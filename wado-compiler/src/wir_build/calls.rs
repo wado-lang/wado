@@ -11,25 +11,14 @@ use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, Operand};
 
-/// The compile-time constant of a SIMD lane operand — a literal `ExprKind` or a
-/// promoted `Operand::Value` constant in the function's value pool.
+/// The compile-time constant of a SIMD lane operand — a promoted
+/// `Operand::Value` int constant in the function's value pool.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
-    match op {
-        Operand::Expr(e) => extract_i32_const(&body.exprs[e].kind),
-        Operand::Value(v) => match body.values.kind(v) {
-            crate::nir_value_graph::ValueKind::Int(n) => *n as u8,
-            k => panic!("SIMD lane operand is not an int constant: {k:?}"),
-        },
-    }
-}
-
-/// Extract a compile-time constant i32 from a TIR expression (for SIMD lane indices).
-fn extract_i32_const(kind: &ExprKind) -> u8 {
-    match kind {
-        ExprKind::IntLiteral { value, .. } => *value as u8,
-        _ => panic!("SIMD lane index must be a constant integer literal"),
+    match body.operand_const_int(op) {
+        Some(n) => n as u8,
+        None => panic!("SIMD lane index must be a constant integer literal"),
     }
 }
 

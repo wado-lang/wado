@@ -439,12 +439,8 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         // Leaf nodes
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
-        | ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::EnumConstruct { .. } => {}
@@ -1146,9 +1142,6 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
 fn is_constant_expr(body: &Body, e: ExprId) -> bool {
     matches!(
         &body.exprs[e].kind,
-        ExprKind::IntLiteral { .. }
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
             | ExprKind::EnumConstruct { .. }
     )
 }
@@ -1264,18 +1257,11 @@ fn build_field_reset(
         TypeTable::I32,
         span,
     );
-    let zero = engine.alloc_expr(
-        ExprKind::IntLiteral {
-            value: 0,
-            repr: "0".to_string(),
-        },
-        TypeTable::I32,
-        span,
-    );
+    let zero = engine.const_operand(crate::nir_value_graph::ValueKind::Int(0), TypeTable::I32);
     let assign = engine.alloc_expr(
         ExprKind::Assign {
             target: field,
-            value: zero.into(),
+            value: zero,
         },
         TypeTable::UNIT,
         span,
@@ -1497,12 +1483,18 @@ fn rename_local_in_expr(
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.as_expr().expect("skeleton operand")]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, value.as_expr().expect("skeleton operand")]),
+        | ExprKind::FieldAccess { expr: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
+        }
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
         ExprKind::StructLiteral { fields, .. } => {
             Walk::Exprs(fields.iter().filter_map(|f| f.value.as_expr()).collect())
         }
-        ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![inner.as_expr().expect("skeleton operand"), index.as_expr().expect("skeleton operand")]),
+        ExprKind::Index { expr: inner, index } => {
+            Walk::Exprs(inner.as_expr().into_iter().chain(index.as_expr()).collect())
+        }
         ExprKind::If {
             condition,
             then_branch,

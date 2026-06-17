@@ -512,10 +512,6 @@ impl ModRef {
             }
 
             // === Pure value-producing leaves ===
-            ExprKind::IntLiteral { .. }
-            | ExprKind::FloatLiteral { .. }
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
             | ExprKind::Null
             | ExprKind::Unit => {}
         }

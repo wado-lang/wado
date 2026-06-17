@@ -436,10 +436,11 @@ fn retarget_block(
 /// The binding value of a `let` / `Assign` statement.
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Some(value.as_expr().expect("skeleton operand")),
+        // A promoted-constant binding has no skeleton value to demote.
+        StmtKind::Let { value, .. } => value.as_expr(),
         StmtKind::Expr(Operand::Expr(e)) => {
             if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
-                Some(value.as_expr().expect("skeleton operand"))
+                value.as_expr()
             } else {
                 None
             }

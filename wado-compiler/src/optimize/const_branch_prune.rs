@@ -163,16 +163,24 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 let mut stmts = engine.body.blocks[block].stmts.clone();
                 stmts.pop();
                 let bv_span = engine.body.exprs[id].span;
-                let bv = engine.materialize_operand(brk_value, bv_span);
                 if stmts.is_empty() {
-                    engine.become_expr(id, bv);
-                } else {
-                    let tail_span = engine.body.exprs[bv].span;
-                    let tail = engine.alloc_stmt(StmtKind::Expr(bv.into()), tail_span);
-                    stmts.push(tail);
-                    engine.set_block_stmts(block, stmts);
-                    engine.replace_expr_kind(id, ExprKind::Block(block));
+                    // `id` becomes the broken value directly: lift a skeleton
+                    // subtree into `id` (changes `id`'s kind), or redirect `id`'s
+                    // parent slot to a constant. The redirect leaves `id`'s kind a
+                    // `LabeledBlock`, so report its real change status — once `id`
+                    // is orphaned a re-fire is a no-op and must not spin.
+                    match brk_value {
+                        Operand::Expr(e) => {
+                            engine.become_expr(id, e);
+                            return true;
+                        }
+                        Operand::Value(_) => return engine.redirect_expr(id, brk_value),
+                    }
                 }
+                let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), bv_span);
+                stmts.push(tail);
+                engine.set_block_stmts(block, stmts);
+                engine.replace_expr_kind(id, ExprKind::Block(block));
                 return true;
             }
         }

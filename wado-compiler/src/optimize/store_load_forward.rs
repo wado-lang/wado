@@ -144,16 +144,14 @@ pub(super) fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>
             continue;
         };
         // Resolve through the e-class representative so a value proven equal to
-        // a literal by a union (not only by build-time hash-consing) forwards
-        // too. With no unions this is the identity. Materialization is the
-        // shared extraction primitive: prefer an existing source literal
-        // (keeping its `repr` / span), else synthesize from the value kind.
+        // a constant by a union (not only by build-time hash-consing) forwards
+        // too. With no unions this is the identity. The constant promotes into
+        // `expr`'s parent operand slot (WEP: The Live ValueGraph).
         let vid = engine.value_find(vid);
-        let Some(new_kind) = super::extract::materialize_literal(engine, vid, expr) else {
+        let Some(value) = super::extract::extract_const(engine, vid, expr) else {
             continue;
         };
-        engine.replace_expr_kind(expr, new_kind);
-        changed = true;
+        changed |= engine.replace_expr_with_value(expr, value);
     }
     changed
 }

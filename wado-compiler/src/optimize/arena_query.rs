@@ -163,41 +163,8 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().map_or(true, |e| is_pure_expr(body, e))
 }
 
-/// Resolve an operand to a `Body` `ExprId`: an `Operand::Expr` is its id; a
-/// promoted constant is materialised as a fresh literal `ExprNode`. For passes
-/// that splice a value position into the skeleton without an `Engine` (they
-/// rebuild the engine after). See `Engine::materialize_operand` for the
-/// in-session counterpart.
-pub(super) fn materialize_operand_in_body(
-    body: &mut Body,
-    op: Operand,
-    span: crate::token::Span,
-    type_table: &crate::tir::TypeTable,
-) -> ExprId {
-    match op {
-        Operand::Expr(e) => e,
-        Operand::Value(v) => {
-            let ty = body
-                .values
-                .type_of(v)
-                .expect("promoted operand has a recorded type");
-            let prim = crate::const_eval::prim_of(ty, type_table);
-            let kind = crate::nir_value_graph::materialize_value_kind(body.values.kind(v), prim);
-            body.exprs.push(crate::nir_arena::ExprNode {
-                kind,
-                type_id: ty,
-                span,
-            })
-        }
-    }
-}
-
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null

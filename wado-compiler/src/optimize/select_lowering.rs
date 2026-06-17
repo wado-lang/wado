@@ -130,10 +130,6 @@ fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) 
 
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Local { .. } => true,
         ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)

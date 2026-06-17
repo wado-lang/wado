@@ -572,9 +572,9 @@ fn extract_dominating_guard(engine: &mut Engine, condition: ExprId) -> Option<Gu
     GuardFact::from_comparison(engine, left, right, true)
 }
 
-/// Replace the expression at `cond` with `false`, preserving its type and span.
+/// Promote the condition at `cond` to the constant `false` in its parent slot.
 fn set_false(engine: &mut Engine, cond: ExprId) {
-    engine.replace_expr_kind(cond, ExprKind::BoolLiteral(false));
+    engine.replace_expr_with_value(cond, crate::const_eval::Value::Bool(false));
 }
 
 /// Check if a block traps (bounds check failure path): a `panic`, or the bare

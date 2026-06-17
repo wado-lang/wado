@@ -1232,11 +1232,11 @@ impl Rewriter<'_, '_> {
         for (k, elem_ty) in element_types.into_iter().enumerate() {
             let new_local_index = ctx.field_local_map[&(local_index, k as u32)];
             let (new_name, arr_ty) = ctx.field_info_map[&(local_index, k as u32)].clone();
-            // Deep-clone the (duplicable) capacity once per field — or
-            // re-materialize it for a promoted constant (a fresh literal each).
+            // Deep-clone the (duplicable) capacity once per field; a promoted
+            // constant is immutable and shareable, so reuse the operand.
             let cap = match capacity {
-                Operand::Expr(e) => engine.clone_expr(e),
-                Operand::Value(_) => engine.materialize_operand(capacity, span),
+                Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
+                Operand::Value(_) => capacity,
             };
             let init = build_with_capacity_call(engine, elem_ty, arr_ty, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
@@ -1328,9 +1328,11 @@ impl Rewriter<'_, '_> {
                     let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                     let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
                     let elem_ty = element_types[k];
+                    // A constant index operand is immutable/shareable — reuse it;
+                    // a skeleton index is deep-cloned per field.
                     let idx_clone = match idx {
-                        Operand::Expr(e) => engine.clone_expr(e),
-                        Operand::Value(_) => engine.materialize_operand(idx, span),
+                        Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
+                        Operand::Value(_) => idx,
                     };
                     let call = build_index_writer_call(
                         engine,
@@ -1353,14 +1355,14 @@ impl Rewriter<'_, '_> {
         }
     }
 
-    /// Decompose a source expression into N per-field expression ids.
+    /// Decompose a source expression into N per-field value operands.
     fn decompose_source(
         &self,
         engine: &mut Engine,
         expr: ExprId,
         expected_arity: usize,
         expected_layout: &ElementLayout,
-    ) -> Option<Vec<ExprId>> {
+    ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
         // Classify the source shape from a read-only inspection first.
         enum Source {
@@ -1439,11 +1441,11 @@ impl Rewriter<'_, '_> {
             _ => return None,
         };
 
-        let src_span = engine.body.exprs[expr].span;
-        // Deep-clone a skeleton element, or re-materialize a promoted constant.
-        let clone_or_materialize = |engine: &mut Engine, op: Operand| match op {
-            Operand::Expr(e) => engine.clone_expr(e),
-            Operand::Value(_) => engine.materialize_operand(op, src_span),
+        // Deep-clone a skeleton element; a promoted constant is immutable and
+        // shareable, so reuse the operand directly (WEP: The Live ValueGraph).
+        let clone_or_dup = |engine: &mut Engine, op: Operand| match op {
+            Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
+            Operand::Value(_) => op,
         };
         match source {
             Source::Tuple(elements) => {
@@ -1451,8 +1453,10 @@ impl Rewriter<'_, '_> {
                 // rewritten to propagate nested decomposed reads.
                 let mut out = Vec::with_capacity(expected_arity);
                 for el in elements {
-                    let c = clone_or_materialize(engine, el);
-                    self.rewrite_expr(engine, c);
+                    let c = clone_or_dup(engine, el);
+                    if let Some(e) = c.as_expr() {
+                        self.rewrite_expr(engine, e);
+                    }
                     out.push(c);
                 }
                 Some(out)
@@ -1460,7 +1464,7 @@ impl Rewriter<'_, '_> {
             Source::Struct(fields) => {
                 // Reorder by `field_index` so output position k corresponds to
                 // field k. `check_source` verified indices cover 0..N exactly once.
-                let mut out: Vec<Option<ExprId>> = (0..expected_arity).map(|_| None).collect();
+                let mut out: Vec<Option<Operand>> = (0..expected_arity).map(|_| None).collect();
                 for (field_index, value) in fields {
                     let k = field_index as usize;
                     if k >= expected_arity {
@@ -1469,8 +1473,10 @@ impl Rewriter<'_, '_> {
                     if out[k].is_some() {
                         return None;
                     }
-                    let c = clone_or_materialize(engine, value);
-                    self.rewrite_expr(engine, c);
+                    let c = clone_or_dup(engine, value);
+                    if let Some(e) = c.as_expr() {
+                        self.rewrite_expr(engine, e);
+                    }
                     out[k] = Some(c);
                 }
                 out.into_iter().collect::<Option<Vec<_>>>()
@@ -1489,7 +1495,7 @@ impl Rewriter<'_, '_> {
                     let (other_field_name, other_arr_ty) =
                         ctx.field_info_map[&(other, k as u32)].clone();
                     let other_elem_ty = other_elem_types[k];
-                    let idx_clone = clone_or_materialize(engine, idx);
+                    let idx_clone = clone_or_dup(engine, idx);
                     let call = build_index_reader_call(
                         engine,
                         other_elem_ty,
@@ -1501,7 +1507,7 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    out.push(call);
+                    out.push(Operand::Expr(call));
                 }
                 Some(out)
             }
@@ -1550,12 +1556,13 @@ impl Rewriter<'_, '_> {
                 let elem_ty = info.element_types[k];
                 let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                 let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                let idx_span = engine.body.exprs[e].span;
                 let idx_clone = match idx_arg {
-                    Operand::Expr(ie) => engine.clone_expr(ie),
-                    Operand::Value(_) => engine.materialize_operand(idx_arg, idx_span),
+                    Operand::Expr(ie) => Operand::Expr(engine.clone_expr(ie)),
+                    Operand::Value(_) => idx_arg,
                 };
-                self.rewrite_expr(engine, idx_clone);
+                if let Some(ie) = idx_clone.as_expr() {
+                    self.rewrite_expr(engine, ie);
+                }
                 let span = engine.body.exprs[e].span;
                 let new_call = build_index_reader_call(
                     engine,
@@ -1680,7 +1687,7 @@ fn build_with_capacity_call(
     engine: &mut Engine,
     elem_ty: TypeId,
     arr_ty: TypeId,
-    cap: ExprId,
+    cap: Operand,
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
@@ -1701,7 +1708,7 @@ fn build_with_capacity_call(
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: cap.into(),
+                expr: cap,
                 is_mut: false,
             }],
         },
@@ -1718,7 +1725,7 @@ fn build_element_writer_call(
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
-    value: ExprId,
+    value: Operand,
     sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
@@ -1735,7 +1742,7 @@ fn build_element_writer_call(
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: value.into(),
+                expr: value,
                 is_mut: false,
             }],
         },
@@ -1752,8 +1759,8 @@ fn build_index_writer_call(
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
-    index: ExprId,
-    value: ExprId,
+    index: Operand,
+    value: Operand,
     sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
@@ -1771,11 +1778,11 @@ fn build_index_writer_call(
             type_args: Vec::new(),
             args: vec![
                 ArenaCallArg {
-                    expr: index.into(),
+                    expr: index,
                     is_mut: false,
                 },
                 ArenaCallArg {
-                    expr: value.into(),
+                    expr: value,
                     is_mut: false,
                 },
             ],
@@ -1793,7 +1800,7 @@ fn build_index_reader_call(
     arr_ty: TypeId,
     field_local: u32,
     field_name: String,
-    index: ExprId,
+    index: Operand,
     sig: &SigKey,
     span: Span,
     ctx: &RewriteCtx,
@@ -1810,7 +1817,7 @@ fn build_index_reader_call(
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
-                expr: index.into(),
+                expr: index,
                 is_mut: false,
             }],
         },
@@ -1823,10 +1830,6 @@ fn build_index_reader_call(
 /// re-evaluated N times with no observable side effects).
 fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::Local { .. }

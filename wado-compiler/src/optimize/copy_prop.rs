@@ -50,7 +50,6 @@ impl CopySource {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
-            _ => None,
         }
     }
 }
@@ -61,16 +60,6 @@ enum CopySource {
         index: u32,
         name: String,
     },
-    IntLiteral {
-        value: u64,
-        repr: String,
-    },
-    FloatLiteral {
-        value: f64,
-        repr: String,
-    },
-    BoolLiteral(bool),
-    CharLiteral(char),
     Ref {
         index: u32,
         name: String,
@@ -126,16 +115,6 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
             index: *index,
             name: name.clone(),
         },
-        ExprKind::IntLiteral { value, repr } => CopySource::IntLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::FloatLiteral { value, repr } => CopySource::FloatLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::BoolLiteral(b) => CopySource::BoolLiteral(*b),
-        ExprKind::CharLiteral(c) => CopySource::CharLiteral(*c),
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
@@ -196,13 +175,15 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
-                if place_root_local(body, receiver.as_expr().expect("skeleton operand")) == Some(local) {
+                if receiver.as_expr().and_then(|e| place_root_local(body, e)) == Some(local) {
                     return true;
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut && place_root_local(body, arg.expr.as_expr().expect("skeleton operand")) == Some(local) {
+                    if arg.is_mut
+                        && arg.expr.as_expr().and_then(|e| place_root_local(body, e)) == Some(local)
+                    {
                         return true;
                     }
                 }
@@ -466,10 +447,6 @@ fn can_propagate_copy(
             }
             true
         }
-        CopySource::IntLiteral { .. }
-        | CopySource::FloatLiteral { .. }
-        | CopySource::BoolLiteral(_)
-        | CopySource::CharLiteral(_) => true,
         CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
             if target_usage.read_count != 1 {
                 return false;
@@ -545,18 +522,6 @@ fn apply_in_expr(
             CopySource::Local { index, name } => {
                 engine.replace_expr_kind(id, ExprKind::Local { index, name });
             }
-            CopySource::IntLiteral { value, repr } => {
-                engine.replace_expr_kind(id, ExprKind::IntLiteral { value, repr });
-            }
-            CopySource::FloatLiteral { value, repr } => {
-                engine.replace_expr_kind(id, ExprKind::FloatLiteral { value, repr });
-            }
-            CopySource::BoolLiteral(b) => {
-                engine.replace_expr_kind(id, ExprKind::BoolLiteral(b));
-            }
-            CopySource::CharLiteral(c) => {
-                engine.replace_expr_kind(id, ExprKind::CharLiteral(c));
-            }
             CopySource::Ref {
                 index,
                 name,
@@ -631,7 +596,6 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
-                _ => false,
             };
             if source_conflicts {
                 has_deferred = true;

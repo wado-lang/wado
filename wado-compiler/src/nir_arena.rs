@@ -155,16 +155,6 @@ pub struct ArenaStructPatternField {
 /// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    IntLiteral {
-        value: u64,
-        repr: String,
-    },
-    FloatLiteral {
-        value: f64,
-        repr: String,
-    },
-    BoolLiteral(bool),
-    CharLiteral(char),
     StringLiteral(String),
     BytesLiteral(Vec<u8>),
     Null,
@@ -413,15 +403,9 @@ impl Body {
     /// callers that only need the value (capacities, zero-tests) avoid threading
     /// a `TypeTable`.
     pub fn operand_const_int(&self, op: Operand) -> Option<u64> {
-        match op {
-            Operand::Value(v) => match self.values.kind(v) {
-                ValueKind::Int(value) => Some(*value),
-                _ => None,
-            },
-            Operand::Expr(e) => match &self.exprs[e].kind {
-                ExprKind::IntLiteral { value, .. } => Some(*value),
-                _ => None,
-            },
+        match self.values.kind(op.as_value()?) {
+            ValueKind::Int(value) => Some(*value),
+            _ => None,
         }
     }
 
@@ -1197,10 +1181,6 @@ impl Body {
                 PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
-                ExprKind::IntLiteral { .. }
-                | ExprKind::FloatLiteral { .. }
-                | ExprKind::BoolLiteral(_)
-                | ExprKind::CharLiteral(_)
                 | ExprKind::StringLiteral(_)
                 | ExprKind::BytesLiteral(_)
                 | ExprKind::Null

@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ExprKind, Operand};
+use crate::nir_arena::Operand;
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
@@ -383,17 +383,8 @@ impl FunctionTranslator<'_, '_> {
         to_type: TypeId,
     ) -> WirInstr {
         // Optimize: int-const cast to i64/u64 → emit I64Const directly to avoid
-        // i32 truncation (a promoted value or a literal `ExprKind`).
-        let int_const = match inner {
-            Operand::Expr(e) => match &self.body.exprs[e].kind {
-                ExprKind::IntLiteral { value, .. } => Some(*value),
-                _ => None,
-            },
-            Operand::Value(v) => match self.body.values.kind(v) {
-                crate::nir_value_graph::ValueKind::Int(n) => Some(*n),
-                _ => None,
-            },
-        };
+        // i32 truncation. A pure scalar constant lives in the value pool.
+        let int_const = self.body.operand_const_int(inner);
         if let Some(value) = int_const
             && matches!(
                 self.type_table.get(to_type),

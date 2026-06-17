@@ -215,10 +215,6 @@ fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<
 
 fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
     match &body.exprs[expr].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Null
         | ExprKind::Unit
         | ExprKind::EnumConstruct { .. } => true,

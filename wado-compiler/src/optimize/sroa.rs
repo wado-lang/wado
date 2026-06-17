@@ -999,15 +999,17 @@ fn expand_struct_let(
     };
     pairs.sort_by_key(|(fi, _)| *fi);
     for (field_index, field_op) in pairs {
-        // A promoted-constant field becomes a fresh literal init for the scalar.
-        let field_value = engine.materialize_operand(field_op, span);
-        rewrite_expr(engine, field_value, ctx);
+        // A promoted-constant field flows straight into the scalar's `let` slot;
+        // a skeleton field is rewritten in place to propagate nested decompositions.
+        if let Some(e) = field_op.as_expr() {
+            rewrite_expr(engine, e, ctx);
+        }
         push_field_let(
             engine,
             (local_idx, field_index),
             is_mut,
             span,
-            field_value,
+            field_op,
             ctx,
             new_stmts,
         );
@@ -1019,7 +1021,7 @@ fn push_field_let(
     key: (u32, u32),
     is_mut: bool,
     span: Span,
-    value: ExprId,
+    value: Operand,
     ctx: &Rewrite,
     new_stmts: &mut Vec<StmtId>,
 ) {
@@ -1032,7 +1034,7 @@ fn push_field_let(
             is_mut,
             is_reactive: false,
             type_id: field_type,
-            value: value.into(),
+            value,
             // The original literal was a fresh value, so its fields don't need
             // value_copy — see the original pass comment.
             skip_value_copy: true,

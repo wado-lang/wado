@@ -39,54 +39,36 @@ impl Rule for ExtractLiteralRule {
             return false;
         };
         let rep = e.value_find(vid);
-        let Some(kind) = materialize_literal(e, rep, id) else {
+        let Some(value) = extract_const(e, rep, id) else {
             return false;
         };
-        if same_literal(&e.body.exprs[id].kind, &kind) {
-            return false;
-        }
-        e.replace_expr_kind(id, kind);
-        true
+        // Promote the node to the pooled constant in its parent slot (WEP: The
+        // Live ValueGraph). Idempotent: a promoted (orphaned) node has no parent
+        // slot, so the retry reports no change and the worklist terminates.
+        e.replace_expr_with_value(id, value)
     }
 }
 
-/// The literal `ExprKind` for `rep` if its representative kind is a constant,
-/// using `at`'s NIR type for integer width / repr. Prefers an existing source
-/// literal (keeping its `repr` / span); otherwise synthesizes one from the
-/// value kind, byte-identically to niri's CTFE path. `None` for a non-literal
+/// The constant [`Value`] for `rep` if its representative kind is a scalar
+/// constant, using `at`'s NIR type for integer width. `None` for a non-constant
 /// representative or when folding is disabled (no type table).
-pub(super) fn materialize_literal(e: &mut Engine, rep: ValueId, at: ExprId) -> Option<ExprKind> {
+pub(super) fn extract_const(
+    e: &mut Engine,
+    rep: ValueId,
+    at: ExprId,
+) -> Option<crate::const_eval::Value> {
     if !matches!(
         e.value_kind(rep),
         ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_)
     ) {
         return None;
     }
-    if let Some(src) = e.literal_source(rep) {
-        return Some(e.body.exprs[src].kind.clone());
-    }
     let vk = e.value_kind(rep).clone();
     let type_id = e.body.exprs[at].type_id;
     let prim = e
         .value_graph_type_table()
         .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
-    let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)?;
-    Some(crate::const_eval::value_to_arena_kind(value))
-}
-
-/// True when two `ExprKind`s are the same literal (so re-materializing is a
-/// no-op). Compares only the literal payload, not `repr` — a differing `repr`
-/// for the same value is not worth re-churning.
-fn same_literal(a: &ExprKind, b: &ExprKind) -> bool {
-    match (a, b) {
-        (ExprKind::IntLiteral { value: x, .. }, ExprKind::IntLiteral { value: y, .. }) => x == y,
-        (ExprKind::FloatLiteral { value: x, .. }, ExprKind::FloatLiteral { value: y, .. }) => {
-            x.to_bits() == y.to_bits()
-        }
-        (ExprKind::BoolLiteral(x), ExprKind::BoolLiteral(y)) => x == y,
-        (ExprKind::CharLiteral(x), ExprKind::CharLiteral(y)) => x == y,
-        _ => false,
-    }
+    crate::nir_value_graph::value_kind_to_const(&vk, prim)
 }
 
 /// True when `expr`'s immediate parent is an `Assign` and `expr` is its target.
@@ -110,53 +92,57 @@ mod tests {
     use crate::token::Span;
 
     fn e(body: &mut Body, kind: ExprKind) -> ExprId {
+        ei(body, kind, TypeTable::UNIT)
+    }
+
+    fn ei(body: &mut Body, kind: ExprKind, type_id: crate::tir::TypeId) -> ExprId {
         body.exprs.push(ExprNode {
             kind,
-            type_id: TypeTable::UNIT,
+            type_id,
             span: Span::default(),
         })
     }
 
     #[test]
     fn materializes_a_value_unioned_to_a_literal() {
-        // { a + b; 5; } — union the sum's class with the literal 5, then the
-        // extractor rewrites the sum expression into `5`.
+        use crate::nir_arena::Operand;
+        use crate::nir_value_graph::ValueKind;
+        // { a + b; 5; } — union the sum's class with the constant 5, then the
+        // extractor promotes the sum statement's operand to the pooled `5`.
         let mut body = Body::empty();
-        let a = e(
+        let a = ei(
             &mut body,
             ExprKind::Local {
                 index: 0,
                 name: "a".into(),
             },
+            TypeTable::I32,
         );
-        let b = e(
+        let b = ei(
             &mut body,
             ExprKind::Local {
                 index: 1,
                 name: "b".into(),
             },
+            TypeTable::I32,
         );
-        let sum = e(
+        let sum = ei(
             &mut body,
             ExprKind::Binary {
                 left: a.into(),
                 op: NirBinaryOp::Add,
                 right: b.into(),
             },
+            TypeTable::I32,
         );
-        let five = e(
-            &mut body,
-            ExprKind::IntLiteral {
-                value: 5,
-                repr: "5".into(),
-            },
-        );
+        // The constant `5` is a pooled value, born as `Operand::Value`.
+        let five_v = body.values.alloc_unshared(ValueKind::Int(5), TypeTable::I32);
         let s0 = body.stmts.push(StmtNode {
             kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
         });
         let s1 = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(five.into()),
+            kind: StmtKind::Expr(Operand::Value(five_v)),
             span: Span::default(),
         });
         body.root = body.blocks.push(BlockNode {
@@ -168,23 +154,22 @@ mod tests {
         let mut locals: Vec<NirLocal> = Vec::new();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
         let v_sum = eng.value(sum).unwrap();
-        let v_five = eng.value(five).unwrap();
-        // The sum is not a literal yet.
-        assert!(!matches!(
-            eng.body.exprs[sum].kind,
-            ExprKind::IntLiteral { .. }
+        // The sum statement still holds the skeleton expression.
+        assert!(matches!(
+            eng.body.stmts[s0].kind,
+            StmtKind::Expr(Operand::Expr(_))
         ));
         // Prove sum ≡ 5 and extract.
-        eng.value_union(v_sum, v_five);
+        eng.value_union(v_sum, five_v);
         eng.rebuild_value_congruence();
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
         eng.run(&rules);
-        // The sum expression is now the literal 5.
-        assert!(matches!(
-            eng.body.exprs[sum].kind,
-            ExprKind::IntLiteral { value: 5, .. }
-        ));
+        // The sum statement's operand is now the pooled constant 5.
+        let StmtKind::Expr(Operand::Value(v)) = eng.body.stmts[s0].kind else {
+            panic!("sum statement operand was not promoted to a value");
+        };
+        assert!(matches!(eng.body.values.kind(v), ValueKind::Int(5)));
     }
 
     #[test]

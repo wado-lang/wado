@@ -168,14 +168,15 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     for byte in s.bytes() {
         let ch = char::from(byte);
         let recv_clone = engine.clone_expr(receiver.as_expr().expect("skeleton operand"));
-        let char_arg = engine.alloc_expr(ExprKind::CharLiteral(ch), TypeTable::CHAR, span);
+        let char_arg =
+            engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
                 receiver: recv_clone.into(),
                 func: ctx.push_char.clone(),
                 type_args: Vec::new(),
                 args: vec![ArenaCallArg {
-                    expr: char_arg.into(),
+                    expr: char_arg,
                     is_mut: false,
                 }],
             },

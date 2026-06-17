@@ -32,19 +32,6 @@ fn escape_string(s: &str) -> String {
     result
 }
 
-fn escape_char(c: char) -> String {
-    match c {
-        '\'' => "\\'".to_string(),
-        '\\' => "\\\\".to_string(),
-        '\n' => "\\n".to_string(),
-        '\r' => "\\r".to_string(),
-        '\t' => "\\t".to_string(),
-        '\0' => "\\0".to_string(),
-        c if c.is_control() => format!("\\u{{{:04X}}}", c as u32),
-        c => c.to_string(),
-    }
-}
-
 /// Unparses NIR back to pseudo-Wado source code.
 /// The output shows the code after monomorphization and lowering.
 /// Note: Monomorphized names like `Box<i32>` are quoted to make the output parseable.
@@ -565,20 +552,6 @@ impl<'a> NirUnparser<'a> {
     fn unparse_expr(&mut self, body: &Body, id: ExprId) {
         let ty = body.exprs[id].type_id;
         match &body.exprs[id].kind {
-            ExprKind::IntLiteral { repr, .. } => {
-                self.output.push_str(repr);
-            }
-            ExprKind::FloatLiteral { repr, .. } => {
-                self.output.push_str(repr);
-            }
-            ExprKind::BoolLiteral(b) => {
-                self.output.push_str(if *b { "true" } else { "false" });
-            }
-            ExprKind::CharLiteral(c) => {
-                self.output.push('\'');
-                self.output.push_str(&escape_char(*c));
-                self.output.push('\'');
-            }
             ExprKind::StringLiteral(s) => {
                 self.output.push('"');
                 self.output.push_str(&escape_string(s));
@@ -688,10 +661,10 @@ impl<'a> NirUnparser<'a> {
                     format!("{}::{func_name}", module_path.join("::"))
                 };
                 let type_args = type_args.clone();
-                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 self.output.push_str(&Self::quote_if_needed(&full_name));
                 self.unparse_type_args(&type_args);
-                self.delimited("(", ")", arg_ids, |s, aid| s.unparse_expr(body, aid));
+                self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
             ExprKind::CmRawCall { local_name, args } => {
                 let local_name = local_name.clone();
@@ -710,15 +683,15 @@ impl<'a> NirUnparser<'a> {
                 let receiver = *receiver;
                 let func_name = func.name.clone();
                 let type_args = type_args.clone();
-                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 // The elaborator wraps `self` receivers in `&`/`&mut`
                 // automatically; strip that wrapper so the rendering reflects the
                 // source value.
-                let actual_receiver = match &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
-                    ExprKind::Unary {
+                let actual_receiver = match receiver.as_expr().map(|e| &body.exprs[e].kind) {
+                    Some(ExprKind::Unary {
                         op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                         expr: inner,
-                    } => *inner,
+                    }) => *inner,
                     _ => receiver,
                 };
                 self.unparse_operand(body, actual_receiver);
@@ -727,7 +700,7 @@ impl<'a> NirUnparser<'a> {
                 // the output captures which impl was selected.
                 self.output.push_str(&Self::quote_if_needed(&func_name));
                 self.unparse_type_args(&type_args);
-                self.delimited("(", ")", arg_ids, |s, aid| s.unparse_expr(body, aid));
+                self.delimited("(", ")", arg_ops, |s, op| s.unparse_operand(body, op));
             }
             ExprKind::FieldAccess {
                 expr: inner,

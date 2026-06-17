@@ -120,8 +120,7 @@ impl Rule for MatchToSwitchRule<'_> {
         };
 
         let span = engine.body.exprs[id].span;
-        let scrut_expr = engine.materialize_operand(scrutinee, span);
-        let new_kind = build_switch(engine, scrut_expr, &arms, analysis, span);
+        let new_kind = build_switch(engine, scrutinee, &arms, analysis, span);
         engine.replace_expr_kind(id, new_kind);
         true
     }
@@ -223,7 +222,7 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
 /// holes fall back to arm 0, which is unreachable for those values).
 fn build_switch(
     engine: &mut Engine,
-    scrutinee: ExprId,
+    scrutinee: Operand,
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
@@ -290,23 +289,22 @@ fn build_switch(
     };
 
     ExprKind::Switch {
-        scrutinee: scrutinee.into(),
+        scrutinee,
         min_value: analysis.min_value,
         arms: switch_arms,
         default: default_block,
     }
 }
 
-/// Deep-clone an arm body expression and wrap it in a fresh block holding a
-/// single `Expr` statement.
+/// Wrap an arm body in a fresh block holding a single `Expr` statement. A
+/// skeleton body is deep-cloned (each arm needs its own copy); a promoted
+/// constant operand is immutable and shareable, so it flows straight into the
+/// statement slot.
 fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
-    // Each switch arm needs its own copy: clone a skeleton body, or materialize
-    // a fresh literal for a promoted constant arm body.
-    let expr = match body {
-        Operand::Expr(e) => engine.clone_expr(e),
-        Operand::Value(_) => engine.materialize_operand(body, arm_span),
+    let (op, span) = match body {
+        Operand::Expr(e) => (Operand::Expr(engine.clone_expr(e)), engine.body.exprs[e].span),
+        Operand::Value(_) => (body, arm_span),
     };
-    let span = engine.body.exprs[expr].span;
-    let stmt = engine.alloc_stmt(StmtKind::Expr(expr.into()), span);
+    let stmt = engine.alloc_stmt(StmtKind::Expr(op), span);
     engine.alloc_block(vec![stmt], span)
 }

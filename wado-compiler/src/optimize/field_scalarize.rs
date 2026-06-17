@@ -1029,10 +1029,6 @@ fn visit_expr_for_alias(
             }
             visit_block_for_alias(body, default, type_table, out);
         }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null
@@ -1408,10 +1404,6 @@ fn count_field_accesses_in_expr(
             }
             count_field_accesses_in_block(body, default, counts, type_table);
         }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null
@@ -2057,7 +2049,7 @@ fn walk_stmt(
                 value.is_some() && states.contains(&CanonState::ScalarOnly);
             if needs_post_eval_writeback {
                 let return_value = value.expect("checked Some above");
-                let return_type = body.exprs[return_value.as_expr().expect("skeleton operand")].type_id;
+                let return_type = body.operand_type(return_value);
                 let tmp_idx = ctx.alloc_temp(return_type);
                 let tmp_name = ctx.temp_name(tmp_idx);
                 let let_sid = push_stmt(
@@ -2780,10 +2772,6 @@ fn walk_other_expr_kinds(
                 walk_operand(body, aid, states, true, out, ctx);
             }
         }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null

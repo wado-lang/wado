@@ -102,17 +102,21 @@ impl Rule for ElideBoxLocalRule {
             else {
                 continue;
             };
-            // Materialize a promoted-constant inner into a literal expr to splice.
-            let inner_span = engine.body.stmts[stmts[i]].span;
-            let inner = engine.materialize_operand(inner_op, inner_span);
-            // Move the single-field initializer's kind into its one `r.field`
-            // use, then drop the now-dead binding. The use site keeps its own
-            // `type_id` / `span` (the field-access node's), matching the old
-            // `substitute_node` — `become_expr` would instead adopt the
-            // initializer's, which only coincides because value semantics force
-            // the field type to equal the initializer's.
-            let inner_kind = std::mem::replace(&mut engine.body.exprs[inner].kind, ExprKind::Unit);
-            engine.replace_expr_kind(use_site, inner_kind);
+            // Substitute the single-field initializer into its one `r.field` use,
+            // then drop the now-dead binding. A skeleton initializer moves its kind
+            // into the use site, which keeps its own `type_id` / `span` (the
+            // field-access node's); a promoted constant redirects the use site's
+            // operand slot to the pooled value (WEP: The Live ValueGraph).
+            match inner_op {
+                Operand::Expr(e) => {
+                    let inner_kind =
+                        std::mem::replace(&mut engine.body.exprs[e].kind, ExprKind::Unit);
+                    engine.replace_expr_kind(use_site, inner_kind);
+                }
+                Operand::Value(_) => {
+                    engine.redirect_expr(use_site, inner_op);
+                }
+            }
             let kept: Vec<StmtId> = stmts
                 .iter()
                 .enumerate()
@@ -617,10 +621,6 @@ fn walk_expr_for_leftmost(
 
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
-        | ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null

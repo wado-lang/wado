@@ -390,8 +390,10 @@ fn collect_mut_escaped_node(
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
+                // A `mut` arg is a place; a promoted constant references no local.
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr.as_expr().expect("skeleton operand"))
+                    && let Some(e) = arg.expr.as_expr()
+                    && let Some(r) = projection_root_local(body, e)
                 {
                     out.insert(r);
                 }
@@ -680,8 +682,11 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             // Calls with mut args may stash the reference — alias.
             ExprKind::Call { args, .. } => {
                 for arg in args {
+                    // A `mut` arg is a place (never a promoted constant); a
+                    // constant arg references no local.
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr.as_expr().expect("skeleton operand"))
+                        && let Some(e) = arg.expr.as_expr()
+                        && let Some(index) = local(e)
                     {
                         out.insert(index);
                     }
@@ -746,12 +751,8 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::GlobalVarSet { .. }
             | ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }
-            | ExprKind::IntLiteral { .. }
-            | ExprKind::FloatLiteral { .. }
             | ExprKind::StringLiteral(_)
             | ExprKind::BytesLiteral(_)
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
             | ExprKind::Null
             | ExprKind::Unit
             | ExprKind::EnumConstruct { .. } => {}

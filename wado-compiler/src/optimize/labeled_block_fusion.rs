@@ -1643,11 +1643,12 @@ fn subst_variant_payload_in_stmt(
     }
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            Shape::Expr(value.as_expr().expect("skeleton operand"))
+            // A promoted-constant value mentions no local — nothing to rewrite.
+            value.as_expr().map_or(Shape::None, Shape::Expr)
         }
         StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::Return { value } => match value {
-            Some(v) => Shape::Expr(v.as_expr().expect("skeleton operand")),
+            Some(v) => v.as_expr().map_or(Shape::None, Shape::Expr),
             None => Shape::None,
         },
         StmtKind::If {

@@ -155,10 +155,6 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
@@ -609,10 +605,6 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null
@@ -1106,9 +1098,10 @@ struct InlineBinding {
     /// The binding's declared type (the arg's type — handles monomorphization
     /// variance and `&mut self` ref wrapping).
     local_type: TypeId,
-    /// The argument expression id, already in the caller arena. The call node is
-    /// discarded after inlining, so its argument subtrees are reused directly.
-    value: ExprId,
+    /// The argument operand, already in the caller arena. The call node is
+    /// discarded after inlining, so its argument subtrees / pool values are
+    /// reused directly.
+    value: Operand,
 }
 
 /// Threaded context for the callee->caller splice: how to remap the callee's
@@ -1191,7 +1184,7 @@ fn build_inlined_labeled_block(
                 is_mut: binding.is_mut,
                 is_reactive: false,
                 type_id: binding.local_type,
-                value: binding.value.into(),
+                value: binding.value,
                 skip_value_copy: false,
             },
             span: call_span,
@@ -1263,11 +1256,6 @@ fn try_inline_call_expr(
             ),
             _ => return None,
         };
-    let call_span = caller.exprs[call_id].span;
-    let arg_ids: Vec<ExprId> = arg_ops
-        .into_iter()
-        .map(|a| operand_to_caller_expr(caller, a, call_span, _type_table))
-        .collect();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
     // A cold call site keeps the call: inlining there only bloats the hot
@@ -1278,15 +1266,17 @@ fn try_inline_call_expr(
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
 
+    // Args are already in the caller arena (operands of the discarded call); bind
+    // each to its param `Let` directly (WEP: The Live ValueGraph).
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()
-        .zip(arg_ids.iter())
+        .zip(arg_ops.iter())
         .map(|(param, &arg)| InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.exprs[arg].type_id,
+            local_type: caller.operand_type(arg),
             value: arg,
         })
         .collect();
@@ -1338,11 +1328,6 @@ fn try_inline_method_call_expr(
         _ => return None,
     };
     let call_span = caller.exprs[call_id].span;
-    let receiver_id = operand_to_caller_expr(caller, receiver_op, call_span, type_table);
-    let arg_ids: Vec<ExprId> = arg_ops
-        .into_iter()
-        .map(|a| operand_to_caller_expr(caller, a, call_span, type_table))
-        .collect();
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
     // A cold call site keeps the call: inlining there only bloats the hot
@@ -1353,27 +1338,28 @@ fn try_inline_method_call_expr(
     let callee = candidate.body.as_ref()?;
 
     let first_param = &candidate.params[0];
-    let recv_type = caller.exprs[receiver_id].type_id;
+    let recv_type = caller.operand_type(receiver_op);
     // Bind receiver to the first parameter (self). For `&mut self`, wrap the
-    // receiver in a `MutRef` so field mutations write back to the original;
-    // for `&self` / by-value, pass the receiver expression directly.
-    let (self_type_id, self_value) =
+    // receiver in a `MutRef` so field mutations write back to the original (the
+    // receiver is then an lvalue `Expr`, never a promoted constant); for
+    // `&self` / by-value, pass the receiver operand directly.
+    let (self_type_id, self_value): (TypeId, Operand) =
         if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
             if matches!(type_table.get(recv_type), ResolvedType::MutRef(_)) {
-                (recv_type, receiver_id)
+                (recv_type, receiver_op)
             } else {
                 let mr = caller.exprs.push(ExprNode {
                     kind: ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
-                        expr: receiver_id.into(),
+                        expr: receiver_op,
                     },
                     type_id: first_param.type_id,
                     span: call_span,
                 });
-                (first_param.type_id, mr)
+                (first_param.type_id, mr.into())
             }
         } else {
-            (recv_type, receiver_id)
+            (recv_type, receiver_op)
         };
 
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
@@ -1384,12 +1370,12 @@ fn try_inline_method_call_expr(
         local_type: self_type_id,
         value: self_value,
     });
-    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ids.iter()) {
+    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ops.iter()) {
         bindings.push(InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.exprs[arg].type_id,
+            local_type: caller.operand_type(arg),
             value: arg,
         });
     }
@@ -1697,37 +1683,6 @@ fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx
     }
 }
 
-/// Resolve an operand to a caller-body `ExprId`: an `Operand::Expr` is its id;
-/// a promoted constant is materialised as a fresh literal `ExprNode` in the
-/// caller (inline binds params to caller-body exprs, so a constant arg must
-/// become one). The `value_of` graph is rebuilt with the engine after inlining,
-/// so a raw `exprs.push` here is consistent with the rest of the inline edits.
-fn operand_to_caller_expr(
-    caller: &mut Body,
-    op: Operand,
-    span: Span,
-    type_table: &TypeTable,
-) -> ExprId {
-    match op {
-        Operand::Expr(e) => e,
-        Operand::Value(v) => {
-            let ty = caller
-                .values
-                .type_of(v)
-                .expect("promoted operand has a recorded type");
-            let prim = crate::const_eval::prim_of(ty, type_table);
-            let value = crate::nir_value_graph::value_kind_to_const(caller.values.kind(v), prim)
-                .expect("promoted scalar materializes");
-            let kind = crate::const_eval::value_to_arena_kind(value);
-            caller.exprs.push(ExprNode {
-                kind,
-                type_id: ty,
-                span,
-            })
-        }
-    }
-}
-
 fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) -> ExprId {
     let span = callee.exprs[id].span;
     let type_id = callee.exprs[id].type_id;
@@ -2024,16 +1979,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 default: splice_block(caller, callee, d, ctx),
             }
         }
-        ExprKind::IntLiteral { value, repr } => ExprKind::IntLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::FloatLiteral { value, repr } => ExprKind::FloatLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::BoolLiteral(b) => ExprKind::BoolLiteral(*b),
-        ExprKind::CharLiteral(c) => ExprKind::CharLiteral(*c),
         ExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
         ExprKind::Null => ExprKind::Null,

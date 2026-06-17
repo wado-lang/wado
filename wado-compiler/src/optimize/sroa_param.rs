@@ -625,7 +625,10 @@ fn rewrite_arg(
         become_expr(body, arg, inner.as_expr().expect("skeleton operand"));
     }
 
-    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap.
+    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap to
+    // its single field. Only a skeleton field is lifted in place; a promoted
+    // constant field falls through to Case 3's `FieldAccess` (`(Wrapper{V}).f`,
+    // folded later) since it has no node to become (WEP: The Live ValueGraph).
     if let ExprKind::StructLiteral {
         struct_type,
         fields,
@@ -633,11 +636,9 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
         && struct_key_of(*struct_type, type_table).as_ref() == Some(&info.struct_key)
         && fields.len() == 1
+        && let Some(fe) = fields[0].value.as_expr()
     {
-        let field_value = fields[0].value;
-        let span = body.exprs[arg].span;
-        let fv = super::arena_query::materialize_operand_in_body(body, field_value, span, type_table);
-        become_expr(body, arg, fv);
+        become_expr(body, arg, fe);
         return;
     }
 

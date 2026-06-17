@@ -266,10 +266,6 @@ impl<'a> Engine<'a> {
                 Operand::Expr(e) => value_of.get(&e).copied(),
             };
             match kind {
-                ExprKind::IntLiteral { value, .. } => pool.int(value),
-                ExprKind::FloatLiteral { value, .. } => pool.float(value),
-                ExprKind::BoolLiteral(b) => pool.bool(b),
-                ExprKind::CharLiteral(c) => pool.char(c),
                 ExprKind::StringLiteral(s) => pool.string(s),
                 ExprKind::Null => pool.null(),
                 ExprKind::Unit => pool.unit(),
@@ -733,9 +729,6 @@ impl<'a> Engine<'a> {
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
         use crate::const_eval::Value;
         use crate::nir_value_graph::ValueKind;
-        let Some(parent) = self.parent_of(NodeRef::Expr(id)) else {
-            return false;
-        };
         let type_id = self.body.exprs[id].type_id;
         let kind = match value {
             Value::Int { value, .. } => ValueKind::Int(value),
@@ -744,10 +737,26 @@ impl<'a> Engine<'a> {
             Value::Char(c) => ValueKind::Char(c),
         };
         let vid = self.body.values.alloc_unshared(kind, type_id);
-        if !self.body.replace_operand_to(parent, id, Operand::Value(vid)) {
+        self.redirect_expr(id, Operand::Value(vid))
+    }
+
+    /// Edit API: redirect `id`'s parent operand slot to `new` (WEP: The Live
+    /// ValueGraph). Used to splice a promoted constant — or an existing
+    /// sub-expression — into the position `id` occupies, orphaning `id`'s node.
+    /// Returns `false` (a no-op) when `id` has no parent or the parent references
+    /// it through a non-operand slot.
+    pub fn redirect_expr(&mut self, id: ExprId, new: Operand) -> bool {
+        let Some(parent) = self.parent_of(NodeRef::Expr(id)) else {
+            return false;
+        };
+        if !self.body.replace_operand_to(parent, id, new) {
             return false;
         }
         crate::optimize::vg_measure::record_inplace_edit();
+        if let Operand::Expr(e) = new {
+            self.set_parent(NodeRef::Expr(e), Some(parent));
+            self.enqueue(NodeRef::Expr(e));
+        }
         // `id` is now orphaned. Drop its own `Local` read mention so a binding it
         // named is not kept artificially live (the discarded subtree's deeper
         // mentions stay — a stale read is conservative, never drops a live one).
@@ -759,10 +768,12 @@ impl<'a> Engine<'a> {
         }
         self.set_parent(NodeRef::Expr(id), None);
         self.enqueue(parent);
-        // The promoted value feeds the parent's value derivation directly through
+        // A promoted value feeds the parent's value derivation directly through
         // the swapped operand; re-derive up the ancestor chain.
         if self.value_graph.is_some() {
-            self.value_graph.as_mut().unwrap().value_of.insert(id, vid);
+            if let Some(vid) = new.as_value() {
+                self.value_graph.as_mut().unwrap().value_of.insert(id, vid);
+            }
             if let NodeRef::Expr(p) = parent {
                 self.maintain_value_after_edit(p);
             }
@@ -851,32 +862,16 @@ impl<'a> Engine<'a> {
         id
     }
 
-    /// Materialize an operand into a skeleton `ExprId`: `Operand::Expr` returns
-    /// its id; `Operand::Value` synthesizes a literal `ExprNode` from the pool —
-    /// the constant extractor for the promoted numeric / bool / char scalars
-    /// (WEP: The Live ValueGraph). A pass restructuring the skeleton (cloning a
-    /// value position into a new statement / block) calls this to put a promoted
-    /// constant back in the tree. Panics on a non-constant value (needs the
-    /// scheduling extractor — a later step).
-    pub fn materialize_operand(&mut self, op: Operand, span: Span) -> ExprId {
-        match op {
-            Operand::Expr(e) => e,
-            Operand::Value(v) => {
-                let ty = self
-                    .body
-                    .values
-                    .type_of(v)
-                    .expect("promoted operand has a recorded type");
-                let prim = self
-                    .value_graph_type_table()
-                    .and_then(|tt| crate::const_eval::prim_of(ty, tt));
-                let kind = crate::nir_value_graph::materialize_value_kind(
-                    self.body.values.kind(v),
-                    prim,
-                );
-                self.alloc_expr(kind, ty, span)
-            }
-        }
+    /// Edit API: intern a fresh constant value into the function's pool and
+    /// return it as an `Operand::Value` (WEP: The Live ValueGraph). For passes
+    /// that synthesize a constant in an operand position (a method arg, an
+    /// assigned value) without a source node.
+    pub fn const_operand(
+        &mut self,
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: crate::tir::TypeId,
+    ) -> Operand {
+        Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
 
     /// Edit API: allocate a fresh statement node.
@@ -1344,24 +1339,14 @@ mod tests {
             span: Span::default(),
         })
     }
-    fn lit(body: &mut Body, n: u64) -> ExprId {
-        e(
-            body,
-            ExprKind::IntLiteral {
-                value: n,
-                repr: n.to_string(),
-            },
+    fn lit(body: &mut Body, n: u64) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(n), TypeTable::I32),
         )
     }
-    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        e(
-            body,
-            ExprKind::Binary {
-                left: left.into(),
-                op,
-                right: right.into(),
-            },
-        )
+    fn bin(body: &mut Body, left: Operand, op: NirBinaryOp, right: Operand) -> ExprId {
+        e(body, ExprKind::Binary { left, op, right })
     }
     fn local0(body: &mut Body) -> ExprId {
         e(

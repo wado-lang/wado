@@ -96,7 +96,6 @@ use std::rc::Rc;
 
 use crate::const_eval::{
     eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
-    value_to_arena_kind,
 };
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
@@ -398,13 +397,12 @@ impl EditSink for BodySink<'_> {
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
     }
-    fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool {
-        // The scratch body is throwaway with no parent map to promote into, so
-        // memoize the fold as a literal node in place — the pre-promotion
-        // behavior. Statement-level CTFE reduction relies on this write-back so a
-        // later statement / the tail read sees the constant.
-        self.body.exprs[e].kind = value_to_arena_kind(value);
-        true
+    fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
+        // Scratch CTFE has no parent map to promote a constant into and pure
+        // scalars no longer have a literal-node form; the value is recomputed on
+        // read (`reduce_to_lattice_a` → `try_fold_a` over operands + env), so the
+        // write-back is a no-op here.
+        false
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         // Clone src's whole node into dst (the original short-circuit rewrite
@@ -474,6 +472,13 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
+    /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
+    /// and pure scalars have no literal-node form, so a fold is recorded here and
+    /// read back by [`Self::expr_to_lattice_a`]. Scoped to one `try_call_fold_a`
+    /// call (saved/cleared around the scratch reduction); empty during real-body
+    /// folding, where rewrites promote through the engine instead.
+    scratch_folds: IndexMap<ExprId, Value>,
     /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
     /// stay [`Lattice::Unevaluated`]. The visitor populates this once
     /// per pass via [`with_callees`].
@@ -512,6 +517,7 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
             global_fields: None,
@@ -573,6 +579,7 @@ impl<'a> Interpreter<'a> {
     /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",
@@ -643,31 +650,12 @@ impl<'a> Interpreter<'a> {
     }
 
     pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
+        if let Some(v) = self.scratch_folds.get(&e) {
+            return Lattice::Const(*v);
+        }
         let node = &body.exprs[e];
         match &node.kind {
-            ExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
-            ExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
-            ExprKind::IntLiteral { value, .. } => {
-                let Some(prim) = prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
-                else {
-                    return Lattice::Unevaluated;
-                };
-                Lattice::Const(Value::Int {
-                    value: *value,
-                    prim,
-                })
-            }
-            ExprKind::FloatLiteral { value, .. } => {
-                let prim = if is_f32_type(node.type_id, self.type_table) {
-                    PrimitiveType::F32
-                } else {
-                    PrimitiveType::F64
-                };
-                Lattice::Const(Value::Float {
-                    value: *value,
-                    prim,
-                })
-            }
             ExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
             }
@@ -720,7 +708,12 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.match_lattice_a(body, scrutinee.as_expr().expect("skeleton operand"), arms),
+            } => match scrutinee.as_expr() {
+                Some(e) => self.match_lattice_a(body, e, arms),
+                // A promoted-constant scrutinee is not evaluated here; the
+                // flow-fold visitor collapses constant matches structurally.
+                None => Lattice::Unevaluated,
+            },
             _ => Lattice::Unevaluated,
         }
     }
@@ -970,12 +963,13 @@ impl<'a> Interpreter<'a> {
     pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
         if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
             // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
-            // The scratch backend declines (`false`); its reads recompute the
-            // value, so falling through to the structural rewrites is a no-op for
-            // a pure constant and the fixpoint settles.
             if sink.replace_with_value(e, value) {
                 return true;
             }
+            // The scratch backend cannot promote (no parent map); memoize the
+            // fold so the scratch's later lattice reads see the constant. Falling
+            // through to the structural rewrites is a no-op for a pure constant.
+            self.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -1005,16 +999,9 @@ impl<'a> Interpreter<'a> {
     /// never `Local` mentions. That lets the rewrite engine apply the result
     /// through its coherent edit API without the use index going stale.
     ///
-    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine
-    /// rule installs the returned kind via `Engine::replace_expr_kind`.
-    pub fn const_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
-        self.const_fold_value_a(body, e).map(value_to_arena_kind)
-    }
-
-    /// The environment-free constant value of `e` (the [`Value`] form of
-    /// [`Self::const_fold_kind_a`]), or `None` when it does not fold. The engine
-    /// rule promotes the result to an `Operand::Value` via
-    /// [`Engine::replace_expr_with_value`].
+    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine rule
+    /// promotes the returned value to an `Operand::Value` via
+    /// `Engine::replace_expr_with_value`.
     pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             return Some(v);
@@ -1025,24 +1012,11 @@ impl<'a> Interpreter<'a> {
         None
     }
 
-    /// The flow-sensitive constant value of `e`, as the literal [`ExprKind`]
-    /// that should replace it, or `None` when `e` does not fold to a constant.
-    ///
-    /// This is the value-substitution subset of
-    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals,
-    /// immutable globals, literal arithmetic, and pure CTFE — returning the
-    /// new kind instead of mutating `body`. The structural
-    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included;
-    /// they reshape more than one node and are committed separately through the
-    /// engine edit API. The caller installs the returned kind via
-    /// `Engine::replace_expr_kind` so the parent map / use index stay coherent.
-    pub fn flow_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
-        self.flow_fold_value_a(body, e).map(value_to_arena_kind)
-    }
-
-    /// The flow-sensitive constant value of `e` (the [`Value`] form of
-    /// [`Self::flow_fold_kind_a`]), or `None`. The sink promotes the result to an
-    /// `Operand::Value` via [`EditSink::replace_with_value`].
+    /// The flow-sensitive constant value of `e` — `env`-bound locals, immutable
+    /// globals, literal arithmetic, and pure CTFE — or `None`. The structural
+    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included.
+    /// The sink promotes the result to an `Operand::Value` via
+    /// [`EditSink::replace_with_value`].
     pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             return Some(v);
@@ -1149,10 +1123,10 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
                 let v = *value;
-                self.reduce_in_place_a(body, v.as_expr().expect("skeleton operand"))
+                self.reduce_in_place_operand_a(body, v)
             }
             StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_a(body, v.as_expr().expect("skeleton operand")),
+                Some(v) => self.reduce_in_place_operand_a(body, v),
                 None => false,
             },
             StmtKind::If {
@@ -1260,10 +1234,9 @@ impl<'a> Interpreter<'a> {
         if !is_speculatable_a(sink.body(), condition.as_expr().expect("skeleton operand")) {
             return false;
         }
-        if !sink.replace_with_value(e, t) {
-            sink.replace_kind(e, value_to_arena_kind(t));
-        }
-        true
+        // Promote both-equal arms to the shared constant. The scratch backend
+        // declines (no parent map); its read path recomputes, so report no change.
+        sink.replace_with_value(e, t)
     }
 
     /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
@@ -1302,24 +1275,14 @@ impl<'a> Interpreter<'a> {
                 return false;
             };
             let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
-            let body_e = match body_op {
-                Operand::Expr(ex) => ex,
-                Operand::Value(v) => {
-                    let ty = sink
-                        .body()
-                        .values
-                        .type_of(v)
-                        .expect("promoted operand has a recorded type");
-                    let prim = crate::const_eval::prim_of(ty, self.type_table);
-                    let kind = crate::nir_value_graph::materialize_value_kind(
-                        sink.body().values.kind(v),
-                        prim,
-                    );
-                    sink.alloc_expr(kind, ty, arm_span)
-                }
+            // The chosen arm's value becomes `e`'s value, wrapped in a block. A
+            // promoted constant arm flows straight into the `Operand` statement
+            // slot — no node materialization (WEP: The Live ValueGraph).
+            let span = match body_op {
+                Operand::Expr(ex) => sink.body().exprs[ex].span,
+                Operand::Value(_) => arm_span,
             };
-            let span = sink.body().exprs[body_e].span;
-            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e.into()), span);
+            let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
             let block = sink.alloc_block(vec![stmt], span);
             sink.replace_kind(e, ExprKind::Block(block));
             return true;
@@ -1375,10 +1338,9 @@ impl<'a> Interpreter<'a> {
             }
         }
         let v = common.expect("at least one arm");
-        if !sink.replace_with_value(e, v) {
-            sink.replace_kind(e, value_to_arena_kind(v));
-        }
-        true
+        // Promote all-equal arms to the shared constant; the scratch backend
+        // declines (recomputes on read), so report its no-change honestly.
+        sink.replace_with_value(e, v)
     }
 
     /// Fold a pure call whose args are all constant: bind the params, evaluate
@@ -1428,6 +1390,9 @@ impl<'a> Interpreter<'a> {
         self.step_budget -= 1;
         self.call_stack.push(key);
         let saved_env = std::mem::take(&mut self.env);
+        // The scratch fold memo is scoped to this reduction; nested CTFE calls
+        // get a fresh map and ids never cross scratch bodies.
+        let saved_folds = std::mem::take(&mut self.scratch_folds);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
@@ -1441,6 +1406,7 @@ impl<'a> Interpreter<'a> {
         self.reduce_in_place_a(&mut scratch, tail);
         let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
+        self.scratch_folds = saved_folds;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,
@@ -1673,18 +1639,12 @@ fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     true
 }
 
-/// The boolean value of an operand: a `BoolLiteral` expr or a promoted
-/// `ValueKind::Bool`. `None` for any other operand.
+/// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
+/// `None` for any other operand.
 fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
-    match op {
-        Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::BoolLiteral(b) => Some(*b),
-            _ => None,
-        },
-        Operand::Value(v) => match body.values.kind(v) {
-            ValueKind::Bool(b) => Some(*b),
-            _ => None,
-        },
+    match body.values.kind(op.as_value()?) {
+        ValueKind::Bool(b) => Some(*b),
+        _ => None,
     }
 }
 
@@ -1727,10 +1687,6 @@ fn try_match_bool_discriminator_a(
 /// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Local { .. }
         | ExprKind::Unit => true,
         ExprKind::Binary { left, op, right } => {

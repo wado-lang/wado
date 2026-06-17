@@ -705,26 +705,6 @@ impl<'a> Builder<'a> {
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::IntLiteral { value, .. } => {
-                let v = self.pool.int(value);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::FloatLiteral { value, .. } => {
-                let v = self.pool.float(value);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::BoolLiteral(b) => {
-                let v = self.pool.bool(b);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::CharLiteral(c) => {
-                let v = self.pool.char(c);
-                self.record_literal(expr, v);
-                Some(v)
-            }
             ExprKind::StringLiteral(s) => {
                 let v = self.pool.string(s);
                 self.record_literal(expr, v);

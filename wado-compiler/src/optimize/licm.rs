@@ -516,10 +516,6 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             v
         }
         // Leaves.
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null
@@ -1027,10 +1023,6 @@ fn collect_modified_vars_in_expr(
             }
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Null
@@ -1340,10 +1332,6 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
 /// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
 fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
         | ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)

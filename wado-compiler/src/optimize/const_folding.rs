@@ -151,12 +151,9 @@ impl Rule for ConstFoldRule<'_> {
             return false;
         };
         // Promote the folded scalar to an `Operand::Value` in its parent (WEP:
-        // The Live ValueGraph). The fallback keeps the skeleton form for the rare
-        // node with no operand parent slot.
-        if !engine.replace_expr_with_value(id, value) {
-            engine.replace_expr_kind(id, crate::const_eval::value_to_arena_kind(value));
-        }
-        true
+        // The Live ValueGraph). A node with no operand parent slot (e.g. a body
+        // root) cannot be promoted; report no change so the worklist settles.
+        engine.replace_expr_with_value(id, value)
     }
 }
 
@@ -268,19 +265,9 @@ fn build_global_env(
 /// in the arena. Used by [`SeqLenCollector`] to read the value of an
 /// inline `GlobalVarSet(X, <const>)` directly from the function's arena
 /// body.
-/// The integer value of an operand: an `IntLiteral` expr or a promoted
-/// `ValueKind::Int`.
+/// The integer value of an operand — a promoted `ValueKind::Int` in the pool.
 fn operand_int_a(body: &Body, op: Operand) -> Option<u64> {
-    match op {
-        Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::IntLiteral { value, .. } => Some(*value),
-            _ => None,
-        },
-        Operand::Value(v) => match body.values.kind(v) {
-            crate::nir_value_graph::ValueKind::Int(x) => Some(*x),
-            _ => None,
-        },
-    }
+    body.operand_const_int(op)
 }
 
 fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {

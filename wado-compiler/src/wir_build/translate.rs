@@ -1815,18 +1815,6 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                    WirInstr::I64Const(*value as i64)
-                }
-                _ => WirInstr::I32Const(*value as i32),
-            },
-            ExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-                _ => WirInstr::F64Const(*value),
-            },
-            ExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
-            ExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
             ExprKind::StringLiteral(s) => {
                 // String literals are constructed from data segments
                 self.translate_string_literal(s)

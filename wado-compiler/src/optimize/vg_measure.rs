@@ -180,10 +180,6 @@ fn hash_node(body: &Body, node: NodeRef, h: &mut DefaultHasher, n: &mut u64) {
             let k = &body.exprs[id].kind;
             std::mem::discriminant(k).hash(h);
             match k {
-                ExprKind::IntLiteral { value, .. } => value.hash(h),
-                ExprKind::FloatLiteral { value, .. } => value.to_bits().hash(h),
-                ExprKind::BoolLiteral(b) => b.hash(h),
-                ExprKind::CharLiteral(c) => c.hash(h),
                 ExprKind::StringLiteral(s) => s.hash(h),
                 ExprKind::Local { index, .. } => index.hash(h),
                 ExprKind::Binary { op, .. } => std::mem::discriminant(op).hash(h),
