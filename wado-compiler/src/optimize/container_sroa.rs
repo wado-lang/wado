@@ -1526,7 +1526,11 @@ impl Rewriter<'_, '_> {
                 let elem_ty = info.element_types[k];
                 let field_local = ctx.field_local_map[&(rec_local, k as u32)];
                 let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, k as u32)].clone();
-                let idx_clone = engine.clone_expr(idx_arg.expr());
+                let idx_span = engine.body.exprs[e].span;
+                let idx_clone = match idx_arg {
+                    Operand::Expr(ie) => engine.clone_expr(ie),
+                    Operand::Value(_) => engine.materialize_operand(idx_arg, idx_span),
+                };
                 self.rewrite_expr(engine, idx_clone);
                 let span = engine.body.exprs[e].span;
                 let new_call = build_index_reader_call(

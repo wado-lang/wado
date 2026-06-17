@@ -214,11 +214,12 @@ fn check_fusion_preconditions_if_variant_test(
         return None;
     };
     let temp_local = *temp_local;
+    let lv = let_value.as_expr()?;
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
         ..
-    } = &body.exprs[let_value.expr()].kind
+    } = &body.exprs[lv].kind
     else {
         return None;
     };
@@ -311,11 +312,12 @@ fn check_fusion_preconditions_match(
         return None;
     };
     let temp_local = *temp_local;
+    let lv = let_value.as_expr()?;
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
         ..
-    } = &body.exprs[let_value.expr()].kind
+    } = &body.exprs[lv].kind
     else {
         return None;
     };

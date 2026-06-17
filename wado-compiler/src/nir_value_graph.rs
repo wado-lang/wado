@@ -309,6 +309,13 @@ impl ValuePool {
         self.types[id.0 as usize]
     }
 
+    /// Every source type recorded for a promoted operand. Used by DCE to keep a
+    /// type reachable when its only use is a promoted constant (which lives here,
+    /// not in an `ExprNode`).
+    pub fn recorded_types(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.types.iter().filter_map(|t| *t)
+    }
+
     /// Allocate a fresh, un-interned value carrying its use-site type. Unlike
     /// [`ValuePool::intern`] this never shares — a same-valued constant of a
     /// different type gets a distinct `ValueId`. Used by operand promotion,

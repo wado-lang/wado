@@ -218,6 +218,7 @@ pub fn optimize(
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
     // Promote literal operands to `Operand::Value` before any pass runs, so the
     // value passes read promoted constants from `body.values` (WEP Phase B.2).
+    // DCE keeps the recorded source types reachable (`ValuePool::recorded_types`).
     promote_all(&project, profiler);
     match opt_level {
         OptLevel::O0 => {

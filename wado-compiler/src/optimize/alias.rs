@@ -703,14 +703,14 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             // references) may modify them. Mark aliased.
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let Some(index) = local(field.value.expr()) {
+                    if let Some(index) = field.value.as_expr().and_then(local) {
                         out.insert(index);
                     }
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for &elem in elements {
-                    if let Some(index) = local(elem.expr()) {
+                    if let Some(index) = elem.as_expr().and_then(local) {
                         out.insert(index);
                     }
                 }
@@ -718,7 +718,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                if let Some(index) = local(p.expr()) {
+                if let Some(index) = p.as_expr().and_then(local) {
                     out.insert(index);
                 }
             }

@@ -596,7 +596,16 @@ fn build_analysis_graph(project: &NirPackage) -> AnalysisGraph {
 
         let mut walker = DceWalker::new(type_table, module_source);
         walker.analyze(&func);
-        let analysis = walker.analysis;
+        let mut analysis = walker.analysis;
+        // Promoted operands hold their source type in the body's value pool, not
+        // in an `ExprNode`, so the walker misses them. Keep those types reachable
+        // (a literal of an otherwise-unreachable newtype) — else its `TypeId`
+        // dangles after `remove_unreachable_types`.
+        if let Some(body) = &func.body {
+            for ty in body.values.recorded_types() {
+                analysis.used_types.insert(ty);
+            }
+        }
 
         let prior = func_positions.insert(func_id.clone(), pos);
         assert!(

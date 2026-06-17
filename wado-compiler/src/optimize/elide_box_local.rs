@@ -244,10 +244,14 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
             if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                 let index = *index;
                 stats.entry(index).or_default().defs += 1;
-                stats_node(body, NodeRef::Expr(value.expr()), stats);
+                if let Some(ve) = value.as_expr() {
+                    stats_node(body, NodeRef::Expr(ve), stats);
+                }
             } else {
                 stats_node(body, NodeRef::Expr(target), stats);
-                stats_node(body, NodeRef::Expr(value.expr()), stats);
+                if let Some(ve) = value.as_expr() {
+                    stats_node(body, NodeRef::Expr(ve), stats);
+                }
             }
         }
         _ => {
@@ -318,7 +322,7 @@ fn describe_candidate(
     if s.field_names.len() != 1 {
         return None;
     }
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.expr()].kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.as_expr()?].kind else {
         return None;
     };
     if fields.len() != 1 {
@@ -326,7 +330,10 @@ fn describe_candidate(
     }
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
-    let inner_mr = ModRef::of_expr(body, inner_value.expr());
+    // A promoted-constant inner mods / refs nothing.
+    let inner_mr = inner_value
+        .as_expr()
+        .map_or_else(ModRef::default, |e| ModRef::of_expr(body, e));
     Some((local_index, field_name, inner_mr))
 }
 

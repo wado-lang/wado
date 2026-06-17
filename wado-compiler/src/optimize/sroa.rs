@@ -339,8 +339,12 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
         return;
     };
     let (name, local_index, is_mut, value) = (name.clone(), *local_index, *is_mut, *value);
-    let aggregate_type_id = body.exprs[value.expr()].type_id;
-    match &body.exprs[value.expr()].kind {
+    // A promoted constant binding is not an aggregate to scalarize.
+    let Some(value_e) = value.as_expr() else {
+        return;
+    };
+    let aggregate_type_id = body.exprs[value_e].type_id;
+    match &body.exprs[value_e].kind {
         ExprKind::StructLiteral {
             struct_name,
             fields,
@@ -348,7 +352,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
         } => {
             let field_info: Vec<(String, TypeId)> = fields
                 .iter()
-                .map(|f| (f.name.clone(), body.exprs[f.value.expr()].type_id))
+                .map(|f| (f.name.clone(), body.operand_type(f.value)))
                 .collect();
             candidates.push(SroaCandidate {
                 local_index,
@@ -363,7 +367,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
             let field_info: Vec<(String, TypeId)> = elements
                 .iter()
                 .enumerate()
-                .map(|(i, e)| (i.to_string(), body.exprs[e.expr()].type_id))
+                .map(|(i, e)| (i.to_string(), body.operand_type(*e)))
                 .collect();
             candidates.push(SroaCandidate {
                 local_index,
