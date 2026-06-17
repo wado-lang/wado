@@ -103,7 +103,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
             {
                 let index = *index;
                 if !is_kept(engine, index, stores_aliased) {
-                    return if arena_query::is_pure_expr(engine.body, value.expr()) {
+                    return if arena_query::is_pure_operand(engine.body, value) {
                         Action::Drop
                     } else {
                         Action::Demote(value.expr())

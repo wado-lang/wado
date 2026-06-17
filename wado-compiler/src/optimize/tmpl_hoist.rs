@@ -219,7 +219,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
         }
         StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
-            collect_local_refs(body, expr.expr(), escaping);
+            collect_local_refs_operand(body, *expr, escaping);
             collect_escaping_in_operand(body, *expr, escaping);
         }
         StmtKind::If {
@@ -256,7 +256,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 let v = *v;
-                collect_local_refs(body, v.expr(), escaping);
+                collect_local_refs_operand(body, v, escaping);
                 collect_escaping_in_operand(body, v, escaping);
             }
         }
@@ -286,7 +286,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             collect_escaping_in_operand(body, receiver, escaping);
             for arg in args {
                 collect_local_refs(body, arg, escaping);
@@ -298,7 +298,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let args = args.clone();
             collect_escaping_in_operand(body, callee, escaping);
             for arg in args {
-                collect_local_refs(body, arg.expr(), escaping);
+                collect_local_refs_operand(body, arg, escaping);
                 collect_escaping_in_operand(body, arg, escaping);
             }
         }
@@ -306,13 +306,13 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::Assign { target, value } => {
             let target = *target;
             let value = *value;
-            collect_local_refs(body, value.expr(), escaping);
+            collect_local_refs_operand(body, value, escaping);
             collect_escaping_in_expr(body, target, escaping);
             collect_escaping_in_operand(body, value, escaping);
         }
         // Struct literal fields: all field values escape
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
+            let vals: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             for v in vals {
                 collect_local_refs(body, v, escaping);
                 collect_escaping_in_expr(body, v, escaping);
@@ -406,21 +406,21 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for arg in args {
-                collect_local_refs(body, arg.expr(), escaping);
+                collect_local_refs_operand(body, arg, escaping);
                 collect_escaping_in_operand(body, arg, escaping);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for elem in elements {
-                collect_local_refs(body, elem.expr(), escaping);
+                collect_local_refs_operand(body, elem, escaping);
                 collect_escaping_in_operand(body, elem, escaping);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 let p = *p;
-                collect_local_refs(body, p.expr(), escaping);
+                collect_local_refs_operand(body, p, escaping);
                 collect_escaping_in_operand(body, p, escaping);
             }
         }
@@ -432,7 +432,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            collect_local_refs(body, value.expr(), escaping);
+            collect_local_refs_operand(body, value, escaping);
             collect_escaping_in_operand(body, value, escaping);
         }
         // Leaf nodes
@@ -454,6 +454,12 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
 /// Does NOT follow through `FieldAccess`: `s.repr` as a struct field value does
 /// not mark `s` as escaping, since field extraction is typically for temporary
 /// iterators/formatters consumed within the same scope.
+fn collect_local_refs_operand(body: &Body, op: Operand, locals: &mut IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_local_refs(body, e, locals);
+    }
+}
+
 fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -477,7 +483,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
             }
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_local_refs(body, inner.expr(), locals);
+            collect_local_refs_operand(body, *inner, locals);
         }
         // FieldAccess (e.g., s.repr) — accessing a subfield doesn't mean the whole
         // local escapes. Skip to avoid false positives with iterator construction.
@@ -514,8 +520,10 @@ fn transform_stmt(
     } else {
         None
     };
-    if let Some((local_index, value)) = let_info {
-        let tmpl_block = match &engine.body.exprs[value.expr()].kind {
+    if let Some((local_index, value)) = let_info
+        && let Some(ve) = value.as_expr()
+    {
+        let tmpl_block = match &engine.body.exprs[ve].kind {
             ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
             _ => None,
         };

@@ -1142,7 +1142,10 @@ impl<'a> Builder<'a> {
                     {
                         return;
                     }
-                    producer = value.expr();
+                    let Some(pe) = value.as_expr() else {
+                        return;
+                    };
+                    producer = pe;
                 }
                 _ => return,
             }

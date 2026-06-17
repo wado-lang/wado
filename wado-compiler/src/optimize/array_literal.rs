@@ -382,7 +382,7 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if !is_zero_int(body, used.value.expr()) {
+    if !used.value.as_expr().is_some_and(|e| is_zero_int(body, e)) {
         return None;
     }
     array_new_capacity(body, repr.value.expr())

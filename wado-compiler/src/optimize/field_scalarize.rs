@@ -82,7 +82,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -242,20 +242,20 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
             // so it is left to the generic descent (never marked).
             ExprKind::Call { args, .. } => {
                 for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    mark_if_param_passed(body, arg.expr(), cx);
+                    mark_if_param_passed_operand(body, arg, cx);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let receiver = *receiver;
-                let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-                mark_if_param_passed(body, receiver.expr(), cx);
+                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+                mark_if_param_passed_operand(body, receiver, cx);
                 for arg in arg_ids {
                     mark_if_param_passed(body, arg, cx);
                 }
             }
             ExprKind::IndirectCall { args, .. } => {
                 for arg in args.clone() {
-                    mark_if_param_passed(body, arg.expr(), cx);
+                    mark_if_param_passed_operand(body, arg, cx);
                 }
             }
             _ => {}
@@ -291,6 +291,12 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
 }
 
 /// If `e` is a struct param (or &mut of one), mark it as conservative.
+fn mark_if_param_passed_operand(body: &Body, op: Operand, cx: &mut ParamUsageCtx) {
+    if let Some(e) = op.as_expr() {
+        mark_if_param_passed(body, e, cx);
+    }
+}
+
 fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -838,14 +844,14 @@ fn visit_stmt_for_alias(
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
-            visit_expr_for_alias(body, value.expr(), false, type_table, out);
+            visit_operand_for_alias(body, *value, false, type_table, out);
         }
         StmtKind::Expr(expr) => {
             visit_expr_for_alias(body, *expr, false, type_table, out);
         }
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
-                visit_expr_for_alias(body, v.expr(), false, type_table, out);
+                visit_operand_for_alias(body, v, false, type_table, out);
             }
         }
         StmtKind::If {
@@ -854,7 +860,7 @@ fn visit_stmt_for_alias(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            visit_expr_for_alias(body, condition.expr(), false, type_table, out);
+            visit_operand_for_alias(body, condition, false, type_table, out);
             visit_block_for_alias(body, then_block, type_table, out);
             if let Some(eb) = else_block {
                 visit_block_for_alias(body, eb, type_table, out);
@@ -865,6 +871,18 @@ fn visit_stmt_for_alias(
             visit_block_for_alias(body, b, type_table, out);
         }
         StmtKind::Continue => {}
+    }
+}
+
+fn visit_operand_for_alias(
+    body: &Body,
+    op: Operand,
+    in_call_arg: bool,
+    type_table: &TypeTable,
+    out: &mut IndexSet<u32>,
+) {
+    if let Some(e) = op.as_expr() {
+        visit_expr_for_alias(body, e, in_call_arg, type_table, out);
     }
 }
 
@@ -893,49 +911,49 @@ fn visit_expr_for_alias(
                 }
                 return;
             }
-            visit_expr_for_alias(body, inner.expr(), false, type_table, out);
+            visit_operand_for_alias(body, inner, false, type_table, out);
         }
         ExprKind::Call { args, .. } => {
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
+                visit_operand_for_alias(body, aid, true, type_table, out);
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            visit_expr_for_alias(body, receiver.expr(), true, type_table, out);
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            visit_operand_for_alias(body, receiver, true, type_table, out);
             for aid in arg_ids {
                 visit_expr_for_alias(body, aid, true, type_table, out);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
+                visit_operand_for_alias(body, aid, true, type_table, out);
             }
         }
         ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            visit_expr_for_alias(body, callee.expr(), false, type_table, out);
+            visit_operand_for_alias(body, callee, false, type_table, out);
             for aid in arg_ids {
-                visit_expr_for_alias(body, aid.expr(), true, type_table, out);
+                visit_operand_for_alias(body, aid, true, type_table, out);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            visit_expr_for_alias(body, left.expr(), false, type_table, out);
-            visit_expr_for_alias(body, right.expr(), false, type_table, out);
+            visit_operand_for_alias(body, left, false, type_table, out);
+            visit_operand_for_alias(body, right, false, type_table, out);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             mark_whole_gc_ref_copy_source(body, value.expr(), type_table, out);
             visit_expr_for_alias(body, target, false, type_table, out);
-            visit_expr_for_alias(body, value.expr(), false, type_table, out);
+            visit_operand_for_alias(body, value, false, type_table, out);
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
-            visit_expr_for_alias(body, index.expr(), false, type_table, out);
+            visit_operand_for_alias(body, expr, false, type_table, out);
+            visit_operand_for_alias(body, index, false, type_table, out);
         }
         ExprKind::Cast { expr, .. }
         | ExprKind::FieldAccess { expr, .. }
@@ -945,7 +963,7 @@ fn visit_expr_for_alias(
         | ExprKind::GlobalVarSet { value: expr, .. }
         | ExprKind::ClosureToCanonical { functor: expr, .. } => {
             let expr = *expr;
-            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
+            visit_operand_for_alias(body, expr, false, type_table, out);
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             let block = *block;
@@ -957,7 +975,7 @@ fn visit_expr_for_alias(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            visit_expr_for_alias(body, condition.expr(), false, type_table, out);
+            visit_operand_for_alias(body, condition, false, type_table, out);
             visit_block_for_alias(body, then_branch, type_table, out);
             if let Some(eb) = else_branch {
                 visit_block_for_alias(body, eb, type_table, out);
@@ -966,27 +984,27 @@ fn visit_expr_for_alias(
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            visit_expr_for_alias(body, expr.expr(), false, type_table, out);
+            visit_operand_for_alias(body, expr, false, type_table, out);
             for arm in &arms {
                 if let Some(g) = arm.guard {
-                    visit_expr_for_alias(body, g.expr(), false, type_table, out);
+                    visit_operand_for_alias(body, g, false, type_table, out);
                 }
-                visit_expr_for_alias(body, arm.body.expr(), false, type_table, out);
+                visit_operand_for_alias(body, arm.body, false, type_table, out);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                visit_expr_for_alias(body, fid.expr(), false, type_table, out);
+                visit_operand_for_alias(body, fid, false, type_table, out);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                visit_expr_for_alias(body, eid.expr(), false, type_table, out);
+                visit_operand_for_alias(body, eid, false, type_table, out);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                visit_expr_for_alias(body, p.expr(), false, type_table, out);
+                visit_operand_for_alias(body, p, false, type_table, out);
             }
         }
         ExprKind::Switch {
@@ -998,7 +1016,7 @@ fn visit_expr_for_alias(
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            visit_expr_for_alias(body, scrutinee.expr(), false, type_table, out);
+            visit_operand_for_alias(body, scrutinee, false, type_table, out);
             for arm in arms {
                 visit_block_for_alias(body, arm, type_table, out);
             }
@@ -1116,14 +1134,14 @@ fn count_field_accesses_in_stmt(
             {
                 mark_local_aliased(*index, counts);
             }
-            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, value, counts, false, false, type_table);
         }
         StmtKind::Expr(expr) => {
             count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = *value {
-                count_field_accesses_in_expr(body, v.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, v, counts, false, false, type_table);
             }
         }
         StmtKind::If {
@@ -1132,7 +1150,7 @@ fn count_field_accesses_in_stmt(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            count_field_accesses_in_expr(body, condition.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, condition, counts, false, false, type_table);
             count_field_accesses_in_block(body, then_block, counts, type_table);
             if let Some(eb) = else_block {
                 count_field_accesses_in_block(body, eb, counts, type_table);
@@ -1150,12 +1168,12 @@ fn count_field_accesses_in_stmt(
         }
         StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
-                count_field_accesses_in_expr(body, v.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, v, counts, false, false, type_table);
             }
         }
         StmtKind::Continue => {}
         StmtKind::LetDestructure { value, .. } => {
-            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *value, counts, false, false, type_table);
         }
     }
 }
@@ -1168,6 +1186,19 @@ fn count_field_accesses_in_stmt(
 /// Anywhere else (`Let`, struct/array literal field, `Assign` rhs,
 /// `Return` / `Break` value, …) the reference escapes and the local
 /// must be marked aliased.
+fn count_field_accesses_in_operand(
+    body: &Body,
+    op: Operand,
+    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
+    is_assign_target: bool,
+    in_call_arg: bool,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        count_field_accesses_in_expr(body, e, counts, is_assign_target, in_call_arg, type_table);
+    }
+}
+
 fn count_field_accesses_in_expr(
     body: &Body,
     e: ExprId,
@@ -1180,7 +1211,7 @@ fn count_field_accesses_in_expr(
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             count_field_accesses_in_expr(body, target, counts, true, false, type_table);
-            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, value, counts, false, false, type_table);
             // If target is a direct local assignment, mark it fully assigned
             if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                 mark_local_fully_assigned(*index, counts);
@@ -1237,13 +1268,13 @@ fn count_field_accesses_in_expr(
                     info.read_count += 1;
                 }
             } else {
-                count_field_accesses_in_expr(body, inner.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, inner, counts, false, false, type_table);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            count_field_accesses_in_expr(body, left.expr(), counts, false, false, type_table);
-            count_field_accesses_in_expr(body, right.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, left, counts, false, false, type_table);
+            count_field_accesses_in_operand(body, right, counts, false, false, type_table);
         }
         ExprKind::Unary { op, expr } => {
             // `&local` / `&mut local` taken outside a direct call-argument
@@ -1271,33 +1302,33 @@ fn count_field_accesses_in_expr(
                 }
                 return;
             }
-            count_field_accesses_in_expr(body, inner.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, inner, counts, false, false, type_table);
         }
         ExprKind::Cast { expr, .. } => {
-            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
         }
         ExprKind::Call { args, .. } => {
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
+                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            count_field_accesses_in_expr(body, receiver.expr(), counts, false, true, type_table);
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            count_field_accesses_in_operand(body, receiver, counts, false, true, type_table);
             for aid in arg_ids {
                 count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
             }
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
+                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
             }
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
-            count_field_accesses_in_expr(body, index.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, expr, counts, false, false, type_table);
+            count_field_accesses_in_operand(body, index, counts, false, false, type_table);
         }
         ExprKind::Block(block) => {
             count_field_accesses_in_block(body, *block, counts, type_table);
@@ -1308,7 +1339,7 @@ fn count_field_accesses_in_expr(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            count_field_accesses_in_expr(body, condition.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, condition, counts, false, false, type_table);
             count_field_accesses_in_block(body, then_branch, counts, type_table);
             if let Some(eb) = else_branch {
                 count_field_accesses_in_block(body, eb, counts, type_table);
@@ -1316,41 +1347,41 @@ fn count_field_accesses_in_expr(
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                count_field_accesses_in_expr(body, fid.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, fid, counts, false, false, type_table);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                count_field_accesses_in_expr(body, eid.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, eid, counts, false, false, type_table);
             }
         }
         ExprKind::IndirectCall { callee, args, .. } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            count_field_accesses_in_expr(body, callee.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, callee, counts, false, false, type_table);
             for aid in arg_ids {
-                count_field_accesses_in_expr(body, aid.expr(), counts, false, true, type_table);
+                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            count_field_accesses_in_expr(body, functor.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *functor, counts, false, false, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = *payload {
-                count_field_accesses_in_expr(body, p.expr(), counts, false, false, type_table);
+                count_field_accesses_in_operand(body, p, counts, false, false, type_table);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             count_field_accesses_in_block(body, *block, counts, type_table);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            count_field_accesses_in_expr(body, value.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *value, counts, false, false, type_table);
         }
         ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
         }
         ExprKind::VariantPayload { expr, .. } => {
-            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
         }
         ExprKind::Switch {
             scrutinee,
@@ -1361,7 +1392,7 @@ fn count_field_accesses_in_expr(
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            count_field_accesses_in_expr(body, scrutinee.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, scrutinee, counts, false, false, type_table);
             for arm in arms {
                 count_field_accesses_in_block(body, arm, counts, type_table);
             }
@@ -1405,7 +1436,7 @@ fn count_field_accesses_in_expr(
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            count_field_accesses_in_expr(body, expr.expr(), counts, false, false, type_table);
+            count_field_accesses_in_operand(body, expr, counts, false, false, type_table);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
                     count_field_accesses_in_expr(
@@ -2525,7 +2556,7 @@ fn accumulate_call_sync(
     match &body.exprs[call].kind {
         ExprKind::Call { func, args, .. } => {
             let func = func.clone();
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for (arg_position, aid) in arg_ids.into_iter().enumerate() {
                 let immut_ref = is_immut_ref_arg(body, aid, type_table);
                 add_sync_fields_for_arg(
@@ -2549,7 +2580,7 @@ fn accumulate_call_sync(
         } => {
             let func = func.clone();
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             let immut_ref = is_immut_ref_arg(body, receiver.expr(), type_table);
             add_sync_fields_for_arg(
                 body,
