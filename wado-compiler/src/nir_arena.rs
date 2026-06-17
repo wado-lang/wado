@@ -481,10 +481,10 @@ impl Body {
         body
     }
 
-    /// The expression id of a body that wraps a single expression — the form
+    /// The value operand of a body that wraps a single expression — the form
     /// global initializers take, whose root block holds exactly one `Expr`
     /// statement. Panics if the body is not in that shape.
-    pub fn sole_expr(&self) -> ExprId {
+    pub fn sole_expr(&self) -> Operand {
         let block = &self.blocks[self.root];
         assert_eq!(
             block.stmts.len(),
@@ -492,10 +492,7 @@ impl Body {
             "expr-wrapper body must hold exactly one statement"
         );
         match self.stmts[block.stmts[0]].kind {
-            StmtKind::Expr(Operand::Expr(e)) => e,
-            StmtKind::Expr(Operand::Value(_)) => {
-                panic!("expr-wrapper body holds a promoted value, not a skeleton expr")
-            }
+            StmtKind::Expr(op) => op,
             _ => panic!("expr-wrapper body statement must be an Expr"),
         }
     }
@@ -536,8 +533,8 @@ impl ExprBody {
         }
     }
 
-    /// The wrapped expression's id.
-    pub fn expr(&self) -> ExprId {
+    /// The wrapped value operand.
+    pub fn expr(&self) -> Operand {
         self.body.sole_expr()
     }
 

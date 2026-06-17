@@ -250,7 +250,11 @@ fn build_global_env(
             let mut interp = Interpreter::new(type_table);
             interp.with_callees(callees);
             interp.with_globals(&env);
-            interp.reduce_to_lattice_a(global.initializer.body(), global.initializer.expr())
+            let body = global.initializer.body();
+            match global.initializer.expr() {
+                Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
+                op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+            }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
             env.insert(key, lattice);
@@ -334,7 +338,8 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
     // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(n) = const_seq_len_a(global.initializer.body(), global.initializer.expr())
+            && let Some(init_e) = global.initializer.expr().as_expr()
+            && let Some(n) = const_seq_len_a(global.initializer.body(), init_e)
         {
             record_seq_len(
                 &mut env,

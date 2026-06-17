@@ -198,7 +198,7 @@ impl<'a> NirUnparser<'a> {
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
         self.output.push_str(" = ");
-        self.unparse_expr(g.initializer.body(), g.initializer.expr());
+        self.unparse_operand(g.initializer.body(), g.initializer.expr());
         self.output.push_str(";\n");
     }
 

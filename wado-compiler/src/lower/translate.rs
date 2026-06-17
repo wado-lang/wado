@@ -382,8 +382,8 @@ impl Translator<'_> {
         // single-`Expr`-statement block — the canonical global-init `Body`
         // shape the optimizer and `wir_build` read via `Body::sole_expr`.
         let span = global.initializer.span;
-        let init_id = fctx.convert_expr(&global.initializer);
-        let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_id.into()), span);
+        let init_op = fctx.convert_operand(&global.initializer);
+        let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_op), span);
         let init_root = fctx.alloc_block(vec![init_stmt], span);
         let initializer = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
@@ -512,15 +512,15 @@ impl FunctionTranslator<'_, '_> {
             ));
         }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
-        let inner_nir = self.convert_expr(inner);
+        let inner_nir = self.convert_operand(inner);
         Some(self.wrap_in_box(
             inner_nir,
             *self.base.box_plan.box_struct_types.get(&inner.type_id)?,
+            inner.span,
         ))
     }
 
-    fn wrap_in_box(&self, value: ExprId, box_type: tir::TypeId) -> ExprId {
-        let span = self.expr_span(value);
+    fn wrap_in_box(&self, value: Operand, box_type: tir::TypeId, span: Span) -> ExprId {
         let box_struct_name = if let crate::tir::ResolvedType::Struct { name, .. } =
             self.base.type_table.borrow().get(box_type)
         {
@@ -534,7 +534,7 @@ impl FunctionTranslator<'_, '_> {
                 struct_name: box_struct_name,
                 fields: vec![ArenaStructField {
                     name: "value".to_string(),
-                    value: value.into(),
+                    value,
                     field_index: 0,
                 }],
             },
@@ -737,6 +737,16 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
+    /// [`Self::wrap_value_copy`] over an operand: a promoted scalar
+    /// (`Operand::Value`) is never value-semantic, so it passes through; only a
+    /// skeleton aggregate is wrapped.
+    fn wrap_value_copy_operand(&self, value: Operand, type_id: tir::TypeId) -> Operand {
+        match value {
+            Operand::Expr(e) => self.wrap_value_copy(e, type_id).into(),
+            Operand::Value(_) => value,
+        }
+    }
+
     fn convert_block(&self, block: &TirBlock) -> BlockId {
         let mut stmts: Vec<StmtId> = Vec::with_capacity(block.stmts.len());
         for s in &block.stmts {
@@ -785,13 +795,13 @@ impl FunctionTranslator<'_, '_> {
                             &self.immutable_locals,
                         ))
                     && self.should_wrap_value_copy(value);
-                let value_nir = self.convert_expr(value);
-                let value_nir = if let Some(box_type) = box_wrap_type {
-                    self.wrap_in_box(value_nir, box_type)
+                let value_op = self.convert_operand(value);
+                let value_op = if let Some(box_type) = box_wrap_type {
+                    self.wrap_in_box(value_op, box_type, value.span).into()
                 } else if needs_value_copy_wrap {
-                    self.wrap_value_copy(value_nir, *type_id)
+                    self.wrap_value_copy_operand(value_op, *type_id)
                 } else {
-                    value_nir
+                    value_op
                 };
                 StmtKind::Let {
                     name: name.clone(),
@@ -799,11 +809,11 @@ impl FunctionTranslator<'_, '_> {
                     is_mut: *is_mut,
                     is_reactive: *is_reactive,
                     type_id: effective_type,
-                    value: value_nir.into(),
+                    value: value_op,
                     skip_value_copy: *skip_value_copy,
                 }
             }
-            TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_expr(expr).into()),
+            TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_operand(expr)),
             TirStmtKind::Return { value } => StmtKind::Return {
                 value: value.as_ref().map(|v| self.convert_operand(v)),
             },
@@ -838,16 +848,16 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let needs_wrap = self.should_wrap_value_copy(value);
                 let value_type = value.type_id;
-                let value_nir = self.convert_expr(value);
-                let value_nir = if needs_wrap {
-                    self.wrap_value_copy(value_nir, value_type)
+                let value_op = self.convert_operand(value);
+                let value_op = if needs_wrap {
+                    self.wrap_value_copy_operand(value_op, value_type)
                 } else {
-                    value_nir
+                    value_op
                 };
                 StmtKind::LetDestructure {
                     pattern: self.convert_pattern(pattern),
                     is_mut: *is_mut,
-                    value: value_nir.into(),
+                    value: value_op,
                 }
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
@@ -1053,7 +1063,7 @@ impl FunctionTranslator<'_, '_> {
     /// `fn(...)`, wrap the converted `Local` in
     /// `ExprKind::ClosureToCanonical` so the callee sees the
     /// original function-shaped view.
-    fn convert_specialized_arg_expr(&self, arg: &TirExpr) -> ExprId {
+    fn convert_specialized_arg_operand(&self, arg: &TirExpr) -> Operand {
         if let TirExprKind::Local { index, .. } = &arg.kind
             && let Some(spec) = self.specialized_for_local(*index)
             && matches!(
@@ -1067,32 +1077,34 @@ impl FunctionTranslator<'_, '_> {
                 .get(spec.functor_id as usize)
         {
             let inner = self.convert_expr(arg);
-            return self.alloc_expr(
-                ExprKind::ClosureToCanonical {
-                    functor: inner.into(),
-                    functor_id: spec.functor_id,
-                    target_fn_type: spec.original_fn_type,
-                    closure_module: functor.module_source.clone(),
-                },
-                spec.original_fn_type,
-                arg.span,
-            );
+            return self
+                .alloc_expr(
+                    ExprKind::ClosureToCanonical {
+                        functor: inner.into(),
+                        functor_id: spec.functor_id,
+                        target_fn_type: spec.original_fn_type,
+                        closure_module: functor.module_source.clone(),
+                    },
+                    spec.original_fn_type,
+                    arg.span,
+                )
+                .into();
         }
-        self.convert_expr(arg)
+        self.convert_operand(arg)
     }
 
     fn convert_expr_kind(&self, kind: &TirExprKind) -> ExprKind {
         match kind {
-            TirExprKind::IntLiteral { value, repr } => ExprKind::IntLiteral {
-                value: *value,
-                repr: repr.clone(),
-            },
-            TirExprKind::FloatLiteral { value, repr } => ExprKind::FloatLiteral {
-                value: *value,
-                repr: repr.clone(),
-            },
-            TirExprKind::BoolLiteral(b) => ExprKind::BoolLiteral(*b),
-            TirExprKind::CharLiteral(c) => ExprKind::CharLiteral(*c),
+            // Pure scalar literals are interned into the `ValuePool` and born as
+            // `Operand::Value` by `convert_operand`; every literal-bearing
+            // position routes through `convert_operand`, so `convert_expr` is
+            // never entered on one (WEP: The Live ValueGraph).
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_) => {
+                unreachable!("scalar literals are interned via convert_operand, never convert_expr")
+            }
             TirExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
             TirExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
             TirExprKind::Null => ExprKind::Null,
@@ -1137,15 +1149,15 @@ impl FunctionTranslator<'_, '_> {
                 let needs_wrap = matches!(&target.kind, TirExprKind::Local { .. })
                     && self.should_wrap_value_copy(value);
                 let value_type = value.type_id;
-                let value_nir = self.convert_expr(value);
-                let value_nir = if needs_wrap {
-                    self.wrap_value_copy(value_nir, value_type)
+                let value_op = self.convert_operand(value);
+                let value_op = if needs_wrap {
+                    self.wrap_value_copy_operand(value_op, value_type)
                 } else {
-                    value_nir
+                    value_op
                 };
                 ExprKind::Assign {
                     target: self.convert_expr(target),
-                    value: value_nir.into(),
+                    value: value_op,
                 }
             }
             TirExprKind::Cast { expr, target_type } => ExprKind::Cast {
@@ -1252,12 +1264,12 @@ impl FunctionTranslator<'_, '_> {
                     .iter()
                     .map(|a| {
                         let needs_wrap = self.should_wrap_value_copy(a);
-                        let nir = self.convert_expr(a);
-                        Operand::Expr(if needs_wrap {
-                            self.wrap_value_copy(nir, a.type_id)
+                        let op = self.convert_operand(a);
+                        if needs_wrap {
+                            self.wrap_value_copy_operand(op, a.type_id)
                         } else {
-                            nir
-                        })
+                            op
+                        }
                     })
                     .collect(),
             },
@@ -1503,14 +1515,14 @@ impl FunctionTranslator<'_, '_> {
         // semantic).
         let needs_value_copy = arg.is_mut && self.should_wrap_value_copy(&arg.expr);
         let value_type = arg.expr.type_id;
-        let converted = self.convert_specialized_arg_expr(&arg.expr);
+        let converted = self.convert_specialized_arg_operand(&arg.expr);
         let expr = if needs_value_copy {
-            self.wrap_value_copy(converted, value_type)
+            self.wrap_value_copy_operand(converted, value_type)
         } else {
             converted
         };
         ArenaCallArg {
-            expr: expr.into(),
+            expr,
             is_mut: arg.is_mut,
         }
     }
