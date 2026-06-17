@@ -1854,7 +1854,9 @@ fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::I
             local_index, value, ..
         } => {
             out.insert(*local_index);
-            collect_writes_in_expr(body, value.expr(), out);
+            if let Some(ve) = value.as_expr() {
+                collect_writes_in_expr(body, ve, out);
+            }
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
             collect_writes_in_pattern(body, *pattern, out);

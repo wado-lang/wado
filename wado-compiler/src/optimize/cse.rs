@@ -37,7 +37,7 @@ use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::{NirBinaryOp, NirFunction};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
@@ -365,8 +365,8 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
         StmtKind::Loop { .. } => {}
         StmtKind::LabeledBlock { block, .. } => collect_exprs_in_block(body, *block, out),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_exprs_in_expr(body, v.expr(), out);
+            if let Some(ve) = value.and_then(Operand::as_expr) {
+                collect_exprs_in_expr(body, ve, out);
             }
         }
         StmtKind::Continue => {}

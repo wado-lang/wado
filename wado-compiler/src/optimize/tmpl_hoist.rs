@@ -48,7 +48,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind,
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -212,7 +212,7 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
 fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>) {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } => {
-            collect_escaping_in_expr(body, value.expr(), escaping);
+            collect_escaping_in_operand(body, *value, escaping);
         }
         StmtKind::Expr(expr) => {
             collect_escaping_in_expr(body, *expr, escaping);
@@ -220,7 +220,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
         StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
             collect_local_refs(body, expr.expr(), escaping);
-            collect_escaping_in_expr(body, expr.expr(), escaping);
+            collect_escaping_in_operand(body, *expr, escaping);
         }
         StmtKind::If {
             condition,
@@ -230,7 +230,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_escaping_in_expr(body, condition.expr(), escaping);
+            collect_escaping_in_operand(body, condition, escaping);
             for s in &body.blocks[then_block].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -257,16 +257,22 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
             if let Some(v) = value {
                 let v = *v;
                 collect_local_refs(body, v.expr(), escaping);
-                collect_escaping_in_expr(body, v.expr(), escaping);
+                collect_escaping_in_operand(body, v, escaping);
             }
         }
         StmtKind::LetDestructure { value, .. } => {
-            collect_escaping_in_expr(body, value.expr(), escaping);
+            collect_escaping_in_operand(body, *value, escaping);
         }
     }
 }
 
 /// Mark all locals that appear as non-receiver function arguments as escaping.
+fn collect_escaping_in_operand(body: &Body, op: Operand, escaping: &mut IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_escaping_in_expr(body, e, escaping);
+    }
+}
+
 fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
@@ -281,7 +287,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             // Receiver (self) doesn't escape — only non-self args escape
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            collect_escaping_in_expr(body, receiver.expr(), escaping);
+            collect_escaping_in_operand(body, receiver, escaping);
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -290,10 +296,10 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            collect_escaping_in_expr(body, callee.expr(), escaping);
+            collect_escaping_in_operand(body, callee, escaping);
             for arg in args {
                 collect_local_refs(body, arg.expr(), escaping);
-                collect_escaping_in_expr(body, arg.expr(), escaping);
+                collect_escaping_in_operand(body, arg, escaping);
             }
         }
         // Assignment: the value escapes (stored in target location)
@@ -302,7 +308,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let value = *value;
             collect_local_refs(body, value.expr(), escaping);
             collect_escaping_in_expr(body, target, escaping);
-            collect_escaping_in_expr(body, value.expr(), escaping);
+            collect_escaping_in_operand(body, value, escaping);
         }
         // Struct literal fields: all field values escape
         ExprKind::StructLiteral { fields, .. } => {
@@ -316,21 +322,21 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_escaping_in_expr(body, inner.expr(), escaping);
-            collect_escaping_in_expr(body, index.expr(), escaping);
+            collect_escaping_in_operand(body, inner, escaping);
+            collect_escaping_in_operand(body, index, escaping);
         }
         // Binary/unary: recurse
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_escaping_in_expr(body, left.expr(), escaping);
-            collect_escaping_in_expr(body, right.expr(), escaping);
+            collect_escaping_in_operand(body, left, escaping);
+            collect_escaping_in_operand(body, right, escaping);
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_escaping_in_expr(body, inner.expr(), escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_escaping_in_expr(body, inner.expr(), escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::If {
             condition,
@@ -340,7 +346,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_escaping_in_expr(body, condition.expr(), escaping);
+            collect_escaping_in_operand(body, condition, escaping);
             for s in &body.blocks[then_branch].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -373,7 +379,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
                         .map(|o| o.expr())
                 })
                 .collect();
-            collect_escaping_in_expr(body, inner.expr(), escaping);
+            collect_escaping_in_operand(body, inner, escaping);
             for ae in arm_exprs {
                 collect_escaping_in_expr(body, ae, escaping);
             }
@@ -387,7 +393,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_escaping_in_expr(body, scrutinee.expr(), escaping);
+            collect_escaping_in_operand(body, scrutinee, escaping);
             for arm in arms {
                 for s in &body.blocks[arm].stmts {
                     collect_escaping_in_stmt(body, *s, escaping);
@@ -401,33 +407,33 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let args = args.clone();
             for arg in args {
                 collect_local_refs(body, arg.expr(), escaping);
-                collect_escaping_in_expr(body, arg.expr(), escaping);
+                collect_escaping_in_operand(body, arg, escaping);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for elem in elements {
                 collect_local_refs(body, elem.expr(), escaping);
-                collect_escaping_in_expr(body, elem.expr(), escaping);
+                collect_escaping_in_operand(body, elem, escaping);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 let p = *p;
                 collect_local_refs(body, p.expr(), escaping);
-                collect_escaping_in_expr(body, p.expr(), escaping);
+                collect_escaping_in_operand(body, p, escaping);
             }
         }
         ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. } => {
-            collect_escaping_in_expr(body, inner.expr(), escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
             collect_local_refs(body, value.expr(), escaping);
-            collect_escaping_in_expr(body, value.expr(), escaping);
+            collect_escaping_in_operand(body, value, escaping);
         }
         // Leaf nodes
         ExprKind::Local { .. }

@@ -250,6 +250,12 @@ impl<'a> Engine<'a> {
         let v = {
             let pool = &mut self.body.values;
             let value_of = &self.value_graph.as_ref().unwrap().value_of;
+            // A pure operand resolves to its promoted `ValueId` directly, or
+            // through `value_of` for a skeleton subtree.
+            let operand_value = |op: Operand| match op {
+                Operand::Value(v) => Some(v),
+                Operand::Expr(e) => value_of.get(&e).copied(),
+            };
             match kind {
                 ExprKind::IntLiteral { value, .. } => pool.int(value),
                 ExprKind::FloatLiteral { value, .. } => pool.float(value),
@@ -259,8 +265,8 @@ impl<'a> Engine<'a> {
                 ExprKind::Null => pool.null(),
                 ExprKind::Unit => pool.unit(),
                 ExprKind::Binary { left, op, right } => {
-                    let lhs = value_of.get(&left.expr()).copied()?;
-                    let rhs = value_of.get(&right.expr()).copied()?;
+                    let lhs = operand_value(left)?;
+                    let rhs = operand_value(right)?;
                     pool.binary(op, lhs, rhs)
                 }
                 ExprKind::Unary { op, expr: inner } => {
@@ -268,14 +274,14 @@ impl<'a> Engine<'a> {
                     if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
                         return None;
                     }
-                    let operand = value_of.get(&inner.expr()).copied()?;
+                    let operand = operand_value(inner)?;
                     pool.unary(op, operand)
                 }
                 ExprKind::Cast {
                     expr: inner,
                     target_type,
                 } => {
-                    let operand = value_of.get(&inner.expr()).copied()?;
+                    let operand = operand_value(inner)?;
                     pool.cast(operand, target_type)
                 }
                 _ => return None,

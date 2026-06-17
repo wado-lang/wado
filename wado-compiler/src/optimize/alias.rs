@@ -608,8 +608,9 @@ fn collect_alias_edges_node(
         NodeRef::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[e].kind
                 && let ExprKind::Local { index: dst, .. } = &body.exprs[*target].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[value.expr()].kind
-                && type_creates_alias(body.exprs[value.expr()].type_id, type_table)
+                && let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
+                && type_creates_alias(body.exprs[ve].type_id, type_table)
             {
                 edges.push((*dst, *src));
             }
@@ -647,7 +648,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Expr(expr) => {
                 if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
                     && let Some(dst) = local(*target)
-                    && let Some(src) = local(value.expr())
+                    && let Some(src) = value.as_expr().and_then(local)
                 {
                     out.insert(dst);
                     out.insert(src);

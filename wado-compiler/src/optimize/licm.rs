@@ -238,7 +238,7 @@ fn licm_block(
             Loop(BlockId),
             If(BlockId, Option<BlockId>),
             Labeled(BlockId),
-            Let(u32, ExprId),
+            Let(u32, Operand),
             Other,
         }
         let shape = match &engine.body.stmts[s].kind {
@@ -251,7 +251,7 @@ fn licm_block(
             StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
             StmtKind::Let {
                 local_index, value, ..
-            } => Shape::Let(*local_index, value.expr()),
+            } => Shape::Let(*local_index, *value),
             _ => Shape::Other,
         };
 
@@ -281,8 +281,9 @@ fn licm_block(
             }
             Shape::Let(local_index, value) => {
                 // Track outer-scope aliases so a subsequent loop's LICM can see them.
-                if let Some(src_idx) = extract_alias_source(engine.body, value)
-                    && is_gc_heap_type(engine.body.exprs[value].type_id, type_table)
+                if let Some(ve) = value.as_expr()
+                    && let Some(src_idx) = extract_alias_source(engine.body, ve)
+                    && is_gc_heap_type(engine.body.exprs[ve].type_id, type_table)
                 {
                     outer_aliases.push((local_index, src_idx));
                 }
