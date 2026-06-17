@@ -29,22 +29,19 @@ revision — so the priorities below are re-derived from a fresh profile,
 not the historical one.
 
 > **Measurement note (read before trusting the percentages).** The
-> headline table above is from the release benchmark (`mise run
-> sqlite-parse`, host built `--release`). The **profile below was
-> captured with the dev-profile `wado`** (`cargo run`, per the
-> inner-dev-loop guidance in the root `CLAUDE.md` — no release rebuild).
-> `Cargo.toml` raises `opt-level` on `cranelift-codegen`, so the
-> JIT-compiled **guest code is near-release quality**, but the wasmtime
-> runtime, GC, and allocator host paths run at dev speed. Net effect: the
-> dev host is ~10× slower per iter than the release headline, and that
-> slack is concentrated in **allocation/GC host work**. So the profile
-> **over-weights allocation-heavy guest frames** (`List<Token>::push`,
-> the `_gale_rule` per-call rule-name allocation) relative to pure-compute frames
-> (`scan_*`, `follow_yields`, the kind-set tests), which it
-> **under-weights**. Read the table as relative self-time with that
-> directional skew in mind; the _ordering within_ the compute frames and
-> within the allocation frames is reliable, the alloc-vs-compute split is
-> a soft upper bound on the alloc share.
+> headline table is from the release benchmark (`mise run sqlite-parse`).
+> The **profile below was captured with the dev-profile `wado`** (`cargo
+> run`, per the inner-dev-loop guidance in the root `CLAUDE.md` — no
+> release rebuild). `Cargo.toml` raises `opt-level` on `cranelift-codegen`,
+> so the JIT-compiled **guest code is near-release quality**, but the
+> wasmtime runtime, GC, and allocator run at dev speed — making the dev
+> host ~10× slower per iter, with the slack concentrated in
+> **allocation/GC**. So the profile inflates allocation-bound frames
+> relative to pure-compute ones (`scan_*`, `follow_yields`, kind-set), and
+> its per-frame attribution within allocation is loose: §2 is a case where
+> a spike shows ~40% of wall time for a frame the sampler puts at 18%.
+> Read the percentages as relative, and the alloc-vs-compute split as
+> approximate.
 
 Reproduce:
 
@@ -58,8 +55,8 @@ wado run --no-cache --profile guest,/tmp/p.json,1 -O2 sqlite_parse/sqlite_parse.
 
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the
 `profiling-wado` skill's script, or upload to profiler.firefox.com. The
-table below merges **7 dev-host runs @1 ms = 1620 samples** to damp the
-per-run noise of a ~3.5 ms-of-guest-work-per-iter workload.)
+table below merges **7 dev-host runs @1 ms = 1620 samples** to damp
+per-run sampling noise.)
 
 ## Live profile (guest sampler, 7 runs merged, 1620 samples @1 ms)
 
@@ -82,31 +79,25 @@ per-run noise of a ~3.5 ms-of-guest-work-per-iter workload.)
 
 Rough buckets (self-time): token-stream construction (`push`+`grow`) ≈
 **25%**; the per-call rule-name `String` allocation at the `_gale_rule`
-boundary (`_gale_rule<*>`, all variants) ≈ **21%** — but see §2: a spike
-that removes only that allocation cuts ~40% of dev-host wall time, so the
-profile **under**-attributes it; lexer char-level work
-(`to_ascii_lowercase` + `List<char>` +
+boundary (`_gale_rule<*>`, all variants) ≈ **21%** (under-attributed — see
+§2); lexer char-level work (`to_ascii_lowercase` + `List<char>` +
 `classify_keyword` + `collect` + `try_*`) ≈ **13%**; `scan_*` ≈ **11%**;
 kind-set membership ≈ **9%**; `Parser` token reads
 (`last_end`/`expect`/`advance`) ≈ **8%**; the FOLLOW gate ≈ **4%**.
 
-This is a different shape from the previous revision, where `follow_yields`
-led at 18.6% and `List<Token>::grow` at 15.3%. The pre-size killed `grow`,
-the per-loop FOLLOW prune dropped the gate to ~4%, and two
-allocation-bound costs rose to the top: per-token construction and the
-per-call rule-name `String` allocation at the generic rule wrapper
-(neither present in the old profile at the same weight). Per the
-measurement note, the two leaders are exactly the frames the dev host
-inflates, but both are real allocations (per-token `struct.new`, §1, and
-per-rule `struct.new String`, §2 — the latter confirmed by a spike, not
-just the sampler), so the _ordering_ holds. Note §2 is **not** a subtree
-copy (a WIR-level fact an earlier draft got wrong): the wrapper returns a
-`ref`; the cost is the rule-name allocation at the call site.
+A different shape from the previous revision, where `follow_yields` led
+at 18.6% and `List<Token>::grow` at 15.3%: the pre-size killed `grow` and
+the per-loop FOLLOW prune dropped the gate to ~4%, leaving two real
+allocations on top — per-token `struct.new` (§1) and the per-call
+rule-name `struct.new String` (§2, confirmed by a spike). Both are
+allocation-bound, so the dev host inflates them (measurement note); the
+ordering holds.
 
 ## What would move the needle
 
-Ordered by current self-time. None are mutually exclusive; several
-multiply rather than add.
+Ordered by profile self-time (but §2 is the largest once the sampler's
+under-attribution is corrected — see its spike). None are mutually
+exclusive; several multiply rather than add.
 
 ### 1. Token-stream construction — `push` 24.0% + `grow` 1.0% (~25%)
 
@@ -162,11 +153,10 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
 }
 ```
 
-The profile attributes ~18% self-time to `_gale_rule<ResultColumnNode>`,
-which **misled an earlier draft into calling it a "subtree copy."** It is
-not. The WIR proves the success path is free of any copy — `Result<…>` is
-a boxed `ref`, so `return r` returns a reference and the only
-`$value_copy$` is on the cold `Err` branch:
+The profile puts ~18% self-time on `_gale_rule<ResultColumnNode>`, but it
+is **not a copy**. The WIR shows the success path is copy-free —
+`Result<…>` is a boxed `ref`, so `return r` returns a reference, and the
+only `$value_copy$` is on the cold `Err` branch:
 
 ```text
 fn _gale_rule<ResultColumnNode>(r, rule) {
@@ -227,9 +217,8 @@ the call site. Either path closes the gap:
   variant passes an `i32` rule-id and turns `rule_stack` into
   `List<i32>`, eliminating hot-path string work entirely.
 
-(Per the measurement note the dev host over-weights this allocation-bound
-cost; the release share is smaller, but the per-parse allocation-count
-reduction is real and host-independent.)
+(The ~40% is dev-host; release allocates faster so the share is smaller,
+but the per-parse allocation-count drop is real and host-independent.)
 
 ### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%)
 
