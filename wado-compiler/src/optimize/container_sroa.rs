@@ -964,7 +964,9 @@ impl WhitelistChecker<'_> {
                     return false;
                 }
                 // Index expression must be visited as a normal expression.
-                self.visit_expr(body, arg0.expr());
+                if let Some(e) = arg0.as_expr() {
+                    self.visit_expr(body, e);
+                }
                 // Record that `other` is being read via IndexReader so it
                 // needs that method monomorphization during rewrite.
                 self.record_use(other, ListMethodKind::IndexReader);

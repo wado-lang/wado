@@ -267,13 +267,19 @@ fn collect_binary_candidates(
             match &body.exprs[e].kind {
                 ExprKind::Binary { left, op, right } => {
                     binary_exprs.push((e, body.exprs[e].type_id, body.exprs[e].span));
-                    stack.push(left.expr());
-                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                        stack.push(right.expr());
+                    if let Some(le) = left.as_expr() {
+                        stack.push(le);
+                    }
+                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or)
+                        && let Some(re) = right.as_expr()
+                    {
+                        stack.push(re);
                     }
                 }
                 ExprKind::Unary { expr: inner, .. } => {
-                    stack.push(inner.expr());
+                    if let Some(ie) = inner.as_expr() {
+                        stack.push(ie);
+                    }
                 }
                 _ => {}
             }

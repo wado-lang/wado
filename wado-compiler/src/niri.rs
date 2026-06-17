@@ -1237,11 +1237,11 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
             _ => return false,
         };
-        let arms_data: Vec<(Option<ExprId>, PatId, ExprId, crate::token::Span)> =
+        let arms_data: Vec<(Option<Operand>, PatId, Operand, crate::token::Span)> =
             match &body.exprs[e].kind {
                 ExprKind::Match { arms, .. } => arms
                     .iter()
-                    .map(|a| (a.guard.map(|g| g.expr()), a.pattern, a.body.expr(), a.span))
+                    .map(|a| (a.guard, a.pattern, a.body, a.span))
                     .collect(),
                 _ => unreachable!(),
             };
@@ -1265,7 +1265,23 @@ impl<'a> Interpreter<'a> {
             let Some(idx) = chosen else {
                 return false;
             };
-            let body_e = arms_data[idx].2;
+            let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
+            let body_e = match body_op {
+                Operand::Expr(ex) => ex,
+                Operand::Value(v) => {
+                    let ty = sink
+                        .body()
+                        .values
+                        .type_of(v)
+                        .expect("promoted operand has a recorded type");
+                    let prim = crate::const_eval::prim_of(ty, self.type_table);
+                    let kind = crate::nir_value_graph::materialize_value_kind(
+                        sink.body().values.kind(v),
+                        prim,
+                    );
+                    sink.alloc_expr(kind, ty, arm_span)
+                }
+            };
             let span = sink.body().exprs[body_e].span;
             let stmt = sink.alloc_stmt(StmtKind::Expr(body_e), span);
             let block = sink.alloc_block(vec![stmt], span);
@@ -1313,7 +1329,7 @@ impl<'a> Interpreter<'a> {
         }
         let mut common: Option<Value> = None;
         for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.expr_to_lattice_a(sink.body(), *b) else {
+            let Lattice::Const(v) = self.operand_to_lattice_a(sink.body(), *b) else {
                 return false;
             };
             match common {
@@ -1599,31 +1615,45 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
 /// Simplify `false && x` / `true || x` and their mirror forms.
 fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     let body = sink.body();
-    let keep = match &body.exprs[e].kind {
+    let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            match (
-                &body.exprs[left.expr()].kind,
-                *op,
-                &body.exprs[right.expr()].kind,
-            ) {
-                (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
-                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
-                (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
-                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => *left,
+            let (left, op, right) = (*left, *op, *right);
+            match (operand_bool(body, left), op, operand_bool(body, right)) {
+                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
+                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
                 _ => return false,
             }
         }
         _ => return false,
     };
-    // Become the kept operand. The other operand is left orphaned.
-    sink.become_expr(e, keep.expr());
+    // Become the kept operand. The other operand is left orphaned. A constant
+    // `keep` (a fully-constant short-circuit) is left to the const-fold path.
+    let Some(keep_e) = keep.as_expr() else {
+        return false;
+    };
+    sink.become_expr(e, keep_e);
     true
+}
+
+/// The boolean value of an operand: a `BoolLiteral` expr or a promoted
+/// `ValueKind::Bool`. `None` for any other operand.
+fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
+    match op {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::BoolLiteral(b) => Some(*b),
+            _ => None,
+        },
+        Operand::Value(v) => match body.values.kind(v) {
+            ValueKind::Bool(b) => Some(*b),
+            _ => None,
+        },
+    }
 }
 
 /// Recognize `match X { Case => true, _ => false }` as an equality test.
 fn try_match_bool_discriminator_a(
     body: &Body,
-    arms: &[(Option<ExprId>, PatId, ExprId, crate::token::Span)],
+    arms: &[(Option<Operand>, PatId, Operand, crate::token::Span)],
 ) -> Option<EnumEqReplacement> {
     let [yes_arm, no_arm] = arms else {
         return None;
@@ -1634,10 +1664,10 @@ fn try_match_bool_discriminator_a(
     if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
         return None;
     }
-    if !matches!(body.exprs[yes_arm.2].kind, ExprKind::BoolLiteral(true)) {
+    if operand_bool(body, yes_arm.2) != Some(true) {
         return None;
     }
-    if !matches!(body.exprs[no_arm.2].kind, ExprKind::BoolLiteral(false)) {
+    if operand_bool(body, no_arm.2) != Some(false) {
         return None;
     }
     let PatKind::Enum {

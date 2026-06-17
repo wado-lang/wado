@@ -198,7 +198,9 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         } => {
             let (local_index, value) = (*local_index, *value);
             stats.entry(local_index).or_default().defs += 1;
-            stats_node(body, NodeRef::Expr(value.expr()), stats);
+            if let Some(ve) = value.as_expr() {
+                stats_node(body, NodeRef::Expr(ve), stats);
+            }
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
             let (pattern, value) = (*pattern, *value);
