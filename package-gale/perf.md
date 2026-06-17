@@ -113,14 +113,28 @@ multiply rather than add.
 The dominant _category_, and now **allocation-bound** (`push`) rather
 than reallocation-bound — the pre-size (`List::with_capacity` in
 `tokenize`) already collapsed `grow` from 15.3% to ~1%, so that earlier
-"cheapest win" is **done**. What remains is the Wasm GC
-`(array (ref Token))` indirection plus a per-token `struct.new Token` on
-every `push` (each `Token` carries a `LexerSlice`, a `Span`, and a
-`leading_trivia: List<Token>`, so the struct is not trivial). The lever is
-**SoA decomposition of `List<Token>`**: parallel primitive arrays
-(`kinds` / `starts` / `ends` as `List<i32>`) so `peek_kind` becomes a
-single `array.get i32` (not `array.get (ref Token)` + `struct.get`) and
-per-token allocation disappears in the lex loop. Two ways to get there:
+"cheapest win" is **done**.
+
+`push` is **not a copy** (checked, like `_gale_rule` §2): the WIR body is
+just a length check + `array.set<ref Token>` + increment, and the token
+array holds **refs** (`(array (ref Token))`), so `push` stores a pointer —
+there is no `$value_copy$Token` anywhere. Two genuine costs remain, both
+removed by the same lever:
+
+1. The per-token **`struct.new Token`** (with its `LexerSlice`, `Span`,
+   and `leading_trivia: List<Token>` sub-allocations) — this lands in
+   `tokenize`, not `push`.
+2. Inside `push`, the **`array.set` into a `(array (ref Token))`** — a GC
+   reference store / write barrier executed once per token; combined with
+   the sheer call frequency (one `push` per token) this is what puts the
+   trivial body at the top, the same call-frequency effect as `last_end`
+   (§3), not per-call expense.
+
+The lever is **SoA decomposition of `List<Token>`**: parallel primitive
+arrays (`kinds` / `starts` / `ends` as `List<i32>`) so `peek_kind` becomes
+a single `array.get i32` (not `array.get (ref Token)` + `struct.get`),
+per-token allocation disappears in the lex loop, and the ref-array store
+becomes a barrier-free `array.set i32`. Two ways to get there:
 
 - **Gale-side:** redesign `Token` so hot fields are flat primitives,
   with an opaque sidecar (or removal) for `text` / `leading_trivia`;
