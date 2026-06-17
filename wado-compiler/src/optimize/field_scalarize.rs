@@ -811,9 +811,6 @@ fn collect_function_aliased_locals(body: &Body, type_table: &TypeTable) -> Index
 /// source — record that source local as aliased. A deep value copy is
 /// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
 /// so it does not match here.
-fn mark_whole_gc_ref_copy_source_operand(body: &Body, op: Operand, type_table: &TypeTable, out: &mut IndexSet<u32>)  {
-    if let Some(e) = op.as_expr() { mark_whole_gc_ref_copy_source(body, e, type_table, out); }
-}
 
 fn mark_whole_gc_ref_copy_source(
     body: &Body,
@@ -893,9 +890,6 @@ fn visit_operand_for_alias(
     }
 }
 
-fn visit_expr_for_alias_operand(body: &Body, op: Operand, in_call_arg: bool, type_table: &TypeTable, out: &mut IndexSet<u32>)  {
-    if let Some(e) = op.as_expr() { visit_expr_for_alias(body, e, in_call_arg, type_table, out); }
-}
 
 fn visit_expr_for_alias(
     body: &Body,
@@ -2409,9 +2403,6 @@ fn walk_expr(
 /// in an assignment. Returns the candidate index + a clone of the
 /// candidate. (Cloning avoids holding a borrow on `ctx` across the
 /// caller's mutations.)
-fn field_assign_to_candidate_operand(body: &Body, op: Operand, ctx: &WalkCtx) -> Option<(usize, ScalarizeCandidate)> {
-    op.as_expr().map_or(None, |e| field_assign_to_candidate(body, e, ctx))
-}
 
 fn field_assign_to_candidate(
     body: &Body,
@@ -2434,9 +2425,6 @@ fn field_assign_to_candidate(
     None
 }
 
-fn field_read_to_candidate_operand(body: &Body, op: Operand, ctx: &WalkCtx) -> Option<(usize, ScalarizeCandidate)> {
-    op.as_expr().map_or(None, |e| field_read_to_candidate(body, e, ctx))
-}
 
 fn field_read_to_candidate(
     body: &Body,
@@ -2466,9 +2454,6 @@ fn field_read_to_candidate(
 /// field-canonical, and updates state to `FieldOnly` for `&mut`-touched
 /// candidates. The call expression itself is left in place; the wrap
 /// (if any) is just the pre-call write-back stmts.
-fn walk_call_expr_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
-    if let Some(e) = op.as_expr() { walk_call_expr(body, e, states, out, ctx); }
-}
 
 fn walk_call_expr(
     body: &mut Body,
@@ -2503,9 +2488,6 @@ fn walk_call_expr(
     // level). All sync sits at stmt level via `out`.
 }
 
-fn recurse_into_call_args_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
-    if let Some(e) = op.as_expr() { recurse_into_call_args(body, e, states, out, ctx); }
-}
 
 fn recurse_into_call_args(
     body: &mut Body,
@@ -2592,9 +2574,6 @@ struct SyncFields {
     re_read: IndexSet<(u32, u32)>,
 }
 
-fn accumulate_call_sync_operand(body: &Body, op: Operand, candidates: &[ScalarizeCandidate], type_table: &TypeTable, cache: &FieldUsageCache, result: &mut SyncFields)  {
-    if let Some(e) = op.as_expr() { accumulate_call_sync(body, e, candidates, type_table, cache, result); }
-}
 
 fn accumulate_call_sync(
     body: &Body,
@@ -2685,9 +2664,6 @@ fn accumulate_call_sync(
 /// rewrites and call wrappings are handled by the higher-level
 /// `walk_expr`; this helper just propagates the walk through structural
 /// kinds.
-fn walk_other_expr_kinds_operand(body: &mut Body, op: Operand, states: &mut ScalarStates, result_used: bool, out: &mut Vec<StmtId>, ctx: &mut WalkCtx)  {
-    if let Some(e) = op.as_expr() { walk_other_expr_kinds(body, e, states, result_used, out, ctx); }
-}
 
 fn walk_other_expr_kinds(
     body: &mut Body,
@@ -2889,9 +2865,6 @@ fn walk_labeled_block(
 /// is the `If` expression whose `else_branch` is updated when the implicit
 /// no-op path needs a synthesized else.
 #[allow(clippy::too_many_arguments)]
-fn walk_expr_branches_if_operand(body: &mut Body, op: Operand, then_branch: BlockId, else_branch: Option<BlockId>, states: &mut ScalarStates, _result_used: bool, ctx: &mut WalkCtx, span: crate::token::Span)  {
-    if let Some(e) = op.as_expr() { walk_expr_branches_if(body, e, then_branch, else_branch, states, _result_used, ctx, span); }
-}
 
 fn walk_expr_branches_if(
     body: &mut Body,

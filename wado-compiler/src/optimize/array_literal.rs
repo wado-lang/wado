@@ -323,9 +323,6 @@ fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
 /// struct with the field path from the value's root. Descends through the
 /// outer block tail (`{ …; *__b }` produced for direct literals) and through
 /// wrapper `StructLiteral` fields.
-fn collect_array_targets_operand(body: &Body, op: Operand, path: &mut Vec<u32>, out: &mut Vec<ArrayTarget>)  {
-    if let Some(e) = op.as_expr() { collect_array_targets(body, e, path, out); }
-}
 
 fn collect_array_targets(
     body: &Body,

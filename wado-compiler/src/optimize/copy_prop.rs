@@ -393,9 +393,6 @@ fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut Analys
     }
 }
 
-fn may_mutate_through_arg_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
-    op.as_expr().map_or(false, |e| may_mutate_through_arg(body, e, type_table))
-}
 
 fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
     matches!(

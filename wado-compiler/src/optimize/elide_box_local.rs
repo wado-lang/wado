@@ -220,9 +220,6 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
     }
 }
 
-fn stats_expr_operand(body: &Body, op: Operand, stats: &mut IndexMap<u32, LocalStats>)  {
-    if let Some(e) = op.as_expr() { stats_expr(body, e, stats); }
-}
 
 fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
     match &body.exprs[id].kind {

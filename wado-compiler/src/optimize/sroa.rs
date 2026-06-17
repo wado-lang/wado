@@ -299,9 +299,6 @@ fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut 
     }
 }
 
-fn extract_ref_local_operand(body: &Body, op: Operand, stores_aliased: &mut IndexSet<u32>)  {
-    if let Some(e) = op.as_expr() { extract_ref_local(body, e, stores_aliased); }
-}
 
 fn extract_ref_local(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
     if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind
@@ -409,9 +406,6 @@ fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> 
     None
 }
 
-fn is_immut_ref_to_candidate_operand(body: &Body, op: Operand, candidates: &IndexSet<u32>) -> bool {
-    op.as_expr().map_or(false, |e| is_immut_ref_to_candidate(body, e, candidates))
-}
 
 fn is_immut_ref_to_candidate(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> bool {
     if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind

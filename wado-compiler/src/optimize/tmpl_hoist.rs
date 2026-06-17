@@ -919,9 +919,6 @@ fn extract_fmt_candidates(
 ///   - Direct `StructLiteral { ... }` where buf references hoisted buffer
 ///   - `LabeledBlock { let buf = ...; break: StructLiteral { ..., buf } }`
 ///     where the intermediate `buf` local traces back to the hoisted buffer
-fn extract_formatter_fields_operand(body: &Body, op: Operand, hoisted_buf_index: u32) -> Option<FmtFields> {
-    op.as_expr().map_or(None, |e| extract_formatter_fields(body, e, hoisted_buf_index))
-}
 
 fn extract_formatter_fields(
     body: &Body,

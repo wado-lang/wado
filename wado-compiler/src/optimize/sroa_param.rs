@@ -73,9 +73,6 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
 }
 
 /// Move `src`'s node content into `id`; `src` is left as a dead `Unit`.
-fn become_expr_operand(body: &mut Body, op: Operand, src: ExprId)  {
-    if let Some(e) = op.as_expr() { become_expr(body, e, src); }
-}
 
 fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
@@ -286,9 +283,6 @@ fn check_node(
     }
 }
 
-fn check_expr_operand(body: &Body, op: Operand, idx: u32, candidates: &IndexMap<(FnKey, usize), SroaInfo>) -> bool {
-    op.as_expr().map_or(false, |e| check_expr(body, e, idx, candidates))
-}
 
 fn check_expr(
     body: &Body,
@@ -522,9 +516,6 @@ fn rewrite_calls_node(
     changed
 }
 
-fn rewrite_call_expr_operand(body: &mut Body, op: Operand, sroa_positions: &IndexMap<FnKey, IndexMap<usize, SroaInfo>>, scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>, type_table: &TypeTable) -> bool {
-    op.as_expr().map_or(false, |e| rewrite_call_expr(body, e, sroa_positions, scalar_param_struct, type_table))
-}
 
 fn rewrite_call_expr(
     body: &mut Body,

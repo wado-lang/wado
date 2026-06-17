@@ -256,9 +256,6 @@ fn rewrite_array_clone_to_shallow(body: &mut Body) {
 
 /// If the expression at `value` is a one-argument call to an array-wrapper
 /// `$value_copy$T` helper, return that helper's key.
-fn wrapper_call_key_operand(body: &Body, op: Operand, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
-    op.as_expr().map_or(None, |e| wrapper_call_key(body, e, wrappers))
-}
 
 fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let ExprKind::Call { func, args, .. } = &body.exprs[value].kind
@@ -357,9 +354,6 @@ fn is_immutable_ref_param(
 /// True when the binding `target_idx` and the source `value` reads from are
 /// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
 /// to a shallow copy is observably equivalent to the deep copy.
-fn demote_candidate_operand(body: &Body, op: Operand, target_idx: u32, params: &[NirParam], an: &mut Analyzer) -> bool {
-    op.as_expr().map_or(false, |e| demote_candidate(body, e, target_idx, params, an))
-}
 
 fn demote_candidate(
     body: &Body,
@@ -455,9 +449,6 @@ fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
 }
 
 /// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
-fn retarget_wrapper_call_operand(body: &mut Body, op: Operand, wrappers: &IndexSet<FuncKey>, shallow_name: &IndexMap<FuncKey, String>)  {
-    if let Some(e) = op.as_expr() { retarget_wrapper_call(body, e, wrappers, shallow_name); }
-}
 
 fn retarget_wrapper_call(
     body: &mut Body,

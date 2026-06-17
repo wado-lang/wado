@@ -139,9 +139,6 @@ fn analyze_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsag
 /// Apply the usage-marking rules for a single expression node — the analog of
 /// the old `UsageAnalyzer::visit_expr` arms, minus the recursion (the caller's
 /// walk visits every node).
-fn classify_expr_operand(body: &Body, op: Operand, type_table: &TypeTable, usage: &mut IndexMap<u32, LocalUsage>)  {
-    if let Some(e) = op.as_expr() { classify_expr(body, e, type_table, usage); }
-}
 
 fn classify_expr(
     body: &Body,
@@ -229,9 +226,6 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
 // Wrapper stripping
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn is_value_copy_call_operand(body: &Body, op: Operand, value_copy_set: &IndexMap<(ModuleSource, String), TypeId>) -> bool {
-    op.as_expr().map_or(false, |e| is_value_copy_call(body, e, value_copy_set))
-}
 
 fn is_value_copy_call(
     body: &Body,

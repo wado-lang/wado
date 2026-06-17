@@ -28,7 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -104,9 +104,6 @@ fn stmt_has_break_to(body: &Body, stmt: StmtId, label: &str) -> bool {
     has_break_to(body, NodeRef::Stmt(stmt), label)
 }
 
-fn expr_has_break_to_operand(body: &Body, op: Operand, label: &str) -> bool {
-    op.as_expr().map_or(false, |e| expr_has_break_to(body, e, label))
-}
 
 fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
     has_break_to(body, NodeRef::Expr(expr), label)

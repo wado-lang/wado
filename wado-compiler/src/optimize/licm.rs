@@ -715,9 +715,6 @@ fn record_mut_ref_clobber(
 
 /// Record a field-access write into `written_field_types`, keyed by the pointee
 /// type of the assigned object.
-fn record_written_field_type_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
-    if let Some(e) = op.as_expr() { record_written_field_type(body, e, modified, type_table); }
-}
 
 fn record_written_field_type(
     body: &Body,
@@ -737,9 +734,6 @@ fn record_written_field_type(
 }
 
 /// Mark what is modified by an assignment target.
-fn mark_assignment_target_as_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
-    if let Some(e) = op.as_expr() { mark_assignment_target_as_modified(body, e, modified, type_table); }
-}
 
 fn mark_assignment_target_as_modified(
     body: &Body,
@@ -1140,9 +1134,6 @@ fn collect_licm_ref_bindings_in_stmt(
     }
 }
 
-fn collect_licm_ref_bindings_in_operand(body: &Body, op: Operand, type_table: &TypeTable, bindings: &mut IndexMap<u32, LicmRefBinding>)  {
-    if let Some(e) = op.as_expr() { collect_licm_ref_bindings_in_expr(body, e, type_table, bindings); }
-}
 
 fn collect_licm_ref_bindings_in_expr(
     body: &Body,
@@ -1228,9 +1219,6 @@ fn find_hoist_candidates_in_stmt(
     }
 }
 
-fn find_hoist_candidates_in_operand(body: &Body, op: Operand, modified_vars: &ModifiedVars, ref_bindings: &IndexMap<u32, LicmRefBinding>, candidates: &mut Vec<HoistCandidate>, seen: &mut IndexSet<(u32, u32)>, next_local: &mut u32)  {
-    if let Some(e) = op.as_expr() { find_hoist_candidates_in_expr(body, e, modified_vars, ref_bindings, candidates, seen, next_local); }
-}
 
 fn find_hoist_candidates_in_expr(
     body: &Body,
@@ -1377,9 +1365,6 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
 }
 
 /// Collect every `Local` leaf of a hoistable-arithmetic tree.
-fn collect_arith_local_leaves_operand(body: &Body, op: Operand, out: &mut Vec<(ExprId, u32)>)  {
-    if let Some(e) = op.as_expr() { collect_arith_local_leaves(body, e, out); }
-}
 
 fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32)>) {
     match &body.exprs[e].kind {

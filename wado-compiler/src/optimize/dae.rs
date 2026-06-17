@@ -56,7 +56,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind, Operand};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
@@ -280,9 +280,6 @@ fn validate_in_body(
     }
 }
 
-fn validate_call_operand(body: &Body, op: Operand, candidates: &IndexMap<FnKey, Vec<bool>>, rejected: &mut IndexSet<FnKey>)  {
-    if let Some(e) = op.as_expr() { validate_call(body, e, candidates, rejected); }
-}
 
 fn validate_call(
     body: &Body,
@@ -415,9 +412,6 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
     changed
 }
 
-fn rewrite_call_operand(body: &mut Body, op: Operand, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
-    op.as_expr().map_or(false, |e| rewrite_call(body, e, confirmed))
-}
 
 fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let key = match &body.exprs[id].kind {

@@ -1762,9 +1762,6 @@ fn collect_loop_heap_node(body: &Body, node: NodeRef, eff: &mut LoopHeapEffects)
     }
 }
 
-fn record_loop_heap_write_operand(body: &Body, op: Operand, eff: &mut LoopHeapEffects)  {
-    if let Some(e) = op.as_expr() { record_loop_heap_write(body, e, eff); }
-}
 
 fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
     match &body.exprs[e].kind {
