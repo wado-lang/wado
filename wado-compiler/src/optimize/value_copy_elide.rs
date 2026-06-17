@@ -190,7 +190,9 @@ fn classify_expr(
         }
         ExprKind::IndirectCall { args, .. } => {
             for &arg in args {
-                if is_mut_ref_type(body.exprs[arg.as_expr().expect("skeleton operand")].type_id, type_table) {
+                if let Some(ae) = arg.as_expr()
+                    && is_mut_ref_type(body.exprs[ae].type_id, type_table)
+                {
                     mark_root_field_mutated_operand(body, arg, usage);
                 }
             }

@@ -406,21 +406,25 @@ fn collect_mut_escaped_node(
             ..
         } => {
             // Unknown callee (builtin / extern not in the project) → assume it
-            // may mutate the receiver (`conservative_on_unknown = true`).
-            if method_mutates_receiver(
-                body,
-                receiver.as_expr().expect("skeleton operand"),
-                func,
-                first_param_types,
-                type_table,
-                true,
-            ) && let Some(r) = projection_root_local(body, receiver.as_expr().expect("skeleton operand"))
+            // may mutate the receiver (`conservative_on_unknown = true`). A
+            // promoted-value receiver carries no local root, so it aliases
+            // nothing.
+            if let Some(re) = receiver.as_expr()
+                && method_mutates_receiver(
+                    body,
+                    re,
+                    func,
+                    first_param_types,
+                    type_table,
+                    true,
+                )
+                && let Some(r) = projection_root_local(body, re)
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr.as_expr().expect("skeleton operand"))
+                    && let Some(r) = arg.expr.as_expr().and_then(|e| projection_root_local(body, e))
                 {
                     out.insert(r);
                 }
@@ -694,12 +698,12 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref: receiver may be passed as `&mut self`.
-                if let Some(index) = local(receiver.as_expr().expect("skeleton operand")) {
+                if let Some(index) = receiver.as_expr().and_then(local) {
                     out.insert(index);
                 }
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr.as_expr().expect("skeleton operand"))
+                        && let Some(index) = arg.expr.as_expr().and_then(local)
                     {
                         out.insert(index);
                     }

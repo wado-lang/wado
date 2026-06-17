@@ -1448,10 +1448,10 @@ fn transform_lb_in_stmt_kind(
         | StmtKind::LabeledBlock { .. }
         | StmtKind::Continue => None,
     };
-    if let Some(v) = target {
+    if let Some(e) = target.and_then(Operand::as_expr) {
         transform_lb_in_expr(
             engine,
-            v.as_expr().expect("skeleton operand"),
+            e,
             orig_label,
             fused_label,
             case_index,

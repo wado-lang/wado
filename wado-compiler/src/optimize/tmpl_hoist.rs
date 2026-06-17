@@ -471,7 +471,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
                 .filter_map(|s| match &body.stmts[*s].kind {
                     StmtKind::Break {
                         value: Some(val), ..
-                    } => Some(val.as_expr().expect("skeleton operand")),
+                    } => val.as_expr(),
                     _ => None,
                 })
                 .collect();
@@ -1402,7 +1402,7 @@ fn rename_local_in_stmt(
 ) {
     enum Shape {
         Expr(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
@@ -1414,18 +1414,20 @@ fn rename_local_in_stmt(
             condition,
             then_block,
             else_block,
-        } => Shape::If(condition.as_expr().expect("skeleton operand"), *then_block, *else_block),
+        } => Shape::If(condition.as_expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Block(*block),
         StmtKind::Loop { body } => Shape::Block(*body),
         StmtKind::Break {
             value: Some(expr), ..
-        } => Shape::Expr(expr.as_expr().expect("skeleton operand")),
+        } => expr.as_expr().map_or(Shape::None, Shape::Expr),
         _ => Shape::None,
     };
     match shape {
         Shape::Expr(e) => rename_local_in_expr(engine, e, old_index, new_index, new_name),
         Shape::If(cond, tb, eb) => {
-            rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            if let Some(cond) = cond {
+                rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            }
             rename_local_in_block(engine, tb, old_index, new_index, new_name);
             if let Some(eb) = eb {
                 rename_local_in_block(engine, eb, old_index, new_index, new_name);
