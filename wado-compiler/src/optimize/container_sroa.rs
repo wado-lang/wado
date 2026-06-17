@@ -1203,7 +1203,7 @@ impl Rewriter<'_, '_> {
         }
 
         // Candidate push/index_assign as an ExprStmt at the statement level.
-        if let StmtKind::Expr(expr) = &engine.body.stmts[s].kind {
+        if let StmtKind::Expr(Operand::Expr(expr)) = &engine.body.stmts[s].kind {
             let expr = *expr;
             let span = engine.body.stmts[s].span;
             if let Some(expanded) = self.try_expand_call_stmt(engine, expr, span) {
@@ -1309,7 +1309,7 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    let st = engine.alloc_stmt(StmtKind::Expr(call), span);
+                    let st = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
                     out.push(st);
                 }
                 Some(out)
@@ -1344,7 +1344,7 @@ impl Rewriter<'_, '_> {
                         span,
                         ctx,
                     );
-                    let st = engine.alloc_stmt(StmtKind::Expr(call), span);
+                    let st = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
                     out.push(st);
                 }
                 Some(out)

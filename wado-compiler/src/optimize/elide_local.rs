@@ -11,7 +11,7 @@
 //! (`copy_prop` / `const_fold` / `dce`), which the WIR-level pass cannot.
 
 use crate::hashmap::IndexSet;
-use crate::nir_arena::{BlockId, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use super::arena_query;
@@ -58,7 +58,7 @@ impl Rule for ElideRule<'_> {
                 Action::Drop => changed = true,
                 Action::Demote(value) => {
                     let span = engine.body.stmts[stmt].span;
-                    new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value), span));
+                    new_stmts.push(engine.alloc_stmt(StmtKind::Expr(value.into()), span));
                     changed = true;
                 }
             }
@@ -93,7 +93,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
         // introduces a local, writes to it via Assign, then a downstream pass
         // folds away the only read site. The matching `let x;` declaration
         // falls out once every write to `x` is gone.
-        StmtKind::Expr(e) => {
+        StmtKind::Expr(Operand::Expr(e)) => {
             let assign = match &engine.body.exprs[*e].kind {
                 ExprKind::Assign { target, value } => Some((*target, *value)),
                 _ => None,

@@ -346,7 +346,11 @@ fn replace_matching_in_stmt(
 /// computes different values per inner-loop iteration.
 fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) => collect_exprs_in_expr(body, *e, out),
+        StmtKind::Expr(e) => {
+            if let Some(e) = e.as_expr() {
+                collect_exprs_in_expr(body, e, out);
+            }
+        }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             if let Some(ve) = value.as_expr() {
                 collect_exprs_in_expr(body, ve, out);

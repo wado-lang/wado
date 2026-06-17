@@ -325,7 +325,7 @@ fn check_fusion_preconditions_match(
     let lb_block = *lb_block;
 
     // --- Stmt 2: Expr(Match { scrut: Local(temp), arms: [Variant, Wildcard] }) ---
-    let StmtKind::Expr(match_expr) = &body.stmts[if_s].kind else {
+    let StmtKind::Expr(Operand::Expr(match_expr)) = &body.stmts[if_s].kind else {
         return None;
     };
     let ExprKind::Match { expr: scrut, arms } = &body.exprs[*match_expr].kind else {
@@ -478,7 +478,7 @@ fn find_break_case_index_for_name_in_stmt(
                 *value, label, variant_name)
         }
         StmtKind::Expr(expr) => {
-            find_break_case_index_for_name_in_expr(body, *expr, label, variant_name)
+            find_break_case_index_for_name_in_operand(body, *expr, label, variant_name)
         }
         StmtKind::Return { value } => value.and_then(|v| {
             find_break_case_index_for_name_in_operand(
@@ -565,7 +565,7 @@ fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Spa
     if let ExprKind::Block(block) = &engine.body.exprs[arm_body].kind {
         *block
     } else {
-        let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body), fallback_span);
+        let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body.into()), fallback_span);
         engine.alloc_block(vec![stmt], fallback_span)
     }
 }
@@ -730,7 +730,7 @@ fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             count_local_uses_in_operand(body, *value, local_idx)
         }
-        StmtKind::Expr(expr) => count_local_uses_in_expr(body, *expr, local_idx),
+        StmtKind::Expr(expr) => count_local_uses_in_operand(body, *expr, local_idx),
         StmtKind::Return { value } => {
             value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
         }
@@ -885,7 +885,7 @@ fn count_variant_payload_uses_in_stmt(
                 *value, local_idx, case_index)
         }
         StmtKind::Expr(expr) => {
-            count_variant_payload_uses_in_expr(body, *expr, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *expr, local_idx, case_index)
         }
         StmtKind::Return { value } => value.map_or(0, |v| {
             count_variant_payload_uses_in_operand(
@@ -1144,7 +1144,8 @@ fn perform_fusion(
             ..
         } => (*then_block, *else_block),
         StmtKind::Expr(match_expr) => {
-            let ExprKind::Match { arms, .. } = &engine.body.exprs[*match_expr].kind else {
+            let match_expr = match_expr.as_expr().expect("match scrutinee is a skeleton expr");
+            let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
                 unreachable!()
             };
             let variant_body = arms[0].body;
@@ -1426,7 +1427,7 @@ fn transform_lb_in_stmt_kind(
 ) {
     let target = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Some(*value),
-        StmtKind::Expr(value) => Some(Operand::Expr(*value)),
+        StmtKind::Expr(value) => Some(*value),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
         StmtKind::If { .. }
         | StmtKind::Loop { .. }
@@ -1644,7 +1645,7 @@ fn subst_variant_payload_in_stmt(
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             Shape::Expr(value.as_expr().expect("skeleton operand"))
         }
-        StmtKind::Expr(expr) => Shape::Expr(*expr),
+        StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::Return { value } => match value {
             Some(v) => Shape::Expr(v.as_expr().expect("skeleton operand")),
             None => Shape::None,
@@ -1846,7 +1847,7 @@ fn stmt_contains_loop(body: &Body, s: StmtId) -> bool {
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
         | StmtKind::Return { value: Some(value) } => expr_contains_loop_operand(body, *value),
-        StmtKind::Expr(value) => expr_contains_loop(body, *value),
+        StmtKind::Expr(value) => expr_contains_loop_operand(body, *value),
         _ => false,
     }
 }
@@ -1900,7 +1901,7 @@ fn stmt_has_free_unlabeled_loop_exit(body: &Body, s: StmtId, loop_depth: u32) ->
         } => expr_has_free_unlabeled_loop_exit_operand(
                 body,
                 *value, loop_depth),
-        StmtKind::Expr(value) => expr_has_free_unlabeled_loop_exit(body, *value, loop_depth),
+        StmtKind::Expr(value) => expr_has_free_unlabeled_loop_exit_operand(body, *value, loop_depth),
         _ => false,
     }
 }

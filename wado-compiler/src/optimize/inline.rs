@@ -57,9 +57,9 @@ enum BlockCut {
 /// cost estimate.
 fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) if is_cold_path_call(body, *e) => BlockCut::Cold,
+        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e)) => BlockCut::Cold,
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
-        StmtKind::Expr(e) if type_table.is_never(body.exprs[*e].type_id) => BlockCut::Diverges,
+        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| type_table.is_never(body.exprs[e].type_id)) => BlockCut::Diverges,
         _ => BlockCut::None,
     }
 }
@@ -67,7 +67,7 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
 /// Inline cost of a single statement (its own expression count).
 fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(expr) => count_expr(body, *expr, type_table),
+        StmtKind::Expr(expr) => count_operand(body, *expr, type_table),
         StmtKind::Let { value, .. } => count_operand(body, *value, type_table),
         StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table),
         StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table)),
@@ -445,7 +445,7 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             collect_callees_from_operand(body, *value, callees);
         }
-        StmtKind::Expr(value) => collect_callees_from_expr(body, *value, callees),
+        StmtKind::Expr(value) => { if let Some(e) = value.as_expr() { collect_callees_from_expr(body, e, callees); } }
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
                 collect_callees_from_operand(body, expr, callees);
@@ -789,14 +789,14 @@ fn inline_calls_in_block(
         None,
     }
     for stmt_id in body.blocks[block].stmts.clone() {
-        if let StmtKind::Expr(e) = &body.stmts[stmt_id].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt_id].kind
             && is_cold_path_call(body, *e)
         {
             cold = true;
         }
         let shape = match &body.stmts[stmt_id].kind {
             StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
-            StmtKind::Expr(expr) => Shape::TopLevel(*expr),
+            StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::TopLevel),
             StmtKind::Return { value: Some(v) } => v.as_expr().map_or(Shape::None, Shape::TopLevel),
             StmtKind::If {
                 condition,
@@ -828,7 +828,7 @@ fn inline_calls_in_block(
                 );
                 match &mut body.stmts[stmt_id].kind {
                     StmtKind::Let { value, .. } => *value = new_value.into(),
-                    StmtKind::Expr(expr) => *expr = new_value,
+                    StmtKind::Expr(expr) => *expr = new_value.into(),
                     StmtKind::Return { value } => *value = Some(new_value.into()),
                     _ => {}
                 }
@@ -1519,7 +1519,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
                 skip_value_copy: scv,
             }
         }
-        StmtKind::Expr(e) => StmtKind::Expr(splice_expr(caller, callee, *e, ctx)),
+        StmtKind::Expr(e) => StmtKind::Expr(splice_operand(caller, callee, *e, ctx)),
         StmtKind::Return { value } => {
             let v = *value;
             StmtKind::Break {

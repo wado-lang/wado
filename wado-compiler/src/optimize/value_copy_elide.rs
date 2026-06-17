@@ -328,7 +328,7 @@ fn eligible_value(
         }
         // `x = $value_copy$T(arg)` top-level — the Assign *is* the binding.
         // Allow elision when this is the only assignment (`assign_count == 1`).
-        StmtKind::Expr(e) => {
+        StmtKind::Expr(Operand::Expr(e)) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                 && let Some(ve) = value.as_expr()

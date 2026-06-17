@@ -1140,7 +1140,7 @@ impl<'a> Engine<'a> {
                 value: self.clone_operand(value),
                 skip_value_copy,
             },
-            StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
+            StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
                 value: value.map(|e| self.clone_operand(e)),
             },
@@ -1377,7 +1377,7 @@ mod tests {
         });
         let seven = {
             let st = body.blocks[body.root].stmts[0];
-            let StmtKind::Expr(e) = body.stmts[st].kind else {
+            let StmtKind::Expr(Operand::Expr(e)) = body.stmts[st].kind else {
                 unreachable!()
             };
             e
@@ -1502,10 +1502,10 @@ mod tests {
         // local+literal pair: recover them by walking the root statements.
         let (f_expr, g_expr, x_expr, y_expr) = {
             let stmts = &body.blocks[body.root].stmts;
-            let StmtKind::Expr(f) = body.stmts[stmts[0]].kind else {
+            let StmtKind::Expr(Operand::Expr(f)) = body.stmts[stmts[0]].kind else {
                 unreachable!()
             };
-            let StmtKind::Expr(g) = body.stmts[stmts[1]].kind else {
+            let StmtKind::Expr(Operand::Expr(g)) = body.stmts[stmts[1]].kind else {
                 unreachable!()
             };
             let ExprKind::Binary { left: xf, .. } = body.exprs[f].kind else {
@@ -1671,7 +1671,7 @@ mod tests {
                 .copied()
                 .filter(|s| {
                     !matches!(&e.body.stmts[*s].kind,
-                        StmtKind::Expr(ex) if matches!(e.body.exprs[*ex].kind, ExprKind::Unit))
+                        StmtKind::Expr(Operand::Expr(ex)) if matches!(e.body.exprs[*ex].kind, ExprKind::Unit))
                 })
                 .collect();
             if kept.len() == stmts.len() {
@@ -1764,10 +1764,10 @@ mod tests {
             vec![s_x, s_add]
         });
         let root = body.root;
-        let StmtKind::Expr(lx) = body.stmts[body.blocks[root].stmts[0]].kind else {
+        let StmtKind::Expr(Operand::Expr(lx)) = body.stmts[body.blocks[root].stmts[0]].kind else {
             panic!("expected expr stmt");
         };
-        let StmtKind::Expr(add) = body.stmts[body.blocks[root].stmts[1]].kind else {
+        let StmtKind::Expr(Operand::Expr(add)) = body.stmts[body.blocks[root].stmts[1]].kind else {
             panic!("expected expr stmt");
         };
         {

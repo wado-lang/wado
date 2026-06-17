@@ -1382,7 +1382,7 @@ impl FunctionTranslator<'_, '_> {
             let is_last = i + 1 == len;
             if is_last {
                 // Last statement: if it's an Expr, translate without drop
-                if let StmtKind::Expr(expr) = &arena.stmts[*stmt_id].kind {
+                if let StmtKind::Expr(Operand::Expr(expr)) = &arena.stmts[*stmt_id].kind {
                     let expr = *expr;
                     let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
@@ -1446,7 +1446,7 @@ impl FunctionTranslator<'_, '_> {
             .stmts
             .last()
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
-                StmtKind::Expr(expr) => {
+                StmtKind::Expr(Operand::Expr(expr)) => {
                     let ty = arena.exprs[*expr].type_id;
                     if ty != TypeTable::UNIT && ty != TypeTable::NEVER {
                         Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
@@ -1569,18 +1569,20 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             StmtKind::Expr(expr) => {
-                let instr = self.translate_expr(*expr);
+                let expr = *expr;
+                let ty = self.operand_type_id(expr);
+                let instr = self.translate_operand(expr);
                 // If the expression has a non-unit type, drop it.
                 // Exception: assignments and global-var-sets produce void WIR instructions
                 // (LocalSet/StructSet/ArraySet/GlobalSet), so don't wrap them in Drop.
-                let is_void_instr = matches!(
-                    &arena.exprs[*expr].kind,
-                    ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
-                );
-                if !is_void_instr
-                    && arena.exprs[*expr].type_id != TypeTable::UNIT
-                    && arena.exprs[*expr].type_id != TypeTable::NEVER
-                {
+                // A promoted pure value (`Operand::Value`) is never one of those.
+                let is_void_instr = expr.as_expr().is_some_and(|e| {
+                    matches!(
+                        &arena.exprs[e].kind,
+                        ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
+                    )
+                });
+                if !is_void_instr && ty != TypeTable::UNIT && ty != TypeTable::NEVER {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)

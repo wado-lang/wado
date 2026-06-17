@@ -272,7 +272,7 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
         bound.insert(local_index);
     }
     match &body.stmts[last].kind {
-        StmtKind::Expr(e) => is_globalizable_const(body, *e, bound),
+        StmtKind::Expr(e) => e.as_expr().is_some_and(|e| is_globalizable_const(body, e, bound)),
         _ => false,
     }
 }
@@ -295,7 +295,7 @@ fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
                 StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value),
-                StmtKind::Expr(value) => contains_aggregate(body, *value),
+                StmtKind::Expr(value) => value.as_expr().is_some_and(|e| contains_aggregate(body, e)),
                 _ => false,
             })
         }
@@ -353,7 +353,7 @@ fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> boo
 fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } => expr_readonly_operand(body, *value, idx, gate),
-        StmtKind::Expr(e) => expr_readonly(body, *e, idx, gate),
+        StmtKind::Expr(e) => e.as_expr().map_or(true, |e| expr_readonly(body, e, idx, gate)),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             value.is_none_or(|v| expr_readonly_operand(body, v, idx, gate))
         }
@@ -586,7 +586,7 @@ fn replace_let_with_set(
                     type_id: TypeTable::UNIT,
                     span,
                 });
-                body.stmts[stmt].kind = StmtKind::Expr(set);
+                body.stmts[stmt].kind = StmtKind::Expr(set.into());
                 return true;
             }
         } else {

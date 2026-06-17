@@ -33,7 +33,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
@@ -226,7 +226,7 @@ impl ValidateCtx<'_> {
     }
 
     fn stmt(&mut self, body: &Body, stmt: StmtId) {
-        if let StmtKind::Expr(e) = &body.stmts[stmt].kind {
+        if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind {
             let e = *e;
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::Call { func, args, .. } => (

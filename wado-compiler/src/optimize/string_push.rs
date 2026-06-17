@@ -33,7 +33,7 @@
 
 use crate::compiler_item::CompilerItem;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
@@ -118,7 +118,7 @@ impl Rule for ShortPushStrRule {
 /// receiver and a short ASCII literal, build the equivalent per-byte
 /// `place.push(ch)` statements and return them; otherwise `None`.
 fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
-    let StmtKind::Expr(expr_id) = engine.body.stmts[stmt].kind else {
+    let StmtKind::Expr(Operand::Expr(expr_id)) = engine.body.stmts[stmt].kind else {
         return None;
     };
 
@@ -182,7 +182,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             TypeTable::UNIT,
             span,
         );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
+        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
     }
     Some(stmts)
 }

@@ -538,7 +538,7 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             value.as_expr().map(Child::Expr).into_iter().collect()
         }
-        StmtKind::Expr(value) => vec![Child::Expr(*value)],
+        StmtKind::Expr(value) => value.as_expr().map(Child::Expr).into_iter().collect(),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             value.iter().filter_map(|v| v.as_expr().map(Child::Expr)).collect()
         }
@@ -612,7 +612,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         } => extract_alias_source(body, inner.as_expr().expect("skeleton operand")),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Expr(tail_expr) = &body.stmts[tail].kind else {
+            let StmtKind::Expr(Operand::Expr(tail_expr)) = &body.stmts[tail].kind else {
                 return None;
             };
             extract_alias_source(body, *tail_expr)
@@ -790,7 +790,7 @@ fn collect_modified_vars_in_stmt(
             collect_modified_vars_in_operand(body, value, modified, type_table);
         }
         StmtKind::Expr(expr) => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = value {

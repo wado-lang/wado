@@ -28,7 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -122,7 +122,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     if let ExprKind::Block(block) = &engine.body.exprs[id].kind {
         let block = *block;
         if engine.body.blocks[block].stmts.len() == 1
-            && let StmtKind::Expr(inner) =
+            && let StmtKind::Expr(Operand::Expr(inner)) =
                 engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
         {
             engine.become_expr(id, inner);
@@ -168,7 +168,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                     engine.become_expr(id, bv);
                 } else {
                     let tail_span = engine.body.exprs[bv].span;
-                    let tail = engine.alloc_stmt(StmtKind::Expr(bv), tail_span);
+                    let tail = engine.alloc_stmt(StmtKind::Expr(bv.into()), tail_span);
                     stmts.push(tail);
                     engine.set_block_stmts(block, stmts);
                     engine.replace_expr_kind(id, ExprKind::Block(block));
@@ -273,9 +273,9 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
         StmtKind::LabeledBlock { label, block } => {
             unused_label_flattenable(body, label, *block, mode)
         }
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
-            ExprKind::Unit | ExprKind::Block(_) => true,
-            ExprKind::LabeledBlock { label, block, .. } => {
+        StmtKind::Expr(e) => match e.as_expr().map(|e| &body.exprs[e].kind) {
+            Some(ExprKind::Unit | ExprKind::Block(_)) => true,
+            Some(ExprKind::LabeledBlock { label, block, .. }) => {
                 unused_label_flattenable(body, label, *block, mode)
             }
             _ => false,
@@ -342,13 +342,13 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             continue;
         }
         // Unit expression statement → drop.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
             && matches!(engine.body.exprs[*e].kind, ExprKind::Unit)
         {
             continue;
         }
         // Void block expression statement → flatten.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
             && let ExprKind::Block(inner) = &engine.body.exprs[*e].kind
         {
             let inner = *inner;
@@ -361,7 +361,7 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             continue;
         }
         // Unused-label labeled-block expression statement → flatten.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
             && let ExprKind::LabeledBlock {
                 label,
                 block: inner,

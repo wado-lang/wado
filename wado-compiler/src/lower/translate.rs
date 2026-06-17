@@ -383,7 +383,7 @@ impl Translator<'_> {
         // shape the optimizer and `wir_build` read via `Body::sole_expr`.
         let span = global.initializer.span;
         let init_id = fctx.convert_expr(&global.initializer);
-        let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_id), span);
+        let init_stmt = fctx.alloc_stmt(StmtKind::Expr(init_id.into()), span);
         let init_root = fctx.alloc_block(vec![init_stmt], span);
         let initializer = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
@@ -671,7 +671,7 @@ impl FunctionTranslator<'_, '_> {
                 field.type_id,
                 span,
             );
-            out.push(self.alloc_stmt(StmtKind::Expr(assign), span));
+            out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
         }
         Some(out)
     }
@@ -803,7 +803,7 @@ impl FunctionTranslator<'_, '_> {
                     skip_value_copy: *skip_value_copy,
                 }
             }
-            TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_expr(expr)),
+            TirStmtKind::Expr(expr) => StmtKind::Expr(self.convert_expr(expr).into()),
             TirStmtKind::Return { value } => StmtKind::Return {
                 value: value.as_ref().map(|v| self.convert_operand(v)),
             },

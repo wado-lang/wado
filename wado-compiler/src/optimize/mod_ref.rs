@@ -572,7 +572,7 @@ impl ModRef {
             }
             StmtKind::Expr(e) => {
                 let e = *e;
-                self.accumulate_expr(body, e, scope);
+                self.accumulate_operand(body, e, scope);
             }
             StmtKind::Return { value } => {
                 self.control.join(Control::NonLocal);

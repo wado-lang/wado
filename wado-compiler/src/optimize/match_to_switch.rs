@@ -264,7 +264,7 @@ fn build_switch(
             TypeTable::UNIT,
             span,
         );
-        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call), span);
+        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span);
         // Call `builtin::unreachable` rather than
         // `core:internal/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
@@ -285,7 +285,7 @@ fn build_switch(
             TypeTable::NEVER,
             span,
         );
-        let stmt = engine.alloc_stmt(StmtKind::Expr(call), span);
+        let stmt = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
         engine.alloc_block(vec![cold_stmt, stmt], span)
     };
 
@@ -307,6 +307,6 @@ fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId
         Operand::Value(_) => engine.materialize_operand(body, arm_span),
     };
     let span = engine.body.exprs[expr].span;
-    let stmt = engine.alloc_stmt(StmtKind::Expr(expr), span);
+    let stmt = engine.alloc_stmt(StmtKind::Expr(expr.into()), span);
     engine.alloc_block(vec![stmt], span)
 }

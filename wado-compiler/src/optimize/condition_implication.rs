@@ -584,7 +584,7 @@ fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
         .stmts
         .iter()
         .any(|s| match &engine.body.stmts[*s].kind {
-            StmtKind::Expr(expr) => is_panic_call(engine, *expr),
+            StmtKind::Expr(expr) => expr.as_expr().is_some_and(|e| is_panic_call(engine, e)),
             _ => false,
         })
 }

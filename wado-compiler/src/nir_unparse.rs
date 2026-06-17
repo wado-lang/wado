@@ -379,7 +379,7 @@ impl<'a> NirUnparser<'a> {
             StmtKind::Expr(expr) => {
                 let expr = *expr;
                 self.write_indent();
-                self.unparse_expr(body, expr);
+                self.unparse_operand(body, expr);
                 self.output.push_str(";\n");
             }
             StmtKind::Return { value } => {

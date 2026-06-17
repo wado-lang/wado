@@ -733,7 +733,7 @@ fn make_write_back_stmt(
         c.type_id,
         span,
     );
-    push_stmt(body, StmtKind::Expr(assign), span)
+    push_stmt(body, StmtKind::Expr(assign.into()), span)
 }
 
 /// `__hfs_F = local.field;` — refresh the scalar from the GC field.
@@ -749,7 +749,7 @@ fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
         c.type_id,
         span,
     );
-    push_stmt(body, StmtKind::Expr(assign), span)
+    push_stmt(body, StmtKind::Expr(assign.into()), span)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -851,7 +851,7 @@ fn visit_stmt_for_alias(
             visit_operand_for_alias(body, *value, false, type_table, out);
         }
         StmtKind::Expr(expr) => {
-            visit_expr_for_alias(body, *expr, false, type_table, out);
+            visit_operand_for_alias(body, *expr, false, type_table, out);
         }
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             if let Some(v) = *value {
@@ -1145,7 +1145,7 @@ fn count_field_accesses_in_stmt(
             count_field_accesses_in_operand(body, value, counts, false, false, type_table);
         }
         StmtKind::Expr(expr) => {
-            count_field_accesses_in_expr(body, *expr, counts, false, false, type_table);
+            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = *value {
@@ -1914,7 +1914,7 @@ fn append_sync_preserving_block_value(
     let trailing_is_value = match body.blocks[block].stmts.last() {
         Some(&s) => matches!(
             &body.stmts[s].kind,
-            StmtKind::Expr(e) if body.exprs[*e].type_id != TypeTable::UNIT
+            StmtKind::Expr(e) if body.operand_type(*e) != TypeTable::UNIT
         ),
         None => false,
     };
@@ -1927,7 +1927,7 @@ fn append_sync_preserving_block_value(
         .pop()
         .expect("checked non-empty above");
     let last_span = body.stmts[last_sid].span;
-    let StmtKind::Expr(value_expr) = body.stmts[last_sid].kind else {
+    let StmtKind::Expr(Operand::Expr(value_expr)) = body.stmts[last_sid].kind else {
         unreachable!("checked Expr above")
     };
     let body_type = body.exprs[value_expr].type_id;
@@ -1957,7 +1957,7 @@ fn append_sync_preserving_block_value(
         body_type,
         last_span,
     );
-    let trailing_sid = push_stmt(body, StmtKind::Expr(local_e), last_span);
+    let trailing_sid = push_stmt(body, StmtKind::Expr(local_e.into()), last_span);
     body.blocks[block].stmts.push(trailing_sid);
     ctx.free_temp(tmp_idx, body_type);
 }
@@ -2154,7 +2154,7 @@ fn walk_stmt(
         }
         StmtKind::Expr(expr) => {
             let expr = *expr;
-            walk_expr(body, expr, states, false, out, ctx);
+            walk_expr_operand(body, expr, states, false, out, ctx);
             out.push(sid);
         }
     }
@@ -3017,7 +3017,7 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     // rewritten as the wrapping Block.
     let original_kind = std::mem::replace(&mut body.exprs[e].kind, ExprKind::Unit);
     let original = push_expr(body, original_kind, expr_type, expr_span);
-    let expr_stmt = push_stmt(body, StmtKind::Expr(original), expr_span);
+    let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), expr_span);
     let mut stmts = prefix;
     stmts.push(expr_stmt);
     let blk = body.blocks.push(crate::nir_arena::BlockNode {
@@ -3066,7 +3066,7 @@ fn emit_convergence_at_arm_body_end(
         // Unit body: Block { Expr(body); sync... }
         let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Unit);
         let original = push_expr(body, original_kind, body_type, body_span);
-        let expr_stmt = push_stmt(body, StmtKind::Expr(original), body_span);
+        let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), body_span);
         let mut stmts = Vec::with_capacity(1 + sync_stmts.len());
         stmts.push(expr_stmt);
         stmts.extend(sync_stmts);
@@ -3110,7 +3110,7 @@ fn emit_convergence_at_arm_body_end(
         body_type,
         body_span,
     );
-    let trailing_stmt = push_stmt(body, StmtKind::Expr(local_e), body_span);
+    let trailing_stmt = push_stmt(body, StmtKind::Expr(local_e.into()), body_span);
     stmts.push(trailing_stmt);
     let blk = body.blocks.push(crate::nir_arena::BlockNode {
         stmts,

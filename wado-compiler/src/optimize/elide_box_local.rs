@@ -372,7 +372,8 @@ fn find_use_site(
 }
 
 fn is_placeholder(body: &Body, stmt: StmtId) -> bool {
-    matches!(&body.stmts[stmt].kind, StmtKind::Expr(e) if matches!(body.exprs[*e].kind, ExprKind::Unit))
+    matches!(&body.stmts[stmt].kind, StmtKind::Expr(e)
+        if e.as_expr().is_some_and(|e| matches!(body.exprs[e].kind, ExprKind::Unit)))
 }
 
 // -----------------------------------------------------------------------
@@ -403,7 +404,9 @@ fn walk_stmt_for_leftmost(
                 _ => LeftmostWalk::Blocked,
             }
         }
-        StmtKind::Expr(e) => walk_expr_for_leftmost(body, *e, candidate, field_name),
+        StmtKind::Expr(e) => e
+            .as_expr()
+            .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, candidate, field_name)),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
             match v
                 .as_expr()

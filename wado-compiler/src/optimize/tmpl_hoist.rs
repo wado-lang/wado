@@ -215,7 +215,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
             collect_escaping_in_operand(body, *value, escaping);
         }
         StmtKind::Expr(expr) => {
-            collect_escaping_in_expr(body, *expr, escaping);
+            collect_escaping_in_operand(body, *expr, escaping);
         }
         StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
@@ -565,7 +565,7 @@ fn transform_stmt(
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Expr(e) => Shape::Expr(*e),
+        StmtKind::Expr(e) => e.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
@@ -793,7 +793,7 @@ fn extract_fmt_candidates(
 
             // Try to extract (local_index, value_expr_id) from the statement.
             let (fmt_local_index, value_expr): (u32, ExprId) = match &engine.body.stmts[*s].kind {
-                StmtKind::Expr(expr) => {
+                StmtKind::Expr(Operand::Expr(expr)) => {
                     let ExprKind::Assign { target, value } = &engine.body.exprs[*expr].kind else {
                         continue;
                     };
@@ -991,7 +991,7 @@ fn extract_formatter_fields(
             // not silently disable Formatter hoisting.
             let block = *block;
             let tail_stmt = *body.blocks[block].stmts.last()?;
-            let StmtKind::Expr(tail) = &body.stmts[tail_stmt].kind else {
+            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[tail_stmt].kind else {
                 return None;
             };
             extract_formatter_fields_from_block(
@@ -1059,7 +1059,7 @@ fn extract_formatter_fields_from_block(
                     return Some(make());
                 }
             }
-            StmtKind::Expr(expr) => {
+            StmtKind::Expr(Operand::Expr(expr)) => {
                 if let ExprKind::Assign { target, value: av } = &body.exprs[*expr].kind
                     && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                     && *index == buf_inner_local
@@ -1280,7 +1280,7 @@ fn build_field_reset(
         TypeTable::UNIT,
         span,
     );
-    engine.alloc_stmt(StmtKind::Expr(assign), span)
+    engine.alloc_stmt(StmtKind::Expr(assign.into()), span)
 }
 
 /// Hoist Formatter struct literals out of a `__tmpl` block.
@@ -1423,7 +1423,7 @@ fn rename_local_in_stmt(
     }
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::Expr),
-        StmtKind::Expr(expr) => Shape::Expr(*expr),
+        StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::Return { value: Some(expr) } => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,

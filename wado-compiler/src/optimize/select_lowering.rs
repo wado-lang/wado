@@ -111,7 +111,7 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
     if stmts.len() != 1 {
         return None;
     }
-    if let StmtKind::Expr(e) = &body.stmts[stmts[0]].kind {
+    if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmts[0]].kind {
         let e = *e;
         if is_select_eligible(body, e, type_table) {
             return Some(e);

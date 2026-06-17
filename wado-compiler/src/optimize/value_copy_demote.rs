@@ -276,7 +276,7 @@ fn stmt_binding(body: &Body, s: StmtId) -> Option<(ExprId, u32)> {
         StmtKind::Let {
             local_index, value, ..
         } => value.as_expr().map(|e| (e, *local_index)),
-        StmtKind::Expr(e) => {
+        StmtKind::Expr(Operand::Expr(e)) => {
             if let ExprKind::Assign { target, value } = &body.exprs[*e].kind
                 && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
             {
@@ -411,7 +411,7 @@ fn retarget_block(
         for s in &body.blocks[block].stmts {
             let target = match &body.stmts[*s].kind {
                 StmtKind::Let { local_index, .. } => Some(*local_index),
-                StmtKind::Expr(e) => match &body.exprs[*e].kind {
+                StmtKind::Expr(Operand::Expr(e)) => match &body.exprs[*e].kind {
                     ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
                         ExprKind::Local { index, .. } => Some(*index),
                         _ => None,
@@ -437,7 +437,7 @@ fn retarget_block(
 fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } => Some(value.as_expr().expect("skeleton operand")),
-        StmtKind::Expr(e) => {
+        StmtKind::Expr(Operand::Expr(e)) => {
             if let ExprKind::Assign { value, .. } = &body.exprs[*e].kind {
                 Some(value.as_expr().expect("skeleton operand"))
             } else {
@@ -860,7 +860,7 @@ impl ElementImmutable<'_, '_, '_> {
                     }
                 }
             }
-            StmtKind::Expr(e) => {
+            StmtKind::Expr(Operand::Expr(e)) => {
                 let e = *e;
                 self.visit_expr(body, e);
                 if !self.clean {

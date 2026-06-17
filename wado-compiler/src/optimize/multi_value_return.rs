@@ -294,7 +294,7 @@ fn stmt_returns_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) -> bo
                 body,
                 *value, expected)
         }
-        StmtKind::Expr(e) => nested_returns_in_expr_match(body, *e, expected),
+        StmtKind::Expr(e) => nested_returns_in_expr_match_operand(body, *e, expected),
         StmtKind::Break { value, .. } => {
             value.is_none_or(|v| nested_returns_in_expr_match_operand(
                 body,
@@ -420,7 +420,7 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
                 body,
                 *value, expected)
         }
-        StmtKind::Expr(e) => expr_break_values_match(body, *e, expected),
+        StmtKind::Expr(e) => expr_break_values_match_operand(body, *e, expected),
         StmtKind::Return { value: Some(e) } => expr_break_values_match_operand(
                 body,
                 *e, expected),
@@ -442,7 +442,7 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
         return false;
     };
     match &body.stmts[last].kind {
-        StmtKind::Expr(e) => expr_returns_match(body, *e, expected),
+        StmtKind::Expr(e) => expr_returns_match_operand(body, *e, expected),
         StmtKind::Break { value: Some(v), .. } => expr_returns_match_operand(
                 body,
                 *v, expected),
@@ -517,7 +517,7 @@ fn validate_stmt(
             );
         }
         StmtKind::Expr(e) => {
-            walk_expr_for_uses(body, *e, candidate_names, candidates, invalid, tracked);
+            walk_expr_for_uses_operand(body, *e, candidate_names, candidates, invalid, tracked);
         }
         StmtKind::Return { value: Some(e) } => {
             walk_expr_for_uses_operand(

@@ -286,7 +286,7 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
                 .rev()
                 .find_map(|s| match &body.stmts[*s].kind {
                     StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
-                    StmtKind::Expr(ex) => const_seq_len_a(body, *ex),
+                    StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
                     _ => None,
                 })
         }

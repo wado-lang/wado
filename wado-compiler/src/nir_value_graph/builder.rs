@@ -620,7 +620,7 @@ impl<'a> Builder<'a> {
                 self.bind_pattern_opaque(pattern);
             }
             StmtKind::Expr(e) => {
-                self.walk_expr(e);
+                self.walk_operand(e);
             }
             StmtKind::Return { value } => {
                 if let Some(v) = value {
@@ -899,7 +899,7 @@ impl<'a> Builder<'a> {
                 // stay opaque: forwarding the tail would let CSE drop the side
                 // effects of the leading statements (e.g. `{ cold_path(); e }`).
                 let tail = if let [only] = self.body.blocks[block].stmts[..]
-                    && let StmtKind::Expr(e) = &self.body.stmts[only].kind
+                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
                 {
                     Some(*e)
                 } else {
@@ -1109,7 +1109,7 @@ impl<'a> Builder<'a> {
                     let Some(&last) = self.body.blocks[*b].stmts.last() else {
                         return;
                     };
-                    let StmtKind::Expr(tail) = &self.body.stmts[last].kind else {
+                    let StmtKind::Expr(Operand::Expr(tail)) = &self.body.stmts[last].kind else {
                         return;
                     };
                     producer = *tail;
@@ -2021,7 +2021,7 @@ mod tests {
                 value: value.into(),
             },
         );
-        alloc_stmt(body, StmtKind::Expr(assign))
+        alloc_stmt(body, StmtKind::Expr(assign.into()))
     }
 
     fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
@@ -2066,7 +2066,7 @@ mod tests {
                 value: value.into(),
             },
         );
-        alloc_stmt(body, StmtKind::Expr(assign))
+        alloc_stmt(body, StmtKind::Expr(assign.into()))
     }
 
     fn call_void(body: &mut Body) -> ExprId {
@@ -2103,7 +2103,7 @@ mod tests {
     fn literal_int_gets_value_id() {
         let mut body = empty_body();
         let lit = int_lit(&mut body, 42);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
+        let s = alloc_stmt(&mut body, StmtKind::Expr(lit.into()));
         root_with(&mut body, vec![s]);
         let r = build_t(&mut body, &[]);
         let v = r.value_of[&lit];
@@ -2117,7 +2117,7 @@ mod tests {
         let lit = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, lit, false);
         let read = local_ref(&mut body, 0);
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, s2]);
         let r = build_t(&mut body, &[]);
         let lit_v = r.value_of[&lit];
@@ -2152,7 +2152,7 @@ mod tests {
         let two = int_lit(&mut body, 2);
         let assign = assign_stmt(&mut body, 0, two);
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, assign, s_read]);
         let r = build_t(&mut body, &[]);
         assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2));
@@ -2180,7 +2180,7 @@ mod tests {
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
         let r = build_t(&mut body, &[]);
         let read_v = r.value_of[&read];
@@ -2213,7 +2213,7 @@ mod tests {
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
         let r = build_t(&mut body, &[]);
         match body.values.kind(r.value_of[&read]) {
@@ -2248,7 +2248,7 @@ mod tests {
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
         let r = build_t(&mut body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
@@ -2268,7 +2268,7 @@ mod tests {
         let lb = block_with(&mut body, vec![assign]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, loop_s, s_read]);
         let r = build_t(&mut body, &[]);
         assert!(matches!(
@@ -2292,7 +2292,7 @@ mod tests {
         let lb = block_with(&mut body, vec![assign]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
         let r = build_t(&mut body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
@@ -2305,8 +2305,8 @@ mod tests {
         let mut body = empty_body();
         let read1 = local_ref(&mut body, 0);
         let read2 = local_ref(&mut body, 0);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2.into()));
         root_with(&mut body, vec![s1, s2]);
         let param = NirParam {
             name: "x".to_string(),
@@ -2332,8 +2332,8 @@ mod tests {
         let read2 = local_ref(&mut body, 0);
         let one_b = int_lit(&mut body, 1);
         let add_b = binary(&mut body, NirBinaryOp::Add, read2, one_b);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b));
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b.into()));
         root_with(&mut body, vec![s1, s2]);
         let param = NirParam {
             name: "x".to_string(),
@@ -2371,7 +2371,7 @@ mod tests {
         );
         let let_s = let_stmt(&mut body, 0, call, false);
         let read = local_ref(&mut body, 0);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, s]);
         let r = build_t(&mut body, &[]);
         assert!(matches!(
@@ -2392,8 +2392,8 @@ mod tests {
         let read1 = field_access(&mut body, recv1, 0);
         let recv2 = local_ref(&mut body, 0);
         let read2 = field_access(&mut body, recv2, 0);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2.into()));
         root_with(&mut body, vec![s1, s2]);
         let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read1], r.value_of[&read2]);
@@ -2454,7 +2454,7 @@ mod tests {
             let read1 = field_access(&mut body, recv1, 0);
             let let_1 = let_stmt(&mut body, 1, read1, false);
             let call = call_void(&mut body);
-            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
             let recv2 = local_ref(&mut body, 0);
             let read2 = field_access(&mut body, recv2, 0);
             let let_2 = let_stmt(&mut body, 2, read2, false);
@@ -2480,7 +2480,7 @@ mod tests {
         let mut body = empty_body();
         let call = call_void(&mut body);
         let fa = field_access(&mut body, call, 0);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
+        let s = alloc_stmt(&mut body, StmtKind::Expr(fa.into()));
         root_with(&mut body, vec![s]);
         let r = build_t(&mut body, &[]);
         assert!(!r.value_of.contains_key(&fa));
@@ -2532,7 +2532,7 @@ mod tests {
                 default,
             },
         );
-        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
+        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e.into()));
 
         root_with(&mut body, vec![let_pre, switch_s]);
         let r = build_t(&mut body, &[param_seed()]);
@@ -2624,7 +2624,7 @@ mod tests {
         );
 
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_x, lb_stmt, s_read]);
         let r = build_t(&mut body, &[]);
         // Post-LB `x` must be Opaque — the break-path write of 2 means the
@@ -2810,7 +2810,7 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
@@ -2834,7 +2834,7 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
@@ -3101,7 +3101,7 @@ mod tests {
         let ref_v2 = ref_of_local(&mut body, 1);
         let assign = assign_stmt(&mut body, 2, ref_v2);
         let tru = bool_lit(&mut body, true);
-        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru));
+        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru.into()));
         let rhs_block = block_with(&mut body, vec![assign, tru_stmt]);
         let rhs_expr = alloc_expr(&mut body, ExprKind::Block(rhs_block));
         let and = alloc_expr(
@@ -3147,7 +3147,7 @@ mod tests {
                 }],
             },
         );
-        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit));
+        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit.into()));
         let inner_block = block_with(&mut body, vec![let_n, tail_stmt]);
         let block_expr = alloc_expr(&mut body, ExprKind::Block(inner_block));
         let let_x = let_stmt(&mut body, 2, block_expr, false);
@@ -3258,7 +3258,7 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let lb = block_with(&mut body, vec![call_s]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let recv_r = local_ref(&mut body, 0);
@@ -3278,7 +3278,7 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let lb = block_with(&mut body, vec![call_s]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let recv_r = local_ref(&mut body, 0);

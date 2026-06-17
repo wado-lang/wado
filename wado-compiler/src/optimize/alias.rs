@@ -21,7 +21,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprKind, NodeRef, StmtKind};
+use crate::nir_arena::{Body, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -645,7 +645,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 }
             }
             // `dst = src` (Assign Local→Local) — same aliasing.
-            StmtKind::Expr(expr) => {
+            StmtKind::Expr(Operand::Expr(expr)) => {
                 if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
                     && let Some(dst) = local(*target)
                     && let Some(src) = value.as_expr().and_then(local)
@@ -654,6 +654,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                     out.insert(src);
                 }
             }
+            StmtKind::Expr(Operand::Value(_)) => {}
             StmtKind::LetDestructure { .. }
             | StmtKind::Return { .. }
             | StmtKind::Break { .. }

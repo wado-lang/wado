@@ -752,7 +752,7 @@ impl<'a> Interpreter<'a> {
         match body.blocks[b].stmts.as_slice() {
             [] => Lattice::Unevaluated,
             [single] => match &body.stmts[*single].kind {
-                StmtKind::Expr(e) => self.expr_to_lattice_a(body, *e),
+                StmtKind::Expr(e) => self.operand_to_lattice_a(body, *e),
                 _ => Lattice::Unevaluated,
             },
             _ => Lattice::Unevaluated,
@@ -1111,7 +1111,7 @@ impl<'a> Interpreter<'a> {
         match &body.stmts[s].kind {
             StmtKind::Expr(e) => {
                 let e = *e;
-                self.reduce_in_place_a(body, e)
+                self.reduce_in_place_operand_a(body, e)
             }
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
                 let v = *value;
@@ -1283,7 +1283,7 @@ impl<'a> Interpreter<'a> {
                 }
             };
             let span = sink.body().exprs[body_e].span;
-            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e), span);
+            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e.into()), span);
             let block = sink.alloc_block(vec![stmt], span);
             sink.replace_kind(e, ExprKind::Block(block));
             return true;
@@ -1441,7 +1441,7 @@ fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
     };
     match body.stmts[*single].kind {
         StmtKind::Return { value: Some(e) } => e.as_expr(),
-        StmtKind::Expr(e) => Some(e),
+        StmtKind::Expr(e) => e.as_expr(),
         _ => None,
     }
 }

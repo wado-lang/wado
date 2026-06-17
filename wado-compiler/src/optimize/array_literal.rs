@@ -241,7 +241,7 @@ impl Collapser<'_> {
     /// Match a `PLACE.push(elem)` statement where `PLACE` roots at `local`.
     /// Returns the field path from `local` to the array and the pushed element.
     fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, Operand)> {
-        let StmtKind::Expr(e) = &body.stmts[stmt].kind else {
+        let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind else {
             return None;
         };
         let ExprKind::MethodCall {
@@ -294,7 +294,7 @@ struct ArrayTarget {
 fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
     match &body.stmts[stmt].kind {
         StmtKind::Let { local_index, .. } => Some(*local_index),
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+        StmtKind::Expr(e) => match &body.exprs[e.as_expr()?].kind {
             ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
@@ -308,7 +308,7 @@ fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
 fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } => value.as_expr(),
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+        StmtKind::Expr(e) => match &body.exprs[e.as_expr()?].kind {
             ExprKind::Assign { value, .. } => value.as_expr(),
             _ => None,
         },

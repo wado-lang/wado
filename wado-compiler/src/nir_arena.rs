@@ -303,7 +303,7 @@ pub enum StmtKind {
         value: Operand,
         skip_value_copy: bool,
     },
-    Expr(ExprId),
+    Expr(Operand),
     Return {
         value: Option<Operand>,
     },
@@ -471,7 +471,7 @@ impl Body {
             span,
         });
         let s = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(e),
+            kind: StmtKind::Expr(Operand::Expr(e)),
             span,
         });
         body.root = body.blocks.push(BlockNode {
@@ -492,7 +492,10 @@ impl Body {
             "expr-wrapper body must hold exactly one statement"
         );
         match self.stmts[block.stmts[0]].kind {
-            StmtKind::Expr(e) => e,
+            StmtKind::Expr(Operand::Expr(e)) => e,
+            StmtKind::Expr(Operand::Value(_)) => {
+                panic!("expr-wrapper body holds a promoted value, not a skeleton expr")
+            }
             _ => panic!("expr-wrapper body statement must be an Expr"),
         }
     }
@@ -917,7 +920,7 @@ impl Body {
                 value: self.clone_operand(value),
                 skip_value_copy,
             },
-            StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
+            StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
                 value: value.map(|o| self.clone_operand(o)),
             },
@@ -1038,7 +1041,7 @@ impl Body {
             }
             NodeRef::Stmt(s) => match &self.stmts[s].kind {
                 StmtKind::Let { value, .. } => op_child(*value, &mut f),
-                StmtKind::Expr(e) => f(NodeRef::Expr(*e)),
+                StmtKind::Expr(e) => op_child(*e, &mut f),
                 StmtKind::Return { value } => {
                     if let Some(o) = value {
                         op_child(*o, &mut f);

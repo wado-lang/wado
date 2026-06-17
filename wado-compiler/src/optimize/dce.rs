@@ -1882,7 +1882,7 @@ fn remove_dead_global_sets_block(
     let old = std::mem::take(&mut body.blocks[block].stmts);
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old.len());
     for s in old {
-        let dead = if let StmtKind::Expr(expr) = &body.stmts[s].kind
+        let dead = if let StmtKind::Expr(Operand::Expr(expr)) = &body.stmts[s].kind
             && let ExprKind::GlobalVarSet {
                 module_source,
                 name,
@@ -1907,7 +1907,7 @@ fn remove_dead_global_sets_block(
                 && expr_has_side_effects(body, ve)
             {
                 let new_s = body.stmts.push(StmtNode {
-                    kind: StmtKind::Expr(ve),
+                    kind: StmtKind::Expr(ve.into()),
                     span,
                 });
                 new_stmts.push(new_s);
@@ -1974,7 +1974,7 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
         .stmts
         .iter()
         .any(|s| match &body.stmts[*s].kind {
-            StmtKind::Expr(e) => expr_has_side_effects(body, *e),
+            StmtKind::Expr(e) => e.as_expr().is_some_and(|e| expr_has_side_effects(body, e)),
             StmtKind::Let { value, .. } => operand_has_side_effects(body, *value),
             StmtKind::Return { value } => {
                 value.is_some_and(|v| operand_has_side_effects(body, v))
@@ -2006,7 +2006,7 @@ fn remove_dead_global_sets_stmt(body: &mut Body, s: StmtId, used: &IndexSet<(Str
         None,
     }
     let w = match &body.stmts[s].kind {
-        StmtKind::Expr(expr) => W::Expr(*expr),
+        StmtKind::Expr(expr) => expr.as_expr().map_or(W::None, W::Expr),
         StmtKind::Let { value, .. } => value.as_expr().map_or(W::None, W::Expr),
         StmtKind::If {
             then_block,
