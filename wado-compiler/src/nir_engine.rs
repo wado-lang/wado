@@ -175,6 +175,15 @@ impl<'a> Engine<'a> {
         self.value_graph.as_ref()?.value_of.get(&expr).copied()
     }
 
+    /// The [`ValueId`] of an operand: the promoted value directly, or the
+    /// skeleton expr's value from the graph.
+    pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+        match op {
+            Operand::Value(v) => Some(v),
+            Operand::Expr(e) => self.value(e),
+        }
+    }
+
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.

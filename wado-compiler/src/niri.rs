@@ -902,7 +902,7 @@ impl<'a> Interpreter<'a> {
             matches!(
                 &body.stmts[*s].kind,
                 StmtKind::If { condition, .. }
-                    if matches!(body.exprs[condition.expr()].kind, ExprKind::BoolLiteral(_))
+                    if operand_bool(body, *condition).is_some()
             )
         });
         if !has_constant_if {

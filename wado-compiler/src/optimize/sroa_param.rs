@@ -527,10 +527,10 @@ fn rewrite_call_expr(
             let Some(positions) = sroa_positions.get(&key).cloned() else {
                 return false;
             };
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
             for (pi, info) in &positions {
-                if *pi < args.len() {
-                    rewrite_arg(body, args[*pi], info, scalar_param_struct, type_table);
+                if let Some(Some(arg)) = args.get(*pi).copied() {
+                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                 }
             }
             true
@@ -585,11 +585,13 @@ fn rewrite_call_expr(
                 let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
                     unreachable!();
                 };
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+                let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
                 for (pi, info) in &positions {
                     let arg_idx = pi.saturating_sub(1);
-                    if *pi >= 1 && arg_idx < args.len() {
-                        rewrite_arg(body, args[arg_idx], info, scalar_param_struct, type_table);
+                    if *pi >= 1
+                        && let Some(Some(arg)) = args.get(arg_idx).copied()
+                    {
+                        rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                     }
                 }
             }

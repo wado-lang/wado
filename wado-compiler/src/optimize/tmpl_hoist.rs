@@ -277,7 +277,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
     match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -606,7 +606,9 @@ fn transform_expr(
             v.extend(args.iter().map(|a| a.expr.expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
+        ExprKind::Binary { left, right, .. } => {
+            Walk::Exprs([*left, *right].into_iter().filter_map(Operand::as_expr).collect())
+        }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),
@@ -1441,7 +1443,9 @@ fn rename_local_in_expr(
             v.extend(args.iter().map(|o| o.expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![left.expr(), right.expr()]),
+        ExprKind::Binary { left, right, .. } => {
+            Walk::Exprs([*left, *right].into_iter().filter_map(Operand::as_expr).collect())
+        }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![inner.expr()]),

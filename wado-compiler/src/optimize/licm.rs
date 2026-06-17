@@ -540,7 +540,7 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
         }
         StmtKind::Expr(value) => vec![Child::Expr(*value)],
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.iter().map(|v| Child::Expr(v.expr())).collect()
+            value.iter().filter_map(|v| v.as_expr().map(Child::Expr)).collect()
         }
         StmtKind::If {
             condition,
@@ -625,7 +625,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
             if brk_label != label {
                 return None;
             }
-            extract_alias_source(body, brk_value.expr())
+            brk_value.as_expr().and_then(|e| extract_alias_source(body, e))
         }
         _ => None,
     }
@@ -957,7 +957,7 @@ fn collect_modified_vars_in_expr(
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
+            let vals: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             for v in vals {
                 collect_modified_vars_in_expr(body, v, modified, type_table);
             }

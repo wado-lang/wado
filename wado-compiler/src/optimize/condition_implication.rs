@@ -33,7 +33,7 @@
 //! nodes are allocated).
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
 
@@ -62,12 +62,12 @@ impl GuardFact {
     /// context establishes as `lhs < rhs` (`is_strict`) or `lhs <= rhs`.
     fn from_comparison(
         engine: &mut Engine,
-        lhs: ExprId,
-        rhs: ExprId,
+        lhs: Operand,
+        rhs: Operand,
         is_strict: bool,
     ) -> Option<GuardFact> {
-        let lhs_vn = engine.value(lhs)?;
-        let rhs_vn = engine.value(rhs)?;
+        let lhs_vn = engine.operand_value(lhs)?;
+        let rhs_vn = engine.operand_value(rhs)?;
         Some(Self::from_values(engine, lhs_vn, rhs_vn, is_strict))
     }
 
@@ -499,12 +499,12 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardF
     let ExprKind::Unary {
         op: NirUnaryOp::Not,
         expr: inner,
-    } = &engine.body.exprs[condition.expr()].kind
+    } = &engine.body.exprs[condition.as_expr()?].kind
     else {
         return None;
     };
     let inner = *inner;
-    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner.expr())?;
+    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner.as_expr()?)?;
     // Loop guards keep the plain-variable shape: the induction variable is
     // compared directly (`i < bound`), so any `Add` decomposition would
     // describe a different program object. Restrict to offset 0.
@@ -540,12 +540,12 @@ fn extract_early_exit_guard(engine: &mut Engine, s: StmtId) -> Option<GuardFact>
         left,
         op: NirBinaryOp::GtEq,
         right,
-    } = &engine.body.exprs[condition.expr()].kind
+    } = &engine.body.exprs[condition.as_expr()?].kind
     else {
         return None;
     };
     let (left, right) = (*left, *right);
-    GuardFact::from_comparison(engine, left.expr(), right.expr(), true)
+    GuardFact::from_comparison(engine, left, right, true)
 }
 
 fn block_always_exits(engine: &Engine, block: BlockId) -> bool {
@@ -569,7 +569,7 @@ fn extract_dominating_guard(engine: &mut Engine, condition: ExprId) -> Option<Gu
         return None;
     };
     let (left, right) = (*left, *right);
-    GuardFact::from_comparison(engine, left.expr(), right.expr(), true)
+    GuardFact::from_comparison(engine, left, right, true)
 }
 
 /// Replace the expression at `cond` with `false`, preserving its type and span.
@@ -608,8 +608,11 @@ fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bo
         return false;
     };
     let (condition, then_block) = (*condition, *then_block);
-    if is_panic_block(engine, then_block) && fact.implies_false(engine, condition.expr()) {
-        set_false(engine, condition.expr());
+    if let Some(ce) = condition.as_expr()
+        && is_panic_block(engine, then_block)
+        && fact.implies_false(engine, ce)
+    {
+        set_false(engine, ce);
         return true;
     }
     false
@@ -647,19 +650,21 @@ impl ArenaOptVisitor for ConditionEliminator {
             _ => None,
         };
         if let Some((condition, then_block, else_block)) = if_ids {
+            let condition_e = condition.as_expr();
             // Check if this statement is a bounds check that can be eliminated.
-            if else_block.is_none()
+            if let Some(ce) = condition_e
+                && else_block.is_none()
                 && is_panic_block(engine, then_block)
-                && self.implied_false(engine, condition.expr())
+                && self.implied_false(engine, ce)
             {
-                set_false(engine, condition.expr());
+                set_false(engine, ce);
                 return true;
             }
 
             // Extract a dominating guard from the condition to extend
             // elimination into the then-block.
-            let mut changed = self.visit_expr(engine, condition.expr());
-            let dom = extract_dominating_guard(engine, condition.expr());
+            let mut changed = condition_e.is_some_and(|ce| self.visit_expr(engine, ce));
+            let dom = condition_e.and_then(|ce| extract_dominating_guard(engine, ce));
             let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
@@ -686,8 +691,8 @@ impl ArenaOptVisitor for ConditionEliminator {
             _ => None,
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
-            let mut changed = self.visit_expr(engine, condition.expr());
-            let dom = extract_dominating_guard(engine, condition.expr());
+            let mut changed = condition.as_expr().is_some_and(|ce| self.visit_expr(engine, ce));
+            let dom = condition.as_expr().and_then(|ce| extract_dominating_guard(engine, ce));
             let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);
@@ -733,10 +738,11 @@ impl ArenaOptVisitor for BitmaskEliminator {
             _ => None,
         };
         if let Some((condition, then_block)) = if_ids
+            && let Some(ce) = condition.as_expr()
             && is_panic_block(engine, then_block)
-            && is_bitmask_bounded(engine, condition.expr())
+            && is_bitmask_bounded(engine, ce)
         {
-            set_false(engine, condition.expr());
+            set_false(engine, ce);
             return true;
         }
         arena_opt_walk(self, engine, NodeRef::Stmt(s))
@@ -759,22 +765,27 @@ impl ArenaOptVisitor for ShortCircuitEliminator {
             _ => None,
         };
         if let Some((left, right)) = or_ids {
-            let mut changed = self.visit_expr(engine, left.expr());
-            let fact = if let ExprKind::Binary {
-                left: cmp_l,
-                op: NirBinaryOp::GtEq,
-                right: cmp_r,
-            } = &engine.body.exprs[left.expr()].kind
+            let mut changed = left.as_expr().is_some_and(|le| self.visit_expr(engine, le));
+            let fact = if let Some(le) = left.as_expr()
+                && let ExprKind::Binary {
+                    left: cmp_l,
+                    op: NirBinaryOp::GtEq,
+                    right: cmp_r,
+                } = &engine.body.exprs[le].kind
             {
                 let (cmp_l, cmp_r) = (*cmp_l, *cmp_r);
-                GuardFact::from_comparison(engine, cmp_l.expr(), cmp_r.expr(), true)
+                GuardFact::from_comparison(engine, cmp_l, cmp_r, true)
             } else {
                 None
             };
-            if let Some(fact) = fact {
-                changed |= GuardEliminator { fact }.visit_expr(engine, right.expr());
+            if let Some(fact) = fact
+                && let Some(re) = right.as_expr()
+            {
+                changed |= GuardEliminator { fact }.visit_expr(engine, re);
             }
-            changed |= self.visit_expr(engine, right.expr());
+            if let Some(re) = right.as_expr() {
+                changed |= self.visit_expr(engine, re);
+            }
             return changed;
         }
         arena_opt_walk(self, engine, NodeRef::Expr(e))

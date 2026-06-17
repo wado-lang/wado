@@ -348,7 +348,9 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
     match &body.stmts[stmt].kind {
         StmtKind::Expr(e) => collect_exprs_in_expr(body, *e, out),
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_exprs_in_expr(body, value.expr(), out);
+            if let Some(ve) = value.as_expr() {
+                collect_exprs_in_expr(body, ve, out);
+            }
         }
         StmtKind::If {
             condition,

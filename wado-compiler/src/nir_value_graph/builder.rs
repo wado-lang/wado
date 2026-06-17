@@ -848,8 +848,10 @@ impl<'a> Builder<'a> {
                         // `local = S { f: lit, … }` rebinds `local` to a fresh
                         // object; seed each pure field like the `Let` case so a
                         // later `local.f` read forwards the literal.
-                        self.seed_struct_literal_fields(index, v, value.expr());
-                        self.update_ref_target(index, value.expr());
+                        if let Some(ve) = value.as_expr() {
+                            self.seed_struct_literal_fields(index, v, ve);
+                            self.update_ref_target(index, ve);
+                        }
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         let (root, recv_v, bare_local) = field_place.expect("field target");
