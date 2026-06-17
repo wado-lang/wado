@@ -41,7 +41,7 @@ use std::rc::Rc;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirGlobal, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprBody, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -170,8 +170,8 @@ fn collect_candidates(
         {
             let (local_index, value, type_id) = (*local_index, *value, *type_id);
             if gate.is_reference_type(type_id)
-                && is_globalizable_const(body, value.expr(), &mut IndexSet::default())
-                && contains_aggregate(body, value.expr())
+                && is_globalizable_const_operand(body, value, &mut IndexSet::default())
+                && contains_aggregate_operand(body, value)
                 && is_readonly_body(body, local_index, gate)
             {
                 out.push(Candidate {
@@ -209,6 +209,10 @@ fn stmt_blocks(body: &Body, stmt: StmtId) -> Vec<BlockId> {
 }
 
 /// Recursively true when `expr` is a closed constant aggregate value.
+fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
+    op.as_expr().map_or(true, |e| is_globalizable_const(body, e, bound))
+}
+
 fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::IntLiteral { .. }
@@ -229,17 +233,17 @@ fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -
             let elements = elements.clone();
             elements
                 .iter()
-                .all(|&e| is_globalizable_const(body, e.expr(), bound))
+                .all(|&e| is_globalizable_const_operand(body, e, bound))
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_none_or(|p| is_globalizable_const(body, p.expr(), bound))
+            payload.is_none_or(|p| is_globalizable_const_operand(body, p, bound))
         }
         // Transparent value wrappers.
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::Neg,
             expr: inner,
         }
-        | ExprKind::Cast { expr: inner, .. } => is_globalizable_const(body, inner.expr(), bound),
+        | ExprKind::Cast { expr: inner, .. } => is_globalizable_const_operand(body, *inner, bound),
         // The builder-temp block an array / list literal leaves.
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             block_is_const(body, *block, bound)
@@ -262,7 +266,7 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
             return false;
         };
         let (local_index, value) = (*local_index, *value);
-        if !is_globalizable_const(body, value.expr(), bound) {
+        if !is_globalizable_const_operand(body, value, bound) {
             return false;
         }
         bound.insert(local_index);
@@ -274,6 +278,10 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
 }
 
 /// True when `expr` contains at least one aggregate constructor.
+fn contains_aggregate_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().is_some_and(|e| contains_aggregate(body, e))
+}
+
 fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::StructLiteral { .. }
@@ -281,12 +289,12 @@ fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
         | ExprKind::ArrayLiteral { .. }
         | ExprKind::VariantConstruct { .. } => true,
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            contains_aggregate(body, inner.expr())
+            contains_aggregate_operand(body, *inner)
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
-                StmtKind::Let { value, .. } => contains_aggregate(body, value.expr()),
+                StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value),
                 StmtKind::Expr(value) => contains_aggregate(body, *value),
                 _ => false,
             })
@@ -344,10 +352,10 @@ fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> boo
 
 fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } => expr_readonly(body, value.expr(), idx, gate),
+        StmtKind::Let { value, .. } => expr_readonly_operand(body, *value, idx, gate),
         StmtKind::Expr(e) => expr_readonly(body, *e, idx, gate),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| expr_readonly(body, v.expr(), idx, gate))
+            value.is_none_or(|v| expr_readonly_operand(body, v, idx, gate))
         }
         StmtKind::If {
             condition,
@@ -355,16 +363,20 @@ fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            expr_readonly(body, condition.expr(), idx, gate)
+            expr_readonly_operand(body, condition, idx, gate)
                 && block_readonly(body, then_block, idx, gate)
                 && else_block.is_none_or(|eb| block_readonly(body, eb, idx, gate))
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             block_readonly(body, *b, idx, gate)
         }
-        StmtKind::LetDestructure { value, .. } => expr_readonly(body, value.expr(), idx, gate),
+        StmtKind::LetDestructure { value, .. } => expr_readonly_operand(body, *value, idx, gate),
         StmtKind::Continue => true,
     }
+}
+
+fn expr_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
+    op.as_expr().map_or(true, |e| expr_readonly(body, e, idx, gate))
 }
 
 fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
@@ -381,70 +393,70 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
         } => {
             let receiver = *receiver;
             let func = func.clone();
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            let recv = strip_refs(body, receiver.expr());
-            if is_local(body, recv, idx) {
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            let recv = receiver.as_expr().map(|e| strip_refs(body, e));
+            if recv.is_some_and(|r| is_local(body, r, idx)) {
                 if gate.callee_mutates_self(&func) != Some(false) {
                     return false;
                 }
-            } else if expr_mentions_local(body, receiver.expr(), idx) {
+            } else if receiver.as_expr().is_some_and(|e| expr_mentions_local(body, e, idx)) {
                 if gate.callee_mutates_self(&func) != Some(false) {
                     return false;
                 }
-                if !expr_readonly(body, receiver.expr(), idx, gate) {
+                if !expr_readonly_operand(body, receiver, idx, gate) {
                     return false;
                 }
-            } else if !expr_readonly(body, receiver.expr(), idx, gate) {
+            } else if !expr_readonly_operand(body, receiver, idx, gate) {
                 return false;
             }
             args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
         }
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             args.iter().all(|&a| call_arg_readonly(body, a, idx, gate))
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            expr_readonly(body, callee.expr(), idx, gate)
+            expr_readonly_operand(body, callee, idx, gate)
                 && args
                     .iter()
-                    .all(|&a| call_arg_readonly(body, a.expr(), idx, gate))
+                    .all(|&a| call_arg_readonly_operand(body, a, idx, gate))
         }
 
         // `&mut <…xs…>` — a mutable reference into the binding escapes.
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => !expr_mentions_local(body, inner.expr(), idx),
+        } => !inner.as_expr().is_some_and(|e| expr_mentions_local(body, e, idx)),
 
         // Pure scalar reads.
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            expr_readonly(body, left.expr(), idx, gate)
-                && expr_readonly(body, right.expr(), idx, gate)
+            expr_readonly_operand(body, left, idx, gate)
+                && expr_readonly_operand(body, right, idx, gate)
         }
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary {
             op: NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot,
             expr: inner,
-        } => expr_readonly(body, inner.expr(), idx, gate),
+        } => expr_readonly_operand(body, *inner, idx, gate),
 
         // Reads through projections.
         ExprKind::Index { expr: base, index } => {
             let (base, index) = (*base, *index);
-            (is_local(body, base.expr(), idx) || expr_readonly(body, base.expr(), idx, gate))
-                && expr_readonly(body, index.expr(), idx, gate)
+            (base.as_expr().is_some_and(|e| is_local(body, e, idx)) || expr_readonly_operand(body, base, idx, gate))
+                && expr_readonly_operand(body, index, idx, gate)
         }
         ExprKind::FieldAccess { expr: base, .. } => {
             let base = *base;
-            is_local(body, base.expr(), idx) || expr_readonly(body, base.expr(), idx, gate)
+            base.as_expr().is_some_and(|e| is_local(body, e, idx)) || expr_readonly_operand(body, base, idx, gate)
         }
 
         // A write whose target touches the binding escapes.
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
-            !expr_mentions_local(body, target, idx) && expr_readonly(body, value.expr(), idx, gate)
+            !expr_mentions_local(body, target, idx) && expr_readonly_operand(body, value, idx, gate)
         }
 
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
@@ -456,7 +468,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            expr_readonly(body, condition.expr(), idx, gate)
+            expr_readonly_operand(body, condition, idx, gate)
                 && block_readonly(body, then_branch, idx, gate)
                 && else_branch.is_none_or(|eb| block_readonly(body, eb, idx, gate))
         }
@@ -466,7 +478,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
                 .iter()
                 .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
                 .collect();
-            expr_readonly(body, scrut.expr(), idx, gate)
+            expr_readonly_operand(body, scrut, idx, gate)
                 && arms.iter().all(|(guard, arm_body)| {
                     guard.is_none_or(|g| expr_readonly(body, g, idx, gate))
                         && expr_readonly(body, *arm_body, idx, gate)
@@ -481,7 +493,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            expr_readonly(body, scrutinee.expr(), idx, gate)
+            expr_readonly_operand(body, scrutinee, idx, gate)
                 && arms.iter().all(|&a| block_readonly(body, a, idx, gate))
                 && block_readonly(body, default, idx, gate)
         }
@@ -494,19 +506,23 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
 /// escapes; passing the binding itself by value is a consuming use (rejected).
+fn call_arg_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
+    op.as_expr().map_or(true, |e| call_arg_readonly(body, e, idx, gate))
+}
+
 fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => *index != idx,
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => !expr_mentions_local(body, inner.expr(), idx),
+        } => !inner.as_expr().is_some_and(|e| expr_mentions_local(body, e, idx)),
         ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
         } => {
             let inner = *inner;
-            is_local(body, inner.expr(), idx) || expr_readonly(body, inner.expr(), idx, gate)
+            inner.as_expr().is_some_and(|e| is_local(body, e, idx)) || expr_readonly_operand(body, inner, idx, gate)
         }
         _ => expr_readonly(body, arg, idx, gate),
     }

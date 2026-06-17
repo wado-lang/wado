@@ -21,7 +21,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction, NirStruct, ReturnAbi};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -35,6 +35,14 @@ struct CandidateInfo {
 
 /// If `expr` is a direct `Call(f)` / `MethodCall(f)` whose callee is a
 /// candidate, return that candidate's index.
+fn candidate_call_idx_operand(
+    body: &Body,
+    op: Operand,
+    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+) -> Option<usize> {
+    op.as_expr().and_then(|e| candidate_call_idx(body, e, candidate_names))
+}
+
 fn candidate_call_idx(
     body: &Body,
     expr: ExprId,
@@ -260,7 +268,9 @@ fn all_returns_match_shape(body: &Body, block: BlockId, expected: &ExpectedShape
 fn stmt_returns_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) -> bool {
     match &body.stmts[stmt].kind {
         StmtKind::Return { value: None } => false,
-        StmtKind::Return { value: Some(v) } => expr_returns_match(body, v.expr(), expected),
+        StmtKind::Return { value: Some(v) } => expr_returns_match_operand(
+                body,
+                *v, expected),
         StmtKind::If {
             then_block,
             else_block,
@@ -273,14 +283,28 @@ fn stmt_returns_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) -> bo
             all_returns_match_shape(body, *b, expected)
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            nested_returns_in_expr_match(body, value.expr(), expected)
+            nested_returns_in_expr_match_operand(
+                body,
+                *value, expected)
         }
         StmtKind::Expr(e) => nested_returns_in_expr_match(body, *e, expected),
         StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| nested_returns_in_expr_match(body, v.expr(), expected))
+            value.is_none_or(|v| nested_returns_in_expr_match_operand(
+                body,
+                v, expected))
         }
         StmtKind::Continue => true,
     }
+}
+
+fn expr_returns_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
+    op.as_expr().is_some_and(|e| expr_returns_match(body, e, expected))
+}
+fn nested_returns_in_expr_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
+    op.as_expr().is_some_and(|e| nested_returns_in_expr_match(body, e, expected))
+}
+fn expr_break_values_match_operand(body: &Body, op: Operand, expected: &ExpectedShape) -> bool {
+    op.as_expr().is_some_and(|e| expr_break_values_match(body, e, expected))
 }
 
 fn nested_returns_in_expr_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bool {
@@ -359,8 +383,12 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
     match &body.stmts[stmt].kind {
         StmtKind::Break { value: Some(v), .. } => {
             let v = *v;
-            expr_returns_match(body, v.expr(), expected)
-                && expr_break_values_match(body, v.expr(), expected)
+            expr_returns_match_operand(
+                body,
+                v, expected)
+                && expr_break_values_match_operand(
+                body,
+                v, expected)
         }
         StmtKind::Break { value: None, .. } | StmtKind::Continue => true,
         StmtKind::If {
@@ -369,7 +397,9 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            expr_break_values_match(body, condition.expr(), expected)
+            expr_break_values_match_operand(
+                body,
+                condition, expected)
                 && all_break_values_match_shape(body, then_block, expected)
                 && else_block.is_none_or(|b| all_break_values_match_shape(body, b, expected))
         }
@@ -377,10 +407,14 @@ fn stmt_break_values_match(body: &Body, stmt: StmtId, expected: &ExpectedShape) 
             all_break_values_match_shape(body, *b, expected)
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            expr_break_values_match(body, value.expr(), expected)
+            expr_break_values_match_operand(
+                body,
+                *value, expected)
         }
         StmtKind::Expr(e) => expr_break_values_match(body, *e, expected),
-        StmtKind::Return { value: Some(e) } => expr_break_values_match(body, e.expr(), expected),
+        StmtKind::Return { value: Some(e) } => expr_break_values_match_operand(
+                body,
+                *e, expected),
         StmtKind::Return { value: None } => true,
     }
 }
@@ -399,7 +433,9 @@ fn block_tail_returns_match(body: &Body, block: BlockId, expected: &ExpectedShap
     };
     match &body.stmts[last].kind {
         StmtKind::Expr(e) => expr_returns_match(body, *e, expected),
-        StmtKind::Break { value: Some(v), .. } => expr_returns_match(body, v.expr(), expected),
+        StmtKind::Break { value: Some(v), .. } => expr_returns_match_operand(
+                body,
+                *v, expected),
         StmtKind::Return { .. } => true,
         _ => false,
     }
@@ -446,12 +482,14 @@ fn validate_stmt(
         } => {
             let (local_index, value, is_mut) = (*local_index, *value, *is_mut);
             if !is_mut
-                && let Some(candidate_idx) = candidate_call_idx(body, value.expr(), candidate_names)
+                && let Some(candidate_idx) = candidate_call_idx_operand(
+                body,
+                value, candidate_names)
             {
                 tracked.insert(local_index, candidate_idx);
-                walk_call_args_for_uses(
-                    body,
-                    value.expr(),
+                walk_call_args_for_uses_operand(
+                body,
+                value,
                     candidate_names,
                     candidates,
                     invalid,
@@ -459,9 +497,9 @@ fn validate_stmt(
                 );
                 return;
             }
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                value.expr(),
+                value,
                 candidate_names,
                 candidates,
                 invalid,
@@ -472,9 +510,9 @@ fn validate_stmt(
             walk_expr_for_uses(body, *e, candidate_names, candidates, invalid, tracked);
         }
         StmtKind::Return { value: Some(e) } => {
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                e.expr(),
+                *e,
                 candidate_names,
                 candidates,
                 invalid,
@@ -484,9 +522,9 @@ fn validate_stmt(
         StmtKind::Return { value: None } | StmtKind::Continue => {}
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                walk_expr_for_uses(
-                    body,
-                    v.expr(),
+                walk_expr_for_uses_operand(
+                body,
+                *v,
                     candidate_names,
                     candidates,
                     invalid,
@@ -500,9 +538,9 @@ fn validate_stmt(
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                condition.expr(),
+                condition,
                 candidate_names,
                 candidates,
                 invalid,
@@ -527,15 +565,40 @@ fn validate_stmt(
             }
         }
         StmtKind::LetDestructure { value, .. } => {
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                value.expr(),
+                *value,
                 candidate_names,
                 candidates,
                 invalid,
                 tracked,
             );
         }
+    }
+}
+
+fn walk_expr_for_uses_operand(
+    body: &Body,
+    op: Operand,
+    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
+    invalid: &mut IndexSet<usize>,
+    tracked: &IndexMap<u32, usize>,
+) {
+    if let Some(e) = op.as_expr() {
+        walk_expr_for_uses(body, e, candidate_names, candidates, invalid, tracked);
+    }
+}
+fn walk_call_args_for_uses_operand(
+    body: &Body,
+    op: Operand,
+    candidate_names: &IndexMap<(String, ModuleSource), usize>,
+    candidates: &IndexMap<usize, CandidateInfo>,
+    invalid: &mut IndexSet<usize>,
+    tracked: &IndexMap<u32, usize>,
+) {
+    if let Some(e) = op.as_expr() {
+        walk_call_args_for_uses(body, e, candidate_names, candidates, invalid, tracked);
     }
 }
 
@@ -561,9 +624,9 @@ fn walk_expr_for_uses(
             {
                 return;
             }
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                source.expr(),
+                source,
                 candidate_names,
                 candidates,
                 invalid,
@@ -599,9 +662,9 @@ fn walk_expr_for_uses(
             }
             let receiver = *receiver;
             let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                receiver.expr(),
+                receiver,
                 candidate_names,
                 candidates,
                 invalid,
@@ -614,9 +677,9 @@ fn walk_expr_for_uses(
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for a in args {
-                walk_expr_for_uses(
-                    body,
-                    a.expr(),
+                walk_expr_for_uses_operand(
+                body,
+                a,
                     candidate_names,
                     candidates,
                     invalid,
@@ -627,18 +690,18 @@ fn walk_expr_for_uses(
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                callee.expr(),
+                callee,
                 candidate_names,
                 candidates,
                 invalid,
                 tracked,
             );
             for a in args {
-                walk_expr_for_uses(
-                    body,
-                    a.expr(),
+                walk_expr_for_uses_operand(
+                body,
+                a,
                     candidate_names,
                     candidates,
                     invalid,
@@ -659,9 +722,9 @@ fn walk_expr_for_uses(
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                condition.expr(),
+                condition,
                 candidate_names,
                 candidates,
                 invalid,
@@ -684,9 +747,9 @@ fn walk_expr_for_uses(
                 .iter()
                 .map(|a| (a.guard.map(|g| g.expr()), a.body.expr()))
                 .collect();
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                scrut.expr(),
+                scrut,
                 candidate_names,
                 candidates,
                 invalid,
@@ -715,9 +778,9 @@ fn walk_expr_for_uses(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            walk_expr_for_uses(
+            walk_expr_for_uses_operand(
                 body,
-                scrutinee.expr(),
+                scrutinee,
                 candidate_names,
                 candidates,
                 invalid,
