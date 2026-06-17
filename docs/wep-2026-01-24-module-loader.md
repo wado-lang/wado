@@ -13,16 +13,22 @@ Currently, unknown namespaces (e.g., `unknown:foo`) are silently treated as loca
 
 ## Decision
 
+> The namespace grammar and the "unknown namespace = error" rule below are
+> superseded by [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md):
+> a namespace is reserved iff the compiler bundles it (`wasi`, `core`), every
+> other coordinate namespace is open, and `lib:` is the single indirection
+> namespace. The local / remote / I/O-delegation rules below still hold.
+
 ### Module Path Syntax
 
 Module paths in `use` declarations follow this grammar:
 
 ```
-ModulePath := NamespacePath | LocalPath | RemotePath
+ModulePath := CoordinatePath | LibAlias | LocalPath | RemotePath
 
-NamespacePath := Namespace ":" Name
-Namespace := "core" | "wasi"
-Name := Identifier ("/" Identifier)*
+CoordinatePath := Namespace (":" Namespace)* ":" Package ("/" Interface)? ("@" Version)?
+LibAlias := "lib:" Identifier
+Namespace, Package, Interface := Identifier
 
 LocalPath := ("." | "..") "/" RelativePath
 RelativePath := PathSegment ("/" PathSegment)*
@@ -33,13 +39,14 @@ RemotePath := ("http://" | "https://") Url
 
 ### Namespace Resolution Rules
 
-1. **Reserved Namespaces (`xxx:`)**
-   - All paths matching `identifier:` pattern are reserved namespace paths
-   - Currently defined namespaces:
-     - `core:` - Wado standard library (`core:prelude`, `core:cli`, etc.)
-     - `wasi:` - WASI interface modules (`wasi:cli`, `wasi:filesystem`, etc.)
-   - **Unknown namespaces result in immediate compile error**
-   - Error message: `unknown module namespace 'xxx'; expected 'core' or 'wasi'`
+1. **Reserved namespace ⇔ bundled namespace**
+   - `core:` — Wado standard library (`core:prelude`, `core:cli`, etc.)
+   - `wasi:` — WASI interface modules (`wasi:cli`, `wasi:filesystem`, etc.)
+   - Every other coordinate namespace is **open** and resolves from outside
+     (default registry, or `with`/manifest source override).
+   - `lib:` is the single indirection namespace (alias / rename / private dep).
+   - See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
+     for resolution and version rules.
 
 2. **Remote Modules (`http://` or `https://`)**
    - URLs starting with `http://` or `https://` are remote modules
