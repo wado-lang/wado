@@ -117,7 +117,8 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
     if skip_value_copy {
         return None;
     }
-    let value = unwrap_copy_value(body, value.expr());
+    // A promoted constant binding is not a copy of another place.
+    let value = unwrap_copy_value(body, value.as_expr()?);
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {

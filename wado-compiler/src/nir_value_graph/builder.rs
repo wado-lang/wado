@@ -1150,12 +1150,18 @@ impl<'a> Builder<'a> {
         };
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
-        let pairs: Vec<(u32, ExprId)> = fields
+        let pairs: Vec<(u32, Operand)> = fields
             .iter()
-            .map(|f| (f.field_index, f.value.expr()))
+            .map(|f| (f.field_index, f.value))
             .collect();
         for (field_index, field_value) in pairs {
-            if let Some(&fv) = self.value_of.get(&field_value) {
+            // A promoted constant field is its own `ValueId`; a skeleton field is
+            // resolved through `value_of`.
+            let fv = match field_value {
+                Operand::Value(v) => Some(v),
+                Operand::Expr(e) => self.value_of.get(&e).copied(),
+            };
+            if let Some(fv) = fv {
                 let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }

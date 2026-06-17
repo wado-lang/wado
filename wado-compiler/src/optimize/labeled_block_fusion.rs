@@ -696,18 +696,18 @@ fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usi
 fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            count_local_uses_in_expr(body, value.expr(), local_idx)
+            count_local_uses_in_operand(body, *value, local_idx)
         }
         StmtKind::Expr(expr) => count_local_uses_in_expr(body, *expr, local_idx),
         StmtKind::Return { value } => {
-            value.map_or(0, |v| count_local_uses_in_expr(body, v.expr(), local_idx))
+            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
         }
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            count_local_uses_in_expr(body, condition.expr(), local_idx)
+            count_local_uses_in_operand(body, *condition, local_idx)
                 + count_local_uses_in_block(body, *then_block, local_idx)
                 + else_block.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
         }
@@ -715,18 +715,23 @@ fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
             count_local_uses_in_block(body, *b, local_idx)
         }
         StmtKind::Break { value, .. } => {
-            value.map_or(0, |v| count_local_uses_in_expr(body, v.expr(), local_idx))
+            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
         }
         StmtKind::Continue => 0,
     }
+}
+
+fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usize {
+    op.as_expr()
+        .map_or(0, |e| count_local_uses_in_expr(body, e, local_idx))
 }
 
 fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => usize::from(is_local(body, e, local_idx)),
         ExprKind::Binary { left, right, .. } => {
-            count_local_uses_in_expr(body, left.expr(), local_idx)
-                + count_local_uses_in_expr(body, right.expr(), local_idx)
+            count_local_uses_in_operand(body, *left, local_idx)
+                + count_local_uses_in_operand(body, *right, local_idx)
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -736,48 +741,48 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
         | ExprKind::GlobalVarSet { value: inner, .. } => {
-            count_local_uses_in_expr(body, inner.expr(), local_idx)
+            count_local_uses_in_operand(body, *inner, local_idx)
         }
         ExprKind::Assign { target, value } => {
             count_local_uses_in_expr(body, *target, local_idx)
-                + count_local_uses_in_expr(body, value.expr(), local_idx)
+                + count_local_uses_in_operand(body, *value, local_idx)
         }
         ExprKind::Index { expr: inner, index } => {
-            count_local_uses_in_expr(body, inner.expr(), local_idx)
-                + count_local_uses_in_expr(body, index.expr(), local_idx)
+            count_local_uses_in_operand(body, *inner, local_idx)
+                + count_local_uses_in_operand(body, *index, local_idx)
         }
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_local_uses_in_expr(body, a.expr.expr(), local_idx))
+            .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
             .sum(),
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .map(|a| count_local_uses_in_expr(body, a.expr(), local_idx))
+            .map(|a| count_local_uses_in_operand(body, *a, local_idx))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_local_uses_in_expr(body, receiver.expr(), local_idx)
+            count_local_uses_in_operand(body, *receiver, local_idx)
                 + args
                     .iter()
-                    .map(|a| count_local_uses_in_expr(body, a.expr.expr(), local_idx))
+                    .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
                     .sum::<usize>()
         }
         ExprKind::IndirectCall { callee, args } => {
-            count_local_uses_in_expr(body, callee.expr(), local_idx)
+            count_local_uses_in_operand(body, *callee, local_idx)
                 + args
                     .iter()
-                    .map(|a| count_local_uses_in_expr(body, a.expr(), local_idx))
+                    .map(|a| count_local_uses_in_operand(body, *a, local_idx))
                     .sum::<usize>()
         }
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_local_uses_in_expr(body, f.value.expr(), local_idx))
+            .map(|f| count_local_uses_in_operand(body, f.value, local_idx))
             .sum(),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_local_uses_in_expr(body, e.expr(), local_idx))
+            .map(|e| count_local_uses_in_operand(body, *e, local_idx))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_local_uses_in_expr(body, p.expr(), local_idx))
+            payload.map_or(0, |p| count_local_uses_in_operand(body, p, local_idx))
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             count_local_uses_in_block(body, *block, local_idx)
@@ -787,19 +792,19 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
             then_branch,
             else_branch,
         } => {
-            count_local_uses_in_expr(body, condition.expr(), local_idx)
+            count_local_uses_in_operand(body, *condition, local_idx)
                 + count_local_uses_in_block(body, *then_branch, local_idx)
                 + else_branch.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
         }
         ExprKind::Match { expr, arms } => {
-            count_local_uses_in_expr(body, expr.expr(), local_idx)
+            count_local_uses_in_operand(body, *expr, local_idx)
                 + arms
                     .iter()
                     .map(|arm| {
-                        count_local_uses_in_expr(body, arm.body.expr(), local_idx)
+                        count_local_uses_in_operand(body, arm.body, local_idx)
                             + arm
                                 .guard
-                                .map_or(0, |g| count_local_uses_in_expr(body, g.expr(), local_idx))
+                                .map_or(0, |g| count_local_uses_in_operand(body, g, local_idx))
                     })
                     .sum::<usize>()
         }
@@ -809,7 +814,7 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
             default,
             ..
         } => {
-            count_local_uses_in_expr(body, scrutinee.expr(), local_idx)
+            count_local_uses_in_operand(body, *scrutinee, local_idx)
                 + arms
                     .iter()
                     .map(|arm| count_local_uses_in_block(body, *arm, local_idx))

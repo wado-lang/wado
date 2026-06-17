@@ -41,7 +41,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind,
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -278,7 +278,7 @@ fn mark_ref_field_locals_as_aliased(
 fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
     match &body.exprs[expr].kind {
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value.expr()).collect();
+            let vals: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             for v in vals {
                 extract_ref_local(body, v, stores_aliased);
             }
@@ -286,7 +286,9 @@ fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut 
         ExprKind::TupleLiteral { elements, .. } => {
             let elems = elements.clone();
             for e in elems {
-                extract_ref_local(body, e.expr(), stores_aliased);
+                if let Some(ee) = e.as_expr() {
+                    extract_ref_local(body, ee, stores_aliased);
+                }
             }
         }
         _ => {}
@@ -443,13 +445,20 @@ fn escape_expr(body: &Body, id: ExprId, candidates: &IndexSet<u32>, escaped: &mu
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && is_candidate_local(body, inner.expr(), candidates).is_some()
+                && inner
+                    .as_expr()
+                    .and_then(|e| is_candidate_local(body, e, candidates))
+                    .is_some()
             {
-                escape_expr(body, value.expr(), candidates, escaped);
+                if let Some(ve) = value.as_expr() {
+                    escape_expr(body, ve, candidates, escaped);
+                }
                 return;
             }
             escape_expr(body, target, candidates, escaped);
-            escape_expr(body, value.expr(), candidates, escaped);
+            if let Some(ve) = value.as_expr() {
+                escape_expr(body, ve, candidates, escaped);
+            }
         }
         ExprKind::Local { index, .. } => {
             if candidates.contains(index) {
@@ -576,15 +585,17 @@ fn soft_node(
                 &body.stmts[s].kind
             {
                 let v = *v;
-                soft_expr(
+                if let Some(ve) = v.as_expr() {
+                    soft_expr(
                     body,
-                    v.expr(),
+                    ve,
                     true,
                     candidates,
                     stores_lookup,
                     current_module,
                     hard_escaped,
                 );
+                }
             } else {
                 body.for_each_child(NodeRef::Stmt(s), |c| {
                     soft_node(
@@ -709,8 +720,9 @@ fn soft_expr(
         }
         ExprKind::Call { func, args, .. } => {
             let func = func.clone();
-            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            for (i, arg) in arg_exprs.into_iter().enumerate() {
+            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            for (i, arg) in arg_ops.into_iter().enumerate() {
+                let Some(arg) = arg.as_expr() else { continue };
                 if is_immut_ref_to_candidate(body, arg, candidates)
                     && !callee_stores_param_at(&func, i, current_module, stores_lookup)
                 {
@@ -735,13 +747,14 @@ fn soft_expr(
         } => {
             let receiver = *receiver;
             let func = func.clone();
-            let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
-            if !is_immut_ref_to_candidate(body, receiver.expr(), candidates)
-                || callee_stores_param_at(&func, 0, current_module, stores_lookup)
+            let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            if let Some(re) = receiver.as_expr()
+                && (!is_immut_ref_to_candidate(body, re, candidates)
+                    || callee_stores_param_at(&func, 0, current_module, stores_lookup))
             {
                 soft_expr(
                     body,
-                    receiver.expr(),
+                    re,
                     false,
                     candidates,
                     stores_lookup,
@@ -749,7 +762,8 @@ fn soft_expr(
                     hard_escaped,
                 );
             }
-            for (i, arg) in arg_exprs.into_iter().enumerate() {
+            for (i, arg) in arg_ops.into_iter().enumerate() {
+                let Some(arg) = arg.as_expr() else { continue };
                 if is_immut_ref_to_candidate(body, arg, candidates)
                     && !callee_stores_param_at(&func, i + 1, current_module, stores_lookup)
                 {

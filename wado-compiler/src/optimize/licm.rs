@@ -25,7 +25,7 @@ use std::cell::Cell;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
@@ -764,19 +764,20 @@ fn collect_modified_vars_in_stmt(
             let local_index = *local_index;
             let value = *value;
             modified.insert_full(local_index);
-            if let Some(src_idx) = extract_alias_source(body, value.expr())
-                && is_gc_heap_type(body.exprs[value.expr()].type_id, type_table)
+            if let Some(ve) = value.as_expr()
+                && let Some(src_idx) = extract_alias_source(body, ve)
+                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
                 modified.add_alias(local_index, src_idx);
             }
-            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
         StmtKind::Expr(expr) => {
             collect_modified_vars_in_expr(body, *expr, modified, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, v.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, *v, modified, type_table);
             }
         }
         StmtKind::If {
@@ -787,7 +788,7 @@ fn collect_modified_vars_in_stmt(
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_modified_vars_in_expr(body, condition.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, condition, modified, type_table);
             collect_modified_vars_in_block(body, then_block, modified, type_table);
             if let Some(eb) = else_block {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
@@ -801,7 +802,7 @@ fn collect_modified_vars_in_stmt(
         }
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, v.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, *v, modified, type_table);
             }
         }
         StmtKind::Continue => {}
@@ -809,7 +810,7 @@ fn collect_modified_vars_in_stmt(
             let pattern = *pattern;
             let value = *value;
             collect_pattern_bindings(body, pattern, modified);
-            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
     }
 }
@@ -856,6 +857,17 @@ fn collect_pattern_bindings(
     }
 }
 
+fn collect_modified_vars_in_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        collect_modified_vars_in_expr(body, e, modified, type_table);
+    }
+}
+
 fn collect_modified_vars_in_expr(
     body: &Body,
     e: ExprId,
@@ -868,28 +880,29 @@ fn collect_modified_vars_in_expr(
             let value = *value;
             mark_assignment_target_as_modified(body, target, modified, type_table);
             collect_modified_vars_in_expr(body, target, modified, type_table);
-            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_modified_vars_in_expr(body, left.expr(), modified, type_table);
-            collect_modified_vars_in_expr(body, right.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, left, modified, type_table);
+            collect_modified_vars_in_operand(body, right, modified, type_table);
         }
         ExprKind::Unary { op, expr: inner } => {
             let inner = *inner;
-            if matches!(op, NirUnaryOp::MutRef)
-                && matches!(body.exprs[inner.expr()].kind, ExprKind::Local { .. })
+            if let Some(ie) = inner.as_expr()
+                && matches!(op, NirUnaryOp::MutRef)
+                && matches!(body.exprs[ie].kind, ExprKind::Local { .. })
             {
-                mark_local_as_fully_modified(body, inner.expr(), modified);
+                mark_local_as_fully_modified(body, ie, modified);
             }
-            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, inner, modified, type_table);
         }
         ExprKind::Cast { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         ExprKind::Call { args, .. } => {
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -898,10 +911,10 @@ fn collect_modified_vars_in_expr(
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             mark_gc_local_as_fully_modified(body, receiver.expr(), modified, type_table);
             record_mut_ref_clobber(body, receiver.expr(), modified, type_table);
-            collect_modified_vars_in_expr(body, receiver.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, receiver, modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -911,17 +924,17 @@ fn collect_modified_vars_in_expr(
         ExprKind::CmRawCall { args, .. } => {
             let arg_ids = args.clone();
             for a in arg_ids {
-                collect_modified_vars_in_expr(body, a.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_modified_vars_in_expr(body, inner.expr(), modified, type_table);
-            collect_modified_vars_in_expr(body, index.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, inner, modified, type_table);
+            collect_modified_vars_in_operand(body, index, modified, type_table);
         }
         ExprKind::Block(block) => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
@@ -934,7 +947,7 @@ fn collect_modified_vars_in_expr(
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_modified_vars_in_expr(body, condition.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, condition, modified, type_table);
             collect_modified_vars_in_block(body, then_branch, modified, type_table);
             if let Some(eb) = else_branch {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
@@ -949,37 +962,37 @@ fn collect_modified_vars_in_expr(
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for el in elements {
-                collect_modified_vars_in_expr(body, el.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, el, modified, type_table);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_modified_vars_in_expr(body, callee.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, callee, modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a.expr(), modified, type_table);
-                collect_modified_vars_in_expr(body, a.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_modified_vars_in_expr(body, functor.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *functor, modified, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                collect_modified_vars_in_expr(body, p.expr(), modified, type_table);
+                collect_modified_vars_in_operand(body, *p, modified, type_table);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_modified_vars_in_expr(body, value.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *value, modified, type_table);
         }
         ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         ExprKind::VariantPayload { expr, .. } => {
-            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         ExprKind::Switch {
             scrutinee,
@@ -990,7 +1003,7 @@ fn collect_modified_vars_in_expr(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_modified_vars_in_expr(body, scrutinee.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, scrutinee, modified, type_table);
             for arm in arms {
                 collect_modified_vars_in_block(body, arm, modified, type_table);
             }
@@ -1013,7 +1026,7 @@ fn collect_modified_vars_in_expr(
                 .iter()
                 .map(|a| (a.pattern, a.guard.map(|g| g.expr()), a.body.expr()))
                 .collect();
-            collect_modified_vars_in_expr(body, expr.expr(), modified, type_table);
+            collect_modified_vars_in_operand(body, expr, modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
                 collect_pattern_bindings(body, pattern, modified);
                 if let Some(g) = guard {

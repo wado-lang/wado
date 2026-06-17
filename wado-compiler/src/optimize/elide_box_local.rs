@@ -40,7 +40,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use super::mod_ref::{ModRef, can_move_past};
@@ -96,12 +96,15 @@ impl Rule for ElideBoxLocalRule {
             ) else {
                 continue;
             };
-            let inner = candidate_inner(engine.body, stmts[i]);
+            let inner_op = candidate_inner(engine.body, stmts[i]);
             let Some(use_site) =
                 find_subst_target(engine.body, NodeRef::Stmt(stmts[j]), candidate, &field_name)
             else {
                 continue;
             };
+            // Materialize a promoted-constant inner into a literal expr to splice.
+            let inner_span = engine.body.stmts[stmts[i]].span;
+            let inner = engine.materialize_operand(inner_op, inner_span);
             // Move the single-field initializer's kind into its one `r.field`
             // use, then drop the now-dead binding. The use site keeps its own
             // `type_id` / `span` (the field-access node's), matching the old
@@ -123,15 +126,15 @@ impl Rule for ElideBoxLocalRule {
     }
 }
 
-/// The single-field initializer expression of a candidate `let x = Struct { f }`.
-fn candidate_inner(body: &Body, stmt: StmtId) -> ExprId {
+/// The single-field initializer operand of a candidate `let x = Struct { f }`.
+fn candidate_inner(body: &Body, stmt: StmtId) -> Operand {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.expr()].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    fields[0].value.expr()
+    fields[0].value
 }
 
 /// The leftmost `candidate.field_name` field-access expression reachable from
@@ -390,14 +393,22 @@ fn walk_stmt_for_leftmost(
 ) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match walk_expr_for_leftmost(body, value.expr(), candidate, field_name) {
+            match value
+                .as_expr()
+                .map_or(LeftmostWalk::Blocked, |ve| {
+                    walk_expr_for_leftmost(body, ve, candidate, field_name)
+                }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
         StmtKind::Expr(e) => walk_expr_for_leftmost(body, *e, candidate, field_name),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match walk_expr_for_leftmost(body, v.expr(), candidate, field_name) {
+            match v
+                .as_expr()
+                .map_or(LeftmostWalk::Blocked, |ve| {
+                    walk_expr_for_leftmost(body, ve, candidate, field_name)
+                }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -456,7 +467,7 @@ fn walk_expr_for_leftmost(
             }
         }
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr.expr()).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
         ExprKind::MethodCall { receiver, args, .. } => {
