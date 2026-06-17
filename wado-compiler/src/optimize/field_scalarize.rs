@@ -1454,9 +1454,9 @@ fn count_field_accesses_in_expr(
                         type_table,
                     );
                 }
-                count_field_accesses_in_expr(
+                count_field_accesses_in_operand(
                     body,
-                    arm.body.expr(),
+                    arm.body,
                     counts,
                     false,
                     false,
