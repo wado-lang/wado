@@ -1036,15 +1036,15 @@ fn if_expr(
         let condition = condition(b);
         let then_branch = then_branch(b);
         let else_branch = else_branch.as_ref().map(|eb| eb(b));
-        pe(
+        Operand::Expr(pe(
             b,
             ExprKind::If {
-                condition: condition.into(),
+                condition,
                 then_branch,
                 else_branch,
             },
             type_id,
-        )
+        ))
     })
 }
 
@@ -2086,14 +2086,14 @@ fn match_expr(scrutinee: Build, arms: Vec<ArmBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let expr = scrutinee(b);
         let arms = arms.iter().map(|a| a(b)).collect();
-        pe(
+        Operand::Expr(pe(
             b,
             ExprKind::Match {
-                expr: expr.into(),
+                expr,
                 arms,
             },
             type_id,
-        )
+        ))
     })
 }
 
