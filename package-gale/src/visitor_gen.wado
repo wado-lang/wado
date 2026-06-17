@@ -8,6 +8,7 @@ use {
     AltBody,
     Op,
     GroupOp,
+    FieldKind,
     rule_header,
 } from "./gir.wado";
 use { all_alts_are_single_token } from "./gen_util.wado";
@@ -102,8 +103,15 @@ fn gen_walk_lr(w: &mut CodeWriter, l: &LeftRecursiveRule, rule_id: i32, header: 
                 w.line(&`v.enter_rule({rule_id}, &"{header.name}", &n.span);`);
                 // The LR rewrite stripped the leading self-reference from
                 // `suffix.ops`; the CST struct still carries it as the left
-                // operand (`prefix_self_ref`), walked via this rule.
-                w.line(&`walk_{header.name}(v, &n.{lr.prefix_self_ref.name});`);
+                // operand (`prefix_self_ref`), walked via this rule. A `+=`
+                // list label makes it a `List`, so iterate in that case.
+                if lr.prefix_self_ref.kind matches { List } {
+                    w.begin(&`for let item of &n.{lr.prefix_self_ref.name}`);
+                    w.line(&`walk_{header.name}(v, item);`);
+                    w.end();
+                } else {
+                    w.line(&`walk_{header.name}(v, &n.{lr.prefix_self_ref.name});`);
+                }
                 gen_walk_ops(w, &lr.suffix.ops, &"n");
                 w.line(&`v.exit_rule({rule_id}, &"{header.name}", &n.span);`);
                 w.end();
@@ -275,12 +283,10 @@ fn append_op_walk_fields(op: &Op, out: &mut List<WalkField>) {
 
 fn append_group_walk_fields(g: &GroupOp, out: &mut List<WalkField>) {
     match &g.shape {
+        // A transparent group carries no CST field of its own, and the
+        // (now-retired) surface-IR walk never descended into one — so emit
+        // nothing. `gen_cst_types` likewise contributes no field for it.
         Transparent => {
-            if g.alts.len() > 0 {
-                for let f of &collect_walk_fields(&g.alts[0].ops) {
-                    out.push(*f);
-                }
-            }
         },
         TokenOnly(sh) => out.push(WalkField {
             name: sh.field,
