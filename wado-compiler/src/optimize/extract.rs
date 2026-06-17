@@ -152,7 +152,11 @@ mod tests {
 
         let mut buf = EngineBuffers::default();
         let mut locals: Vec<NirLocal> = Vec::new();
+        let type_table = TypeTable::default();
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        // The extractor reads the operand's primitive from the type table to
+        // recover the constant's width.
+        eng.set_value_graph_type_table(&type_table);
         let v_sum = eng.value(sum).unwrap();
         // The sum statement still holds the skeleton expression.
         assert!(matches!(

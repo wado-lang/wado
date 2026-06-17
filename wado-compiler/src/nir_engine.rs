@@ -1512,12 +1512,13 @@ mod tests {
             )
         }
         let mut body = mk_body(|b| {
+            // Share the `5` operand across both sums: the difference under union
+            // is only `x` vs `y`, isolating the congruence check.
+            let c5 = lit(b, 5);
             let x = local(b, 0);
-            let c0 = lit(b, 5);
-            let f = bin(b, x, NirBinaryOp::Add, c0);
+            let f = bin(b, x, NirBinaryOp::Add, c5);
             let y = local(b, 1);
-            let c1 = lit(b, 5);
-            let g = bin(b, y, NirBinaryOp::Add, c1);
+            let g = bin(b, y, NirBinaryOp::Add, c5);
             let sf = s(b, StmtKind::Expr(f.into()));
             let sg = s(b, StmtKind::Expr(g.into()));
             vec![sf, sg]
@@ -1662,7 +1663,7 @@ mod tests {
         };
         let original = value.as_expr().unwrap();
         let (orig_left, orig_right) = match &body.exprs[original].kind {
-            ExprKind::Binary { left, right, .. } => (left.as_expr().unwrap(), right.as_expr().unwrap()),
+            ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected Binary, got {other:?}"),
         };
         let before = body.exprs.len();
@@ -1672,16 +1673,16 @@ mod tests {
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
-        // A Binary plus its two literal operands were allocated.
-        assert_eq!(body.exprs.len(), before + 3);
+        // Only the Binary node is copied: its `1` and `2` are pure-value operands
+        // (immutable pool values), shared by the clone, not deep-copied.
+        assert_eq!(body.exprs.len(), before + 1);
         assert_ne!(clone, original);
         let (new_left, new_right) = match &body.exprs[clone].kind {
-            ExprKind::Binary { left, right, .. } => (left.as_expr().unwrap(), right.as_expr().unwrap()),
+            ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected cloned Binary, got {other:?}"),
         };
-        // Deep copy: the clone's operands are fresh ids, not shared.
-        assert_ne!(new_left, orig_left);
-        assert_ne!(new_right, orig_right);
+        assert_eq!(new_left, orig_left);
+        assert_eq!(new_right, orig_right);
     }
 
     /// Demo block rule: drop every `()`-valued expression statement from a

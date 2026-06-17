@@ -1934,13 +1934,10 @@ mod tests {
         });
     }
 
-    fn int_lit(body: &mut Body, value: u64) -> ExprId {
-        alloc_expr(
-            body,
-            ExprKind::IntLiteral {
-                value,
-                repr: value.to_string(),
-            },
+    fn int_lit(body: &mut Body, value: u64) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(value), TypeTable::I32),
         )
     }
 
@@ -1954,7 +1951,7 @@ mod tests {
         )
     }
 
-    fn let_stmt(body: &mut Body, idx: u32, value: ExprId, is_mut: bool) -> StmtId {
+    fn let_stmt(body: &mut Body, idx: u32, value: impl Into<Operand>, is_mut: bool) -> StmtId {
         alloc_stmt(
             body,
             StmtKind::Let {
@@ -1969,7 +1966,7 @@ mod tests {
         )
     }
 
-    fn assign_stmt(body: &mut Body, idx: u32, value: ExprId) -> StmtId {
+    fn assign_stmt(body: &mut Body, idx: u32, value: impl Into<Operand>) -> StmtId {
         let target = local_ref(body, idx);
         let assign = alloc_expr(
             body,
@@ -1981,7 +1978,12 @@ mod tests {
         alloc_stmt(body, StmtKind::Expr(assign.into()))
     }
 
-    fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
+    fn binary(
+        body: &mut Body,
+        op: NirBinaryOp,
+        left: impl Into<Operand>,
+        right: impl Into<Operand>,
+    ) -> ExprId {
         alloc_expr(
             body,
             ExprKind::Binary {
@@ -1992,8 +1994,11 @@ mod tests {
         )
     }
 
-    fn bool_lit(body: &mut Body, b: bool) -> ExprId {
-        alloc_expr(body, ExprKind::BoolLiteral(b))
+    fn bool_lit(body: &mut Body, b: bool) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Bool(b), TypeTable::BOOL),
+        )
     }
 
     fn block_with(body: &mut Body, stmts: Vec<StmtId>) -> crate::nir_arena::BlockId {
@@ -2014,7 +2019,7 @@ mod tests {
         )
     }
 
-    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
+    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: impl Into<Operand>) -> StmtId {
         let target = field_access(body, recv, field_index);
         let assign = alloc_expr(
             body,
@@ -2058,26 +2063,25 @@ mod tests {
 
     #[test]
     fn literal_int_gets_value_id() {
+        // A pure scalar literal is born as `Operand::Value`; its identity is the
+        // pooled value directly, not a `value_of` entry for a skeleton node.
         let mut body = empty_body();
         let lit = int_lit(&mut body, 42);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(lit.into()));
-        root_with(&mut body, vec![s]);
-        let r = build_t(&mut body, &[]);
-        let v = r.value_of[&lit];
+        let v = lit.as_value().unwrap();
         assert_eq!(body.values.kind(v), &ValueKind::Int(42));
     }
 
     #[test]
     fn let_then_read_returns_same_value() {
-        // let x = 1; x
+        // let x = 1; x — the read of `x` resolves to the bound literal's value.
         let mut body = empty_body();
         let lit = int_lit(&mut body, 1);
+        let lit_v = lit.as_value().unwrap();
         let let_s = let_stmt(&mut body, 0, lit, false);
         let read = local_ref(&mut body, 0);
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, s2]);
         let r = build_t(&mut body, &[]);
-        let lit_v = r.value_of[&lit];
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
         assert_eq!(body.values.kind(read_v), &ValueKind::Int(1));
@@ -2085,15 +2089,16 @@ mod tests {
 
     #[test]
     fn equivalent_arithmetic_dedupes() {
-        // let a = 1 + 2; let b = 1 + 2;
+        // let a = 1 + 2; let b = 1 + 2; — two binaries over the *same* operand
+        // values share a hash-consed `ValueId` (CSE). Each operand value is shared
+        // (one pool id per constant), as a real CSE-able program presents them;
+        // distinct unshared constants would not coincide, and need not — they fold.
         let mut body = empty_body();
-        let one_a = int_lit(&mut body, 1);
-        let two_a = int_lit(&mut body, 2);
-        let add_a = binary(&mut body, NirBinaryOp::Add, one_a, two_a);
+        let one = int_lit(&mut body, 1);
+        let two = int_lit(&mut body, 2);
+        let add_a = binary(&mut body, NirBinaryOp::Add, one, two);
         let let_a = let_stmt(&mut body, 0, add_a, false);
-        let one_b = int_lit(&mut body, 1);
-        let two_b = int_lit(&mut body, 2);
-        let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
+        let add_b = binary(&mut body, NirBinaryOp::Add, one, two);
         let let_b = let_stmt(&mut body, 1, add_b, false);
         root_with(&mut body, vec![let_a, let_b]);
         let r = build_t(&mut body, &[]);
@@ -2190,11 +2195,12 @@ mod tests {
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
         let cond = bool_lit(&mut body, true);
-        let two_a = int_lit(&mut body, 2);
-        let assign_then = assign_stmt(&mut body, 0, two_a);
+        // Both arms write the same value `2` (one shared pool id), so the merge
+        // agrees without a Select.
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
-        let two_b = int_lit(&mut body, 2);
-        let assign_else = assign_stmt(&mut body, 0, two_b);
+        let assign_else = assign_stmt(&mut body, 0, two);
         let else_block = block_with(&mut body, vec![assign_else]);
         let if_s = alloc_stmt(
             &mut body,
@@ -2283,12 +2289,11 @@ mod tests {
     fn binary_on_param_reads_dedupes() {
         // fn(x: i32) { x + 1; x + 1; }
         let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
         let read1 = local_ref(&mut body, 0);
-        let one_a = int_lit(&mut body, 1);
-        let add_a = binary(&mut body, NirBinaryOp::Add, read1, one_a);
+        let add_a = binary(&mut body, NirBinaryOp::Add, read1, one);
         let read2 = local_ref(&mut body, 0);
-        let one_b = int_lit(&mut body, 1);
-        let add_b = binary(&mut body, NirBinaryOp::Add, read2, one_b);
+        let add_b = binary(&mut body, NirBinaryOp::Add, read2, one);
         let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a.into()));
         let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b.into()));
         root_with(&mut body, vec![s1, s2]);
@@ -2736,7 +2741,8 @@ mod tests {
         let r = build_t(&mut body, &[param_seed()]);
         let read_v = r.value_of[&read];
         assert_eq!(body.values.kind(read_v), &ValueKind::Int(7));
-        assert_eq!(read_v, r.value_of[&seven]);
+        // The forwarded read resolves to the stored literal's pool value.
+        assert_eq!(read_v, seven.as_value().unwrap());
     }
 
     #[test]
@@ -2835,7 +2841,7 @@ mod tests {
     }
 
     /// `let v = S { f0: 7 }` then a one-field struct literal helper.
-    fn one_field_struct(body: &mut Body, value: ExprId) -> ExprId {
+    fn one_field_struct(body: &mut Body, value: impl Into<Operand>) -> ExprId {
         alloc_expr(
             body,
             ExprKind::StructLiteral {
@@ -3329,18 +3335,10 @@ mod tests {
         // `let a = <i32 lit>;` — the value carries its source type so extraction
         // can materialise it once the typed ExprNode is promoted away.
         let mut body = empty_body();
-        let lit = body.exprs.push(ExprNode {
-            kind: ExprKind::IntLiteral {
-                value: 7,
-                repr: "7".to_string(),
-            },
-            type_id: TypeTable::I32,
-            span: Span::default(),
-        });
-        let s = let_stmt(&mut body, 0, lit, false);
-        root_with(&mut body, vec![s]);
-        let r = build_t(&mut body, &[]);
-        let v = r.value_of[&lit];
+        // A promoted scalar carries its source type in the pool directly.
+        let Operand::Value(v) = int_lit(&mut body, 7) else {
+            unreachable!("int_lit yields a pool value")
+        };
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
     }
 
