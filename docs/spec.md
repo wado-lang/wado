@@ -1703,7 +1703,7 @@ This design aligns with TypeScript (primary target audience) and enables intuiti
 ```
 
 ```wado
-// A JSON array maps naturally to a tuple (JSON file import is provided by Kiln):
+// A JSON array maps naturally to a tuple:
 let point: [i32, i32] = [10, 20];
 let mixed: [i32, String, bool] = [1, "hello", true];
 ```
