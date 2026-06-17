@@ -39,6 +39,10 @@ struct Acc {
     prev: Vec<Option<Vec<(u64, u64)>>>,
     builds: u64,
     first_builds: u64,
+    /// Per-pass `(builds, first_builds)`, so the rebuild count can be attributed
+    /// to the passes that build (`cse`, `licm`) — targeting for the live-graph
+    /// work (which redundant rebuilds to eliminate first).
+    per_pass: std::collections::BTreeMap<&'static str, (u64, u64)>,
     total_nodes: u64,
     savable_nodes: u64,
     rewalked_nodes: u64,
@@ -93,7 +97,7 @@ pub(crate) fn record_inplace_edit() {
 /// Record a value-graph build of function `fid` over `body`. Compares to the
 /// previous build of the same function and attributes node counts to the
 /// reusable prefix vs the re-walked suffix.
-pub fn record_build(fid: usize, body: &Body) {
+pub fn record_build(fid: usize, body: &Body, pass: &'static str) {
     if !enabled() {
         return;
     }
@@ -106,6 +110,12 @@ pub fn record_build(fid: usize, body: &Body) {
         }
         a.builds += 1;
         a.total_nodes += cur_total;
+        let pp = a.per_pass.entry(pass).or_default();
+        pp.0 += 1;
+        let is_first = a.prev[fid].is_none();
+        if is_first {
+            pp.1 += 1;
+        }
         match a.prev[fid].take() {
             None => {
                 // First build of this function: nothing reusable.
@@ -223,6 +233,12 @@ pub fn report() {
             a.first_builds,
             a.builds - a.first_builds
         );
+        for (pass, (builds, firsts)) in &a.per_pass {
+            eprintln!(
+                "  by pass {pass}: builds={builds} (first={firsts}, rebuilds={})",
+                builds - firsts
+            );
+        }
         eprintln!(
             "total build node-walks = {} ; savable (reusable prefix) = {} ({:.1}%) ; re-walked = {}",
             a.total_nodes, a.savable_nodes, savable_pct, a.rewalked_nodes

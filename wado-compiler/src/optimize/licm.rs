@@ -166,7 +166,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        super::vg_measure::record_build(fid.index(), body);
+        super::vg_measure::record_build(fid.index(), body, "licm");
         let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
