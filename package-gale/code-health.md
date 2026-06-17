@@ -19,7 +19,6 @@ How to read:
 
 The biggest single lever: most twin-path bugs exist because the second copy missed a fix.
 
-- [ ] The remaining alternatives twins (`parse_alternatives`/`parse_lexer_alternatives`) are still separate: a trivial `|`-separated loop differing only in element type. Left alone deliberately — a generic/closure unification costs more than the 5-line duplication removes. (The balanced-delimiter scanners, comment-skipping, `parse_postfix`/`parse_lexer_postfix`, and the `tokens`/`channels` block scanners are now unified via `src/g4/scan.wado`, `parse_repeat_op`, and `parse_id_list_block`.)
 - [ ] `try_expand_opaque` re-implements `build_sll_node`'s dispatch construction (where the at-end handling got lost); `dump.wado::render_prediction` hand-mirrors `gen_multi_alt_body_alt`'s grouping+sort+`build_prediction(…, MAX_LOOKAHEAD_DEPTH, …)` pipeline.
 - [ ] Test helpers copy-pasted per file: `assert_tree` ×33, `assert_parses` ×8 (+2 near-clones), `unparse_xml` ×3. These are each bound to their grammar's generated namespace (`g::parse` / `g::to_tree` / `g::token_kind_name` / `normalize_tree`), so a shared module can only host a grammar-independent tail (normalize+compare+assert); the per-grammar calls stay. (The hand-rolled `str_contains` copies are gone — replaced by stdlib `String::contains`.)
 - [ ] Extractor emitter boilerplate ×6 (~80% identical bodies). `scripts/extract_antlr4_descriptors.wado:659-998`, `:1841-1857`
