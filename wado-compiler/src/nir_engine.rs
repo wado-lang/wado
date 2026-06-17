@@ -195,15 +195,6 @@ impl<'a> Engine<'a> {
         self.body.values.kind(id)
     }
 
-    /// First `ExprId` observed producing the given literal `ValueId`. Returns
-    /// `None` if `id` is not a literal kind (or no expression produced it).
-    /// Lets a rewrite reuse the original literal `ExprKind` — including its
-    /// source `repr` — when substituting a literal at a use site.
-    pub fn literal_source(&mut self, id: crate::nir_value_graph::ValueId) -> Option<ExprId> {
-        self.ensure_value_graph();
-        self.value_graph.as_ref()?.literal_source.get(&id).copied()
-    }
-
     /// The `ValueId` a read of `local` would produce in the pre-header of
     /// the loop whose body block is `loop_body` (the builder's
     /// `current_value` snapshot at loop entry). `None` when the loop is

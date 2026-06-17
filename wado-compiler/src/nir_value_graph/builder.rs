@@ -190,12 +190,6 @@ struct FlowArm {
 #[derive(Debug)]
 pub struct ValueGraphBuild {
     pub value_of: IndexMap<ExprId, ValueId>,
-    /// For each literal `ValueId`, the first `ExprId` we observed producing
-    /// it. Lets a consumer (e.g. store-load-forward) clone the original
-    /// literal `ExprKind` — including its source `repr` — when replacing a
-    /// `Local` read with the forwarded literal, avoiding `repr` churn in
-    /// diagnostic output and NIR dumps.
-    pub literal_source: IndexMap<ValueId, ExprId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
     /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
     /// leaf's use-site value to equal this entry value — cross-iteration
@@ -242,16 +236,15 @@ pub fn build(
     // and write it back. `body.values` is the one persistent pool — ids stay
     // stable across builds (it only grows), the prerequisite for build-once.
     let seed = std::mem::take(&mut body.values);
-    let (pool, value_of, literal_source, loop_entry_values) = {
+    let (pool, value_of, loop_entry_values) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.seed_params(param_locals);
         b.walk_block(body.root);
-        (b.pool, b.value_of, b.literal_source, b.loop_entry_values)
+        (b.pool, b.value_of, b.loop_entry_values)
     };
     body.values = pool;
     ValueGraphBuild {
         value_of,
-        literal_source,
         loop_entry_values,
     }
 }
@@ -360,9 +353,6 @@ struct Builder<'a> {
     current_value: IndexMap<u32, ValueId>,
     /// Heap-version tracker. See [`HeapState`].
     heap_state: HeapState,
-    /// `ValueId` → first source `ExprId` for literal values, so consumers can
-    /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
-    literal_source: IndexMap<ValueId, ExprId>,
     /// Store→load forwarding for fields: the value last stored to
     /// `(receiver, field, version)`, returned for reads at the same triple.
     /// Versions are monotonic and never reused, so a write or branch join
@@ -410,7 +400,6 @@ impl<'a> Builder<'a> {
             value_of: IndexMap::default(),
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
-            literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
@@ -705,21 +694,9 @@ impl<'a> Builder<'a> {
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::StringLiteral(s) => {
-                let v = self.pool.string(s);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::Null => {
-                let v = self.pool.null();
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::Unit => {
-                let v = self.pool.unit();
-                self.record_literal(expr, v);
-                Some(v)
-            }
+            ExprKind::StringLiteral(s) => Some(self.pool.string(s)),
+            ExprKind::Null => Some(self.pool.null()),
+            ExprKind::Unit => Some(self.pool.unit()),
 
             // ---- Local read ----
             ExprKind::Local { index, .. } => Some(self.read_local(index)),
@@ -1055,9 +1032,6 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn record_literal(&mut self, expr: ExprId, value: ValueId) {
-        self.literal_source.entry(value).or_insert(expr);
-    }
 
     /// Seed the field-store map from a `let x = S { f: v, … }` binding so a
     /// later `x.f` read forwards `v`. Wrappers are peered through to the
