@@ -860,7 +860,26 @@ impl FunctionTranslator<'_, '_> {
     /// skeleton subtree as `Operand::Expr`; Phase B interns pure expressions into
     /// the function's `ValuePool` and returns `Operand::Value` here instead.
     fn convert_operand(&self, expr: &TirExpr) -> Operand {
-        Operand::Expr(self.convert_expr(expr))
+        // Pure scalar literals are born directly as `Operand::Value` in the
+        // function's value pool — they never exist as an `ExprKind` (WEP: The
+        // Live ValueGraph; pure scalars live only in the graph). `alloc_unshared`
+        // keeps each constant's source width (a type-erased `7` of `i32` vs
+        // `i64` must not collide).
+        use crate::nir_value_graph::ValueKind;
+        let vk = match &expr.kind {
+            TirExprKind::IntLiteral { value, .. } => Some(ValueKind::Int(*value)),
+            TirExprKind::FloatLiteral { value, .. } => Some(ValueKind::Float(value.to_bits())),
+            TirExprKind::BoolLiteral(b) => Some(ValueKind::Bool(*b)),
+            TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
+            _ => None,
+        };
+        match vk {
+            Some(vk) => {
+                let vid = self.arena.borrow_mut().values.alloc_unshared(vk, expr.type_id);
+                Operand::Value(vid)
+            }
+            None => Operand::Expr(self.convert_expr(expr)),
+        }
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> ExprId {
