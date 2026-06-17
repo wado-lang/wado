@@ -125,9 +125,8 @@ impl G4Lexer {
     }
 
     fn read_char_class(&mut self) -> Token {
-        // `scan_char_class` encodes the ANTLR4 char-set lexicon (only `\X`
-        // escapes, first unescaped `]` ends the set, no nesting). The text
-        // is a verbatim copy of the source span, so emit an owned token.
+        // `scan_char_class` handles the ANTLR4 char-set lexicon; the text is
+        // a verbatim copy of its source span, so emit an owned token.
         let start = self.pos;
         match scan_char_class(self.chars, start) {
             Some(end) => {

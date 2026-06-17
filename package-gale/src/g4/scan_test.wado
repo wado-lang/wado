@@ -6,7 +6,6 @@ fn chars_of(s: String) -> List<char> {
 
 test "scan_line_comment stops at the newline" {
     let c = chars_of("// hi\nrest");
-    // index 5 is the '\n'
     assert scan_line_comment(&c, 0) == 5;
 }
 
@@ -17,7 +16,6 @@ test "scan_line_comment runs to end when no newline" {
 
 test "scan_block_comment returns index past closing */" {
     let c = chars_of("/* x */ y");
-    // '/* x */' occupies indices 0..7
     assert scan_block_comment(&c, 0) == 7;
 }
 
@@ -75,19 +73,16 @@ test "scan_balanced handles a simple brace block" {
 
 test "scan_balanced nests braces" {
     let c = chars_of("{ if (x) { y } } rest");
-    // outer '}' is at index 15, so the index just past it is 16
     assert scan_balanced(&c, 0, '{', '}') matches { Some(16) };
 }
 
 test "scan_balanced ignores a close inside a string" {
     let c = chars_of("{ s = \"}\" } rest");
-    // closing '}' is at index 10, so the index just past it is 11
     assert scan_balanced(&c, 0, '{', '}') matches { Some(11) };
 }
 
 test "scan_balanced ignores a close inside a line comment" {
     let c = chars_of("{ // }\n}");
-    // closing brace is the last char (index 7), so result is 8
     assert scan_balanced(&c, 0, '{', '}') matches { Some(8) };
 }
 

@@ -16,7 +16,7 @@
 /// the index of the terminating `\n` (which it excludes), or `chars.len()`.
 pub fn scan_line_comment(chars: &List<char>, pos: i32) -> i32 {
     let n = chars.len();
-    let mut i = pos + 2;  // skip `//`
+    let mut i = pos + 2;
     while i < n && chars[i] != '\n' {
         i += 1;
     }
@@ -28,7 +28,7 @@ pub fn scan_line_comment(chars: &List<char>, pos: i32) -> i32 {
 /// unterminated.
 pub fn scan_block_comment(chars: &List<char>, pos: i32) -> i32 {
     let n = chars.len();
-    let mut i = pos + 2;  // skip `/*`
+    let mut i = pos + 2;
     while i + 1 < n {
         if chars[i] == '*' && chars[i + 1] == '/' {
             return i + 2;
@@ -91,7 +91,7 @@ pub fn scan_char_class(chars: &List<char>, pos: i32) -> Option<i32> {
 /// `None` if depth never returns to zero before end-of-input.
 pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char) -> Option<i32> {
     let n = chars.len();
-    let mut i = open_idx + 1;  // skip opening delimiter
+    let mut i = open_idx + 1;
     let mut depth = 1;
     while i < n {
         let c = chars[i];
