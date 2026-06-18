@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781723625244,
+  "lastUpdate": 1781794827372,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33693,6 +33693,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 396125,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4acde96e327426a038ab86e5dcdd3c058991a3c2",
+          "message": "Merge pull request #1395 from wado-lang/claude/token-stream-soa-decomposition-wck9db\n\nperf(gale): token-stream SoA decomposition (~36% faster SQLite parse)",
+          "timestamp": "2026-06-18T23:50:17+09:00",
+          "tree_id": "a1e991b5ced268c323953a213564abacb99f9dda",
+          "url": "https://github.com/wado-lang/wado/commit/4acde96e327426a038ab86e5dcdd3c058991a3c2"
+        },
+        "date": 1781794826779,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 393446,
             "unit": "bytes"
           }
         ]
