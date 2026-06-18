@@ -678,6 +678,22 @@ findings are the deliverable.
   a leaf-mistyping to fix at its source). Experiment + instrumentation discarded;
   branch green at `adecff3ca`.
 
+  Deeper instrumentation (recurse **all** child kinds, `Cast`/`FieldAccess`
+  included): **0** freeze-redirected source exprs have a width mismatch anywhere
+  in their value tree _at freeze time_ — yet early-freeze-alone still emits the
+  mismatch. So the inconsistency is **not present when the freeze promotes**; it
+  arises **after**, when a later pass mutates the graph (a `value_union` from
+  `cse` / `store_load_forward`, or a congruence rebuild) so that a promoted
+  operand's `find()` later resolves to a different-width representative. Verdict:
+  the freeze-before-passes **shortcut is the wrong vehicle** — it opens a
+  freeze-then-mutate window that the WEP's actual design (`lower` emits
+  `Operand::Value` directly and passes are migrated to consume operands, never
+  re-deriving) does not have. The next promotion work should pursue the real
+  design (operands born at lower, passes migrated) rather than the freeze-early
+  shortcut, and separately fix the upstream `u64`-shift-with-`i32`-lhs-literal
+  leaf-mistyping. Experiment + instrumentation discarded; branch green at
+  `adecff3ca`.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
