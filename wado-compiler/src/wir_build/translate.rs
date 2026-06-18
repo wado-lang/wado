@@ -1763,6 +1763,74 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Emit a binary op from already-translated operand WIR. Shared by the
+    /// skeleton `ExprKind::Binary` path and the value-graph extractor so the
+    /// short-circuit / width-truncation behaviour cannot diverge. `left_ty` is
+    /// the (left) operand's source type, which selects the op width.
+    pub(super) fn emit_binary_wir(
+        &mut self,
+        op: NirBinaryOp,
+        l: WirInstr,
+        r: WirInstr,
+        left_ty: TypeId,
+    ) -> WirInstr {
+        // Short-circuit logical operators: `r`'s instruction tree sits in a
+        // conditional branch, so it runs only when reached.
+        if matches!(op, NirBinaryOp::And) {
+            return WirInstr::If {
+                condition: Box::new(l),
+                result: Some(WirType::I32),
+                then_body: vec![r],
+                else_body: Some(vec![WirInstr::I32Const(0)]),
+            };
+        }
+        if matches!(op, NirBinaryOp::Or) {
+            return WirInstr::If {
+                condition: Box::new(l),
+                result: Some(WirType::I32),
+                then_body: vec![WirInstr::I32Const(1)],
+                else_body: Some(vec![r]),
+            };
+        }
+        let result = self.translate_binary_op(&op, Box::new(l), Box::new(r), left_ty);
+        // Truncate sub-i32 arithmetic/bitwise results to the correct width;
+        // comparisons / logical ops already return a 0/1 i32.
+        if !matches!(
+            op,
+            NirBinaryOp::Eq
+                | NirBinaryOp::NotEq
+                | NirBinaryOp::Lt
+                | NirBinaryOp::LtEq
+                | NirBinaryOp::Gt
+                | NirBinaryOp::GtEq
+                | NirBinaryOp::And
+                | NirBinaryOp::Or
+                | NirBinaryOp::RefEq
+                | NirBinaryOp::RefNotEq
+        ) && let ResolvedType::Primitive(prim) = self.type_table.get(left_ty)
+        {
+            return Self::truncate_to_sub_i32(result, prim);
+        }
+        result
+    }
+
+    /// Emit a pure unary op (`Neg` / `Not` / `BitNot`) from already-translated
+    /// operand WIR. Shared by the skeleton path and the extractor.
+    pub(super) fn emit_unary_wir(
+        &mut self,
+        op: NirUnaryOp,
+        o: WirInstr,
+        inner_ty: TypeId,
+    ) -> WirInstr {
+        let result = self.translate_unary_op(&op, Box::new(o), inner_ty);
+        if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
+            && let ResolvedType::Primitive(prim) = self.type_table.get(inner_ty)
+        {
+            return Self::truncate_to_sub_i32(result, prim);
+        }
+        result
+    }
+
     /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
     /// WEP: The Live ValueGraph). Constant value kinds lower directly from the
     /// pool, using the source type recorded by the builder. Non-constant kinds
@@ -1807,6 +1875,44 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             ValueKind::Unit => WirInstr::Nop,
+            ValueKind::Binary { op, lhs, rhs } => {
+                let left_ty = self
+                    .body
+                    .values
+                    .type_of(lhs)
+                    .expect("promoted Binary lhs has no recorded type");
+                let l = self.extract_value(lhs);
+                let r = self.extract_value(rhs);
+                self.emit_binary_wir(op, l, r, left_ty)
+            }
+            ValueKind::Unary { op, operand } => {
+                let inner_ty = self
+                    .body
+                    .values
+                    .type_of(operand)
+                    .expect("promoted Unary operand has no recorded type");
+                let o = self.extract_value(operand);
+                self.emit_unary_wir(op, o, inner_ty)
+            }
+            ValueKind::Cast { operand, target } => {
+                let from_ty = self
+                    .body
+                    .values
+                    .type_of(operand)
+                    .expect("promoted Cast operand has no recorded type");
+                self.translate_cast(crate::nir_arena::Operand::Value(operand), from_ty, target)
+            }
+            // An `Opaque` stands for an effectful / non-re-emittable leaf (a
+            // local read, a call result). Its WIR is the recorded skeleton
+            // source the builder/lower scheduled for it.
+            ValueKind::Opaque(id) => {
+                let src = self
+                    .body
+                    .values
+                    .opaque_source(id)
+                    .expect("promoted Opaque has no recorded skeleton source");
+                self.translate_expr_inner(src)
+            }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
     }
@@ -1858,53 +1964,10 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Binary { op, left, right } => {
-                let (left, right) = (*left, *right);
-                // Short-circuit logical operators: defer right-side evaluation
-                if matches!(op, NirBinaryOp::And) {
-                    let l = self.translate_operand(left);
-                    let r = self.translate_operand(right);
-                    // if left { right } else { 0 }
-                    return WirInstr::If {
-                        condition: Box::new(l),
-                        result: Some(WirType::I32),
-                        then_body: vec![r],
-                        else_body: Some(vec![WirInstr::I32Const(0)]),
-                    };
-                }
-                if matches!(op, NirBinaryOp::Or) {
-                    let l = self.translate_operand(left);
-                    let r = self.translate_operand(right);
-                    // if left { 1 } else { right }
-                    return WirInstr::If {
-                        condition: Box::new(l),
-                        result: Some(WirType::I32),
-                        then_body: vec![WirInstr::I32Const(1)],
-                        else_body: Some(vec![r]),
-                    };
-                }
-                let l = Box::new(self.translate_operand(left));
-                let r = Box::new(self.translate_operand(right));
-                let result = self.translate_binary_op(op, l, r, self.operand_type_id(left));
-                // Truncate sub-i32 arithmetic/bitwise results to the correct width.
-                // Comparisons and logical ops return bool (i32 0/1), so skip those.
-                if !matches!(
-                    op,
-                    NirBinaryOp::Eq
-                        | NirBinaryOp::NotEq
-                        | NirBinaryOp::Lt
-                        | NirBinaryOp::LtEq
-                        | NirBinaryOp::Gt
-                        | NirBinaryOp::GtEq
-                        | NirBinaryOp::And
-                        | NirBinaryOp::Or
-                        | NirBinaryOp::RefEq
-                        | NirBinaryOp::RefNotEq
-                ) && let ResolvedType::Primitive(prim) =
-                    self.type_table.get(self.operand_type_id(left))
-                {
-                    return Self::truncate_to_sub_i32(result, prim);
-                }
-                result
+                let (op, left, right) = (*op, *left, *right);
+                let l = self.translate_operand(left);
+                let r = self.translate_operand(right);
+                self.emit_binary_wir(op, l, r, self.operand_type_id(left))
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
@@ -1912,16 +1975,8 @@ impl FunctionTranslator<'_, '_> {
                 NirUnaryOp::Deref => self.translate_operand(*inner),
                 _ => {
                     let inner = *inner;
-                    let o = Box::new(self.translate_operand(inner));
-                    let result = self.translate_unary_op(op, o, self.operand_type_id(inner));
-                    // Truncate sub-i32 results for Neg and BitNot.
-                    if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
-                        && let ResolvedType::Primitive(prim) =
-                            self.type_table.get(self.operand_type_id(inner))
-                    {
-                        return Self::truncate_to_sub_i32(result, prim);
-                    }
-                    result
+                    let o = self.translate_operand(inner);
+                    self.emit_unary_wir(*op, o, self.operand_type_id(inner))
                 }
             },
 

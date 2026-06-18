@@ -212,6 +212,13 @@ pub struct ValuePool {
     /// reads the value's type here. Populated by the builder / `lower` at
     /// creation; `None` until set.
     types: Vec<Option<TypeId>>,
+    /// Skeleton source for an `Opaque`: the `ExprId` whose evaluation produces
+    /// the opaque value (a `Local` read, a `Call` result kept in the skeleton).
+    /// Extraction re-emits the opaque by lowering this expr — the graph alone
+    /// cannot reconstruct an effectful / unknown leaf. Empty for opaques minted
+    /// without a recorded source (e.g. a bare parameter, materialised as its
+    /// `Local`).
+    opaque_sources: IndexMap<OpaqueId, crate::nir_arena::ExprId>,
 }
 
 impl ValuePool {
@@ -448,6 +455,22 @@ impl ValuePool {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
         self.intern(ValueKind::Opaque(opaque))
+    }
+
+    /// Allocate a fresh `Opaque` whose value is produced by the skeleton
+    /// expression `source`, recorded for extraction (the extractor re-emits the
+    /// opaque by lowering `source`).
+    pub fn fresh_opaque_with_source(&mut self, source: crate::nir_arena::ExprId) -> ValueId {
+        let opaque = OpaqueId(self.next_opaque);
+        self.next_opaque += 1;
+        self.opaque_sources.insert(opaque, source);
+        self.intern(ValueKind::Opaque(opaque))
+    }
+
+    /// The recorded skeleton source of an `Opaque`, if any.
+    #[inline]
+    pub fn opaque_source(&self, opaque: OpaqueId) -> Option<crate::nir_arena::ExprId> {
+        self.opaque_sources.get(&opaque).copied()
     }
 
     /// Read the kind of an allocated `ValueId`. Panics if `id` is out of
