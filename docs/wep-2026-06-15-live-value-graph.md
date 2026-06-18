@@ -833,15 +833,20 @@ final 10:
   `opt_licm_invariant_arith`, `tir_optimize_bool_identity`, likely `closure_2`):
   fixture-expectation churn, not miscompiles.
 - **3 control-flow miscompiles** (`select_extended_arms`, `if_merged`,
-  `labeled_block`) — all involve **`Select`** and bisect to _both_ `freeze` and
-  `peephole`. These are the **`Select` re-emission soundness issue** the WEP
-  flagged as the hard "availability" part: re-emitting `if cond { then } else`
-  at a use site can re-evaluate a control merge differently than the original flow
-  took. Late-freeze dodges it by timing (committed e2e 2960/0); early promotion
-  surfaces it. The correct fix is the availability analysis (extract a shared
-  `Select` as a `local.get` of the value materialised at the merge, not a
-  recomputed `if`), so `Select` promotion must gate on it — the keystone's known
-  hard sub-problem, now reproduced on concrete fixtures.
+  `labeled_block`) — all involve a promoted **`Select`** value. `WADO_SKIP_PASS`
+  bisects to `peephole` (skipping it passes), so a peephole **rule corrupts the
+  promoted `Select`** — it is _not_ the extraction-availability issue (that would
+  manifest at WIR build regardless of peephole). Narrowing so far: removing
+  `branch_prune` **or** `const_fold` individually does _not_ fix it, so the
+  culprit is another peephole rule (`match_to_switch` / `value_copy_elide` /
+  `ref_elim` / `elide_box` / `array_literal` / `labeled_block_fusion`) or the
+  engine's value-graph maintenance over a promoted `Select` operand during the
+  peephole session. `select_extended_arms` computes `decimal_pos = 2` where the
+  source merge yields `-5`. Next step: continue the in-peephole rule bisection
+  (remove rules one at a time) on `select_extended_arms`. (Separately, the
+  extraction-availability concern — re-emitting `if cond {..} else {..}` at a use
+  site vs a `local.get` of the merge value — remains a real keystone sub-problem,
+  but it is not what these three fixtures hit.)
 - 1 ICE (fixed) and `assert_fail_call_arg` (power-assert diagnostic formatting,
   uncharacterized).
 
