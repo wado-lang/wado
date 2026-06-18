@@ -531,6 +531,42 @@ of a disturbed suffix — maintenance is pointwise). It is the WEP's "live
 maintenance to every pass," sequenced so each step is independently e2e-green and
 moves `rebuilds` down monotonically.
 
+#### Two empirical probes (run, measured, reverted) that scope the blockers
+
+Step 1/2 above were probed with real code to find the precise obstacles before
+committing the wide change. Both were reverted on correctness grounds; the
+findings are the deliverable.
+
+- **Probe A — drop `licm`'s `invalidate_value_graph`.** Byte-identical on zlib,
+  correct on count_prime, full O0/O2 e2e green (2960/0) — but `WADO_VERIFY_VG`
+  flagged a **new over-merge** in the licm session. Root cause:
+  `maintain_value_after_edit` walks the edited node's _ancestors_ only, never the
+  **downstream local readers** whose `value_of` a reassignment stales; the next
+  pure re-intern then hash-conses two now-distinct trees to one `ValueId`. The
+  invalidate was masking this by rebuilding. This is the same downstream-stale
+  flaw the WEP names as the reason flow values must be _promoted into operand
+  slots_ (a frozen `Operand::Value` cannot stale), not maintained as a side
+  table. So step 2's coarsening must additionally **drop every downstream reader
+  of a reassigned local**, or the value must be promoted — confirming operand
+  promotion is the load-bearing piece, not optional.
+- **Probe B — run the freeze (promotion) before the value passes.** Two failures:
+  `licm` panics on a promoted operand (`licm.rs:559` assumes a skeleton `Expr` —
+  a guard fix), and -O2 emits **invalid Wasm** (`i64`/`i32` type mismatch).
+  Cause: `ValueKind` is type-erased and hash-consed, so after early promotion a
+  later pass (`inline` / `const_fold`) creates a _new_ use of the shared value at
+  a different width, and extraction picks the wrong one. The **late** freeze
+  sidesteps this purely by timing (no pass runs after it to add a divergent-width
+  use). So promoting early requires **per-use width preservation** —
+  un-erasing the pool (carry width in `ValueKind`) or `alloc_unshared` per
+  `(value, type)` — which is the precondition for moving promotion ahead of the
+  passes.
+
+Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
+**not clean on count_prime even on the committed baseline** (a
+`cse → store_load_forward` over-merge, different exprs). Currently benign (e2e
+green), but it falsifies the earlier "clean across the corpus" claim and is the
+same downstream-stale flaw — it disappears under operand promotion.
+
 ## Operand-promotion migration order
 
 The representation change is wide and lands red across the pipeline. The order
