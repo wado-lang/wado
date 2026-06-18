@@ -224,10 +224,24 @@ fn analyze_function_body(
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and propagate or eliminate it out from under
     // the promoted read. Empty (behavior-neutral) until operand promotion runs.
-    for idx in body.locals_read_via_promotion() {
+    for idx in promoted_reads_set(body) {
         result.usage.entry(idx).or_default().read_count += 2;
     }
     result
+}
+
+/// Locals read through a promoted `Operand::Value`. Under early promotion
+/// (`WADO_PROMOTE_EARLY`) the precise live-slot walk has a known gap (a still-read
+/// local whose `Opaque(Local)` source it doesn't reach — see WEP / `elide_local`),
+/// so use the over-conservative pool-wide set: sound (keeps more locals live,
+/// never propagates/eliminates a still-read one), at the cost of a few missed
+/// copies. Flag-off keeps the precise walk, so the default is unchanged.
+fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
+    if crate::optimize::promote_early_enabled() {
+        body.values.opaque_local_sources().collect()
+    } else {
+        body.locals_read_via_promotion()
+    }
 }
 
 fn analyze_block(
@@ -609,7 +623,7 @@ fn propagate_at_root(
         if analysis.bindings.is_empty() {
             break;
         }
-        let promoted_reads = engine.body.locals_read_via_promotion();
+        let promoted_reads = promoted_reads_set(engine.body);
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
