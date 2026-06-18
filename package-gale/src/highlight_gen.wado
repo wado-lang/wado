@@ -75,11 +75,11 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
         let root_rule = parser_rules[0].name;
         w.line(&"let parse_result = parse(input);");
         w.begin(&"if let Ok(tree) = parse_result");
-        w.line(&`walk_{root_rule}(&mut visitor, &tree);`);
+        w.line(&`walk_{root_rule}(&mut visitor, &tree.tokens, &tree.root);`);
         w.else_begin(&"else");
         w.line(&"let tokens = tokenize(input);");
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.visit_token(&Tok::new(&tokens, _i));");
+        w.line(&"visitor.visit_token(&tokens, _i);");
         w.end();
         w.end();
     } else {
@@ -88,7 +88,7 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
         // fallback emitted `walk_(...)` — invalid code.
         w.line(&"let tokens = tokenize(input);");
         w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.visit_token(&Tok::new(&tokens, _i));");
+        w.line(&"visitor.visit_token(&tokens, _i);");
         w.end();
     }
     w.line(&"return highlight_html(input, &visitor.captures);");

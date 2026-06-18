@@ -153,6 +153,168 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// TokenStream is the struct-of-arrays token storage for generated parsers.
+/// A "token" is an `i32` index into these parallel arrays; no per-token
+/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
+/// are read on every scan/dispatch step as a single `array.get i32`; the
+/// trivia and source-char data are cold, materialised on demand only by the
+/// diagnostic / round-trip paths.
+///
+/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
+/// end; the generated-parser runtime uses `TokenStream` instead.
+///
+/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
+/// `triv_lo` / `triv_hi`) always share a length, because `push_token` is the
+/// only writer and advances all five together. Hidden / skip tokens ("trivia")
+/// live in the flat `triv_*` arrays in source order; each parser token owns the
+/// half-open range `[triv_lo[i], triv_hi[i])`.
+pub struct TokenStream {
+    pub kinds: List<i32>,
+    pub starts: List<i32>,
+    pub ends: List<i32>,
+    pub triv_lo: List<i32>,
+    pub triv_hi: List<i32>,
+    pub chars: &List<char>,
+    pub triv_kinds: List<i32>,
+    pub triv_starts: List<i32>,
+    pub triv_ends: List<i32>,
+    pub triv_chans: List<i32>,
+}
+
+impl TokenStream {
+    /// Empty stream over `chars` (a borrow of the source char list, like
+    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
+    /// four characters (the old `tokenize` heuristic).
+    pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
+        let cap = chars.len() / 4 + 1;
+        return TokenStream {
+            kinds: List::with_capacity(cap),
+            starts: List::with_capacity(cap),
+            ends: List::with_capacity(cap),
+            triv_lo: List::with_capacity(cap),
+            triv_hi: List::with_capacity(cap),
+            chars,
+            triv_kinds: [],
+            triv_starts: [],
+            triv_ends: [],
+            triv_chans: [],
+        };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.kinds.len();
+    }
+
+    /// The next trivia index — the lexer records this as a token's `triv_lo`
+    /// before accumulating that token's leading trivia, and again as `triv_hi`
+    /// after.
+    pub fn trivia_mark(&self) -> i32 {
+        return self.triv_kinds.len();
+    }
+
+    /// Append one hidden / skip token to the flat trivia arrays.
+    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+        self.triv_kinds.push(kind);
+        self.triv_starts.push(start);
+        self.triv_ends.push(end);
+        self.triv_chans.push(channel);
+    }
+
+    /// Append one parser (default-channel) token. The sole writer of the
+    /// per-token arrays, so their lengths stay in lockstep by construction.
+    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+        self.kinds.push(kind);
+        self.starts.push(start);
+        self.ends.push(end);
+        self.triv_lo.push(triv_lo);
+        self.triv_hi.push(triv_hi);
+    }
+
+    pub fn kind_at(&self, i: i32) -> i32 {
+        return self.kinds[i];
+    }
+
+    pub fn span_at(&self, i: i32) -> Span {
+        return Span::new(self.starts[i], self.ends[i]);
+    }
+
+    pub fn is_empty_text(&self, i: i32) -> bool {
+        return self.starts[i] >= self.ends[i];
+    }
+
+    /// Append `chars[start..end]` to `out` (no allocation).
+    pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
+        for let mut j = start; j < end; j += 1 {
+            out.push(self.chars[j]);
+        }
+    }
+
+    /// Materialise token `i`'s text as an owned `String` (cold path).
+    pub fn token_text(&self, i: i32) -> String {
+        let start = self.starts[i];
+        let end = self.ends[i];
+        let mut s = String::with_capacity(end - start);
+        self.push_text(&mut s, start, end);
+        return s;
+    }
+}
+
+/// Tok is a terminal handle: an `i32` index into a `TokenStream` plus a
+/// borrow of that stream. Generated parsers store a `Tok` in each CST
+/// terminal field and hand it to `Visitor::visit_token`; it carries the
+/// stream so the CST stays self-contained (text/span/trivia render without
+/// threading the stream through the walk). No per-token aggregate is built
+/// in the lexer or on the scan hot path — a `Tok` is created only when a
+/// terminal is committed into the tree.
+pub struct Tok {
+    pub stream: &TokenStream,
+    pub idx: i32,
+}
+
+impl Tok {
+    pub fn new(stream: &TokenStream, idx: i32) -> Tok with stores[stream] {
+        return Tok { stream, idx };
+    }
+
+    pub fn kind(&self) -> i32 {
+        return self.stream.kinds[self.idx];
+    }
+
+    pub fn span(&self) -> Span {
+        return self.stream.span_at(self.idx);
+    }
+
+    pub fn is_empty_text(&self) -> bool {
+        return self.stream.is_empty_text(self.idx);
+    }
+
+    pub fn text(&self) -> String {
+        return self.stream.token_text(self.idx);
+    }
+
+    /// Append this token's text to `out` without allocating.
+    pub fn push_text(&self, out: &mut String) {
+        self.stream.push_text(out, self.stream.starts[self.idx], self.stream.ends[self.idx]);
+    }
+
+    pub fn triv_lo(&self) -> i32 {
+        return self.stream.triv_lo[self.idx];
+    }
+
+    pub fn triv_hi(&self) -> i32 {
+        return self.stream.triv_hi[self.idx];
+    }
+
+    /// Append the text of every leading-trivia token to `out`, in source
+    /// order (no allocation).
+    pub fn push_leading_trivia_text(&self, out: &mut String) {
+        let s = self.stream;
+        for let mut j = s.triv_lo[self.idx]; j < s.triv_hi[self.idx]; j += 1 {
+            s.push_text(out, s.triv_starts[j], s.triv_ends[j]);
+        }
+    }
+}
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -225,9 +387,10 @@ impl Display for ParseError {
 //! where `lex.wado` is concatenated first.
 
 
-/// CstChild is either a terminal token or a non-terminal sub-tree.
+/// CstChild is either a terminal token (a `Tok` handle into the stream) or a
+/// non-terminal sub-tree.
 pub variant CstChild {
-    Token(Token),
+    Token(Tok),
     Node(CstNode),
 }
 
@@ -253,8 +416,8 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     out.push_str(&`({node.name}`);
     for let child of &node.children {
         if let Token(t) = *child {
-            if !t.text.is_empty() {
-                out.push_str(&` {t.text}`);
+            if !t.is_empty_text() {
+                out.push_str(&` {t.text()}`);
             }
         } else if let Node(n) = *child {
             out.push_str(&" ");
@@ -277,7 +440,7 @@ pub trait Visitor {
     }
     fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn visit_token(&mut self, token: &Token) {
+    fn visit_token(&mut self, token: &Tok) {
     }
 }
 
@@ -289,7 +452,7 @@ pub struct TreeRecorder {
 variant TreeEvent {
     Enter(TreeEnterInfo),
     Exit,
-    VisitToken(Token),
+    VisitToken(Tok),
 }
 
 struct TreeEnterInfo {
@@ -317,7 +480,7 @@ impl Visitor for TreeRecorder {
         self.events.push(TreeEvent::Exit);
     }
 
-    fn visit_token(&mut self, token: &Token) {
+    fn visit_token(&mut self, token: &Tok) {
         self.events.push(TreeEvent::VisitToken(*token));
     }
 }
@@ -412,11 +575,9 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Used by Stage L (token-stream equivalence) tests against the upstream
 /// `LexerExec` / etc. `[output]` blocks.
 ///
-/// - `tokens` is the public-channel stream returned by the generated
-///   `tokenize(input)`. Skip-channel tokens never reach this array, so no
-///   filtering is needed here.
-/// - `input` is the original source; passed in so line/col can be
-///   computed from byte offsets (Gale's `Token` does not carry these).
+/// - `tokens` is the `TokenStream` returned by the generated
+///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
+///   non-default-channel trivia is interleaved.
 /// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
 ///   tokens print as `<EOF>` text with type id `-1`.
 ///
@@ -429,8 +590,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: List<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
+    let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
     let mut line_starts: List<i32> = [0];
@@ -442,19 +603,26 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        let tok = &tokens[i];
-        // Non-default-channel tokens (`-> channel(HIDDEN)`) are parked in the
-        // next token's `leading_trivia`; ANTLR4 still dumps them in source
-        // order with a `channel=N` attribute, so interleave them ahead of the
-        // host token. Skip tokens (channel 0) are discarded — neither printed
-        // nor indexed (matching ANTLR4's `Lexer.skip()`).
-        for let tr of &tok.leading_trivia {
-            if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
+        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
+        // token's trivia range; ANTLR4 still dumps it in source order with a
+        // `channel=N` attribute, so interleave it ahead of the host token.
+        // Skip trivia (channel 0) is discarded — neither printed nor indexed
+        // (matching ANTLR4's `Lexer.skip()`).
+        let lo = tokens.triv_lo[i];
+        let hi = tokens.triv_hi[i];
+        for let mut t = lo; t < hi; t += 1 {
+            if tokens.triv_chans[t] != 0 {
+                emit_lexer_token(
+                    &mut out, tokens, tokens.triv_kinds[t], tokens.triv_starts[t],
+                    tokens.triv_ends[t], tokens.triv_chans[t], &line_starts, index, eof_kind,
+                );
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
+        emit_lexer_token(
+            &mut out, tokens, tokens.kinds[i], tokens.starts[i], tokens.ends[i], 0,
+            &line_starts, index, eof_kind,
+        );
         index += 1;
     }
     return out;
@@ -464,14 +632,24 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
-    let is_eof = tok.kind == eof_kind;
+fn emit_lexer_token(
+    out: &mut String,
+    tokens: &TokenStream,
+    kind: i32,
+    start: i32,
+    end: i32,
+    channel: i32,
+    line_starts: &List<i32>,
+    index: i32,
+    eof_kind: i32,
+) {
+    let is_eof = kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
         text_buf.push_str(&"<EOF>");
     } else {
-        for let mut j = tok.text.start; j < tok.text.end; j += 1 {
-            let c = tok.text.chars[j];
+        for let mut j = start; j < end; j += 1 {
+            let c = tokens.chars[j];
             match c {
                 '\n' => text_buf.push_str(&"\\n"),
                 '\r' => text_buf.push_str(&"\\r"),
@@ -480,13 +658,13 @@ fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, inde
             }
         }
     }
-    let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_from_starts(line_starts, tok.span.start);
+    let type_id = if is_eof { -1 } else { kind + 1 };
+    let line_col = line_col_from_starts(line_starts, start);
     let line = line_col.0;
     let col = line_col.1;
-    let end_inclusive = tok.span.end - 1;
-    let channel_attr = if tok.channel != 0 { `channel={tok.channel},` } else { String::from("") };
-    out.push_str(&`[@{index},{tok.span.start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+    let end_inclusive = end - 1;
+    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
+    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
 }
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
@@ -572,7 +750,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -583,7 +761,7 @@ pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, 
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens.kinds[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {
@@ -611,7 +789,7 @@ pub struct SNode {
 
 pub struct ANode {
     pub span: Span,
-    pub token: Token,
+    pub token: Tok,
 }
 
 global TK_ID: i32 = 0;
@@ -695,10 +873,10 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: List<Token> = [];
+    let mut ts = TokenStream::new(&lexer.chars);
+    let mut triv_lo = ts.trivia_mark();
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
@@ -721,25 +899,23 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_INT; }
         }
         if best_end <= start {
-            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.push(tok);
-            trivia = [];
+            ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
+            triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
             if is_skip {
-                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+                ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else {
-                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
-                tokens.push(tok);
-                trivia = [];
+                ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
+                triv_lo = ts.trivia_mark();
             }
             lexer.pos = best_end;
         }
     }
-    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens.to_array();
+    ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    return ts;
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -754,19 +930,18 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: TokenStream,
     pos: i32,
-    chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars, pending: null };
+    fn new(tokens: TokenStream) -> Parser {
+        return Parser { tokens, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
-        let lc = line_col_at(&self.chars, span.start);
+        let lc = line_col_at(self.tokens.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
@@ -777,70 +952,71 @@ impl Parser {
         }
     }
 
-    fn peek(&self) -> &Token {
-        return &self.tokens[self.pos];
+    fn peek_start(&self) -> i32 {
+        return self.tokens.starts[self.pos];
+    }
+
+    fn peek_span(&self) -> Span {
+        return self.tokens.span_at(self.pos);
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens[self.pos].kind;
+        return self.tokens.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens[idx].kind;
+        return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Token {
-        let tok = self.tokens[self.pos];
+    fn advance(&mut self) -> Tok {
+        let i = self.pos;
         self.pos += 1;
-        return tok;
+        return Tok::new(&self.tokens, i);
     }
 
     fn last_end(&self) -> i32 {
         if self.pos == 0 { return 0; }
-        return self.tokens[self.pos - 1].span.end;
+        return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
-        if self.tokens[self.pos].kind == kind {
+    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+        if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(self.tokens[self.pos]);
+                return Result::Ok(Tok::new(&self.tokens, self.pos));
             }
             return Result::Ok(self.advance());
         }
-        let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
         return Result::Err(self.error(
-            `expected {name}, got "{tok.text}"`,
-            tok.span,
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             [name],
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Token, ParseError> {
-        let tok = &self.tokens[self.pos];
+    fn fail(&self, name: String) -> Result<Tok, ParseError> {
         return Result::Err(self.error(
-            `expected {name}, got "{tok.text}"`,
-            tok.span,
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             [name],
         ));
     }
 
-    fn match_any(&mut self) -> Result<Token, ParseError> {
-        if self.tokens[self.pos].kind != TK_EOF {
+    fn match_any(&mut self) -> Result<Tok, ParseError> {
+        if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `expected any token, got "{tok.text}"`,
-            tok.span,
+            `expected any token, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["any token"],
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
-        let k = self.tokens[self.pos].kind;
+    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+        let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -853,38 +1029,36 @@ impl Parser {
                 return Result::Ok(self.advance());
             }
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `unexpected token "{tok.text}"`,
-            tok.span,
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["set complement"],
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
-        let k = self.tokens[self.pos].kind;
+    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+        let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(self.tokens[self.pos]);
+                    return Result::Ok(Tok::new(&self.tokens, self.pos));
                 }
                 return Result::Ok(self.advance());
             }
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `unexpected token "{tok.text}"`,
-            tok.span,
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["token set"],
         ));
     }
 }
 
-fn scan_s(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos].kind == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens.kinds[pos] == TK_ID && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_a(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -893,15 +1067,15 @@ fn scan_s(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
     return pos;
 }
 
-fn scan_a(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && tokens[pos].kind == TK_ID {
+fn scan_a(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && tokens.kinds[pos] == TK_ID {
         return pos + 1;
     }
     return -1;
 }
 
 fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -930,7 +1104,7 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ANode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
         let token = p.expect(kind)?;
@@ -941,7 +1115,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     }
     return Result::Err(p.error(
         "expected a",
-        p.peek().span,
+        p.peek_span(),
         ["TK_ID"],
     ));
 }
@@ -969,8 +1143,7 @@ fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -
 
 fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    return Parser::new(tokens, chars);
+    return Parser::new(tokens);
 }
 
 fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {

@@ -23,11 +23,11 @@ fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
     out.push_str(&`<{node.name}>`);
     for let child of &node.children {
-        if let Token(t) = *child {
-            t.push_leading_trivia_text(&mut out);
-            let kind_name = html::token_kind_name(t.kind());
+        if let Token(i) = *child {
+            node.toks.push_leading_trivia_text(&mut out, i);
+            let kind_name = html::token_kind_name(node.toks.kinds[i]);
             out.push_str(&`<{kind_name}>`);
-            t.push_text(&mut out);
+            node.toks.push_token_text(&mut out, i);
             out.push_str(&`</{kind_name}>`);
         } else if let Node(n) = *child {
             out.push_str(&unparse_xml(&n));

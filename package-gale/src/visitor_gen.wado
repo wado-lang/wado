@@ -37,6 +37,7 @@ fn gen_walk_fn(w: &mut CodeWriter, rule: &Rule, surface_alts: &List<Alternative>
     f.set_pub();
     f.add_generic(&"V: Visitor");
     f.add_param(&"v", &"&mut V");
+    f.add_param(&"toks", &"&TokenStream");
     f.add_param(&"node", &`&{header.type_name}`);
     f.emit_begin(w);
 
@@ -66,7 +67,7 @@ fn gen_walk_multi_alt(
         // the node is a `{ span, token }` struct, so the walk visits its one
         // token directly instead of matching N variant arms.
         w.line(&`v.enter_rule({rule_id}, &"{header.name}", &node.span);`);
-        w.line(&"v.visit_token(&node.token);");
+        w.line(&"v.visit_token(toks, node.token);");
         w.line(&`v.exit_rule({rule_id}, &"{header.name}", &node.span);`);
         return;
     }
@@ -107,10 +108,10 @@ fn gen_walk_lr(w: &mut CodeWriter, l: &LeftRecursiveRule, rule_id: i32, header: 
                 // list label makes it a `List`, so iterate in that case.
                 if lr.prefix_self_ref.kind matches { List } {
                     w.begin(&`for let item of &n.{lr.prefix_self_ref.name}`);
-                    w.line(&`walk_{header.name}(v, item);`);
+                    w.line(&`walk_{header.name}(v, toks, item);`);
                     w.end();
                 } else {
-                    w.line(&`walk_{header.name}(v, &n.{lr.prefix_self_ref.name});`);
+                    w.line(&`walk_{header.name}(v, toks, &n.{lr.prefix_self_ref.name});`);
                 }
                 gen_walk_ops(w, &lr.suffix.ops, &"n");
                 w.line(&`v.exit_rule({rule_id}, &"{header.name}", &n.span);`);
@@ -148,8 +149,8 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
 
 fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
     match action {
-        VisitToken => w.line(&`v.visit_token({expr});`),
-        WalkRule(rule_name) => w.line(&`walk_{rule_name}(v, {expr});`),
+        VisitToken => w.line(&`v.visit_token(toks, {tok_index_expr(expr)});`),
+        WalkRule(rule_name) => w.line(&`walk_{rule_name}(v, toks, {expr});`),
         WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
         WalkStruct(fields) => {
             // Strip leading '&' from expr so child gen_walk_field calls
@@ -175,10 +176,25 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GroupCas
     w.begin(&`match {expr}`);
     for let c of cases {
         w.begin(&`{c.case_name}(inner) =>`);
-        w.line(&`walk_{c.rule_name}(v, inner);`);
+        w.line(&`walk_{c.rule_name}(v, toks, inner);`);
         w.end();
     }
     w.end();
+}
+
+/// The `i32` token-index expression to pass to `visit_token`. A direct
+/// field access arrives as `&node.field` (strip the `&` to read the i32);
+/// a `for`/`if let` binding arrives as `item` (a `&i32`, so deref).
+fn tok_index_expr(expr: &String) -> String {
+    if expr.len() > 0 && expr.chars().next() matches { Some(c) && c == '&' } {
+        let mut base = String::with_capacity(expr.len());
+        let mut skip = true;
+        for let c of expr.chars() {
+            if skip && c == '&' { skip = false; } else { base.push(c); }
+        }
+        return base;
+    }
+    return `*{expr}`;
 }
 
 fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GeneralGroupCaseInfo>) {
@@ -201,11 +217,11 @@ fn gen_to_tree_fn(w: &mut CodeWriter, lowered: &LoweredGrammar) {
 
     let mut f = FnSpec::new("to_tree");
     f.set_pub();
-    f.add_param(&"node", &`&{header.type_name}`);
+    f.add_param(&"result", &`&ParseResult<{header.type_name}>`);
     f.set_return_type(&"CstNode");
     f.emit_begin(w);
-    w.line(&"let mut recorder = TreeRecorder::new();");
-    w.line(&`walk_{header.name}(&mut recorder, node);`);
+    w.line(&"let mut recorder = TreeRecorder::new(&result.tokens);");
+    w.line(&`walk_{header.name}(&mut recorder, &result.tokens, &result.root);`);
     w.line(&"return recorder.build();");
     w.end();
     w.blank();

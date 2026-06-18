@@ -258,63 +258,20 @@ impl TokenStream {
         self.push_text(&mut s, start, end);
         return s;
     }
-}
 
-/// Tok is a terminal handle: an `i32` index into a `TokenStream` plus a
-/// borrow of that stream. Generated parsers store a `Tok` in each CST
-/// terminal field and hand it to `Visitor::visit_token`; it carries the
-/// stream so the CST stays self-contained (text/span/trivia render without
-/// threading the stream through the walk). No per-token aggregate is built
-/// in the lexer or on the scan hot path — a `Tok` is created only when a
-/// terminal is committed into the tree.
-pub struct Tok {
-    pub stream: &TokenStream,
-    pub idx: i32,
-}
-
-impl Tok {
-    pub fn new(stream: &TokenStream, idx: i32) -> Tok with stores[stream] {
-        return Tok { stream, idx };
+    /// Append token `i`'s text to `out` (no allocation).
+    pub fn push_token_text(&self, out: &mut String, i: i32) {
+        self.push_text(out, self.starts[i], self.ends[i]);
     }
 
-    pub fn kind(&self) -> i32 {
-        return self.stream.kinds[self.idx];
-    }
-
-    pub fn span(&self) -> Span {
-        return self.stream.span_at(self.idx);
-    }
-
-    pub fn is_empty_text(&self) -> bool {
-        return self.stream.is_empty_text(self.idx);
-    }
-
-    pub fn text(&self) -> String {
-        return self.stream.token_text(self.idx);
-    }
-
-    /// Append this token's text to `out` without allocating.
-    pub fn push_text(&self, out: &mut String) {
-        self.stream.push_text(out, self.stream.starts[self.idx], self.stream.ends[self.idx]);
-    }
-
-    pub fn triv_lo(&self) -> i32 {
-        return self.stream.triv_lo[self.idx];
-    }
-
-    pub fn triv_hi(&self) -> i32 {
-        return self.stream.triv_hi[self.idx];
-    }
-
-    /// Append the text of every leading-trivia token to `out`, in source
-    /// order (no allocation).
-    pub fn push_leading_trivia_text(&self, out: &mut String) {
-        let s = self.stream;
-        for let mut j = s.triv_lo[self.idx]; j < s.triv_hi[self.idx]; j += 1 {
-            s.push_text(out, s.triv_starts[j], s.triv_ends[j]);
+    /// Append the text of token `i`'s leading trivia, in source order.
+    pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
+        for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+            self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
 }
+
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///

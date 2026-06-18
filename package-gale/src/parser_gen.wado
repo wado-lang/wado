@@ -267,11 +267,11 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
 
     let mut f5 = FnSpec::new("advance");
     f5.set_receiver(&"&mut self");
-    f5.set_return_type(&"Tok");
+    f5.set_return_type(&"i32");
     f5.emit_begin(w);
     w.line(&"let i = self.pos;");
     w.line(&"self.pos += 1;");
-    w.line(&"return Tok::new(&self.tokens, i);");
+    w.line(&"return i;");
     w.end();
     w.blank();
 
@@ -291,11 +291,11 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
-    f7.set_return_type(&"Result<Tok, ParseError>");
+    f7.set_return_type(&"Result<i32, ParseError>");
     f7.emit_begin(w);
     w.begin(&"if self.tokens.kinds[self.pos] == kind");
     w.begin(&"if kind == TK_EOF");
-    w.line(&"return Result::Ok(Tok::new(&self.tokens, self.pos));");
+    w.line(&"return Result::Ok(self.pos);");
     w.end();
     w.line(&"return Result::Ok(self.advance());");
     w.end();
@@ -313,7 +313,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f8 = FnSpec::new("fail");
     f8.set_receiver(&"&self");
     f8.add_param(&"name", &"String");
-    f8.set_return_type(&"Result<Tok, ParseError>");
+    f8.set_return_type(&"Result<i32, ParseError>");
     f8.emit_begin(w);
     w.line(&"return Result::Err(self.error(");
     w.indent();
@@ -329,7 +329,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // Fails at EOF.
     let mut f9 = FnSpec::new("match_any");
     f9.set_receiver(&"&mut self");
-    f9.set_return_type(&"Result<Tok, ParseError>");
+    f9.set_return_type(&"Result<i32, ParseError>");
     f9.emit_begin(w);
     w.begin(&"if self.tokens.kinds[self.pos] != TK_EOF");
     w.line(&"return Result::Ok(self.advance());");
@@ -349,7 +349,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f10 = FnSpec::new("match_not");
     f10.set_receiver(&"&mut self");
     f10.add_param(&"excluded", &"List<i32>");
-    f10.set_return_type(&"Result<Tok, ParseError>");
+    f10.set_return_type(&"Result<i32, ParseError>");
     f10.emit_begin(w);
     w.line(&"let k = self.tokens.kinds[self.pos];");
     w.begin(&"if k != TK_EOF");
@@ -380,13 +380,13 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f11 = FnSpec::new("match_set");
     f11.set_receiver(&"&mut self");
     f11.add_param(&"included", &"List<i32>");
-    f11.set_return_type(&"Result<Tok, ParseError>");
+    f11.set_return_type(&"Result<i32, ParseError>");
     f11.emit_begin(w);
     w.line(&"let k = self.tokens.kinds[self.pos];");
     w.begin(&"for let x of included");
     w.begin(&"if x == k");
     w.begin(&"if k == TK_EOF");
-    w.line(&"return Result::Ok(Tok::new(&self.tokens, self.pos));");
+    w.line(&"return Result::Ok(self.pos);");
     w.end();
     w.line(&"return Result::Ok(self.advance());");
     w.end();
@@ -3469,11 +3469,11 @@ fn op_field(op: &Op) -> String {
 /// `List<…>` declaration; other call sites read the FieldDecl directly.
 fn op_field_type(op: &Op) -> String {
     return match op {
-        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Tok",
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "i32",
         RuleCall(r) => rule_type_name(&r.target_name),
         Group(g) => match &g.shape {
             SimpleCst(scst) => scst.type_name,
-            TokenOnly(_) => "Tok",
+            TokenOnly(_) => "i32",
             SingleAlt(sa) => sa.struct_name,
             General(gen) => gen.variant_type,
             Transparent => panic("op_field_type: Transparent groups have no own field type"),
@@ -5720,7 +5720,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, trace: bool) {
     let mut f = FnSpec::new("parse");
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.set_return_type(&`Result<ParseResult<{header.type_name}>, ParseError>`);
     f.emit_begin(w);
     w.line(&`return parse_{header.snake_name}(input);`);
     w.end();
@@ -5762,14 +5762,18 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
     gru.add_generic(&"T");
     gru.add_param(&"input", &"&String");
     gru.add_param(&"run", &"fn(&mut Parser) -> Result<T, ParseError>");
-    gru.set_return_type(&"Result<T, ParseError>");
+    gru.set_return_type(&"Result<ParseResult<T>, ParseError>");
     gru.emit_begin(w);
     w.line(&"let mut parser = _gale_new_parser(input);");
     w.line(&"let _result = run(&mut parser);");
     w.begin(&"if let Err(_e) = _result");
     w.line(&"return Result::Err(_gale_pick_error(&parser, _e));");
     w.end();
-    w.line(&"return _result;");
+    // Bundle the typed root with the TokenStream its `i32` terminals index.
+    w.begin(&"if let Ok(_root) = _result");
+    w.line(&"return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });");
+    w.end();
+    w.line(&"unreachable();");
     w.end();
     w.blank();
 
@@ -5810,7 +5814,7 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     let mut f = FnSpec::new(&`parse_{header.snake_name}`);
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.set_return_type(&`Result<ParseResult<{header.type_name}>, ParseError>`);
     f.emit_begin(w);
     // The wrapper's defaulted `follow`/`min_prec` absorb the LR / gated cases,
     // so this one closure form is uniform across all rules.
