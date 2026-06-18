@@ -847,6 +847,26 @@ final 10:
   extraction-availability concern — re-emitting `if cond {..} else {..}` at a use
   site vs a `local.get` of the merge value — remains a real keystone sub-problem,
   but it is not what these three fixtures hit.)
+
+  Culprit isolated (per-peephole-rule `SKIP_PRULE` bisection): the rule is
+  **`elide_local`** — skipping only it passes all three. It eliminates a local
+  that is still read through a promoted operand, but `locals_read_via_promotion`
+  (which `elide_local` already consults) **does not list that local**, so the
+  guard does not fire. Verified: forcing `is_kept` to consult the pool-wide
+  `opaque_local_sources` (over-conservative) fixes all three — so the needed
+  local genuinely has an `Opaque(Local)` source, but it is not reached by
+  `for_each_operand` + `collect_opaque_locals` from a live operand slot. A
+  `find_imm`→raw-`kind` alignment in `collect_opaque_locals` (extraction reads the
+  raw value, not the union-find rep) was tried and did **not** fix it, so the gap
+  is subtler than a rep/raw mismatch — a promoted read this precise walk misses
+  while `opaque_local_sources` catches. The over-conservative set is **not** a safe
+  substitute (the builder seeds `Opaque(Local)` for many non-read locals, and
+  `opaque_sources` persists on the body across passes, so it would disable
+  `elide_local` broadly). Dormant in the committed late-freeze path
+  (`locals_read_via_promotion` is empty there, e2e 2960/0), so the branch stays
+  correct; the gap needs focused keystone-time work to make the precise walk
+  complete. Reverted the speculative raw-`kind` change rather than ship an
+  un-understood edit.
 - 1 ICE (fixed) and `assert_fail_call_arg` (power-assert diagnostic formatting,
   uncharacterized).
 
