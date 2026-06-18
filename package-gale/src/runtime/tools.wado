@@ -104,15 +104,29 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
         for let mut t = lo; t < hi; t += 1 {
             if tokens.triv_chans[t] != 0 {
                 emit_lexer_token(
-                    &mut out, tokens, tokens.triv_kinds[t], tokens.triv_starts[t],
-                    tokens.triv_ends[t], tokens.triv_chans[t], &line_starts, index, eof_kind,
+                    &mut out,
+                    tokens,
+                    tokens.triv_kinds[t],
+                    tokens.triv_starts[t],
+                    tokens.triv_ends[t],
+                    tokens.triv_chans[t],
+                    &line_starts,
+                    index,
+                    eof_kind,
                 );
                 index += 1;
             }
         }
         emit_lexer_token(
-            &mut out, tokens, tokens.kinds[i], tokens.starts[i], tokens.ends[i], 0,
-            &line_starts, index, eof_kind,
+            &mut out,
+            tokens,
+            tokens.kinds[i],
+            tokens.starts[i],
+            tokens.ends[i],
+            0,
+            &line_starts,
+            index,
+            eof_kind,
         );
         index += 1;
     }

@@ -180,11 +180,9 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size every array to roughly one token per four
-    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
-    /// most languages emit a whitespace token between tokens, so the flat
-    /// trivia arrays grow to about the same length — leaving them at `[]`
-    /// re-grows them from zero on every parse.
+    /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
+    /// per four chars; trivia tracks token count, so `[]` would re-grow from
+    /// zero every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -344,10 +342,9 @@ impl Display for ParseError {
 //! where `lex.wado` is concatenated first.
 
 
-/// A parse result: the typed root node plus the `TokenStream` its terminal
-/// `i32` indices point into. A token is a bare index, so the tree is only
-/// meaningful alongside its stream; bundling them keeps every consumer
-/// self-contained without per-terminal allocation.
+/// A parse result: the typed root node plus the `TokenStream` its `i32`
+/// terminal indices point into. A token is a bare index, so the tree is
+/// meaningful only with its stream — hence they travel bundled.
 pub struct ParseResult<T> {
     pub root: T,
     pub tokens: TokenStream,
@@ -405,9 +402,8 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
 /// String compares while visitors that care about the name (TreeRecorder)
 /// can still use it.
 ///
-/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index
-/// (tokens are bare indices), so a visitor reads kind/text/span/trivia from
-/// the stream on demand.
+/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index,
+/// so a visitor reads kind/text/span/trivia from the stream on demand.
 pub trait Visitor {
     fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
@@ -588,15 +584,29 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
         for let mut t = lo; t < hi; t += 1 {
             if tokens.triv_chans[t] != 0 {
                 emit_lexer_token(
-                    &mut out, tokens, tokens.triv_kinds[t], tokens.triv_starts[t],
-                    tokens.triv_ends[t], tokens.triv_chans[t], &line_starts, index, eof_kind,
+                    &mut out,
+                    tokens,
+                    tokens.triv_kinds[t],
+                    tokens.triv_starts[t],
+                    tokens.triv_ends[t],
+                    tokens.triv_chans[t],
+                    &line_starts,
+                    index,
+                    eof_kind,
                 );
                 index += 1;
             }
         }
         emit_lexer_token(
-            &mut out, tokens, tokens.kinds[i], tokens.starts[i], tokens.ends[i], 0,
-            &line_starts, index, eof_kind,
+            &mut out,
+            tokens,
+            tokens.kinds[i],
+            tokens.starts[i],
+            tokens.ends[i],
+            0,
+            &line_starts,
+            index,
+            eof_kind,
         );
         index += 1;
     }
