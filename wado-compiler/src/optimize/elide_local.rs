@@ -50,10 +50,14 @@ impl<'a> ElideRule<'a> {
 impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
+        // Locals read only through a promoted `Operand::Value` are live but
+        // invisible to the use index; treat them as kept. Empty (so this is
+        // behavior-neutral) until operand promotion runs.
+        let promoted_reads = engine.body.locals_read_via_promotion();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
         for stmt in stmts {
-            match classify(engine, stmt, self.stores_aliased) {
+            match classify(engine, stmt, self.stores_aliased, &promoted_reads) {
                 Action::Keep => new_stmts.push(stmt),
                 Action::Drop => changed = true,
                 Action::Demote(value) => {
@@ -74,13 +78,18 @@ impl Rule for ElideRule<'_> {
 /// tree `Elider`: an unread `let x = value` or a bare `x = value` (assign at
 /// statement position) where `x` is unread is dropped when `value` is pure,
 /// otherwise demoted to `Expr(value)`.
-fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Action {
+fn classify(
+    engine: &Engine,
+    stmt: StmtId,
+    stores_aliased: &IndexSet<u32>,
+    promoted_reads: &IndexSet<u32>,
+) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx, stores_aliased) {
+            if is_kept(engine, idx, stores_aliased, promoted_reads) {
                 Action::Keep
             } else if arena_query::is_pure_operand(engine.body, value) {
                 Action::Drop
@@ -102,7 +111,7 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index, stores_aliased) {
+                if !is_kept(engine, index, stores_aliased, promoted_reads) {
                     return if arena_query::is_pure_operand(engine.body, value) {
                         Action::Drop
                     } else {
@@ -118,6 +127,13 @@ fn classify(engine: &Engine, stmt: StmtId, stores_aliased: &IndexSet<u32>) -> Ac
 
 /// A local is kept (not elidable) when its reference escaped via a `stores`
 /// alias, or it is read anywhere in the body.
-fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
-    stores_aliased.contains(&local) || engine.is_local_read(local)
+fn is_kept(
+    engine: &Engine,
+    local: u32,
+    stores_aliased: &IndexSet<u32>,
+    promoted_reads: &IndexSet<u32>,
+) -> bool {
+    stores_aliased.contains(&local)
+        || engine.is_local_read(local)
+        || promoted_reads.contains(&local)
 }

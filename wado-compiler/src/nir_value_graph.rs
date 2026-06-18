@@ -342,6 +342,16 @@ impl ValuePool {
         ValueId(x)
     }
 
+    /// Class representative without path compression — the `&self` form of
+    /// [`ValuePool::find`], for read-only walks that cannot take `&mut`.
+    pub fn find_imm(&self, id: ValueId) -> ValueId {
+        let mut x = id.0;
+        while self.parent[x as usize] != x {
+            x = self.parent[x as usize];
+        }
+        ValueId(x)
+    }
+
     /// Merge the classes of `a` and `b`, returning the surviving representative
     /// (the smaller raw id, for determinism). The merge is recorded for the
     /// next [`ValuePool::rebuild`], which restores congruence. A no-op (and
@@ -514,6 +524,38 @@ impl ValuePool {
             OpaqueSource::Local(idx) => Some(*idx),
             OpaqueSource::Expr(_) => None,
         })
+    }
+
+    /// Collect into `out` every local index named by an `Opaque(Local)`
+    /// reachable from value `v` — the locals a promoted value reads when
+    /// extracted (a leaf `Opaque(Local)` is `local.get idx`). Recurses the pure
+    /// value tree; a `FieldAccess` reads its receiver's locals.
+    pub fn collect_opaque_locals(&self, v: ValueId, out: &mut IndexSet<u32>) {
+        match self.kind(self.find_imm(v)).clone() {
+            ValueKind::Opaque(oid) => {
+                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
+                    out.insert(idx);
+                }
+            }
+            ValueKind::Binary { lhs, rhs, .. } => {
+                self.collect_opaque_locals(lhs, out);
+                self.collect_opaque_locals(rhs, out);
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.collect_opaque_locals(operand, out);
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                self.collect_opaque_locals(cond, out);
+                self.collect_opaque_locals(then, out);
+                self.collect_opaque_locals(else_, out);
+            }
+            ValueKind::LoopPhi { entry, body_iter } => {
+                self.collect_opaque_locals(entry, out);
+                self.collect_opaque_locals(body_iter, out);
+            }
+            ValueKind::FieldAccess { receiver, .. } => self.collect_opaque_locals(receiver, out),
+            _ => {}
+        }
     }
 
     /// Remap every `OpaqueSource::Local` index through `remap` (old → new).
