@@ -593,6 +593,13 @@ findings are the deliverable.
   last-write side table. This is the precise next blocker for moving promotion
   ahead of the passes; the experiment was discarded (uncommitted, never landed).
 
+  Narrowed: `count_prime`'s own arithmetic is entirely `i32` (`n` / `d` / `count`
+  / `limit`), yet the mismatch is `i64`/`i32` — so the wrong-width value is in the
+  `u64` timing glue (`MonotonicClock` / `core:benchmark`), not the prime loop. The
+  next-session repro should instrument `extract_value`'s `Binary` / `Unary` arms
+  to dump `(value, op, type_of(self), type_of(lhs))` and catch the `u64` operand
+  recorded at `i32` width.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
