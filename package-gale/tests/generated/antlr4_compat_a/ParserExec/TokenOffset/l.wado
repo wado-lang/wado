@@ -690,9 +690,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
-//! `./lex.wado` import is stripped at `#include_str` time.
-
+//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
 
 /// `follow` is the caller's deterministic K-prefix continuation:
 /// `follow[d]` is the set of token kinds that may appear at input depth
@@ -710,10 +708,11 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 /// carried at runtime, not code baked into a specialised function.
 ///
 /// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
+/// caller continuation ending in EOF gates correctly. `tokens` is the bare
+/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
+/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
+/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
+/// would, which matters for deeply recursive scan grammars.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 /// Prepend a static local prefix to an inherited FOLLOW continuation.
@@ -735,7 +734,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -746,7 +745,7 @@ pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, e
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens.kinds[idx] } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {
@@ -1587,13 +1586,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1617,13 +1618,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -1638,7 +1639,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -1661,7 +1662,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -1672,7 +1673,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -1693,7 +1694,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -1710,805 +1711,805 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     sg_0: {
         pos = gp_0;
         sg_0_0: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_1 { break sg_0_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_1 { break sg_0_0; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_1: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_2 { break sg_0_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_2 { break sg_0_1; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_2: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_3 { break sg_0_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_3 { break sg_0_2; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_3: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_4 { break sg_0_3; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_4 { break sg_0_3; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_4: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_5 { break sg_0_4; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_5 { break sg_0_4; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_5: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_6 { break sg_0_5; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_6 { break sg_0_5; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_6: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_7 { break sg_0_6; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_7 { break sg_0_6; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_7: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_8 { break sg_0_7; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_8 { break sg_0_7; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_8: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_9 { break sg_0_8; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_9 { break sg_0_8; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_9: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_10 { break sg_0_9; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_10 { break sg_0_9; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_10: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_11 { break sg_0_10; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_11 { break sg_0_10; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_11: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_12 { break sg_0_11; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_12 { break sg_0_11; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_12: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_13 { break sg_0_12; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_13 { break sg_0_12; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_13: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_14 { break sg_0_13; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_14 { break sg_0_13; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_14: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_15 { break sg_0_14; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_15 { break sg_0_14; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_15: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_16 { break sg_0_15; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_16 { break sg_0_15; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_16: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_17 { break sg_0_16; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_17 { break sg_0_16; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_17: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_18 { break sg_0_17; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_18 { break sg_0_17; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_18: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_19 { break sg_0_18; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_19 { break sg_0_18; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_19: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_20 { break sg_0_19; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_20 { break sg_0_19; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_20: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_21 { break sg_0_20; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_21 { break sg_0_20; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_21: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_22 { break sg_0_21; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_22 { break sg_0_21; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_22: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_23 { break sg_0_22; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_23 { break sg_0_22; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_23: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_24 { break sg_0_23; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_24 { break sg_0_23; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_24: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_25 { break sg_0_24; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_25 { break sg_0_24; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_25: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_26 { break sg_0_25; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_26 { break sg_0_25; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_26: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_27 { break sg_0_26; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_27 { break sg_0_26; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_27: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_28 { break sg_0_27; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_28 { break sg_0_27; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_28: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_29 { break sg_0_28; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_29 { break sg_0_28; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_29: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_30 { break sg_0_29; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_30 { break sg_0_29; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_30: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_31 { break sg_0_30; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_31 { break sg_0_30; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_31: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_32 { break sg_0_31; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_32 { break sg_0_31; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_32: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_33 { break sg_0_32; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_33 { break sg_0_32; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_33: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_34 { break sg_0_33; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_34 { break sg_0_33; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_34: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_35 { break sg_0_34; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_35 { break sg_0_34; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_35: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_36 { break sg_0_35; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_36 { break sg_0_35; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_36: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_37 { break sg_0_36; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_37 { break sg_0_36; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_37: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_38 { break sg_0_37; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_38 { break sg_0_37; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_38: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_39 { break sg_0_38; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_39 { break sg_0_38; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_39: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_40 { break sg_0_39; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_40 { break sg_0_39; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_40: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_41 { break sg_0_40; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_41 { break sg_0_40; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_41: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_42 { break sg_0_41; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_42 { break sg_0_41; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_42: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_43 { break sg_0_42; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_43 { break sg_0_42; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_43: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_44 { break sg_0_43; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_44 { break sg_0_43; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_44: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_45 { break sg_0_44; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_45 { break sg_0_44; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_45: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_46 { break sg_0_45; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_46 { break sg_0_45; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_46: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_47 { break sg_0_46; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_47 { break sg_0_46; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_47: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_48 { break sg_0_47; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_48 { break sg_0_47; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_48: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_49 { break sg_0_48; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_49 { break sg_0_48; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_49: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_50 { break sg_0_49; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_50 { break sg_0_49; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_50: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_51 { break sg_0_50; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_51 { break sg_0_50; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_51: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_52 { break sg_0_51; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_52 { break sg_0_51; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_52: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_53 { break sg_0_52; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_53 { break sg_0_52; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_53: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_54 { break sg_0_53; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_54 { break sg_0_53; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_54: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_55 { break sg_0_54; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_55 { break sg_0_54; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_55: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_56 { break sg_0_55; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_56 { break sg_0_55; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_56: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_57 { break sg_0_56; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_57 { break sg_0_56; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_57: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_58 { break sg_0_57; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_58 { break sg_0_57; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_58: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_59 { break sg_0_58; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_59 { break sg_0_58; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_59: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_60 { break sg_0_59; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_60 { break sg_0_59; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_60: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_61 { break sg_0_60; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_61 { break sg_0_60; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_61: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_62 { break sg_0_61; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_62 { break sg_0_61; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_62: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_63 { break sg_0_62; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_63 { break sg_0_62; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_63: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_64 { break sg_0_63; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_64 { break sg_0_63; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_64: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_65 { break sg_0_64; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_65 { break sg_0_64; }
             pos += 1;
             break sg_0;
         }
         pos = gp_0;
         sg_0_65: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_66 { break sg_0_65; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_66 { break sg_0_65; }
             pos += 1;
             break sg_0;
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
             pos = gp_1;
             sg_1_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_1 { break sg_1_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_1 { break sg_1_0; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_2 { break sg_1_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_2 { break sg_1_1; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_3 { break sg_1_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_3 { break sg_1_2; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_4 { break sg_1_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_4 { break sg_1_3; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_4: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_5 { break sg_1_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_5 { break sg_1_4; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_5: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_6 { break sg_1_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_6 { break sg_1_5; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_6: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_7 { break sg_1_6; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_7 { break sg_1_6; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_7: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_8 { break sg_1_7; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_8 { break sg_1_7; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_8: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_9 { break sg_1_8; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_9 { break sg_1_8; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_9: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_10 { break sg_1_9; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_10 { break sg_1_9; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_10: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_11 { break sg_1_10; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_11 { break sg_1_10; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_11: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_12 { break sg_1_11; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_12 { break sg_1_11; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_12: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_13 { break sg_1_12; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_13 { break sg_1_12; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_13: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_14 { break sg_1_13; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_14 { break sg_1_13; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_14: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_15 { break sg_1_14; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_15 { break sg_1_14; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_15: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_16 { break sg_1_15; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_16 { break sg_1_15; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_16: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_17 { break sg_1_16; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_17 { break sg_1_16; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_17: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_18 { break sg_1_17; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_18 { break sg_1_17; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_18: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_19 { break sg_1_18; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_19 { break sg_1_18; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_19: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_20 { break sg_1_19; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_20 { break sg_1_19; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_20: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_21 { break sg_1_20; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_21 { break sg_1_20; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_21: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_22 { break sg_1_21; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_22 { break sg_1_21; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_22: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_23 { break sg_1_22; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_23 { break sg_1_22; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_23: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_24 { break sg_1_23; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_24 { break sg_1_23; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_24: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_25 { break sg_1_24; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_25 { break sg_1_24; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_25: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_26 { break sg_1_25; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_26 { break sg_1_25; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_26: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_27 { break sg_1_26; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_27 { break sg_1_26; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_27: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_28 { break sg_1_27; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_28 { break sg_1_27; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_28: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_29 { break sg_1_28; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_29 { break sg_1_28; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_29: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_30 { break sg_1_29; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_30 { break sg_1_29; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_30: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_31 { break sg_1_30; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_31 { break sg_1_30; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_31: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_32 { break sg_1_31; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_32 { break sg_1_31; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_32: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_33 { break sg_1_32; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_33 { break sg_1_32; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_33: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_34 { break sg_1_33; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_34 { break sg_1_33; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_34: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_35 { break sg_1_34; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_35 { break sg_1_34; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_35: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_36 { break sg_1_35; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_36 { break sg_1_35; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_36: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_37 { break sg_1_36; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_37 { break sg_1_36; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_37: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_38 { break sg_1_37; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_38 { break sg_1_37; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_38: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_39 { break sg_1_38; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_39 { break sg_1_38; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_39: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_40 { break sg_1_39; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_40 { break sg_1_39; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_40: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_41 { break sg_1_40; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_41 { break sg_1_40; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_41: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_42 { break sg_1_41; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_42 { break sg_1_41; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_42: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_43 { break sg_1_42; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_43 { break sg_1_42; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_43: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_44 { break sg_1_43; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_44 { break sg_1_43; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_44: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_45 { break sg_1_44; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_45 { break sg_1_44; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_45: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_46 { break sg_1_45; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_46 { break sg_1_45; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_46: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_47 { break sg_1_46; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_47 { break sg_1_46; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_47: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_48 { break sg_1_47; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_48 { break sg_1_47; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_48: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_49 { break sg_1_48; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_49 { break sg_1_48; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_49: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_50 { break sg_1_49; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_50 { break sg_1_49; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_50: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_51 { break sg_1_50; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_51 { break sg_1_50; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_51: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_52 { break sg_1_51; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_52 { break sg_1_51; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_52: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_53 { break sg_1_52; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_53 { break sg_1_52; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_53: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_54 { break sg_1_53; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_54 { break sg_1_53; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_54: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_55 { break sg_1_54; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_55 { break sg_1_54; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_55: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_56 { break sg_1_55; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_56 { break sg_1_55; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_56: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_57 { break sg_1_56; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_57 { break sg_1_56; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_57: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_58 { break sg_1_57; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_58 { break sg_1_57; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_58: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_59 { break sg_1_58; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_59 { break sg_1_58; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_59: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_60 { break sg_1_59; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_60 { break sg_1_59; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_60: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_61 { break sg_1_60; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_61 { break sg_1_60; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_61: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_62 { break sg_1_61; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_62 { break sg_1_61; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_62: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_63 { break sg_1_62; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_63 { break sg_1_62; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_63: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_64 { break sg_1_63; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_64 { break sg_1_63; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_64: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_65 { break sg_1_64; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_65 { break sg_1_64; }
                 pos += 1;
                 break sg_1;
             }
             pos = gp_1;
             sg_1_65: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_66 { break sg_1_65; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_66 { break sg_1_65; }
                 pos += 1;
                 break sg_1;
             }
@@ -2526,406 +2527,406 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     let mut _plus_first = true;
     loop {
         if !_plus_first {
-            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 let gp_2 = pos;
                 sg_2: {
                     pos = gp_2;
                     sg_2_0: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_1 { break sg_2_0; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_1 { break sg_2_0; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_1: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_2 { break sg_2_1; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_2 { break sg_2_1; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_2: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_3 { break sg_2_2; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_3 { break sg_2_2; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_3: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_4 { break sg_2_3; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_4 { break sg_2_3; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_4: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_5 { break sg_2_4; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_5 { break sg_2_4; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_5: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_6 { break sg_2_5; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_6 { break sg_2_5; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_6: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_7 { break sg_2_6; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_7 { break sg_2_6; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_7: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_8 { break sg_2_7; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_8 { break sg_2_7; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_8: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_9 { break sg_2_8; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_9 { break sg_2_8; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_9: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_10 { break sg_2_9; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_10 { break sg_2_9; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_10: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_11 { break sg_2_10; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_11 { break sg_2_10; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_11: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_12 { break sg_2_11; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_12 { break sg_2_11; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_12: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_13 { break sg_2_12; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_13 { break sg_2_12; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_13: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_14 { break sg_2_13; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_14 { break sg_2_13; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_14: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_15 { break sg_2_14; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_15 { break sg_2_14; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_15: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_16 { break sg_2_15; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_16 { break sg_2_15; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_16: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_17 { break sg_2_16; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_17 { break sg_2_16; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_17: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_18 { break sg_2_17; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_18 { break sg_2_17; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_18: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_19 { break sg_2_18; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_19 { break sg_2_18; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_19: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_20 { break sg_2_19; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_20 { break sg_2_19; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_20: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_21 { break sg_2_20; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_21 { break sg_2_20; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_21: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_22 { break sg_2_21; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_22 { break sg_2_21; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_22: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_23 { break sg_2_22; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_23 { break sg_2_22; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_23: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_24 { break sg_2_23; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_24 { break sg_2_23; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_24: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_25 { break sg_2_24; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_25 { break sg_2_24; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_25: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_26 { break sg_2_25; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_26 { break sg_2_25; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_26: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_27 { break sg_2_26; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_27 { break sg_2_26; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_27: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_28 { break sg_2_27; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_28 { break sg_2_27; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_28: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_29 { break sg_2_28; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_29 { break sg_2_28; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_29: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_30 { break sg_2_29; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_30 { break sg_2_29; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_30: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_31 { break sg_2_30; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_31 { break sg_2_30; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_31: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_32 { break sg_2_31; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_32 { break sg_2_31; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_32: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_33 { break sg_2_32; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_33 { break sg_2_32; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_33: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_34 { break sg_2_33; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_34 { break sg_2_33; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_34: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_35 { break sg_2_34; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_35 { break sg_2_34; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_35: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_36 { break sg_2_35; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_36 { break sg_2_35; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_36: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_37 { break sg_2_36; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_37 { break sg_2_36; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_37: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_38 { break sg_2_37; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_38 { break sg_2_37; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_38: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_39 { break sg_2_38; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_39 { break sg_2_38; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_39: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_40 { break sg_2_39; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_40 { break sg_2_39; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_40: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_41 { break sg_2_40; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_41 { break sg_2_40; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_41: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_42 { break sg_2_41; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_42 { break sg_2_41; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_42: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_43 { break sg_2_42; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_43 { break sg_2_42; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_43: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_44 { break sg_2_43; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_44 { break sg_2_43; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_44: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_45 { break sg_2_44; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_45 { break sg_2_44; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_45: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_46 { break sg_2_45; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_46 { break sg_2_45; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_46: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_47 { break sg_2_46; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_47 { break sg_2_46; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_47: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_48 { break sg_2_47; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_48 { break sg_2_47; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_48: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_49 { break sg_2_48; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_49 { break sg_2_48; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_49: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_50 { break sg_2_49; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_50 { break sg_2_49; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_50: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_51 { break sg_2_50; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_51 { break sg_2_50; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_51: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_52 { break sg_2_51; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_52 { break sg_2_51; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_52: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_53 { break sg_2_52; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_53 { break sg_2_52; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_53: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_54 { break sg_2_53; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_54 { break sg_2_53; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_54: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_55 { break sg_2_54; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_55 { break sg_2_54; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_55: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_56 { break sg_2_55; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_56 { break sg_2_55; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_56: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_57 { break sg_2_56; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_57 { break sg_2_56; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_57: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_58 { break sg_2_57; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_58 { break sg_2_57; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_58: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_59 { break sg_2_58; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_59 { break sg_2_58; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_59: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_60 { break sg_2_59; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_60 { break sg_2_59; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_60: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_61 { break sg_2_60; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_61 { break sg_2_60; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_61: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_62 { break sg_2_61; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_62 { break sg_2_61; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_62: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_63 { break sg_2_62; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_63 { break sg_2_62; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_63: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_64 { break sg_2_63; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_64 { break sg_2_63; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_64: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_65 { break sg_2_64; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_65 { break sg_2_64; }
                         pos += 1;
                         break sg_2;
                     }
                     pos = gp_2;
                     sg_2_65: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_66 { break sg_2_65; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_66 { break sg_2_65; }
                         pos += 1;
                         break sg_2;
                     }

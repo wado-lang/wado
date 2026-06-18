@@ -690,9 +690,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
-//! `./lex.wado` import is stripped at `#include_str` time.
-
+//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
 
 /// `follow` is the caller's deterministic K-prefix continuation:
 /// `follow[d]` is the set of token kinds that may appear at input depth
@@ -710,10 +708,11 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 /// carried at runtime, not code baked into a specialised function.
 ///
 /// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
+/// caller continuation ending in EOF gates correctly. `tokens` is the bare
+/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
+/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
+/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
+/// would, which matters for deeply recursive scan grammars.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 /// Prepend a static local prefix to an inherited FOLLOW continuation.
@@ -735,7 +734,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -746,7 +745,7 @@ pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, e
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens.kinds[idx] } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {
@@ -781,9 +780,10 @@ pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, e
 //! single source of truth; the builder/serializer in `src/atn.wado` `use`s
 //! them. The blob carries a version word `atn_decode` asserts.
 //!
-//! The `./lex.wado` import is stripped at `#include_str` time (see
-//! `gen_runtime` in `codegen.wado`); `src/atn.wado` imports these symbols
-//! as a normal module.
+//! Prediction reads token kinds only, so the simulator takes the flat
+//! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
+//! `List` wrapper) — this keeps scan frames a slot smaller, which matters
+//! for deeply recursive grammars.
 
 use { TreeMap } from "core:collections";
 
@@ -1686,7 +1686,7 @@ pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
@@ -1730,7 +1730,7 @@ pub fn atn_predict_with_stack(
             return atn_min_alt(&alts);
         }
         prev = alts;
-        let token = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
         let moved = atn_move(sim, &configs, token, eof);
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, rule_stack);
@@ -1756,13 +1756,13 @@ pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     rule_stack: &List<i32>,
     decision: i32,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
     min_prec: i32 = 0,
 ) -> i32 {
     let dstate = sim.decision_state[decision];
-    let t = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
     let s = sim.state_tr_start[dstate];
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
@@ -1816,7 +1816,7 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
 #[allow(dead_code)]
-pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &TokenStream, start_pos: i32, eof: i32) -> i32 {
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
@@ -1837,7 +1837,7 @@ pub fn atn_ng_optional_enter(
     sim: &AtnSim,
     current_rule: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
 ) -> bool {
@@ -2082,6 +2082,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
     atn_stack: List<i32>,
@@ -2090,7 +2091,8 @@ struct Parser {
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null, atn_stack: [], atn_ret_pending: -1 };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null, atn_stack: [], atn_ret_pending: -1 };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -2114,13 +2116,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -2135,7 +2137,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -2158,7 +2160,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -2169,7 +2171,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -2190,7 +2192,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -2207,11 +2209,11 @@ impl Parser {
     }
 }
 
-fn scan_start(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_start(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2220,15 +2222,15 @@ fn scan_start(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_statement(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_X {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_X { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2248,19 +2250,19 @@ fn scan_statement(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_if_statement(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_IF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_Y { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_Y { return -1; }
     pos += 1;
     pos = scan_statement(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LIT_ELSE {
+    if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_ELSE { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0; }
                 pos += 1;
                 pos = scan_statement(tokens, pos, follow, 0);
                 if pos < 0 { break sg_0; }
@@ -2279,10 +2281,10 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let mut _plus_first = true;
     loop {
         if !_plus_first {
-            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 pos = scan_statement(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break rep_scan; }
@@ -2359,7 +2361,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_y = p.expect(TK_LIT_Y)?;
     p.atn_ret_pending = 29;
     let statement = _parse_statement(p, follow)?;
-    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&GALE_ATN_SIM, 2, &p.atn_stack, &p.tokens, p.pos, TK_EOF) {
+    let lit_else_statement: Option<LitElseStatementItem> = if atn_ng_optional_enter(&GALE_ATN_SIM, 2, &p.atn_stack, &p.kinds, p.pos, TK_EOF) {
         let lit_else = p.expect(TK_LIT_ELSE)?;
         p.atn_ret_pending = 38;
         let statement = _parse_statement(p, follow)?;

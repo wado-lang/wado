@@ -875,13 +875,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -905,13 +907,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -926,7 +928,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -949,7 +951,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -960,7 +962,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -981,7 +983,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -998,19 +1000,19 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expr(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_MINUS {
             let mut best: i32 = -1;
@@ -1055,7 +1057,7 @@ fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_2(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_op(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1064,11 +1066,11 @@ fn scan_expr_lr_2(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1084,20 +1086,20 @@ fn scan_expr(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_literal(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_literal(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LIT_MINUS {
+    if pos < tokens.len() && tokens[pos] == TK_LIT_MINUS {
         let sp = pos;
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_MINUS { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_Integer { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_Integer { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_op(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_0(tokens.kinds[pos]) {
+fn scan_op(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -1127,7 +1129,7 @@ fn _parse_expr__inner_alt_0(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_literal(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1145,7 +1147,7 @@ fn _parse_expr__inner_alt_1(p: &mut Parser) -> Result<ExprNode, ParseError> {
     }));
 }
 
-fn _parse_expr__inner_scan_1(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_expr__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_op(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1158,7 +1160,7 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> Result<ExprNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if p.peek_kind() == TK_LIT_MINUS {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_expr__inner_scan_0(_sd_tokens, _sd_pos);
             let _sd_p_1 = _parse_expr__inner_scan_1(_sd_tokens, _sd_pos);
@@ -1210,7 +1212,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
         let suffix_kind = p.peek_kind();
         if _gale_kind_set_0(suffix_kind) {
             if 1 >= min_prec {
-                if scan_expr_lr_2(&p.tokens, p.pos) < 0 {
+                if scan_expr_lr_2(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expr__inner_lr_2(p, result, start)?;

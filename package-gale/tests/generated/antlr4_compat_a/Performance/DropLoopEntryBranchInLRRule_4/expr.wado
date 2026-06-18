@@ -709,9 +709,10 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 //! single source of truth; the builder/serializer in `src/atn.wado` `use`s
 //! them. The blob carries a version word `atn_decode` asserts.
 //!
-//! The `./lex.wado` import is stripped at `#include_str` time (see
-//! `gen_runtime` in `codegen.wado`); `src/atn.wado` imports these symbols
-//! as a normal module.
+//! Prediction reads token kinds only, so the simulator takes the flat
+//! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
+//! `List` wrapper) — this keeps scan frames a slot smaller, which matters
+//! for deeply recursive grammars.
 
 use { TreeMap } from "core:collections";
 
@@ -1614,7 +1615,7 @@ pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
@@ -1658,7 +1659,7 @@ pub fn atn_predict_with_stack(
             return atn_min_alt(&alts);
         }
         prev = alts;
-        let token = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
         let moved = atn_move(sim, &configs, token, eof);
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, rule_stack);
@@ -1684,13 +1685,13 @@ pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     rule_stack: &List<i32>,
     decision: i32,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
     min_prec: i32 = 0,
 ) -> i32 {
     let dstate = sim.decision_state[decision];
-    let t = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
     let s = sim.state_tr_start[dstate];
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
@@ -1744,7 +1745,7 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
 #[allow(dead_code)]
-pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &TokenStream, start_pos: i32, eof: i32) -> i32 {
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
@@ -1765,7 +1766,7 @@ pub fn atn_ng_optional_enter(
     sim: &AtnSim,
     current_rule: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
 ) -> bool {
@@ -2129,6 +2130,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
     atn_stack: List<i32>,
@@ -2137,7 +2139,8 @@ struct Parser {
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null, atn_stack: [], atn_ret_pending: -1 };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null, atn_stack: [], atn_ret_pending: -1 };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -2161,13 +2164,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -2182,7 +2185,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -2205,7 +2208,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -2216,7 +2219,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -2237,7 +2240,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -2254,10 +2257,10 @@ impl Parser {
     }
 }
 
-fn scan_stat(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stat(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_0(alt_kind) {
             let mut best: i32 = -1;
@@ -2267,7 +2270,7 @@ fn scan_stat(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -2277,7 +2280,7 @@ fn scan_stat(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_DOT { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -2290,15 +2293,15 @@ fn scan_stat(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2306,7 +2309,7 @@ fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_NOT {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_NOT { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_NOT { break try_1; }
                 pos += 1;
                 GALE_SCAN_STACK.push(25);
                 pos = scan_expr(tokens, pos, 0);
@@ -2318,11 +2321,11 @@ fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LPAREN {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LPAREN { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_2; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RPAREN { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_2; }
                 pos += 1;
                 GALE_SCAN_STACK.push(34);
                 pos = scan_expr(tokens, pos, 0);
@@ -2334,13 +2337,13 @@ fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BETWEEN {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_BETWEEN { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_BETWEEN { break try_3; }
                 pos += 1;
                 GALE_SCAN_STACK.push(39);
                 pos = scan_expr(tokens, pos, 0);
                 GALE_SCAN_STACK.pop();
                 if pos < 0 { break try_3; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_AND { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { break try_3; }
                 pos += 1;
                 GALE_SCAN_STACK.push(43);
                 pos = scan_expr(tokens, pos, 0);
@@ -2356,9 +2359,9 @@ fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_2(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_lr_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_AND { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(51);
     pos = scan_expr(tokens, pos, 4);
@@ -2367,9 +2370,9 @@ fn scan_expr_lr_2(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_3(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_lr_3(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_OR { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_OR { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(56);
     pos = scan_expr(tokens, pos, 3);
@@ -2378,15 +2381,15 @@ fn scan_expr_lr_3(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr_lr_5(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_lr_5(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_QUESTION { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_QUESTION { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(61);
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_COLON { return -1; }
     pos += 1;
     GALE_SCAN_STACK.push(65);
     pos = scan_expr(tokens, pos, 2);
@@ -2395,7 +2398,7 @@ fn scan_expr_lr_5(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expr(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
@@ -2432,13 +2435,13 @@ fn _parse_stat__inner_alt_0(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn _parse_stat__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_stat__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     GALE_SCAN_STACK.push(8);
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -2455,13 +2458,13 @@ fn _parse_stat__inner_alt_1(p: &mut Parser) -> Result<StatNode, ParseError> {
     }));
 }
 
-fn _parse_stat__inner_scan_1(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_stat__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     GALE_SCAN_STACK.push(13);
     pos = scan_expr(tokens, pos, 0);
     GALE_SCAN_STACK.pop();
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_DOT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
     pos += 1;
     return pos;
 }
@@ -2470,7 +2473,7 @@ fn _parse_stat__inner(p: &mut Parser) -> Result<StatNode, ParseError> {
     let kind = p.peek_kind();
     if _gale_kind_set_0(kind) {
         if _gale_kind_set_0(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_stat__inner_scan_0(_sd_tokens, _sd_pos);
             let _sd_p_1 = _parse_stat__inner_scan_1(_sd_tokens, _sd_pos);
@@ -2610,7 +2613,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
     let start = p.peek_start();
     let mut result = _parse_expr__inner_atom(p)?;
     loop {
-        let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, 2, &p.tokens, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, 2, &p.kinds, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             result = _parse_expr__inner_lr_2(p, result, start)?;

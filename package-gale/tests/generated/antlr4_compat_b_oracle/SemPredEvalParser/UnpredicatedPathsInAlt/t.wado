@@ -873,13 +873,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -903,13 +905,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -924,7 +926,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -947,7 +949,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -958,7 +960,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -979,7 +981,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -996,10 +998,10 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_s(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
@@ -1024,26 +1026,26 @@ fn scan_s(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_a(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1056,11 +1058,11 @@ fn scan_a(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_b(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_b(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -1074,7 +1076,7 @@ fn _parse_s__inner_alt_0(p: &mut Parser) -> Result<SNode, ParseError> {
     }));
 }
 
-fn _parse_s__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_s__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_a(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1090,7 +1092,7 @@ fn _parse_s__inner_alt_1(p: &mut Parser) -> Result<SNode, ParseError> {
     }));
 }
 
-fn _parse_s__inner_scan_1(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_s__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_b(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -1130,11 +1132,11 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> Result<ANode, ParseError> {
     }));
 }
 
-fn _parse_a__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
@@ -1150,11 +1152,11 @@ fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<ANode, ParseError> {
     }));
 }
 
-fn _parse_a__inner_scan_1(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
@@ -1162,7 +1164,7 @@ fn _parse_a__inner_scan_1(tokens: &TokenStream, pos: i32) -> i32 {
 fn _parse_a__inner(p: &mut Parser) -> Result<ANode, ParseError> {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _sd_tokens = &p.tokens;
+        let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
         let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);

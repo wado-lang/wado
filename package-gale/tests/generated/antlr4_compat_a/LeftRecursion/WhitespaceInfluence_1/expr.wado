@@ -1738,13 +1738,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1768,13 +1770,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -1789,7 +1791,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -1812,7 +1814,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -1823,7 +1825,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -1844,7 +1846,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -1861,35 +1863,35 @@ impl Parser {
     }
 }
 
-fn scan_prog(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens.kinds[pos] == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_0_done: {
                         sg_0: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_0; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                             pos += 1;
                             pos = scan_expression(tokens, pos, 0);
                             if pos < 0 { break sg_0; }
@@ -1900,13 +1902,13 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
             pos = start;
             try_10: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { break try_10; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_10; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -1915,11 +1917,11 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LPAREN {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LPAREN { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RPAREN { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1927,7 +1929,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_BANG {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_BANG { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { break try_2; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_2; }
@@ -1937,7 +1939,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_MINUS {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_MINUS { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break try_3; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_3; }
@@ -1947,7 +1949,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_PLUS {
             pos = start;
             try_4: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_PLUS { break try_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break try_4; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_4; }
@@ -1957,15 +1959,15 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_LIT_LBRACKET {
             pos = start;
             try_5: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LBRACKET { break try_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_5; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_5; }
-                while pos < tokens.len() && tokens.kinds[pos] == TK_LIT_COMMA {
+                while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                             pos += 1;
                             pos = scan_expression(tokens, pos, 0);
                             if pos < 0 { break sg_1; }
@@ -1976,7 +1978,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RBRACKET { break try_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_5; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1984,7 +1986,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_K_TRUE {
             pos = start;
             try_6: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_K_TRUE { break try_6; }
+                if pos >= tokens.len() || tokens[pos] != TK_K_TRUE { break try_6; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1992,7 +1994,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_K_FALSE {
             pos = start;
             try_7: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_K_FALSE { break try_7; }
+                if pos >= tokens.len() || tokens[pos] != TK_K_FALSE { break try_7; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2000,7 +2002,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_NUMBER {
             pos = start;
             try_8: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_NUMBER { break try_8; }
+                if pos >= tokens.len() || tokens[pos] != TK_NUMBER { break try_8; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2008,7 +2010,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_DATE {
             pos = start;
             try_9: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_DATE { break try_9; }
+                if pos >= tokens.len() || tokens[pos] != TK_DATE { break try_9; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2016,7 +2018,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_SQ_STRING {
             pos = start;
             try_11: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_SQ_STRING { break try_11; }
+                if pos >= tokens.len() || tokens[pos] != TK_SQ_STRING { break try_11; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2024,7 +2026,7 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
         } else if alt_kind == TK_K_NULL {
             pos = start;
             try_12: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_K_NULL { break try_12; }
+                if pos >= tokens.len() || tokens[pos] != TK_K_NULL { break try_12; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2036,127 +2038,127 @@ fn scan_expression_atom(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_5(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_5(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_CARET { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_CARET { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 16);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_6(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_6(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_STAR { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 15);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_7(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_7(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_SLASH { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 14);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_8(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_8(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_PERCENT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_PERCENT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 13);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_9(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_9(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_MINUS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 12);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_10(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_10(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_PLUS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 11);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_11(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_11(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_EQ { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 10);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_12(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_12(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_BANGEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_BANGEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 9);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_13(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_13(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_GT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 8);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_14(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_14(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_GTEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_GTEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 7);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_15(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_15(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LT { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 6);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_16(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_16(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LTEQ { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LTEQ { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 5);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expression_lr_17(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_K_IN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_K_IN { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 4);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_LIT_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
         let sp = pos;
         sg_2_done: {
             sg_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 4);
                 if pos < 0 { break sg_2; }
@@ -2167,24 +2169,24 @@ fn scan_expression_lr_17(tokens: &TokenStream, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expression_lr_18(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_18(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_3 = pos;
     sg_3: {
         pos = gp_3;
         sg_3_0: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_AMP { break sg_3_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_AMP { break sg_3_0; }
             pos += 1;
             break sg_3;
         }
         pos = gp_3;
         sg_3_1: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_K_AND { break sg_3_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_K_AND { break sg_3_1; }
             pos += 1;
             break sg_3;
         }
@@ -2195,19 +2197,19 @@ fn scan_expression_lr_18(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression_lr_19(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expression_lr_19(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let gp_4 = pos;
     sg_4: {
         pos = gp_4;
         sg_4_0: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_PIPE { break sg_4_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_PIPE { break sg_4_0; }
             pos += 1;
             break sg_4;
         }
         pos = gp_4;
         sg_4_1: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_K_OR { break sg_4_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_K_OR { break sg_4_1; }
             pos += 1;
             break sg_4;
         }
@@ -2218,11 +2220,11 @@ fn scan_expression_lr_19(tokens: &TokenStream, pos: i32) -> i32 {
     return pos;
 }
 
-fn scan_expression(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expression_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_CARET {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
@@ -2374,11 +2376,11 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_5_done: {
                 sg_5: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_5; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_5; }
                     pos += 1;
                     pos = scan_expression(tokens, pos, 0);
                     if pos < 0 { break sg_5; }
@@ -2409,19 +2411,19 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<ExpressionNode, Pars
     }));
 }
 
-fn _parse_expression__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_LIT_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
         let sp = pos;
         sg_6_done: {
             sg_6: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_6; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_6; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break sg_6; }
@@ -2432,7 +2434,7 @@ fn _parse_expression__inner_scan_0(tokens: &TokenStream, pos: i32) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
@@ -2446,9 +2448,9 @@ fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<ExpressionNode, Par
     }));
 }
 
-fn _parse_expression__inner_scan_25(tokens: &TokenStream, pos: i32) -> i32 {
+fn _parse_expression__inner_scan_25(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ID { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
@@ -2457,7 +2459,7 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _sd_tokens = &p.tokens;
+        let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         let _sd_p_0 = _parse_expression__inner_scan_0(_sd_tokens, _sd_pos);
         let _sd_p_25 = _parse_expression__inner_scan_25(_sd_tokens, _sd_pos);
@@ -2524,11 +2526,11 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<ExpressionNode, Parse
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 sg_7_done: {
                     sg_7: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_7; }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_7; }
                         pos += 1;
                         pos = scan_expression(tokens, pos, 0);
                         if pos < 0 { break sg_7; }
@@ -2746,11 +2748,11 @@ fn _parse_expression__inner_lr_17(p: &mut Parser, left: ExpressionNode, start: i
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_8_done: {
                 sg_8: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_COMMA { break sg_8; }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_8; }
                     pos += 1;
                     pos = scan_expression(tokens, pos, 4);
                     if pos < 0 { break sg_8; }
@@ -2811,7 +2813,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_CARET {
             if 15 >= min_prec {
-                if scan_expression_lr_5(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_5(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_5(p, result, start)?;
@@ -2820,7 +2822,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_STAR {
             if 14 >= min_prec {
-                if scan_expression_lr_6(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_6(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_6(p, result, start)?;
@@ -2829,7 +2831,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_SLASH {
             if 13 >= min_prec {
-                if scan_expression_lr_7(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_7(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_7(p, result, start)?;
@@ -2838,7 +2840,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_PERCENT {
             if 12 >= min_prec {
-                if scan_expression_lr_8(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_8(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_8(p, result, start)?;
@@ -2847,7 +2849,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_MINUS {
             if 11 >= min_prec {
-                if scan_expression_lr_9(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_9(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_9(p, result, start)?;
@@ -2856,7 +2858,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_PLUS {
             if 10 >= min_prec {
-                if scan_expression_lr_10(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_10(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_10(p, result, start)?;
@@ -2865,7 +2867,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_EQ {
             if 9 >= min_prec {
-                if scan_expression_lr_11(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_11(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_11(p, result, start)?;
@@ -2874,7 +2876,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_BANGEQ {
             if 8 >= min_prec {
-                if scan_expression_lr_12(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_12(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_12(p, result, start)?;
@@ -2883,7 +2885,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_GT {
             if 7 >= min_prec {
-                if scan_expression_lr_13(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_13(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_13(p, result, start)?;
@@ -2892,7 +2894,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_GTEQ {
             if 6 >= min_prec {
-                if scan_expression_lr_14(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_14(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_14(p, result, start)?;
@@ -2901,7 +2903,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_LT {
             if 5 >= min_prec {
-                if scan_expression_lr_15(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_15(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_15(p, result, start)?;
@@ -2910,7 +2912,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_LIT_LTEQ {
             if 4 >= min_prec {
-                if scan_expression_lr_16(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_16(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_16(p, result, start)?;
@@ -2919,7 +2921,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if suffix_kind == TK_K_IN {
             if 3 >= min_prec {
-                if scan_expression_lr_17(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_17(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_17(p, result, start)?;
@@ -2928,7 +2930,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if _gale_kind_set_0(suffix_kind) {
             if 2 >= min_prec {
-                if scan_expression_lr_18(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_18(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_18(p, result, start)?;
@@ -2937,7 +2939,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<Express
             }
         } else if _gale_kind_set_1(suffix_kind) {
             if 1 >= min_prec {
-                if scan_expression_lr_19(&p.tokens, p.pos) < 0 {
+                if scan_expression_lr_19(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expression__inner_lr_19(p, result, start)?;

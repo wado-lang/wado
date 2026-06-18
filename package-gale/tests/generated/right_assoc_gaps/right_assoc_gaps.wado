@@ -856,13 +856,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -886,13 +888,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -907,7 +909,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -930,7 +932,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -941,7 +943,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -962,7 +964,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -979,36 +981,36 @@ impl Parser {
     }
 }
 
-fn scan_expr_atom(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expr_lr_0(tokens: &TokenStream, pos: i32) -> i32 {
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_CARET { return -1; }
-    pos += 1;
-    pos = scan_expr(tokens, pos, 2);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_expr_lr_1(tokens: &TokenStream, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIT_PLUS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_CARET { return -1; }
     pos += 1;
     pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { return -1; }
+    pos += 1;
+    pos = scan_expr(tokens, pos, 2);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
+fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_expr_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
-        let suffix_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+        let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if suffix_kind == TK_LIT_CARET {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1078,7 +1080,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
         let suffix_kind = p.peek_kind();
         if suffix_kind == TK_LIT_CARET {
             if 2 >= min_prec {
-                if scan_expr_lr_0(&p.tokens, p.pos) < 0 {
+                if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expr__inner_lr_0(p, result, start)?;
@@ -1087,7 +1089,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<ExprNode, Par
             }
         } else if suffix_kind == TK_LIT_PLUS {
             if 1 >= min_prec {
-                if scan_expr_lr_1(&p.tokens, p.pos) < 0 {
+                if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
                     break;
                 }
                 result = _parse_expr__inner_lr_1(p, result, start)?;

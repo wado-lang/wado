@@ -1009,13 +1009,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1039,13 +1041,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -1060,7 +1062,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -1083,7 +1085,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -1094,7 +1096,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -1115,7 +1117,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -1132,23 +1134,23 @@ impl Parser {
     }
 }
 
-fn scan_program(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_program(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens.kinds[pos]) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_stmt(tokens, pos, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIST {
             pos = start;
@@ -1181,19 +1183,19 @@ fn scan_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_list_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_list_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LIST { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIST { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ITEM { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ITEM { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ITEM { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ITEM { break sg_0; }
                 pos += 1;
                 break sg_0_done;
             }
@@ -1202,24 +1204,24 @@ fn scan_list_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_not_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_not_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_NOT {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_NOT { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_NOT { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF || tokens.kinds[pos] == TK_ITEM { break try_0; }
+                if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_ITEM { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1227,11 +1229,11 @@ fn scan_not_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
         } else if alt_kind == TK_SET {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_SET { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SET { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF || tokens.kinds[pos] == TK_ITEM || tokens.kinds[pos] == TK_NUMBER { break try_1; }
+                if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_ITEM || tokens[pos] == TK_NUMBER { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -1243,13 +1245,13 @@ fn scan_not_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn scan_any_stmt(tokens: &TokenStream, pos: i32, min_prec: i32 = 0) -> i32 {
+fn scan_any_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ANY { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ANY { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
@@ -1260,7 +1262,7 @@ fn _parse_program__inner(p: &mut Parser) -> Result<ProgramNode, ParseError> {
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_stmt(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
@@ -1335,13 +1337,13 @@ fn _parse_list_stmt__inner(p: &mut Parser) -> Result<ListStmtNode, ParseError> {
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_1_done: {
                 sg_1: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_1; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_ITEM { break sg_1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ITEM { break sg_1; }
                     pos += 1;
                     break sg_1_done;
                 }

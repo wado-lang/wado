@@ -694,9 +694,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
-//! `./lex.wado` import is stripped at `#include_str` time.
-
+//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
 
 /// `follow` is the caller's deterministic K-prefix continuation:
 /// `follow[d]` is the set of token kinds that may appear at input depth
@@ -714,10 +712,11 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 /// carried at runtime, not code baked into a specialised function.
 ///
 /// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
+/// caller continuation ending in EOF gates correctly. `tokens` is the bare
+/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
+/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
+/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
+/// would, which matters for deeply recursive scan grammars.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 /// Prepend a static local prefix to an inherited FOLLOW continuation.
@@ -739,7 +738,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -750,7 +749,7 @@ pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, e
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens.kinds[idx] } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {
@@ -3963,13 +3962,15 @@ pub fn token_kind_name(kind: i32) -> String {
 
 struct Parser {
     tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
 }
 
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
-        return Parser { tokens, pos: 0, pending: null };
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -3993,13 +3994,13 @@ impl Parser {
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens.kinds[self.pos];
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens.kinds[idx];
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
@@ -4014,7 +4015,7 @@ impl Parser {
     }
 
     fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] == kind {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 return Result::Ok(self.pos);
             }
@@ -4037,7 +4038,7 @@ impl Parser {
     }
 
     fn match_any(&mut self) -> Result<i32, ParseError> {
-        if self.tokens.kinds[self.pos] != TK_EOF {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
         return Result::Err(self.error(
@@ -4048,7 +4049,7 @@ impl Parser {
     }
 
     fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -4069,7 +4070,7 @@ impl Parser {
     }
 
     fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
-        let k = self.tokens.kinds[self.pos];
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
@@ -4086,11 +4087,11 @@ impl Parser {
     }
 }
 
-fn scan_grammar_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_grammar_decl(tokens, pos, &FOLLOW_MASK_0, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens.kinds[pos]) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_prequel_construct(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -4098,39 +4099,39 @@ fn scan_grammar_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
     }
     pos = scan_rules(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_MODE {
+    while pos < tokens.len() && tokens[pos] == TK_MODE {
         let sp = pos;
         pos = scan_mode_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_EOF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_grammar_decl(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_decl(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_grammar_type(tokens, pos, &FOLLOW_MASK_2, 0);
     if pos < 0 { return -1; }
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_grammar_type(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_grammar_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LEXER {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LEXER { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LEXER { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_GRAMMAR { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_GRAMMAR { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4138,9 +4139,9 @@ fn scan_grammar_type(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_PARSER {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_PARSER { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_PARSER { break try_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_GRAMMAR { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_GRAMMAR { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4148,7 +4149,7 @@ fn scan_grammar_type(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_GRAMMAR {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_GRAMMAR { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_GRAMMAR { break try_2; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4160,10 +4161,10 @@ fn scan_grammar_type(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_prequel_construct(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_prequel_construct(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OPTIONS {
             pos = start;
@@ -4212,17 +4213,17 @@ fn scan_prequel_construct(tokens: &TokenStream, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_options_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_options_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_OPTIONS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_OPTIONS { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_1(tokens.kinds[pos]) {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos]) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
                 pos = scan_option(tokens, pos, &FOLLOW_MASK_3, 0);
                 if pos < 0 { break sg_0; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { break sg_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0; }
                 pos += 1;
                 break sg_0_done;
             }
@@ -4231,37 +4232,37 @@ fn scan_options_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
     pos = scan_option_value(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_option_value(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_option_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && tokens.kinds[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_DOT { break sg_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_1; }
                             pos += 1;
                             pos = scan_identifier(tokens, pos, follow, 0);
                             if pos < 0 { break sg_1; }
@@ -4278,7 +4279,7 @@ fn scan_option_value(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_STRING_LITERAL {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4294,7 +4295,7 @@ fn scan_option_value(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_INT {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_3; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4306,17 +4307,17 @@ fn scan_option_value(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_delegate_grammars(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_delegate_grammars(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_IMPORT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_IMPORT { return -1; }
     pos += 1;
     pos = scan_delegate_grammar(tokens, pos, &FOLLOW_MASK_5, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_2_done: {
             sg_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_2; }
                 pos += 1;
                 pos = scan_delegate_grammar(tokens, pos, follow, 0);
                 if pos < 0 { break sg_2; }
@@ -4327,15 +4328,15 @@ fn scan_delegate_grammars(tokens: &TokenStream, pos: i32, follow: &List<List<i32
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_delegate_grammar(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_delegate_grammar(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             let mut best: i32 = -1;
@@ -4349,7 +4350,7 @@ fn scan_delegate_grammar(tokens: &TokenStream, pos: i32, follow: &List<List<i32>
             try_0: {
                 pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_0; }
                 pos += 1;
                 pos = scan_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -4364,43 +4365,43 @@ fn scan_delegate_grammar(tokens: &TokenStream, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_tokens_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_tokens_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_TOKENS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_TOKENS { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_1(tokens.kinds[pos]) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos]) {
         let sp = pos;
         pos = scan_id_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_channels_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_channels_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_CHANNELS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CHANNELS { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_1(tokens.kinds[pos]) {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos]) {
         let sp = pos;
         pos = scan_id_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RBRACE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RBRACE { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_id_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_3_done: {
             sg_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_3; }
                 pos += 1;
                 pos = scan_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break sg_3; }
@@ -4411,25 +4412,25 @@ fn scan_id_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_COMMA { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
     return pos;
 }
 
-fn scan_action_(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_action_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_AT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_AT { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_2(tokens.kinds[pos]) {
+    if pos < tokens.len() && _gale_kind_set_2(tokens[pos]) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
                 pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6, 0);
                 if pos < 0 { break sg_4; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COLONCOLON { break sg_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_COLONCOLON { break sg_4; }
                 pos += 1;
                 break sg_4_done;
             }
@@ -4444,10 +4445,10 @@ fn scan_action_(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_action_scope_name(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_action_scope_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             pos = start;
@@ -4460,7 +4461,7 @@ fn scan_action_scope_name(tokens: &TokenStream, pos: i32, follow: &List<List<i32
         } else if alt_kind == TK_LEXER {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LEXER { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_LEXER { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4468,7 +4469,7 @@ fn scan_action_scope_name(tokens: &TokenStream, pos: i32, follow: &List<List<i32
         } else if alt_kind == TK_PARSER {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_PARSER { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_PARSER { break try_2; }
                 pos += 1;
                 break scan_alts;
             }
@@ -4480,37 +4481,37 @@ fn scan_action_scope_name(tokens: &TokenStream, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_action_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_action_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ACTION { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ACTION { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_arg_action_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_arg_action_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_BEGIN_ARGUMENT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_BEGIN_ARGUMENT { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens.kinds[pos] == TK_ARGUMENT_CONTENT {
+    while pos < tokens.len() && tokens[pos] == TK_ARGUMENT_CONTENT {
         let sp = pos;
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_ARGUMENT_CONTENT { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_ARGUMENT_CONTENT { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_END_ARGUMENT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_END_ARGUMENT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_mode_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_mode_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_MODE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_MODE { return -1; }
     pos += 1;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
-    while pos < tokens.len() && _gale_kind_set_3(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_lexer_rule_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -4519,9 +4520,9 @@ fn scan_mode_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_rules(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rules(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_4(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_4(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_rule_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -4530,10 +4531,10 @@ fn scan_rules(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_rule_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_18(alt_kind) {
             pos = start;
@@ -4574,61 +4575,61 @@ fn scan_rule_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_parser_rule_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_parser_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_5(tokens.kinds[pos]) {
+    if pos < tokens.len() && _gale_kind_set_5(tokens[pos]) {
         let sp = pos;
         pos = scan_rule_modifiers(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RULE_REF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RULE_REF { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_BEGIN_ARGUMENT {
+    if pos < tokens.len() && tokens[pos] == TK_BEGIN_ARGUMENT {
         let sp = pos;
         pos = scan_arg_action_block(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_RETURNS {
+    if pos < tokens.len() && tokens[pos] == TK_RETURNS {
         let sp = pos;
         pos = scan_rule_returns(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_THROWS {
+    if pos < tokens.len() && tokens[pos] == TK_THROWS {
         let sp = pos;
         pos = scan_throws_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LOCALS {
+    if pos < tokens.len() && tokens[pos] == TK_LOCALS {
         let sp = pos;
         pos = scan_locals_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_6(tokens.kinds[pos]) {
+    while pos < tokens.len() && _gale_kind_set_6(tokens[pos]) {
         let sp = pos;
         pos = scan_rule_prequel(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
     pos = scan_rule_block(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     pos = scan_exception_group(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_exception_group(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_exception_group(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && tokens.kinds[pos] == TK_CATCH && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_CATCH && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_exception_handler(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_FINALLY && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_FINALLY && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_finally_clause(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -4636,9 +4637,9 @@ fn scan_exception_group(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_exception_handler(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_exception_handler(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_CATCH { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_CATCH { return -1; }
     pos += 1;
     pos = scan_arg_action_block(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
@@ -4647,19 +4648,19 @@ fn scan_exception_handler(tokens: &TokenStream, pos: i32, follow: &List<List<i32
     return pos;
 }
 
-fn scan_finally_clause(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_finally_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_FINALLY { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_FINALLY { return -1; }
     pos += 1;
     pos = scan_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_rule_prequel(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_prequel(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OPTIONS {
             pos = start;
@@ -4684,26 +4685,26 @@ fn scan_rule_prequel(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_rule_returns(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_returns(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RETURNS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RETURNS { return -1; }
     pos += 1;
     pos = scan_arg_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_throws_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_throws_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_THROWS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_THROWS { return -1; }
     pos += 1;
     pos = scan_qualified_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_5_done: {
             sg_5: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
                 pos += 1;
                 pos = scan_qualified_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break sg_5; }
@@ -4717,18 +4718,18 @@ fn scan_throws_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_locals_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_locals_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LOCALS { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LOCALS { return -1; }
     pos += 1;
     pos = scan_arg_action_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_rule_action(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_action(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_AT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_AT { return -1; }
     pos += 1;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_7, 0);
     if pos < 0 { return -1; }
@@ -4737,11 +4738,11 @@ fn scan_rule_action(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_rule_modifiers(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_modifiers(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_rule_modifier(tokens, pos, &EMPTY_FOLLOW, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_5(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_5(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_rule_modifier(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -4750,29 +4751,29 @@ fn scan_rule_modifiers(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_rule_modifier(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_5(tokens.kinds[pos]) {
+fn scan_rule_modifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_5(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_rule_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_rule_alt_list(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_rule_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_rule_alt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_alt(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_6_done: {
             sg_6: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_6; }
+                if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_6; }
                 pos += 1;
                 pos = scan_labeled_alt(tokens, pos, follow, 0);
                 if pos < 0 { break sg_6; }
@@ -4786,15 +4787,15 @@ fn scan_rule_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_labeled_alt(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_labeled_alt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_POUND && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_POUND && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_7_done: {
             sg_7: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_POUND { break sg_7; }
+                if pos >= tokens.len() || tokens[pos] != TK_POUND { break sg_7; }
                 pos += 1;
                 pos = scan_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break sg_7; }
@@ -4807,45 +4808,45 @@ fn scan_labeled_alt(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_lexer_rule_spec(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_FRAGMENT {
+    if pos < tokens.len() && tokens[pos] == TK_FRAGMENT {
         let sp = pos;
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_FRAGMENT { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_FRAGMENT { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_TOKEN_REF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_TOKEN_REF { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_OPTIONS {
+    if pos < tokens.len() && tokens[pos] == TK_OPTIONS {
         let sp = pos;
         pos = scan_options_spec(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_COLON { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
     pos = scan_lexer_rule_block(tokens, pos, &FOLLOW_MASK_3, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_lexer_rule_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_rule_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_alt_list(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_lexer_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_alt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_alt(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_8_done: {
             sg_8: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_8; }
+                if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_8; }
                 pos += 1;
                 pos = scan_lexer_alt(tokens, pos, follow, 0);
                 if pos < 0 { break sg_8; }
@@ -4859,17 +4860,17 @@ fn scan_lexer_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_lexer_alt(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_alt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         let mut best: i32 = -1;
         pos = start;
         try_0: {
             pos = scan_lexer_elements(tokens, pos, follow, 0);
             if pos < 0 { break try_0; }
-            if pos < tokens.len() && tokens.kinds[pos] == TK_RARROW && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            if pos < tokens.len() && tokens[pos] == TK_RARROW && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                 let sp = pos;
                 pos = scan_lexer_commands(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { pos = sp; }
@@ -4886,10 +4887,10 @@ fn scan_lexer_alt(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_lexer_elements(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_7(alt_kind) {
             let mut best: i32 = -1;
@@ -4897,7 +4898,7 @@ fn scan_lexer_elements(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
             try_0: {
                 pos = scan_lexer_element(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_7(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _gale_kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_lexer_element(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; break; }
@@ -4922,17 +4923,17 @@ fn scan_lexer_elements(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_lexer_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_8(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_lexer_atom(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -4945,7 +4946,7 @@ fn scan_lexer_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
             try_1: {
                 pos = scan_lexer_block(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -4958,9 +4959,9 @@ fn scan_lexer_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
             try_2: {
                 pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_8, follow), 0);
                 if pos < 0 { break try_2; }
-                if pos < tokens.len() && tokens.kinds[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -4973,28 +4974,28 @@ fn scan_lexer_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_lexer_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     pos = scan_lexer_alt_list(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_lexer_commands(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_commands(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RARROW { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RARROW { return -1; }
     pos += 1;
     pos = scan_lexer_command(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_9_done: {
             sg_9: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_9; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_9; }
                 pos += 1;
                 pos = scan_lexer_command(tokens, pos, follow, 0);
                 if pos < 0 { break sg_9; }
@@ -5008,10 +5009,10 @@ fn scan_lexer_commands(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_lexer_command(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_19(alt_kind) {
             let mut best: i32 = -1;
@@ -5025,11 +5026,11 @@ fn scan_lexer_command(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
             try_0: {
                 pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_10, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
                 pos += 1;
                 pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9, 0);
                 if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_RPAREN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
@@ -5042,10 +5043,10 @@ fn scan_lexer_command(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_lexer_command_name(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             pos = start;
@@ -5058,7 +5059,7 @@ fn scan_lexer_command_name(tokens: &TokenStream, pos: i32, follow: &List<List<i3
         } else if alt_kind == TK_MODE {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_MODE { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_MODE { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -5070,10 +5071,10 @@ fn scan_lexer_command_name(tokens: &TokenStream, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_lexer_command_expr(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_command_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             pos = start;
@@ -5086,7 +5087,7 @@ fn scan_lexer_command_expr(tokens: &TokenStream, pos: i32, follow: &List<List<i3
         } else if alt_kind == TK_INT {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -5098,15 +5099,15 @@ fn scan_lexer_command_expr(tokens: &TokenStream, pos: i32, follow: &List<List<i3
     return pos;
 }
 
-fn scan_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_alt_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alternative(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_10_done: {
             sg_10: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_10; }
+                if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_10; }
                 pos += 1;
                 pos = scan_alternative(tokens, pos, follow, 0);
                 if pos < 0 { break sg_10; }
@@ -5120,23 +5121,23 @@ fn scan_alt_list(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_alternative(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_alternative(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_10(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT {
+                if pos < tokens.len() && tokens[pos] == TK_LT {
                     let sp = pos;
                     pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
                 pos = scan_element(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break try_0; }
-                while pos < tokens.len() && _gale_kind_set_11(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                while pos < tokens.len() && _gale_kind_set_11(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_element(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; break; }
@@ -5161,10 +5162,10 @@ fn scan_alternative(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             let mut best: i32 = -1;
@@ -5172,7 +5173,7 @@ fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
             try_0: {
                 pos = scan_labeled_element(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
-                if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5183,7 +5184,7 @@ fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
             try_1: {
                 pos = scan_atom(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5197,7 +5198,7 @@ fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
             try_1: {
                 pos = scan_atom(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
-                if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5218,12 +5219,12 @@ fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
             try_3: {
                 pos = scan_action_block(tokens, pos, follow, 0);
                 if pos < 0 { break try_3; }
-                if pos < tokens.len() && tokens.kinds[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_predicate_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5238,17 +5239,17 @@ fn scan_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_predicate_options(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_predicate_options(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
     pos += 1;
     pos = scan_predicate_option(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_11_done: {
             sg_11: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_11; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_11; }
                 pos += 1;
                 pos = scan_predicate_option(tokens, pos, follow, 0);
                 if pos < 0 { break sg_11; }
@@ -5259,15 +5260,15 @@ fn scan_predicate_options(tokens: &TokenStream, pos: i32, follow: &List<List<i32
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_GT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_predicate_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             let mut best: i32 = -1;
@@ -5281,10 +5282,10 @@ fn scan_predicate_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>
             try_1: {
                 pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_1; }
                 pos += 1;
                 let gp_12 = pos;
-                let sgk_12 = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+                let sgk_12 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _gale_kind_set_12(sgk_12) {
                     sg_12: {
                         pos = gp_12;
@@ -5295,13 +5296,13 @@ fn scan_predicate_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>
                         }
                         pos = gp_12;
                         sg_12_1: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break sg_12_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_12_1; }
                             pos += 1;
                             break sg_12;
                         }
                         pos = gp_12;
                         sg_12_2: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break sg_12_2; }
+                            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_12_2; }
                             pos += 1;
                             break sg_12;
                         }
@@ -5319,7 +5320,7 @@ fn scan_predicate_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn scan_labeled_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_labeled_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12, 0);
     if pos < 0 { return -1; }
@@ -5327,20 +5328,20 @@ fn scan_labeled_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>
     sg_13: {
         pos = gp_13;
         sg_13_0: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { break sg_13_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_13_0; }
             pos += 1;
             break sg_13;
         }
         pos = gp_13;
         sg_13_1: {
-            if pos >= tokens.len() || tokens.kinds[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_PLUS_ASSIGN { break sg_13_1; }
             pos += 1;
             break sg_13;
         }
         return -1;
     }
     let gp_14 = pos;
-    let sgk_14 = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let sgk_14 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _gale_kind_set_14(sgk_14) {
         sg_14: {
             pos = gp_14;
@@ -5361,11 +5362,11 @@ fn scan_labeled_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_ebnf(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_ebnf(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_block(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_block_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -5373,26 +5374,26 @@ fn scan_ebnf(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn scan_block_suffix(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_block_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_ebnf_suffix(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_ebnf_suffix(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_ebnf_suffix(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_QUESTION {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_QUESTION { break try_0; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -5401,11 +5402,11 @@ fn scan_ebnf_suffix(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
         } else if alt_kind == TK_STAR {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STAR { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_STAR { break try_1; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -5414,11 +5415,11 @@ fn scan_ebnf_suffix(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
         } else if alt_kind == TK_PLUS {
             pos = start;
             try_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_PLUS { break try_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_PLUS { break try_2; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
+                    if pos >= tokens.len() || tokens[pos] != TK_QUESTION { pos = -1; } else { pos += 1; }
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -5431,10 +5432,10 @@ fn scan_ebnf_suffix(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_lexer_atom(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_lexer_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_STRING_LITERAL {
             let mut best: i32 = -1;
@@ -5471,7 +5472,7 @@ fn scan_lexer_atom(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &E
         } else if alt_kind == TK_LEXER_CHAR_SET {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LEXER_CHAR_SET { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LEXER_CHAR_SET { break try_3; }
                 pos += 1;
                 break scan_alts;
             }
@@ -5491,10 +5492,10 @@ fn scan_lexer_atom(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_atom(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_15(alt_kind) {
             pos = start;
@@ -5535,11 +5536,11 @@ fn scan_atom(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn scan_wildcard(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_wildcard(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_DOT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_DOT { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -5547,16 +5548,16 @@ fn scan_wildcard(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_not_set(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_not_set(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_NOT {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_NOT { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_NOT { break try_0; }
                 pos += 1;
                 pos = scan_set_element(tokens, pos, follow, 0);
                 if pos < 0 { break try_0; }
@@ -5564,7 +5565,7 @@ fn scan_not_set(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
             }
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_NOT { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_NOT { break try_1; }
                 pos += 1;
                 pos = scan_block_set(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
@@ -5579,17 +5580,17 @@ fn scan_not_set(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_block_set(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_block_set(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     pos = scan_set_element(tokens, pos, &FOLLOW_MASK_13, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_OR {
+    while pos < tokens.len() && tokens[pos] == TK_OR {
         let sp = pos;
         sg_15_done: {
             sg_15: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_15; }
+                if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_15; }
                 pos += 1;
                 pos = scan_set_element(tokens, pos, follow, 0);
                 if pos < 0 { break sg_15; }
@@ -5600,22 +5601,22 @@ fn scan_block_set(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EM
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_set_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_set_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_TOKEN_REF {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_TOKEN_REF { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_TOKEN_REF { break try_0; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5627,9 +5628,9 @@ fn scan_set_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
             let mut best: i32 = -1;
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_1; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5647,7 +5648,7 @@ fn scan_set_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
         } else if alt_kind == TK_LEXER_CHAR_SET {
             pos = start;
             try_3: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_LEXER_CHAR_SET { break try_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LEXER_CHAR_SET { break try_3; }
                 pos += 1;
                 break scan_alts;
             }
@@ -5659,26 +5660,26 @@ fn scan_set_element(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_16(tokens.kinds[pos]) {
+    if pos < tokens.len() && _gale_kind_set_16(tokens[pos]) {
         let sp = pos;
         sg_16_done: {
             sg_16: {
-                if pos < tokens.len() && tokens.kinds[pos] == TK_OPTIONS {
+                if pos < tokens.len() && tokens[pos] == TK_OPTIONS {
                     let sp = pos;
                     pos = scan_options_spec(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
                 }
-                while pos < tokens.len() && tokens.kinds[pos] == TK_AT {
+                while pos < tokens.len() && tokens[pos] == TK_AT {
                     let sp = pos;
                     pos = scan_rule_action(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COLON { break sg_16; }
+                if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_16; }
                 pos += 1;
                 break sg_16_done;
             }
@@ -5688,21 +5689,21 @@ fn scan_block(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_
     }
     pos = scan_alt_list(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_ruleref(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_ruleref(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RULE_REF { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RULE_REF { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_BEGIN_ARGUMENT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_BEGIN_ARGUMENT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_arg_action_block(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -5710,28 +5711,28 @@ fn scan_ruleref(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_character_range(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_character_range(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RANGE { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RANGE { return -1; }
     pos += 1;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_terminal_def(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_terminal_def(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_TOKEN_REF {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_TOKEN_REF { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_TOKEN_REF { break try_0; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5742,9 +5743,9 @@ fn scan_terminal_def(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_STRING_LITERAL {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_1; }
                 pos += 1;
-                if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -5759,17 +5760,17 @@ fn scan_terminal_def(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_element_options(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_element_options(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
     pos += 1;
     pos = scan_element_option(tokens, pos, &FOLLOW_MASK_11, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_COMMA {
+    while pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
         sg_17_done: {
             sg_17: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_17; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_17; }
                 pos += 1;
                 pos = scan_element_option(tokens, pos, follow, 0);
                 if pos < 0 { break sg_17; }
@@ -5780,15 +5781,15 @@ fn scan_element_options(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_GT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_element_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_element_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_1(alt_kind) {
             let mut best: i32 = -1;
@@ -5802,10 +5803,10 @@ fn scan_element_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
             try_1: {
                 pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
                 if pos < 0 { break try_1; }
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_1; }
                 pos += 1;
                 let gp_18 = pos;
-                let sgk_18 = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+                let sgk_18 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _gale_kind_set_17(sgk_18) {
                     sg_18: {
                         pos = gp_18;
@@ -5816,13 +5817,13 @@ fn scan_element_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
                         }
                         pos = gp_18;
                         sg_18_1: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break sg_18_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_18_1; }
                             pos += 1;
                             break sg_18;
                         }
                         pos = gp_18;
                         sg_18_2: {
-                            if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break sg_18_2; }
+                            if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_18_2; }
                             pos += 1;
                             break sg_18;
                         }
@@ -5840,22 +5841,22 @@ fn scan_element_option(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_identifier(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_1(tokens.kinds[pos]) {
+fn scan_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_1(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_qualified_identifier(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_qualified_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens.kinds[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_19_done: {
             sg_19: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_DOT { break sg_19; }
+                if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_19; }
                 pos += 1;
                 pos = scan_identifier(tokens, pos, follow, 0);
                 if pos < 0 { break sg_19; }
@@ -5876,7 +5877,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_prequel_construct(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -5899,7 +5900,7 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     loop {
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_mode_spec(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan_2; }
@@ -6044,13 +6045,13 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_20_done: {
                 sg_20: {
                     pos = scan_option(tokens, pos, &FOLLOW_MASK_3, 0);
                     if pos < 0 { break sg_20; }
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_SEMI { break sg_20; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_20; }
                     pos += 1;
                     break sg_20_done;
                 }
@@ -6105,14 +6106,14 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let identifier = _parse_identifier(p, follow)?;
         let mut dot_identifier_list: List<DotIdentifierItem> = [];
         loop {
-            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 sg_21_done: {
                     sg_21: {
-                        if pos >= tokens.len() || tokens.kinds[pos] != TK_DOT { break sg_21; }
+                        if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_21; }
                         pos += 1;
                         pos = scan_identifier(tokens, pos, follow, 0);
                         if pos < 0 { break sg_21; }
@@ -6178,11 +6179,11 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_22_done: {
                 sg_22: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_22; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_22; }
                     pos += 1;
                     pos = scan_delegate_grammar(tokens, pos, follow, 0);
                     if pos < 0 { break sg_22; }
@@ -6225,7 +6226,7 @@ fn _parse_delegate_grammar__inner_alt_1(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_delegate_grammar__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -6245,11 +6246,11 @@ fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_delegate_grammar__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_delegate_grammar__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
     pos = scan_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -6260,7 +6261,7 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_delegate_grammar__inner_scan_1(_sd_tokens, _sd_pos);
             let _sd_p_0 = _parse_delegate_grammar__inner_scan_0(_sd_tokens, _sd_pos);
@@ -6343,14 +6344,14 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let identifier = _parse_identifier(p, follow)?;
     let mut comma_identifier_list: List<CommaIdentifierItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_23_done: {
                 sg_23: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_23; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_23; }
                     pos += 1;
                     pos = scan_identifier(tokens, pos, follow, 0);
                     if pos < 0 { break sg_23; }
@@ -6370,7 +6371,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         };
         comma_identifier_list.push(comma_identifier);
     }
-    let comma: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let comma: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_COMMA {
         let comma = p.expect(TK_COMMA)?;
@@ -6395,11 +6396,11 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let at = p.expect(TK_AT)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
-        let tokens = &p.tokens;
+        let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
         pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6, 0);
         if pos < 0 { break opt_scan; }
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_COLONCOLON { break opt_scan; }
+        if pos >= tokens.len() || tokens[pos] != TK_COLONCOLON { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
@@ -6505,10 +6506,10 @@ fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let semi = p.expect(TK_SEMI)?;
     let mut lexer_rule_spec_list: List<LexerRuleSpecNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_lexer_rule_spec(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -6543,10 +6544,10 @@ fn _parse_rules__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let start = p.peek_start();
     let mut rule_spec_list: List<RuleSpecNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_rule_spec(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -6583,7 +6584,7 @@ fn _parse_rule_spec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_rule_spec__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_rule_spec__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_rule_spec(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -6599,7 +6600,7 @@ fn _parse_rule_spec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }));
 }
 
-fn _parse_rule_spec__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_rule_spec__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_parser_rule_spec(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -6669,7 +6670,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_rule_prequel(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -6715,10 +6716,10 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     let start = p.peek_start();
     let mut exception_handler_list: List<ExceptionHandlerNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_exception_handler(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -6736,7 +6737,7 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         let exception_handler = _parse_exception_handler(p, &EMPTY_FOLLOW)?;
         exception_handler_list.push(exception_handler);
     }
-    let finally_clause: Option<FinallyClauseNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let finally_clause: Option<FinallyClauseNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_FINALLY {
         let finally_clause = _parse_finally_clause(p, &EMPTY_FOLLOW)?;
@@ -6836,14 +6837,14 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let qualified_identifier = _parse_qualified_identifier(p, follow)?;
     let mut comma_qualified_identifier_list: List<CommaQualifiedIdentifierItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_24_done: {
                 sg_24: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_24; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_24; }
                     pos += 1;
                     pos = scan_qualified_identifier(tokens, pos, follow, 0);
                     if pos < 0 { break sg_24; }
@@ -6913,10 +6914,10 @@ fn _parse_rule_modifiers__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let mut _plus_first = true;
     loop {
         if !_plus_first {
-            if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 pos = scan_rule_modifier(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break rep_scan; }
@@ -6985,14 +6986,14 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let labeled_alt = _parse_labeled_alt(p, follow)?;
     let mut or_labeled_alt_list: List<OrLabeledAltItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_25_done: {
                 sg_25: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_25; }
+                    if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_25; }
                     pos += 1;
                     pos = scan_labeled_alt(tokens, pos, follow, 0);
                     if pos < 0 { break sg_25; }
@@ -7026,7 +7027,7 @@ fn _parse_rule_alt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LabeledAltNode, ParseError> {
     let start = p.peek_start();
     let alternative = _parse_alternative(p, follow)?;
-    let pound_identifier: Option<PoundIdentifierItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
+    let pound_identifier: Option<PoundIdentifierItem> = if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
         let pound = p.expect(TK_POUND)?;
         let identifier = _parse_identifier(p, follow)?;
         let pound_identifier = PoundIdentifierItem {
@@ -7099,14 +7100,14 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let lexer_alt = _parse_lexer_alt(p, follow)?;
     let mut or_lexer_alt_list: List<OrLexerAltItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_26_done: {
                 sg_26: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_26; }
+                    if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_26; }
                     pos += 1;
                     pos = scan_lexer_alt(tokens, pos, follow, 0);
                     if pos < 0 { break sg_26; }
@@ -7142,7 +7143,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let kind = p.peek_kind();
     scope: {
         let lexer_elements = _parse_lexer_elements(p, follow)?;
-        let lexer_commands: Option<LexerCommandsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let lexer_commands: Option<LexerCommandsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_RARROW {
             let lexer_commands = _parse_lexer_commands(p, &EMPTY_FOLLOW)?;
@@ -7180,10 +7181,10 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         let mut _plus_first = true;
         loop {
             if !_plus_first {
-                if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
-                    let tokens = &p.tokens;
+                    let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     pos = scan_lexer_element(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { break rep_scan; }
@@ -7229,7 +7230,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
         let lexer_atom = _parse_lexer_atom(p, follow)?;
-        let ebnf_suffix: Option<EbnfSuffixNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let ebnf_suffix: Option<EbnfSuffixNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if _gale_kind_set_9(p.peek_kind()) {
             let ebnf_suffix = _parse_ebnf_suffix(p, &EMPTY_FOLLOW)?;
@@ -7245,7 +7246,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     if kind == TK_LPAREN {
         let lexer_block = _parse_lexer_block(p, follow)?;
-        let ebnf_suffix: Option<EbnfSuffixNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let ebnf_suffix: Option<EbnfSuffixNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if _gale_kind_set_9(p.peek_kind()) {
             let ebnf_suffix = _parse_ebnf_suffix(p, &EMPTY_FOLLOW)?;
@@ -7261,7 +7262,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_8, follow))?;
-        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7309,14 +7310,14 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let lexer_command = _parse_lexer_command(p, follow)?;
     let mut comma_lexer_command_list: List<CommaLexerCommandItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_27_done: {
                 sg_27: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_27; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_27; }
                     pos += 1;
                     pos = scan_lexer_command(tokens, pos, follow, 0);
                     if pos < 0 { break sg_27; }
@@ -7357,7 +7358,7 @@ fn _parse_lexer_command__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_lexer_command__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_lexer_command__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7379,15 +7380,15 @@ fn _parse_lexer_command__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = 
     }));
 }
 
-fn _parse_lexer_command__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_lexer_command__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_10, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_LPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_RPAREN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
@@ -7396,7 +7397,7 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let kind = p.peek_kind();
     if _gale_kind_set_19(kind) {
         if _gale_kind_set_19(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_lexer_command__inner_scan_1(_sd_tokens, _sd_pos);
             let _sd_p_0 = _parse_lexer_command__inner_scan_0(_sd_tokens, _sd_pos);
@@ -7491,14 +7492,14 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let alternative = _parse_alternative(p, follow)?;
     let mut or_alternative_list: List<OrAlternativeItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_28_done: {
                 sg_28: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_28; }
+                    if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_28; }
                     pos += 1;
                     pos = scan_alternative(tokens, pos, follow, 0);
                     if pos < 0 { break sg_28; }
@@ -7543,10 +7544,10 @@ fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         let mut _plus_first = true;
         loop {
             if !_plus_first {
-                if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+                if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
-                    let tokens = &p.tokens;
+                    let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     pos = scan_element(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { break rep_scan; }
@@ -7593,13 +7594,13 @@ fn _parse_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let labeled_element = _parse_labeled_element(p, follow)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
-        let tokens = &p.tokens;
+        let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
         pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let ebnf_suffix = _parse_ebnf_suffix(p, &EMPTY_FOLLOW)?;
     }
     return Result::Ok(ElementNode::Alt0(ElementAlt0 {
@@ -7608,11 +7609,11 @@ fn _parse_element__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }));
 }
 
-fn _parse_element__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_element__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_labeled_element(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -7625,13 +7626,13 @@ fn _parse_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let atom = _parse_atom(p, follow)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
-        let tokens = &p.tokens;
+        let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
         pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
-    if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         let ebnf_suffix = _parse_ebnf_suffix(p, &EMPTY_FOLLOW)?;
     }
     return Result::Ok(ElementNode::Alt1(ElementAlt1 {
@@ -7640,11 +7641,11 @@ fn _parse_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }));
 }
 
-fn _parse_element__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_element__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_atom(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    if pos < tokens.len() && _gale_kind_set_9(tokens.kinds[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_9(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_ebnf_suffix(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -7657,7 +7658,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let kind = p.peek_kind();
     if _gale_kind_set_13(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_element__inner_scan_0(_sd_tokens, _sd_pos);
             let _sd_p_1 = _parse_element__inner_scan_1(_sd_tokens, _sd_pos);
@@ -7691,7 +7692,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     }
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, follow)?;
-        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7699,7 +7700,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         } else {
             null
         };
-        let predicate_options: Option<PredicateOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let predicate_options: Option<PredicateOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_LT {
             let predicate_options = _parse_predicate_options(p, &EMPTY_FOLLOW)?;
@@ -7733,11 +7734,11 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_29_done: {
                 sg_29: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_29; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_29; }
                     pos += 1;
                     pos = scan_predicate_option(tokens, pos, follow, 0);
                     if pos < 0 { break sg_29; }
@@ -7780,7 +7781,7 @@ fn _parse_predicate_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_predicate_option__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_predicate_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_element_option(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -7818,14 +7819,14 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>>
     }));
 }
 
-fn _parse_predicate_option__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_predicate_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
     let gp_30 = pos;
-    let sgk_30 = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let sgk_30 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _gale_kind_set_12(sgk_30) {
         sg_30: {
             pos = gp_30;
@@ -7836,13 +7837,13 @@ fn _parse_predicate_option__inner_scan_1(tokens: &TokenStream, pos: i32, follow:
             }
             pos = gp_30;
             sg_30_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break sg_30_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_30_1; }
                 pos += 1;
                 break sg_30;
             }
             pos = gp_30;
             sg_30_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break sg_30_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_30_2; }
                 pos += 1;
                 break sg_30;
             }
@@ -7856,7 +7857,7 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_predicate_option__inner_scan_0(_sd_tokens, _sd_pos);
             let _sd_p_1 = _parse_predicate_option__inner_scan_1(_sd_tokens, _sd_pos);
@@ -7919,7 +7920,7 @@ fn _parse_labeled_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 fn _parse_ebnf__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<EbnfNode, ParseError> {
     let start = p.peek_start();
     let block = _parse_block(p, follow)?;
-    let block_suffix: Option<BlockSuffixNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let block_suffix: Option<BlockSuffixNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if _gale_kind_set_9(p.peek_kind()) {
         let block_suffix = _parse_block_suffix(p, &EMPTY_FOLLOW)?;
@@ -7956,7 +7957,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
         let question = p.expect(TK_QUESTION)?;
-        let question_2: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question_2: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7972,7 +7973,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if kind == TK_STAR {
         let star = p.expect(TK_STAR)?;
-        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7988,7 +7989,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if kind == TK_PLUS {
         let plus = p.expect(TK_PLUS)?;
-        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -8022,7 +8023,7 @@ fn _parse_lexer_atom__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_lexer_atom__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_lexer_atom__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8038,7 +8039,7 @@ fn _parse_lexer_atom__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
     }));
 }
 
-fn _parse_lexer_atom__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_lexer_atom__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_terminal_def(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8136,7 +8137,7 @@ fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
 fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WildcardNode, ParseError> {
     let start = p.peek_start();
     let dot = p.expect(TK_DOT)?;
-    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_LT {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8166,9 +8167,9 @@ fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }));
 }
 
-fn _parse_not_set__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_not_set__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_NOT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
     pos += 1;
     pos = scan_set_element(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8186,9 +8187,9 @@ fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }));
 }
 
-fn _parse_not_set__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_not_set__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_NOT { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
     pos += 1;
     pos = scan_block_set(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8226,11 +8227,11 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_31_done: {
                 sg_31: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_OR { break sg_31; }
+                    if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_31; }
                     pos += 1;
                     pos = scan_set_element(tokens, pos, follow, 0);
                     if pos < 0 { break sg_31; }
@@ -8267,7 +8268,7 @@ fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<SetElementNode, ParseError> {
     let start = p.peek_start();
     let string_literal = p.expect(TK_STRING_LITERAL)?;
-    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_LT {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8282,11 +8283,11 @@ fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_set_element__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_set_element__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens.kinds[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_LT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_element_options(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -8303,7 +8304,7 @@ fn _parse_set_element__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &E
     }));
 }
 
-fn _parse_set_element__inner_scan_2(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_set_element__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_character_range(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8315,7 +8316,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         let token_ref = p.expect(TK_TOKEN_REF)?;
-        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_LT {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8331,7 +8332,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if kind == TK_STRING_LITERAL {
         if p.peek_kind() == TK_STRING_LITERAL {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_set_element__inner_scan_1(_sd_tokens, _sd_pos);
             let _sd_p_2 = _parse_set_element__inner_scan_2(_sd_tokens, _sd_pos);
@@ -8377,20 +8378,20 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let lparen = p.expect(TK_LPAREN)?;
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
-        let tokens = &p.tokens;
+        let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        if pos < tokens.len() && tokens.kinds[pos] == TK_OPTIONS {
+        if pos < tokens.len() && tokens[pos] == TK_OPTIONS {
             let sp = pos;
             pos = scan_options_spec(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { pos = sp; }
         }
-        while pos < tokens.len() && tokens.kinds[pos] == TK_AT {
+        while pos < tokens.len() && tokens[pos] == TK_AT {
             let sp = pos;
             pos = scan_rule_action(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
         }
-        if pos >= tokens.len() || tokens.kinds[pos] != TK_COLON { break opt_scan; }
+        if pos >= tokens.len() || tokens[pos] != TK_COLON { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
@@ -8405,7 +8406,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 pos = scan_rule_action(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break rep_scan; }
@@ -8451,7 +8452,7 @@ fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
 fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<RulerefNode, ParseError> {
     let start = p.peek_start();
     let rule_ref = p.expect(TK_RULE_REF)?;
-    let arg_action_block: Option<ArgActionBlockNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let arg_action_block: Option<ArgActionBlockNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_BEGIN_ARGUMENT {
         let arg_action_block = _parse_arg_action_block(p, &EMPTY_FOLLOW)?;
@@ -8459,7 +8460,7 @@ fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     } else {
         null
     };
-    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_LT {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8501,7 +8502,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
         let token_ref = p.expect(TK_TOKEN_REF)?;
-        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_LT {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8517,7 +8518,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     }
     if kind == TK_STRING_LITERAL {
         let string_literal = p.expect(TK_STRING_LITERAL)?;
-        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let element_options: Option<ElementOptionsNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_LT {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW)?;
@@ -8550,11 +8551,11 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_32_done: {
                 sg_32: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_COMMA { break sg_32; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_32; }
                     pos += 1;
                     pos = scan_element_option(tokens, pos, follow, 0);
                     if pos < 0 { break sg_32; }
@@ -8597,7 +8598,7 @@ fn _parse_element_option__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> =
     }));
 }
 
-fn _parse_element_option__inner_scan_0(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_element_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_qualified_identifier(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
@@ -8635,14 +8636,14 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> =
     }));
 }
 
-fn _parse_element_option__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn _parse_element_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens.kinds[pos] != TK_ASSIGN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
     let gp_33 = pos;
-    let sgk_33 = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };
+    let sgk_33 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _gale_kind_set_17(sgk_33) {
         sg_33: {
             pos = gp_33;
@@ -8653,13 +8654,13 @@ fn _parse_element_option__inner_scan_1(tokens: &TokenStream, pos: i32, follow: &
             }
             pos = gp_33;
             sg_33_1: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_STRING_LITERAL { break sg_33_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break sg_33_1; }
                 pos += 1;
                 break sg_33;
             }
             pos = gp_33;
             sg_33_2: {
-                if pos >= tokens.len() || tokens.kinds[pos] != TK_INT { break sg_33_2; }
+                if pos >= tokens.len() || tokens[pos] != TK_INT { break sg_33_2; }
                 pos += 1;
                 break sg_33;
             }
@@ -8673,7 +8674,7 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let kind = p.peek_kind();
     if _gale_kind_set_1(kind) {
         if _gale_kind_set_1(p.peek_kind()) {
-            let _sd_tokens = &p.tokens;
+            let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_element_option__inner_scan_0(_sd_tokens, _sd_pos);
             let _sd_p_1 = _parse_element_option__inner_scan_1(_sd_tokens, _sd_pos);
@@ -8733,14 +8734,14 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
     let identifier = _parse_identifier(p, follow)?;
     let mut dot_identifier_list: List<DotIdentifierItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_34_done: {
                 sg_34: {
-                    if pos >= tokens.len() || tokens.kinds[pos] != TK_DOT { break sg_34; }
+                    if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_34; }
                     pos += 1;
                     pos = scan_identifier(tokens, pos, follow, 0);
                     if pos < 0 { break sg_34; }
