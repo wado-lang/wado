@@ -421,6 +421,42 @@ is tracked against the three acceptance criteria, not against incidental speedup
 - [ ] **Retire the intra-procedural iteration count.** The graph and worklist
       self-converge; keep an outer round count only for the interprocedural cycle.
 
+### Decisive pivot: criterion 3 forces operand promotion; side-table persistence is a dead end
+
+A build-once-via-persisted-side-table sub-path was started and instrumented this
+session: the value graph (`ValueGraphBuild`) moved onto `Body` (commit
+`685260a16`, behavior-neutral) and maintenance was hardened to drop a reassigned
+local's downstream readers (commit `36fac4552`), which fixed the verified
+`count_prime` over-merge (`Local m` ≡ a `Shl`). But running `WADO_VERIFY_VG`
+across the benchmark corpus surfaced a **second, distinct** over-merge on zlib:
+
+```
+expr1713 = Local{index:333 "__v1"}  ≡  expr3564 = FieldAccess{.used}
+maintained: both -> ValueId(935692)   fresh: 1840139 vs 1813397
+```
+
+A local that forwarded from `obj.used` (`let __v1 = obj.used`) and a later
+`obj.used` read share a stale value after the heap changed. Maintaining this
+_precisely_ means re-deriving per-`(receiver, field)` `HeapVersion`s on every
+heap-affecting edit — i.e. re-implementing the builder's heap-version walk
+incrementally. Each over-merge mechanism (reassigned-local readers, then
+FieldAccess/heap, then `Select`/`LoopPhi` next) needs its own precise
+maintenance; coarsening them instead regresses code quality, which fails 完勝
+(no-compromise). So precise side-table maintenance is as hard as the builder and
+still does not retire `value_of`.
+
+Decisive point: **acceptance criterion 3 requires the `value_of` side-table to
+retire**, which a _persisted side-table_ can never do by construction. Only
+operand promotion — pure values frozen into `Operand::Value` slots, with a
+`FieldAccess` frozen at its heap version — retires `value_of`, and it
+**structurally eliminates both over-merge mechanisms**: a frozen operand value
+cannot go stale (old reads keep their old `ValueId`; new reads get new ones; a
+rewrite is a `union`, never a re-derivation). So the unified path to all three
+criteria is to **complete operand promotion**, not to persist and maintain the
+side-table. `36fac4552` (the over-merge fix) stands as a correctness fix on its
+own; `685260a16` (graph on `Body`) is harmless and the pool already lives there.
+The remaining work pivots to the promotion migration below.
+
 ### Extraction proven; the rebuild win is all-or-nothing
 
 A late, in-pipeline freeze pass (`optimize/extract.rs::freeze_pure_arith`,
