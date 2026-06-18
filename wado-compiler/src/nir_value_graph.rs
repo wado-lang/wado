@@ -481,6 +481,33 @@ impl ValuePool {
         self.opaque_sources.get(&opaque).copied()
     }
 
+    /// Whether `id`'s value can be re-emitted by the extractor purely from the
+    /// graph + side-effect-free, position-independent leaves: literal constants
+    /// and `Local`-sourced opaques (a `local.get`), composed by `Binary` /
+    /// `Unary` / `Cast`. Excludes `Opaque(Expr)` (effectful / unscheduled),
+    /// `Select` / `LoopPhi` (flow merges — extraction-unsupported and, for
+    /// `LoopPhi`, loop-variant so not safe to float), `FieldAccess`, etc. Used
+    /// to decide whether a pure-arith node is safe to freeze into an operand
+    /// value. Resolves children through `find`.
+    pub fn value_fully_reemittable_locally(&mut self, id: ValueId) -> bool {
+        let rep = self.find(id);
+        match self.kind(rep).clone() {
+            ValueKind::Int(_)
+            | ValueKind::Float(_)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_) => true,
+            ValueKind::Opaque(op) => matches!(self.opaque_source(op), Some(OpaqueSource::Local(_))),
+            ValueKind::Binary { lhs, rhs, .. } => {
+                self.value_fully_reemittable_locally(lhs)
+                    && self.value_fully_reemittable_locally(rhs)
+            }
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                self.value_fully_reemittable_locally(operand)
+            }
+            _ => false,
+        }
+    }
+
     /// Read the kind of an allocated `ValueId`. Panics if `id` is out of
     /// range (i.e., came from a different pool).
     #[inline]

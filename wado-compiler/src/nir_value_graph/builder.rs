@@ -35,7 +35,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, ValueId, ValuePool};
+use super::{HeapVersion, OpaqueSource, ValueId, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -573,7 +573,9 @@ impl<'a> Builder<'a> {
 
     fn seed_params(&mut self, param_locals: &[u32]) {
         for &idx in param_locals {
-            let opaque = self.pool.fresh_opaque();
+            // A parameter's value re-emits as `local.get idx` — record the
+            // source so the extractor can materialise a promoted value over it.
+            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
             self.current_value.insert(idx, opaque);
         }
     }
@@ -592,7 +594,7 @@ impl<'a> Builder<'a> {
             } => {
                 let v = self
                     .walk_operand(value)
-                    .unwrap_or_else(|| self.pool.fresh_opaque());
+                    .unwrap_or_else(|| self.pool.fresh_opaque_with_source(OpaqueSource::Local(local_index)));
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
@@ -1171,7 +1173,7 @@ impl<'a> Builder<'a> {
         } else {
             // Unbound locals shouldn't occur on well-typed NIR; cache a
             // fresh Opaque so subsequent reads agree.
-            let v = self.pool.fresh_opaque();
+            let v = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
             self.current_value.insert(idx, v);
             v
         }
@@ -1180,7 +1182,9 @@ impl<'a> Builder<'a> {
     fn bind_pattern_opaque(&mut self, pat: PatId) {
         match self.body.pats[pat].kind.clone() {
             PatKind::Binding { local_index, .. } => {
-                let v = self.pool.fresh_opaque();
+                let v = self
+                    .pool
+                    .fresh_opaque_with_source(OpaqueSource::Local(local_index));
                 self.current_value.insert(local_index, v);
             }
             PatKind::Tuple(children, _) => {
