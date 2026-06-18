@@ -414,7 +414,15 @@ fn can_propagate_copy(
     binding: &CopyBinding,
     usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
+    promoted_reads: &IndexSet<u32>,
 ) -> bool {
+    // A target read through a promoted `Opaque(Local)` value cannot be
+    // propagated: `apply_in_expr` substitutes only skeleton reads, and the
+    // binding's `let` is then removed (`dead_locals`), so the promoted read
+    // would dangle on a deleted local. Leave the copy in place.
+    if promoted_reads.contains(&binding.target_local) {
+        return false;
+    }
     let Some(target_usage) = usage.get(&binding.target_local) else {
         return true;
     };
@@ -601,10 +609,11 @@ fn propagate_at_root(
         if analysis.bindings.is_empty() {
             break;
         }
+        let promoted_reads = engine.body.locals_read_via_promotion();
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
-            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table))
+            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table, &promoted_reads))
             .collect();
         if eliminable.is_empty() {
             break;
