@@ -742,6 +742,26 @@ live-promoted-reads query is the next brick (and the general primitive every
 liveness-based pass needs under promotion); deferred rather than rushed because
 the over-approximation trap makes a naive fix a silent quality regression.
 
+Landed (commit `0cbb27fbf`): the live-promoted-reads primitive —
+`Body::for_each_operand` (read-only mirror of `map_operands`) +
+`Body::locals_read_via_promotion`, backed by `ValuePool::collect_opaque_locals` +
+`find_imm` (a `&self` union-find root). `elide_local` now keeps a local read only
+through a promoted `Opaque(Local)`. Precise (walks only values in live operand
+slots, dodging the `opaque_local_sources` over-approximation), behavior-neutral
+pre-promotion (770 lib green). Impact under early promotion: **e2e failures
+347 → 111** — `peephole`/`elide_local` was the single dominant culprit (it runs
+every iteration). Pass migration so far: `inline`, `dae`, `elide_local`.
+
+Remaining 111 (early-promotion only; baseline green) by prefix: serde 12,
+allocator 10, opt 7, match 6, array 6, wasm 5, newtype 5, closure 5, assert 5, …
+Next culprit triaged — `coerce_float` (`f32 PI: 0.0000004` vs `3.1415927`):
+`WADO_SKIP_PASS` implicates `copy_prop` + `inline`, but `extract_value`'s `Float`
+arm is **correct** (instrumented: `bits` = f64 PI, `value_ty` = F32, emits
+`F32Const(3.1415927)`). So the corruption is **downstream of extraction** — a
+copy_prop/inline interaction on a promoted f32 value (a missing/!mismatched
+f32↔f64 coercion or a cross-function value splice), not the extractor. A distinct
+focused trace; deferred to the next brick. Tree restored green.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
