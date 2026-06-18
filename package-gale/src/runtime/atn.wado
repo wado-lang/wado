@@ -19,11 +19,11 @@
 //! single source of truth; the builder/serializer in `src/atn.wado` `use`s
 //! them. The blob carries a version word `atn_decode` asserts.
 //!
-//! The `./lex.wado` import is stripped at `#include_str` time (see
-//! `gen_runtime` in `codegen.wado`); `src/atn.wado` imports these symbols
-//! as a normal module.
+//! Prediction reads token kinds only, so the simulator takes the flat
+//! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
+//! `List` wrapper) — this keeps scan frames a slot smaller, which matters
+//! for deeply recursive grammars.
 
-use { TokenStream } from "./lex.wado";
 use { TreeMap } from "core:collections";
 
 // ATN wire-format constants — the single source of truth for the serialized
@@ -925,7 +925,7 @@ pub fn atn_predict_with_stack(
     sim: &AtnSim,
     decision: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     start_pos: i32,
     eof: i32,
     min_prec: i32 = 0,
@@ -969,7 +969,7 @@ pub fn atn_predict_with_stack(
             return atn_min_alt(&alts);
         }
         prev = alts;
-        let token = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
         let moved = atn_move(sim, &configs, token, eof);
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, rule_stack);
@@ -995,13 +995,13 @@ pub fn atn_lr_loop_decision(
     sim: &AtnSim,
     rule_stack: &List<i32>,
     decision: i32,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
     min_prec: i32 = 0,
 ) -> i32 {
     let dstate = sim.decision_state[decision];
-    let t = if pos < tokens.len() { tokens.kinds[pos] } else { eof };
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
     let s = sim.state_tr_start[dstate];
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
@@ -1055,7 +1055,7 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
 /// top-level decisions; deeper decisions whose disambiguation depends on the
 /// caller's follow need `atn_predict_with_stack` with the real rule stack.
 #[allow(dead_code)]
-pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &TokenStream, start_pos: i32, eof: i32) -> i32 {
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
     let empty: List<i32> = [];
     return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
 }
@@ -1076,7 +1076,7 @@ pub fn atn_ng_optional_enter(
     sim: &AtnSim,
     current_rule: i32,
     rule_stack: &List<i32>,
-    tokens: &TokenStream,
+    tokens: &Array<i32>,
     pos: i32,
     eof: i32,
 ) -> bool {

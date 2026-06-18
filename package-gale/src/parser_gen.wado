@@ -160,6 +160,12 @@ fn join_kinds(kinds: &List<String>) -> String {
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
+    // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
+    // array (not the `List<i32>` wrapper) so reading `kinds[pos]` is a single
+    // `array.get` with nothing for the optimizer to hoist into an extra local;
+    // a `&List<i32>` would cost every deeply-recursive scan frame one more
+    // slot, overflowing the wasm stack on pathological grammars.
+    s.add_field(&"kinds", &"Array<i32>");
     s.add_field(&"pos", &"i32");
     // Deepest speculative failure seen (a scan-gated repetition re-parses a
     // malformed element to harvest a precise inner error). The input-entry
@@ -189,7 +195,8 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f.add_param(&"tokens", &"TokenStream");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
-    let mut init = String::from("tokens, pos: 0, pending: null");
+    w.line(&"let kinds = tokens.kinds.to_array();");
+    let mut init = String::from("tokens, kinds, pos: 0, pending: null");
     if trace {
         init.push_str(&", trace_depth: 0");
     }
@@ -250,7 +257,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f3.set_receiver(&"&self");
     f3.set_return_type(&"i32");
     f3.emit_begin(w);
-    w.line(&"return self.tokens.kinds[self.pos];");
+    w.line(&"return self.kinds[self.pos];");
     w.end();
     w.blank();
 
@@ -261,7 +268,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f4.emit_begin(w);
     w.line(&"let idx = self.pos + offset;");
     w.line(&"if idx >= self.tokens.len() { return TK_EOF; }");
-    w.line(&"return self.tokens.kinds[idx];");
+    w.line(&"return self.kinds[idx];");
     w.end();
     w.blank();
 
@@ -293,7 +300,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f7.add_param(&"kind", &"i32");
     f7.set_return_type(&"Result<i32, ParseError>");
     f7.emit_begin(w);
-    w.begin(&"if self.tokens.kinds[self.pos] == kind");
+    w.begin(&"if self.kinds[self.pos] == kind");
     w.begin(&"if kind == TK_EOF");
     w.line(&"return Result::Ok(self.pos);");
     w.end();
@@ -331,7 +338,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f9.set_receiver(&"&mut self");
     f9.set_return_type(&"Result<i32, ParseError>");
     f9.emit_begin(w);
-    w.begin(&"if self.tokens.kinds[self.pos] != TK_EOF");
+    w.begin(&"if self.kinds[self.pos] != TK_EOF");
     w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.line(&"return Result::Err(self.error(");
@@ -351,7 +358,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f10.add_param(&"excluded", &"List<i32>");
     f10.set_return_type(&"Result<i32, ParseError>");
     f10.emit_begin(w);
-    w.line(&"let k = self.tokens.kinds[self.pos];");
+    w.line(&"let k = self.kinds[self.pos];");
     w.begin(&"if k != TK_EOF");
     w.line(&"let mut blocked = false;");
     w.begin(&"for let x of excluded");
@@ -382,7 +389,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f11.add_param(&"included", &"List<i32>");
     f11.set_return_type(&"Result<i32, ParseError>");
     f11.emit_begin(w);
-    w.line(&"let k = self.tokens.kinds[self.pos];");
+    w.line(&"let k = self.kinds[self.pos];");
     w.begin(&"for let x of included");
     w.begin(&"if x == k");
     w.begin(&"if k == TK_EOF");
@@ -449,7 +456,7 @@ fn gen_alt_scan_if_possible(
     let scan_name = `{*fn_name}_scan_{alt_index}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param(&"tokens", &"&TokenStream");
+    f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
@@ -539,7 +546,7 @@ fn gen_scan_function_named(
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param(&"tokens", &"&TokenStream");
+    f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
@@ -581,7 +588,7 @@ fn gen_scan_function_named(
         // by making scan_X functions reachable. Behaviourally identical to
         // the longest-match tournament: every alt consumes exactly one
         // token, so longest-match and first-success-wins both pick whatever
-        // alt's token equals `tokens.kinds[pos]`.
+        // alt's token equals `tokens[pos]`.
         let mut firsts: List<String> = [];
         for let alt of &rule.alternatives {
             let t = single_token_first(&alt.elements[0]);
@@ -589,7 +596,7 @@ fn gen_scan_function_named(
                 firsts.push(t);
             }
         }
-        let check = ctx.kind_check_str(&firsts, &"tokens.kinds[pos]");
+        let check = ctx.kind_check_str(&firsts, &"tokens[pos]");
         w.begin(&`if pos < tokens.len() && {check}`);
         w.line(&"return pos + 1;");
         w.end();
@@ -640,7 +647,7 @@ fn gen_scan_lr_functions(
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param(&"tokens", &"&TokenStream");
+    fa.add_param(&"tokens", &"&Array<i32>");
     fa.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut fa);
@@ -669,7 +676,7 @@ fn gen_scan_lr_functions(
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param(&"tokens", &"&TokenStream");
+    f2.add_param(&"tokens", &"&Array<i32>");
     f2.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f2);
@@ -715,7 +722,7 @@ fn gen_scan_lr_suffix_helpers(
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param(&"tokens", &"&TokenStream");
+        f.add_param(&"tokens", &"&Array<i32>");
         f.add_param(&"pos", &"i32");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
@@ -760,7 +767,7 @@ fn gen_lr_suffix_dispatch_atn(
         );
     } else {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`,
+            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
         );
     }
     w.line(&`let _lr_pos0 = {pos_expr};`);
@@ -826,7 +833,7 @@ fn gen_lr_suffix_dispatch(
 
     w.begin(&"loop");
     if side.scan {
-        w.line(&"let suffix_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };");
+        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     } else {
         w.line(&"let suffix_kind = p.peek_kind();");
     }
@@ -964,7 +971,7 @@ fn gen_lr_overlap_dispatch(
             w.else_begin(&`else if suffix_kind == {*shared_tk}`);
         }
         let second_accessor = if side.scan {
-            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens.kinds[pos + 1] } else { TK_EOF };");
+            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
             "second_kind";
         } else {
             "p.peek_at(1)";
@@ -1117,7 +1124,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
 
     w.line(&"let start = pos;");
     w.line(&"let mut pos = pos;");
-    w.line(&"let alt_kind = if pos < tokens.len() { tokens.kinds[pos] } else { TK_EOF };");
+    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
 
     w.begin(&"scan_alts:");
 
@@ -1264,7 +1271,7 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 }
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
-/// `tokens[pos + d].kind` (guarded by `pos + d < tokens.len()`) instead
+/// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
 /// of `p.peek_at(d)`. Multi-token sets route through
 /// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
@@ -1285,7 +1292,7 @@ fn gen_scan_op_element(
     min_prec_override: i32 = 0,
 ) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens.kinds[pos] != {t.kind} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1322,14 +1329,14 @@ fn gen_scan_op_element(
         return;
     }
     if let Wildcard = se {
-        w.line(&`if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens.kinds[pos] == {*k}`);
+            check_parts.push(`tokens[pos] == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1338,7 +1345,7 @@ fn gen_scan_op_element(
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1362,7 +1369,7 @@ fn gen_scan_op_element(
 /// failed iteration means "skip", not abort.
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens.kinds[pos] != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let RuleCall(rc) = se {
@@ -1381,13 +1388,13 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let Wildcard = se {
-        w.line(&"if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
+        w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens.kinds[pos] == {*k}`);
+            check_parts.push(`tokens[pos] == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1396,7 +1403,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens.kinds[pos] == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let Group(ge) = se {
@@ -1450,7 +1457,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if effective_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&effective_first, &"tokens.kinds[pos]");
+        let check = ctx.kind_check_str(&effective_first, &"tokens[pos]");
         // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
         // NOT caller_follow_gate { try iter }`. When `caller_follow_gate` is
         // empty (no `follow`), the guard collapses to the regular shape.
@@ -1470,7 +1477,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens.kinds[pos]");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         let guard = if caller_follow_gate.is_empty() {
             `pos < tokens.len() && {check}`;
         } else {
@@ -1490,7 +1497,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens.kinds[pos]");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         // Plus's subsequent iters get the K-prefix gate; the mandatory
         // first iter ran above.
         let guard = if caller_follow_gate.is_empty() {
@@ -1589,7 +1596,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
-        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens.kinds[pos] \} else \{ TK_EOF \};`);
+        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
         let gate = ctx.kind_check_str(&union_first, &sgk_var);
         w.begin(&`if {gate}`);
     }
@@ -2798,7 +2805,7 @@ fn gen_op_opt_scan_guard_for_group(
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
     w.begin(&`{scan_label}:`);
-    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     if g_op.scan_alts.len() == 1 {
@@ -2941,7 +2948,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     // rather than emit a parser that silently mispredicts. No corpus grammar
     // has a `??` inside an LR rule.
     assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
-    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
+    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -2952,7 +2959,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
-        return `!(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && ({*cond})`;
+        return `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && ({*cond})`;
     }
     return *cond;
 }
@@ -3851,7 +3858,7 @@ fn gen_op_repeat_optional_rulecall(
     // doesn't swallow tokens the caller needs. Empty (`follow` absent)
     // falls through to the regular `first_check` shape.
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.tokens, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
     } else {
         "";
     };
@@ -3896,7 +3903,7 @@ fn gen_op_repeat_optional_leaf(
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.tokens, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
     } else {
         "";
     };
@@ -3931,7 +3938,7 @@ fn gen_op_repeat_optional_leaf(
 /// (`gate_caller_follow`).
 fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     if rep_op.gate_caller_follow {
-        w.line(&"if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }");
+        w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
     }
 }
 
@@ -4309,7 +4316,7 @@ fn join_lookahead_condition(
         let part = match access {
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
-                let check = ctx.kind_check_str(&sig[d], &`tokens.kinds[{idx_expr}]`);
+                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}]`);
                 `{idx_expr} < tokens.len() && {check}`;
             },
             Parse => {
@@ -4348,7 +4355,7 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// ```
 /// let mut opt_scan_pos_N: i32 = -1;
 /// opt_scan_N: {
-///     let tokens = &p.tokens;
+///     let tokens = &p.kinds;
 ///     let mut pos: i32 = p.pos;
 ///     /* inline scan of inner; on fail: break opt_scan_N; */
 ///     opt_scan_pos_N = pos;
@@ -4383,7 +4390,7 @@ fn gen_scan_guard_with_prefix(
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
     w.begin(&`{scan_label}:`);
-    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
@@ -4490,7 +4497,7 @@ fn gen_scan_winner_tournament(
         let alt_index = sorted_group[k];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(&`{scan_label}:`);
-        w.line(&"let tokens = &p.tokens;");
+        w.line(&"let tokens = &p.kinds;");
         w.line(&"let mut pos: i32 = p.pos;");
         let sb = &scan_alts[alt_index];
         gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
@@ -5324,7 +5331,7 @@ fn gen_lr_call_with_prec(
     // (mutating) parse when the scan confirms the suffix would succeed.
     if use_prec {
         w.begin(&`if {prec} >= min_prec`);
-        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(&`if {*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
@@ -5332,7 +5339,7 @@ fn gen_lr_call_with_prec(
         w.line(&"break;");
         w.end();
     } else {
-        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(&`if {*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
@@ -5454,7 +5461,7 @@ fn gen_prediction_code_inner(
                     // (ANTLR4-compatible): scan each alt, pick the one
                     // advancing pos the furthest; ties go to the first alt
                     // in grammar order.
-                    w.line(&"let _sd_tokens = &p.tokens;");
+                    w.line(&"let _sd_tokens = &p.kinds;");
                     w.line(&"let _sd_pos = p.pos;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -5507,7 +5514,7 @@ fn gen_prediction_code_inner(
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                             if is_full {
                                 // Full scan: success guarantees parse success.
-                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                                 }
@@ -5515,7 +5522,7 @@ fn gen_prediction_code_inner(
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
-                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 w.line(&`let r_{idx} = {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {

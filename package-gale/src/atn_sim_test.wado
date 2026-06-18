@@ -18,7 +18,7 @@ use {
     ATN_BLOCK_END,
     ATN_STAR_LOOP_ENTRY,
 } from "./runtime/atn.wado";
-use { Token, LexerSlice, Span, TokenStream } from "./runtime/lex.wado";
+use { Token, LexerSlice, Span } from "./runtime/lex.wado";
 use { parse } from "./g4/parser.wado";
 use { assign_atn_call_sites } from "./ir.wado";
 
@@ -26,15 +26,14 @@ fn mk(kind: i32) -> Token {
     return Token::new(kind, LexerSlice::from_string(""), Span::new(0, 0));
 }
 
-/// Build a TokenStream from a token list (only kinds matter to the ATN sim).
-fn to_stream(toks: &List<Token>) -> TokenStream {
-    let chars: List<char> = [];
-    let mut ts = TokenStream::new(&chars);
+/// The flat kinds array the ATN sim reads (the only token data prediction
+/// uses), matching the generated parser's `&Array<i32>` scan currency.
+fn to_kinds(toks: &List<Token>) -> Array<i32> {
+    let mut kinds: List<i32> = [];
     for let t of toks {
-        let lo = ts.trivia_mark();
-        ts.push_token(t.kind, 0, 0, lo, ts.trivia_mark());
+        kinds.push(t.kind);
     }
-    return ts;
+    return kinds.to_array();
 }
 
 /// Decision number of parser rule `rule`'s top-level alternation block.
@@ -137,8 +136,8 @@ test "predict resolves a two-token shared-prefix decision" {
         mk(6),
         mk(7),
     ];
-    assert atn_adaptive_predict(&sim, d, &to_stream(&paren), 0, eof) == 0, "ID '(' ')' should pick alt 0";
-    assert atn_adaptive_predict(&sim, d, &to_stream(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
+    assert atn_adaptive_predict(&sim, d, &to_kinds(&paren), 0, eof) == 0, "ID '(' ')' should pick alt 0";
+    assert atn_adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
@@ -154,7 +153,7 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_adaptive_predict(&sim, d, &to_stream(&toks), 0, eof);
+    let alt = atn_adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
     // The chosen alt's edge must lead to BlockEnd: non-greedy prefers EXIT.
     assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "non-greedy must choose the exit alt";
 }
@@ -171,7 +170,7 @@ test "greedy ? picks the enter alt on the same conflict" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_adaptive_predict(&sim, d, &to_stream(&toks), 0, eof);
+    let alt = atn_adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
     // Greedy prefers ENTER: the chosen alt's edge must NOT go to BlockEnd.
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "greedy must choose the enter alt";
 }
@@ -202,7 +201,7 @@ test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_predict_with_stack(&sim, d, &stack, &to_stream(&toks), 0, eof);
+    let alt = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
     assert alt_target_kind(&atn, d, alt) == ATN_BLOCK_END, "inner ?? must EXIT (let the outer take the else)";
 }
 
@@ -220,7 +219,7 @@ test "full-context: outer ifStatement ?? consumes the else" {
         mk(7),
         mk(4),
     ];
-    let alt = atn_predict_with_stack(&sim, d, &stack, &to_stream(&toks), 0, eof);
+    let alt = atn_predict_with_stack(&sim, d, &stack, &to_kinds(&toks), 0, eof);
     assert alt_target_kind(&atn, d, alt) != ATN_BLOCK_END, "outer ?? must ENTER (consume the else)";
 }
 
@@ -244,7 +243,7 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
         mk(5),
         mk(0),
     ];
-    let alt = atn_adaptive_predict(&sim, d, &to_stream(&toks), 0, eof);
+    let alt = atn_adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
     assert alt >= 0 && alt < 3, `LR loop-entry prediction out of range: {alt}`;
 }
 
@@ -267,11 +266,11 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     ];
     let empty: List<i32> = [];
     // pr=0: the '+' alt (own_prec 1) is enabled and matches → enter it (1).
-    let lo = atn_predict_with_stack(&sim, d, &empty, &to_stream(&toks), 0, eof, 0);
+    let lo = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&toks), 0, eof, 0);
     assert lo == 1, `min_prec 0 should enter the '+' alt (1), got {lo}`;
     // pr=2: the '+' alt is pruned (1 < 2) and '*' does not match '+', so only
     // the exit edge survives → exit alt (2).
-    let hi = atn_predict_with_stack(&sim, d, &empty, &to_stream(&toks), 0, eof, 2);
+    let hi = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&toks), 0, eof, 2);
     assert hi == 2, `min_prec 2 should prune '+' and exit (2), got {hi}`;
 }
 
@@ -292,9 +291,9 @@ test "LR loop decision: precedence gates enter/exit" {
         mk(0),
     ];
     // min_prec 0: enter the '+' alt (own_prec 1 >= 0, suffix starts with '+').
-    assert atn_lr_loop_decision(&sim, &empty, d, &to_stream(&toks), 0, eof, 0) == 1, "min_prec 0 enters '+'";
+    assert atn_lr_loop_decision(&sim, &empty, d, &to_kinds(&toks), 0, eof, 0) == 1, "min_prec 0 enters '+'";
     // min_prec 2: '+' (own_prec 1 < 2) pruned, '*' suffix !startswith '+', exit.
-    assert atn_lr_loop_decision(&sim, &empty, d, &to_stream(&toks), 0, eof, 2) == 2, "min_prec 2 exits";
+    assert atn_lr_loop_decision(&sim, &empty, d, &to_kinds(&toks), 0, eof, 2) == 2, "min_prec 2 exits";
 }
 
 // A `~SEMI` operator suffix must match any token EXCEPT `SEMI`. The FIRST
@@ -323,13 +322,13 @@ test "atn_lr_loop_decision: ~SEMI suffix excludes the SEMI token" {
         mk(1),
         mk(0),
     ];
-    assert atn_lr_loop_decision(&sim, &empty, d, &to_stream(&on_semi), 0, eof) == 1, "~SEMI must not match SEMI";
+    assert atn_lr_loop_decision(&sim, &empty, d, &to_kinds(&on_semi), 0, eof) == 1, "~SEMI must not match SEMI";
     // it admits INT(0): enter the suffix (alt 0).
     let on_int: List<Token> = [
         mk(0),
         mk(0),
     ];
-    assert atn_lr_loop_decision(&sim, &empty, d, &to_stream(&on_int), 0, eof) == 0, "~SEMI matches INT";
+    assert atn_lr_loop_decision(&sim, &empty, d, &to_kinds(&on_int), 0, eof) == 0, "~SEMI matches INT";
 }
 
 // A caller stack 1000 frames deep seeds `rs = 999`. The packed CfgSet key
@@ -352,7 +351,7 @@ test "CfgSet packed key handles a deep caller stack" {
         mk(4),
         mk(5),
     ];
-    assert atn_predict_with_stack(&sim, d, &deep, &to_stream(&toks), 0, 2) == 0, "deep stack must still predict alt 0";
+    assert atn_predict_with_stack(&sim, d, &deep, &to_kinds(&toks), 0, 2) == 0, "deep stack must still predict alt 0";
 }
 
 // An LR rule whose atom alternative is nullable (`a : ID?`) can begin with a
