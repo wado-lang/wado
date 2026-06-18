@@ -593,12 +593,27 @@ findings are the deliverable.
   last-write side table. This is the precise next blocker for moving promotion
   ahead of the passes; the experiment was discarded (uncommitted, never landed).
 
-  Narrowed: `count_prime`'s own arithmetic is entirely `i32` (`n` / `d` / `count`
-  / `limit`), yet the mismatch is `i64`/`i32` — so the wrong-width value is in the
-  `u64` timing glue (`MonotonicClock` / `core:benchmark`), not the prime loop. The
-  next-session repro should instrument `extract_value`'s `Binary` / `Unary` arms
-  to dump `(value, op, type_of(self), type_of(lhs))` and catch the `u64` operand
-  recorded at `i32` width.
+  Root-caused (instrumented `extract_value`'s `Binary` arm, early-freeze build,
+  count_prime): the wrong-width values are in the `u64` timing glue, and they are
+  **internally inconsistent** — e.g. `ValueId(69) = Binary{Shr, Int(2,i32),
+  Int(3,i32)}` with recorded `self_ty = u64`, and conversely a `Shr` with
+  `self_ty = i32` whose `lhs = Int(1,u64)`. So a `u64`-typed binary expr carries
+  `i32`-typed operand values (and vice versa). Two consequences:
+  - Extraction reads the operand width from `type_of(lhs)`, not the binary's own
+    `self_ty`, so it emits the operand width while the consuming context wants the
+    result width → the `i64`/`i32` validation error.
+  - `ValueKind::Binary` / `Unary` / `Cast` omit the result type from the hash-cons
+    key, so a `u64` and an `i32` computation with structurally-equal operand ids
+    collide onto one `ValueId` carrying a single (last-write) `self_ty`.
+
+  The leaf fix (`1f133e71a`) was necessary but the composite kinds still erase
+  width. The fix has two coupled parts, both real implementation: (1) carry the
+  result `TypeId` in the `Binary` / `Unary` / `Cast` hash-cons key (intern records
+  it, like `Int` / `Float`), so cross-width computations never share an id; (2)
+  have `extract_value` derive each op's width from the value's own recorded type,
+  and widen operands as needed. Only then is early promotion width-correct. The
+  experiment + instrumentation were discarded (uncommitted); the branch stays
+  green.
 
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
