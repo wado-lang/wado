@@ -502,9 +502,18 @@ already exist and are proven: `Engine::maintain_value_after_edit` /
 `maintain_pure_value` (re-derive a node's pure value, drop what they can't), and
 the `partition_refines` oracle (`WADO_VERIFY_VG`) that certifies the maintained
 graph never over-merges — coarsening (a dropped flow value) is sound, only a
-missed optimization. Under the project's fix-while-advancing rule (interim
-regressions tolerated, then recovered), criterion 1 is reachable by a sequence of
-green-correctness steps rather than one atomic change:
+missed optimization. Correction (Probe A, below): the route is _not_ a sequence of independently
+shippable green steps. Step 2's coarsening alone **over-merges** — dropping the
+edited node's ancestors leaves stale `value_of` on the **downstream readers** of
+a reassigned local, which the next pure re-intern hash-conses wrongly (a
+miscompile, masked today by the rebuild). So persistence (step 2) is sound only
+once every flow value that a structural pass can stale is either coarsened
+_with its downstream readers_ or **promoted into an operand slot** (a frozen
+`Operand::Value` cannot stale). The blocker is soundness-coupling, not quality
+regression — `WADO_VERIFY_VG` must be the development gate, and the persistence
+flip lands atomically with the downstream-coarsening / promotion, not before it.
+With that caveat, criterion 1 is still approached by these steps (green under the
+verify harness), not one undifferentiated rewrite:
 
 1. **Body-persistent graph.** Move `ValueGraphBuild` (`value_of` +
    `loop_entry_values`) onto `Body` next to `values: ValuePool`. Build once;
@@ -560,6 +569,15 @@ findings are the deliverable.
   un-erasing the pool (carry width in `ValueKind`) or `alloc_unshared` per
   `(value, type)` — which is the precondition for moving promotion ahead of the
   passes.
+
+  Fixed (commit `1f133e71a`): `ValueKind::Int` / `Float` now carry their source
+  `TypeId` in the hash-cons key, so `7: i32` and `7: i64` are distinct values
+  each recording its own width; `intern` stamps `type_of` at construction. All
+  ~40 construction / match sites were converted atomically (the split-hash-cons
+  hazard demands it), behavior-neutral (zlib -O2 byte-identical; 2960/0 e2e; a new
+  width-distinctness unit test). This removes Probe B's width blocker — early
+  promotion is now sound on the width axis. The `licm.rs:559` guard remains for
+  the early-promotion change itself.
 
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
