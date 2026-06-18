@@ -555,10 +555,14 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
             then_block,
             else_block,
         } => {
-            let mut v = vec![
-                Child::Expr(condition.as_expr().expect("skeleton operand")),
-                Child::Block(*then_block),
-            ];
+            // A promoted (`Operand::Value`) condition has no skeleton child to
+            // traverse; only an `Expr` condition contributes a child node.
+            let mut v: Vec<Child> = condition
+                .as_expr()
+                .map(Child::Expr)
+                .into_iter()
+                .chain(std::iter::once(Child::Block(*then_block)))
+                .collect();
             if let Some(eb) = else_block {
                 v.push(Child::Block(*eb));
             }
