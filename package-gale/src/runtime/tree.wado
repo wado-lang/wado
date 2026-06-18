@@ -1,11 +1,16 @@
 //! The single homogeneous (untyped) concrete syntax tree produced by every
-//! generated error-resilient parser, plus the `TreeBuilder` the parser drives
-//! to construct it.
+//! generated error-resilient parser, the `TreeBuilder` the parser drives to
+//! construct it, and the `ParseResult` the parser returns.
 //!
 //! Unlike the retired typed-CST-then-convert design, the parser builds *this*
 //! tree directly — there is no second typed representation and no walk/convert
 //! step. Consumers (compiler front ends, LSP, syntax highlight) read this tree
 //! as-is, so the generic view they want is free.
+//!
+//! `CstNode` is a pure value tree: it holds no reference to the token stream,
+//! so it composes and stores freely and `ParseResult` can own both the tree and
+//! the stream it indexes without a self-referential borrow. Methods that need
+//! terminal text or kinds take a `&TokenStream` argument.
 //!
 //! Error tokens are first-class and lossless: `Missing` (an inserted synthetic
 //! terminal), `Skipped` (a real terminal deleted during recovery), and a
@@ -14,11 +19,12 @@
 //! stream flags (`TOK_SYNTHETIC` / `TOK_SKIPPED`, see `lex.wado`) carry the same
 //! facts at the terminal level.
 //!
-//! Imports its lexing vocabulary from `lex.wado`; that import is stripped at
-//! `#include_str` time (see `gen_runtime` in `codegen.wado`), where `lex.wado`
-//! is concatenated first.
+//! Imports `TokenStream` from `lex.wado` and `Diagnostic` from `diag.wado`;
+//! those imports are stripped at `#include_str` time (see `gen_runtime` in
+//! `codegen.wado`), where the fragments are concatenated into one module.
 
 use { Span, TokenStream } from "./lex.wado";
+use { Diagnostic } from "./diag.wado";
 
 /// A node's kind: a parser-rule id (`0..num_rules`, in grammar declaration
 /// order) or the reserved `K_ERROR` sentinel for a recovery region node. A
@@ -52,13 +58,13 @@ pub variant CstChild {
     Node(CstNode),  // a sub-rule (an error region when its kind is K_ERROR)
 }
 
-/// A node in the homogeneous tree. Borrows the `TokenStream` so terminal
-/// text/span render from the stored `i32` indices on demand.
+/// A node in the homogeneous tree. A pure value: terminals are `i32` indices
+/// into a `TokenStream` that lives outside the tree (in `ParseResult`), so
+/// rendering methods take that stream as an argument.
 pub struct CstNode {
     pub kind: NodeKind,
     pub span: Span,
     pub children: List<CstChild>,
-    pub toks: &TokenStream,
     pub flags: i32,
 }
 
@@ -75,14 +81,20 @@ impl CstNode {
     /// `rule_names[kind]` names rule nodes (`K_ERROR` renders `<error>`);
     /// `token_names[kind]` names missing terminals. Real terminals with empty
     /// text (e.g. EOF) are omitted; missing/skipped terminals render markers.
-    pub fn to_string_tree(&self, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn to_string_tree(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         let mut out = String::with_capacity(256);
-        cst_to_string_tree_impl(&mut out, self, rule_names, token_names);
+        cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
         return out;
     }
 }
 
-fn cst_to_string_tree_impl(out: &mut String, node: &CstNode, rule_names: &List<String>, token_names: &List<String>) {
+fn cst_to_string_tree_impl(
+    out: &mut String,
+    node: &CstNode,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) {
     out.push_str(&"(");
     if node.kind == K_ERROR {
         out.push_str(&"<error>");
@@ -92,26 +104,52 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode, rule_names: &List<S
     for let child of &node.children {
         match *child {
             Token(i) => {
-                if !node.toks.is_empty_text(i) {
+                if !toks.is_empty_text(i) {
                     out.push_str(&" ");
-                    node.toks.push_token_text(out, i);
+                    toks.push_token_text(out, i);
                 }
             },
             Missing(i) => {
-                out.push_str(&` <missing {token_names[node.toks.kind_at(i)]}>`);
+                out.push_str(&` <missing {token_names[toks.kind_at(i)]}>`);
             },
             Skipped(i) => {
                 out.push_str(&" <skip ");
-                node.toks.push_token_text(out, i);
+                toks.push_token_text(out, i);
                 out.push_str(&">");
             },
             Node(n) => {
                 out.push_str(&" ");
-                cst_to_string_tree_impl(out, &n, rule_names, token_names);
+                cst_to_string_tree_impl(out, &n, toks, rule_names, token_names);
             },
         }
     }
     out.push_str(&")");
+}
+
+/// What a parse returns: the homogeneous root, the token stream its terminal
+/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
+/// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
+/// the result is a freely movable value.
+pub struct ParseResult {
+    pub root: CstNode,
+    pub tokens: TokenStream,
+    pub diagnostics: List<Diagnostic>,
+}
+
+impl ParseResult {
+    pub fn has_errors(&self) -> bool {
+        for let d of &self.diagnostics {
+            if d.is_error() {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// True when the parse produced no error-severity diagnostics.
+    pub fn ok(&self) -> bool {
+        return !self.has_errors();
+    }
 }
 
 /// A flat event recorded by the parser as it descends. `finish()` replays the
@@ -127,17 +165,16 @@ variant BuildEvent {
 
 /// The builder the generated parser drives. It records a flat event stream
 /// (`start_node` / `token` / `missing` / `skip` / `finish_node`) and replays it
-/// in `finish()`. Holds a shared `&TokenStream`; the parser appends synthetic
-/// "missing" tokens to that same stream (through its own `&mut`) before calling
-/// `missing`, and marks skipped tokens before calling `skip`.
+/// in `finish()`. It is purely structural — it stores token *indices*, never the
+/// stream itself; the parser owns the `TokenStream`, appending synthetic
+/// "missing" tokens and marking skipped ones on its own copy.
 pub struct TreeBuilder {
-    toks: &TokenStream,
     events: List<BuildEvent>,
 }
 
 impl TreeBuilder {
-    pub fn new(toks: &TokenStream) -> TreeBuilder with stores[toks] {
-        return TreeBuilder { toks, events: [] };
+    pub fn new() -> TreeBuilder {
+        return TreeBuilder { events: [] };
     }
 
     /// Open a rule node of `kind` starting at byte offset `start`.
@@ -173,13 +210,13 @@ impl TreeBuilder {
     }
 
     /// Materialise the tree. Valid once the root node has been closed.
-    pub fn finish(&self) -> CstNode with stores[self] {
+    pub fn finish(&self) -> CstNode {
         let mut pos = 0;
-        return tree_build_node(&self.events, self.toks, &mut pos);
+        return tree_build_node(&self.events, &mut pos);
     }
 }
 
-fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
+fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
     if let Open(info) = events[*pos] {
         let kind = info.0;
         let start = info.1;
@@ -198,7 +235,7 @@ fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32)
                 break;
             }
             if let Open(_) = ev {
-                let child = tree_build_node(events, toks, pos);
+                let child = tree_build_node(events, pos);
                 if child.flags & NODE_ERROR != 0 {
                     flags = flags | NODE_ERROR;
                 }
@@ -219,7 +256,7 @@ fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32)
                 *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, toks, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags };
     }
     panic("TreeBuilder: expected Open event");
 }

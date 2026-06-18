@@ -21,10 +21,14 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 ## The tree
 
 ```
-CstNode  { kind: NodeKind, span, children: List<CstChild>, toks, flags }
+CstNode  { kind: NodeKind, span, children: List<CstChild>, flags }
 CstChild = Token(i32) | Missing(i32) | Skipped(i32) | Node(CstNode)
 ```
 
+- `CstNode` is a pure value tree — it holds no reference to the token stream, so
+  it composes and stores freely and `ParseResult` can own both the tree and the
+  stream without a self-referential borrow. Methods that need terminal text or
+  kinds take a `&TokenStream` argument.
 - `NodeKind` is an `i32` newtype (rule id; `K_ERROR` for a recovery region).
   Its `Display` renders the rule name and `Inspect` renders `name(id)`, so
   debugging shows names. The name table is grammar-specific, emitted by codegen.
