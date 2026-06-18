@@ -891,6 +891,9 @@ impl FunctionTranslator<'_, '_> {
             // (`translate_string_literal`) depends only on its bytes, which the
             // extractor reads from the pool. Born as `Operand::Value`.
             TirExprKind::StringLiteral(s) => Some(ValueKind::String(s.clone())),
+            // The unit value `()` has no runtime representation; its WIR
+            // materialisation depends only on its type. Born as Operand::Value.
+            TirExprKind::Unit => Some(ValueKind::Unit),
             _ => None,
         };
         match vk {
@@ -1122,7 +1125,9 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Null => {
                 unreachable!("Null is interned via convert_operand, never convert_expr")
             }
-            TirExprKind::Unit => ExprKind::Unit,
+            TirExprKind::Unit => {
+                unreachable!("unit is interned via convert_operand, never convert_expr")
+            }
             TirExprKind::Local { index, name } => ExprKind::Local {
                 index: *index,
                 name: name.clone(),

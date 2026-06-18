@@ -1833,7 +1833,6 @@ fn build_index_reader_call(
 /// re-evaluated N times with no observable side effects).
 fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => true,
         ExprKind::Binary { left, right, .. } => {

@@ -156,7 +156,6 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => 0,
@@ -605,7 +604,6 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         }
         // Leaf nodes
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1978,7 +1976,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             }
         }
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
-        ExprKind::Unit => ExprKind::Unit,
         ExprKind::Dead => ExprKind::Dead,
         ExprKind::GlobalVarGet {
             module_source,
@@ -2063,7 +2060,7 @@ fn inline_calls_in_expr(
                 let moved = std::mem::replace(
                     &mut body.exprs[new_id],
                     ExprNode {
-                        kind: ExprKind::Unit,
+                        kind: ExprKind::Dead,
                         type_id: TypeTable::UNIT,
                         span,
                     },
@@ -2130,7 +2127,7 @@ fn inline_calls_in_expr(
                 let moved = std::mem::replace(
                     &mut body.exprs[new_id],
                     ExprNode {
-                        kind: ExprKind::Unit,
+                        kind: ExprKind::Dead,
                         type_id: TypeTable::UNIT,
                         span,
                     },

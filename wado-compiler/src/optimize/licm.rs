@@ -517,7 +517,6 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         }
         // Leaves.
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1023,7 +1022,6 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }

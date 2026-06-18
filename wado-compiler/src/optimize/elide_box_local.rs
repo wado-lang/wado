@@ -377,7 +377,7 @@ fn find_use_site(
 
 fn is_placeholder(body: &Body, stmt: StmtId) -> bool {
     matches!(&body.stmts[stmt].kind, StmtKind::Expr(e)
-        if e.as_expr().is_some_and(|e| matches!(body.exprs[e].kind, ExprKind::Unit)))
+        if e.as_value().is_some_and(|v| matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
 }
 
 // -----------------------------------------------------------------------
@@ -622,7 +622,6 @@ fn walk_expr_for_leftmost(
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,
     }

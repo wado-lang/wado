@@ -440,7 +440,6 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => {}
     }

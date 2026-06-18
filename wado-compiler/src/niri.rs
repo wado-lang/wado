@@ -1186,12 +1186,15 @@ impl<'a> Interpreter<'a> {
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
+            let span = sink.body().exprs[e].span;
             let kind = if b {
                 ExprKind::Block(then_branch)
             } else if let Some(eb) = else_branch {
                 ExprKind::Block(eb)
             } else {
-                ExprKind::Unit
+                // `if false {}` with no else evaluates to unit; an empty block
+                // is the unit-typed skeleton form (the unit value has no node).
+                ExprKind::Block(sink.alloc_block(Vec::new(), span))
             };
             sink.replace_kind(e, kind);
             return true;
@@ -1687,8 +1690,7 @@ fn try_match_bool_discriminator_a(
 /// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        | ExprKind::Local { .. }
-        | ExprKind::Unit => true,
+        | ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
                 && is_speculatable_operand_a(body, *left)

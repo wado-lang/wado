@@ -166,7 +166,6 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,

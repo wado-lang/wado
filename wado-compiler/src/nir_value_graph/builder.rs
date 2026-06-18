@@ -694,7 +694,6 @@ impl<'a> Builder<'a> {
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::Unit => Some(self.pool.unit()),
             // Orphaned tombstone: no value.
             ExprKind::Dead => None,
 

@@ -1819,10 +1819,6 @@ impl FunctionTranslator<'_, '_> {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }
-            ExprKind::Unit => {
-                // Unit has no value; use nop
-                WirInstr::Nop
-            }
             // Orphaned tombstone: never materialised (DCE drops it first).
             ExprKind::Dead => WirInstr::Nop,
 

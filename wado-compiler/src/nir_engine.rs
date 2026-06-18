@@ -257,7 +257,6 @@ impl<'a> Engine<'a> {
                 Operand::Expr(e) => value_of.get(&e).copied(),
             };
             match kind {
-                ExprKind::Unit => pool.unit(),
                 ExprKind::Binary { left, op, right } => {
                     let lhs = operand_value(left)?;
                     let rhs = operand_value(right)?;
@@ -1694,7 +1693,7 @@ mod tests {
                 .copied()
                 .filter(|s| {
                     !matches!(&e.body.stmts[*s].kind,
-                        StmtKind::Expr(Operand::Expr(ex)) if matches!(e.body.exprs[*ex].kind, ExprKind::Unit))
+                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
                 })
                 .collect();
             if kept.len() == stmts.len() {
@@ -1713,8 +1712,11 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = e(b, ExprKind::Unit);
-            let unit_stmt = s(b, StmtKind::Expr(unit.into()));
+            let unit = Operand::Value(
+                b.values
+                    .alloc_unshared(crate::nir_value_graph::ValueKind::Unit, crate::tir::TypeTable::UNIT),
+            );
+            let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]
         });

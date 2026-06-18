@@ -162,7 +162,6 @@ pub enum ExprKind {
     /// `ValueKind::Unit` operand.)
     Dead,
     BytesLiteral(Vec<u8>),
-    Unit,
     Local {
         index: u32,
         name: String,
@@ -1220,7 +1219,6 @@ impl Body {
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
                 | ExprKind::BytesLiteral(_)
-                | ExprKind::Unit
                 | ExprKind::Dead
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }

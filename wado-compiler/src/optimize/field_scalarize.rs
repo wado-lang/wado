@@ -1032,7 +1032,6 @@ fn visit_expr_for_alias(
             visit_block_for_alias(body, default, type_table, out);
         }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1407,7 +1406,6 @@ fn count_field_accesses_in_expr(
             count_field_accesses_in_block(body, default, counts, type_table);
         }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -2776,7 +2774,6 @@ fn walk_other_expr_kinds(
             }
         }
         | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -3071,7 +3068,7 @@ fn emit_convergence_at_arm_body_end(
     // to the original body's value after sync.
     let tmp_idx = ctx.alloc_temp(body_type);
     let tmp_name = ctx.temp_name(tmp_idx);
-    let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Unit);
+    let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
     let original = push_expr(body, original_kind, body_type, body_span);
     let let_stmt = push_stmt(
         body,

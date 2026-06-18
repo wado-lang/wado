@@ -1165,9 +1165,14 @@ fn perform_fusion(
             let variant_body = arms[0].body;
             let else_body = arms[1].body;
             let then_block = arm_body_into_block(engine, variant_body.as_expr().expect("skeleton operand"), span);
-            let else_block = match &engine.body.exprs[else_body.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Unit => None,
-                _ => Some(arm_body_into_block(engine, else_body.as_expr().expect("skeleton operand"), span)),
+            // A unit-valued else arm (the `None` case) contributes no block.
+            let else_block = if else_body
+                .as_value()
+                .is_some_and(|v| matches!(engine.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit))
+            {
+                None
+            } else {
+                Some(arm_body_into_block(engine, else_body.as_expr().expect("skeleton operand"), span))
             };
             (then_block, else_block)
         }
@@ -1297,8 +1302,9 @@ fn transform_lb_stmt(
             else {
                 unreachable!()
             };
-            let payload_expr = payload
-                .unwrap_or_else(|| engine.alloc_expr(ExprKind::Unit, payload_type, span).into());
+            let payload_expr = payload.unwrap_or_else(|| {
+                engine.const_operand(crate::nir_value_graph::ValueKind::Unit, payload_type)
+            });
 
             // Emit: let __payload = payload_expr;
             let let_stmt = engine.alloc_stmt(

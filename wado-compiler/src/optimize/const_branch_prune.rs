@@ -221,8 +221,12 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
         _ => false,
     };
     if is_empty {
-        engine.replace_expr_kind(id, ExprKind::Unit);
-        return true;
+        // An empty block evaluates to unit; splice the pooled unit value into
+        // `id`'s position (the unit value has no skeleton node). `redirect_expr`
+        // is a no-op when `id` has no redirectable parent slot — report its
+        // result so the worklist settles instead of spinning on a non-edit.
+        let unit = engine.const_operand(crate::nir_value_graph::ValueKind::Unit, crate::tir::TypeTable::UNIT);
+        return engine.redirect_expr(id, unit);
     }
 
     false
@@ -281,8 +285,15 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
         StmtKind::LabeledBlock { label, block } => {
             unused_label_flattenable(body, label, *block, mode)
         }
+        StmtKind::Expr(e)
+            if e.as_value().is_some_and(|v| {
+                matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)
+            }) =>
+        {
+            true
+        }
         StmtKind::Expr(e) => match e.as_expr().map(|e| &body.exprs[e].kind) {
-            Some(ExprKind::Unit | ExprKind::Block(_)) => true,
+            Some(ExprKind::Block(_)) => true,
             Some(ExprKind::LabeledBlock { label, block, .. }) => {
                 unused_label_flattenable(body, label, *block, mode)
             }
@@ -350,8 +361,10 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             continue;
         }
         // Unit expression statement → drop.
-        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
-            && matches!(engine.body.exprs[*e].kind, ExprKind::Unit)
+        if let StmtKind::Expr(op) = &engine.body.stmts[stmt].kind
+            && op
+                .as_value()
+                .is_some_and(|v| matches!(engine.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit))
         {
             continue;
         }

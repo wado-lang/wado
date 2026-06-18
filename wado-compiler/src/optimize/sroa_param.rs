@@ -653,7 +653,7 @@ fn rewrite_arg(
     // Case 3: general — extract the field via FieldAccess.
     let span = body.exprs[arg].span;
     let orig_ty = body.exprs[arg].type_id;
-    let orig_kind = std::mem::replace(&mut body.exprs[arg].kind, ExprKind::Unit);
+    let orig_kind = std::mem::replace(&mut body.exprs[arg].kind, ExprKind::Dead);
     let orig = body.exprs.push(ExprNode {
         kind: orig_kind,
         type_id: orig_ty,

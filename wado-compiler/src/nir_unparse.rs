@@ -541,6 +541,8 @@ impl<'a> NirUnparser<'a> {
                     self.output.push('"');
                     self.output.push_str(&escape_string(s));
                     self.output.push('"');
+                } else if matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit) {
+                    self.output.push_str("()");
                 } else if let Some(value) =
                     crate::const_eval::Value::from_operand(body, op, self.type_table)
                 {
@@ -581,9 +583,6 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
-            }
-            ExprKind::Unit => {
-                self.output.push_str("()");
             }
             ExprKind::Dead => {
                 self.output.push_str("<dead>");
