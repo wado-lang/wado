@@ -18,19 +18,15 @@ failed approaches) and [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 | **Gale (generated)**          | **~2.29 ms/iter** | ~5.83 MB/s |
 | Rust `sqlparser-rs` (release) |     ~1.62 ms/iter |  8.25 MB/s |
 
-Current gap ≈ **1.42×** vs `sqlparser-rs` release. The
-**token-stream SoA decomposition (§1) is now implemented** and moved Gale
-from ~3.57 → ~2.29 ms/iter (~36% faster) — closing the gap from the prior
-~1.9× to ~1.42× (gap is the hardware-robust metric: this run measured
-`sqlparser-rs` at 1.62 ms vs the 1.90 ms recorded earlier, so compare
-ratios, not absolutes across runs). The tokens are now stored
-struct-of-arrays (`TokenStream`: parallel `i32` `kinds`/`starts`/`ends` +
-flat trivia arrays); the per-token `struct.new Token` is gone from
-`tokenize`, every scan/dispatch read is a single `array.get i32`, and CST
-terminals are a bare `i32` index (no per-terminal allocation). Earlier
-wins still stand: the lexer rework collapsed `tokenize` self-time and the
-token arrays are pre-sized. The fixture now parses **~60× faster** than
-the 137 ms/iter recorded when this section first lived in `TODO.md`.
+Current gap ≈ **1.42×** vs `sqlparser-rs` release (gap is the
+hardware-robust metric: this run measured `sqlparser-rs` at 1.62 ms; an
+earlier run on another host put it at 1.90 ms — compare ratios, not
+absolutes across runs). Tokens are stored struct-of-arrays
+(`TokenStream`: parallel `i32` `kinds`/`starts`/`ends` + flat trivia
+arrays); a token is a bare `i32` index — no per-token / per-terminal
+aggregate is allocated, and every scan/dispatch read is a single
+`array.get i32`. The fixture now parses **~60× faster** than the
+137 ms/iter recorded when this section first lived in `TODO.md`.
 
 > **Measurement note (read before trusting the percentages).** The
 > headline table is from the release benchmark (`mise run sqlite-parse`).
@@ -39,13 +35,11 @@ the 137 ms/iter recorded when this section first lived in `TODO.md`.
 > release rebuild). `Cargo.toml` raises `opt-level` on `cranelift-codegen`,
 > so the JIT-compiled **guest code is near-release quality**, but the
 > wasmtime runtime, GC, and allocator run at dev speed — making the dev
-> host ~10× slower per iter, with the slack concentrated in
-> **allocation/GC**. So the profile inflates allocation-bound frames
-> relative to pure-compute ones (`scan_*`, `follow_yields`, kind-set), and
-> its per-frame attribution within allocation is loose: §2 is a case where
-> a spike shows ~40% of wall time for a frame the sampler puts at 18%.
-> Read the percentages as relative, and the alloc-vs-compute split as
-> approximate.
+> host ~4–5× slower per iter (~10.8 ms vs ~2.29 ms release), with the
+> slack concentrated in **allocation/GC**. So the profile inflates
+> allocation-bound frames relative to pure-compute ones (`scan_*`,
+> `follow_yields`, kind-set). Read the percentages as relative, and the
+> alloc-vs-compute split as approximate.
 
 Reproduce:
 
@@ -58,106 +52,63 @@ wado run --no-cache --profile guest,/tmp/p.json,1 -O2 sqlite_parse/sqlite_parse.
 ```
 
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the
-`profiling-wado` skill's script, or upload to profiler.firefox.com. The
-table below merges **7 dev-host runs @1 ms = 1620 samples** to damp
-per-run sampling noise.)
+`profiling-wado` skill's script — count **leaf** frames for self-time —
+or upload to profiler.firefox.com. The table below merges **5 dev-host
+runs @1 ms = 4177 samples** to damp per-run sampling noise.)
 
-## Live profile (guest sampler, 7 runs merged, 1620 samples @1 ms)
+## Live profile (guest sampler, 5 runs merged, 4177 samples @1 ms)
 
-|   Pct | Symbol                       | role                                             |
-| ----: | ---------------------------- | ------------------------------------------------ |
-| 24.0% | `List<Token>::push`          | per-token `struct.new Token` + array store       |
-| 18.1% | `_gale_rule<ResultColumn..>` | per-call rule-name `String` alloc at the wrapper |
-|  5.7% | `Parser::last_end`           | `Parser→List→Token→Span→end` load chain          |
-|  4.3% | `_gale_kind_set_8`           | membership test over the big keyword set         |
-|  4.1% | `follow_yields`              | runtime FOLLOW gate (LL repair), parse + scan    |
-|  3.9% | `scan_any_name`              | scan (prediction)                                |
-|  3.2% | `char::to_ascii_lowercase`   | case-insensitive keyword matching                |
-|  2.7% | `scan_expr`                  | scan (LR precedence climb)                       |
-|  2.5% | `StrCharIter::collect`       | `input.chars().collect()` into `List<char>`      |
-|  1.7% | `Parser::expect`             | token read                                       |
-|  1.7% | `tokenize`                   | lexer driver (was 27.9% historically)            |
-|  1.5% | `List<char>::push`           | lexer char-buffer fill                           |
-|  1.0% | `List<Token>::grow`          | token-array reallocation (now pre-sized away)    |
-|  0.9% | `classify_keyword`           | keyword vs identifier disambiguation             |
+Post-SoA shape. The old per-token `struct.new Token` frame
+(`List<Token>::push`, was 24%) is gone; the per-call rule-name `String`
+allocation now leads outright.
 
-Rough buckets (self-time): token-stream construction (`push`+`grow`) ≈
-**25%**; the per-call rule-name `String` allocation at the `_gale_rule`
-boundary (`_gale_rule<*>`, all variants) ≈ **21%** (under-attributed — see
-§2); lexer char-level work (`to_ascii_lowercase` + `List<char>` +
-`classify_keyword` + `collect` + `try_*`) ≈ **13%**; `scan_*` ≈ **11%**;
-kind-set membership ≈ **9%**; `Parser` token reads
-(`last_end`/`expect`/`advance`) ≈ **8%**; the FOLLOW gate ≈ **4%**.
+|   Pct | Symbol                     | role                                                            |
+| ----: | -------------------------- | --------------------------------------------------------------- |
+| 24.3% | `_gale_rule<AnyNameNode>`  | per-call rule-name `String` alloc at the wrapper                |
+|  7.6% | `Parser::last_end`         | `tokens.ends[pos-1]` — one `array.get i32`, huge call count     |
+|  6.7% | `List<i32>::grow`          | `TokenStream` array growth (the `/4` pre-size under-shoots SQL) |
+|  6.4% | `_gale_kind_set_8`         | membership test over the big keyword set                        |
+|  4.5% | `scan_any_name`            | scan (prediction)                                               |
+|  4.4% | `follow_yields`            | runtime FOLLOW gate (LL repair), parse + scan                   |
+|  3.6% | `char::to_ascii_lowercase` | case-insensitive keyword matching                               |
+|  3.4% | `scan_expr`                | scan (LR precedence climb)                                      |
+|  2.9% | `List<i32>::push`          | `TokenStream` token push (`push_token`)                         |
+|  2.4% | `Parser::expect`           | token read                                                      |
+|  2.3% | `try_IDENTIFIER`           | lexer identifier matcher                                        |
+|  1.4% | `_parse_expr__inner`       | LR expr body                                                    |
+|  1.1% | `classify_keyword`         | keyword vs identifier disambiguation                            |
+|  1.1% | `StrCharIter::collect`     | one `input.chars().collect()` (lexer)                           |
+|  0.8% | `tokenize`                 | lexer driver                                                    |
+|  0.7% | `TokenStream::push_token`  | SoA token writer                                                |
 
-A different shape from the previous revision, where `follow_yields` led
-at 18.6% and `List<Token>::grow` at 15.3%: the pre-size killed `grow` and
-the per-loop FOLLOW prune dropped the gate to ~4%, leaving two real
-allocations on top — per-token `struct.new` (§1) and the per-call
-rule-name `struct.new String` (§2, confirmed by a spike). Both are
-allocation-bound, so the dev host inflates them (measurement note); the
-ordering holds.
+Rough buckets (self-time): the per-call rule-name `String` allocation at
+the `_gale_rule` boundary (all `_gale_rule<*>` variants summed) ≈ **~27%**
+— now the dominant single cost (§1); `scan_*` ≈ **~13%**; kind-set
+membership (`_gale_kind_set_*`) ≈ **~11%**; token-stream construction (now
+flat `i32`-array building: `List<i32>::grow`+`push`+`push_token`) ≈
+**~10%** — down from ~25% pre-SoA, and dominated by `grow` because the
+`chars.len()/4` pre-size under-shoots SQL token density (§4); `Parser`
+token reads (`last_end`+`expect`) ≈ **~10%**; lexer char-level work
+(`to_ascii_lowercase` + `classify_keyword` + `try_*` + `List<char>` +
+`collect`) ≈ **~10%**; the FOLLOW gate ≈ **~4%**.
+
+`Parser::last_end` is still ~7.6% **by call frequency**, not per-call cost:
+the SoA already collapsed it to a single `array.get i32` (the old 4-step
+`Parser→Token→Span→end` chain is gone), and inlining/precomputation
+measured zero wall-time change — see "What does not work".
 
 ## What would move the needle
 
-Ordered by profile self-time (but §2 is the largest once the sampler's
-under-attribution is corrected — see its spike). None are mutually
-exclusive; several multiply rather than add.
+Ordered by profile self-time. None are mutually exclusive; several
+multiply rather than add. (The token-stream SoA decomposition that led
+this list pre-2026-06 is done — tokens are now flat `i32` arrays; see the
+benchmark state and `git log`.)
 
-### 1. Token-stream construction — `push` 24.0% + `grow` 1.0% (~25%) — ✅ DONE
+### 1. Per-call rule-name `String` allocation — the `_gale_rule` boundary (~27% self-time)
 
-**Implemented (2026-06): SoA decomposition of the token stream.** Tokens
-are a `TokenStream` of parallel `i32` arrays (`kinds`/`starts`/`ends` +
-flat trivia arrays over borrowed `chars`); a token is a bare `i32` index.
-The per-token `struct.new Token` is gone from `tokenize`, hot reads are a
-single `array.get i32`, and the typed AST / CST store a bare `i32`
-terminal (no per-terminal allocation; `ParseResult<T>` bundles the tree
-with its stream). Measured: ~3.57 → ~2.29 ms/iter on the SQLite fixture.
-Design and rationale: [`token-stream-soa-design.md`](./token-stream-soa-design.md).
-The original analysis that motivated this is kept below.
-
-The dominant _category_, and now **allocation-bound** (`push`) rather
-than reallocation-bound — the pre-size (`List::with_capacity` in
-`tokenize`) already collapsed `grow` from 15.3% to ~1%, so that earlier
-"cheapest win" is **done**.
-
-`push` is **not a copy** (checked, like `_gale_rule` §2): the WIR body is
-just a length check + `array.set<ref Token>` + increment, and the token
-array holds **refs** (`(array (ref Token))`), so `push` stores a pointer —
-there is no `$value_copy$Token` anywhere. Two genuine costs remain, both
-removed by the same lever:
-
-1. The per-token **`struct.new Token`** (with its `LexerSlice`, `Span`,
-   and `leading_trivia: List<Token>` sub-allocations) — this lands in
-   `tokenize`, not `push`.
-2. Inside `push`, the **`array.set` into a `(array (ref Token))`** — a GC
-   reference store / write barrier executed once per token; combined with
-   the sheer call frequency (one `push` per token) this is what puts the
-   trivial body at the top, the same call-frequency effect as `last_end`
-   (§3), not per-call expense.
-
-The lever is **SoA decomposition of `List<Token>`**: parallel primitive
-arrays (`kinds` / `starts` / `ends` as `List<i32>`) so `peek_kind` becomes
-a single `array.get i32` (not `array.get (ref Token)` + `struct.get`),
-per-token allocation disappears in the lex loop, and the ref-array store
-becomes a barrier-free `array.set i32`. The Gale-side path is designed in
-detail in [`token-stream-soa-design.md`](./token-stream-soa-design.md).
-Two ways to get there:
-
-- **Gale-side:** redesign `Token` so hot fields are flat primitives,
-  with an opaque sidecar (or removal) for `text` / `leading_trivia`;
-  keep the public `Token` API as a view handle if needed.
-- **Wado-side:** extend `container_sroa` to handle (a) struct fields
-  (currently locals only), (b) inner structs with nested
-  struct/reference fields, (c) cross-function rewrites for the
-  `scan_*(&List<Token>, ...)` parameter pattern (1100+ sites in the
-  SQLite parser pass `&p.tokens` as a bare reference, always
-  escaping). Today the pass fires on zero candidates in
-  Gale-generated parsers.
-
-### 2. Per-call rule-name `String` allocation — the `_gale_rule` boundary (~40% dev-host)
-
-**The single largest reducible cost, and not what the profile name
-suggests.** Every parser rule is emitted as
+**The single largest reducible cost, and now the top profile frame** (the
+SoA rework removed the per-token `struct.new` that used to sit above it).
+Every parser rule is emitted as
 `_parse_X(p, follow) = _gale_rule(_parse_X__inner(p, follow), "X")`.
 `_gale_rule<T>` records the rule name on the `ParseError.rule_stack` on
 the **error** path only:
@@ -169,13 +120,14 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
 }
 ```
 
-The profile puts ~18% self-time on `_gale_rule<ResultColumnNode>`, but it
-is **not a copy**. The WIR shows the success path is copy-free —
-`Result<…>` is a boxed `ref`, so `return r` returns a reference, and the
-only `$value_copy$` is on the cold `Err` branch:
+The profile puts ~24% self-time on `_gale_rule<AnyNameNode>` (the
+most-entered rule — identifiers are everywhere in SQL), but it is **not a
+copy**. The WIR shows the success path is copy-free — `Result<…>` is a
+boxed `ref`, so `return r` returns a reference, and the only
+`$value_copy$` is on the cold `Err` branch:
 
 ```text
-fn _gale_rule<ResultColumnNode>(r, rule) {
+fn _gale_rule<AnyNameNode>(r, rule) {
     if ref.test …::Err(r) { … $value_copy … }   // cold: only on parse failure
     return r;                                     // returns a ref — no copy
 }
@@ -183,7 +135,7 @@ fn _gale_rule<ResultColumnNode>(r, rule) {
 
 The real cost lives at the **call site**, in the wrapper `_parse_X`: the
 rule-name `"X"` is rebuilt on **every** rule entry as
-`struct.new String { repr: array.new_data("result_column"), used: 13 }` —
+`struct.new String { repr: array.new_data("any_name"), used: 8 }` —
 a fresh GC allocation on the hot success path, consumed only on the cold
 error path. Thousands of these per parse dominate the allocation traffic.
 
@@ -233,29 +185,12 @@ the call site. Either path closes the gap:
   variant passes an `i32` rule-id and turns `rule_stack` into
   `List<i32>`, eliminating hot-path string work entirely.
 
-(The ~40% is dev-host; release allocates faster so the share is smaller,
-but the per-parse allocation-count drop is real and host-independent.)
+(Release allocates faster so the share is smaller than dev-host, but the
+per-parse allocation-count drop is real and host-independent.)
 
-### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%) — ✅ DONE (via §1)
+### 2. Kind-set membership — `_gale_kind_set_*` (~11%)
 
-**Implemented (2026-06):** the §1 SoA decomposition turned `last_end` into
-a single `self.tokens.ends[pos - 1]` (`array.get i32`); the 4-step load
-chain is gone. `peek_kind` / `peek_at` are likewise one `array.get i32`,
-and `expect` / `advance` return an `i32` index. Original analysis below.
-
-`Parser::last_end` is a 4-step `Parser→List→Token→Span→end` load chain.
-It ranks high **purely because of call frequency** — it is invoked an
-enormous number of times — not because any single call is expensive.
-That is why **inlining and precomputation both measured zero improvement**
-(see below): there is no call overhead or redundant work to remove; the
-only thing that moves the needle is making each load cheaper. The SoA
-decomposition in (1) does exactly that, turning the end offset into a
-direct `array.get i32`. This is the same lever as §1 — SoA pays off in two
-places at once.
-
-### 4. Kind-set membership — `_gale_kind_set_*` (~9%)
-
-`_gale_kind_set_8` alone is 4.3%: a `k matches { TK_… | TK_… | … }`
+`_gale_kind_set_8` alone is 6.4%: a `k matches { TK_… | TK_… | … }`
 membership test over the large SQLite keyword set (~125 kinds), called
 from scan dispatch and the parser's lookahead gates. Generated today as a
 branch/compare cascade (71 such helpers in the SQLite parser). A
@@ -263,15 +198,24 @@ compile-time **perfect hash** or a **bitset indexed by token kind**
 (`(kind >> 5)` word + `1 << (kind & 31)`) turns it into O(1) with no
 branch cascade — worth it because a handful of large sets dominate. This
 is a pure-compute frame the dev host does _not_ inflate, so its release
-share is likely a touch higher than 9%.
+share is likely a touch higher than 11%.
 
-### 5. Lexer char-level work (~13%, independent secondary lever)
+### 3. Token-array pre-size — `List<i32>::grow` 6.7%
+
+The SoA `tokenize` pre-sizes each `TokenStream` array to
+`chars.len()/4 + 1`, but SQL is token-dense (short keywords/punctuation),
+so the arrays still `grow`. Pre-sizing closer to the real token count —
+a denser divisor, or a cheap first-pass token-count estimate — would
+reclaim most of this `grow` self-time. Cheap, self-contained, in
+`gen_tokenize_fn` (`lexer_gen.wado`).
+
+### 4. Lexer char-level work (~10%, independent secondary lever)
 
 Inside lexing, work splits across `to_ascii_lowercase` (case-insensitive
-matching, 3.2%), `List<char>` buffer building, and `classify_keyword`
-(0.9%). (The 2.5% `StrCharIter::collect` in `_gale_new_parser` is **gone**:
-the §1 SoA rework dropped the `Parser`'s separate `input.chars().collect()`
-— the `TokenStream` borrows the lexer's chars, so the program now collects
+matching, 3.6%), `List<char>` buffer building, and `classify_keyword`
+(1.1%). (The `Parser`'s separate `input.chars().collect()` is **gone**:
+the SoA rework had the `TokenStream` borrow the lexer's chars, so the
+program now collects
 the source once, not twice.) Pick by what
 profiling on the predicate-correct lexer says is hottest (after Stage C
 makes predicates real — a fast tokenizer is meaningless if it tokenizes
@@ -293,14 +237,16 @@ incorrectly). Candidates:
 ## What does not work
 
 - **Inlining hot `Parser` methods / any per-method micro-opt.**
-  `Parser::last_end` is high only because of its huge call count, not
-  per-call expense. Precomputing it (caching the value in a field) or
-  forcing inlining removes the named function from the profile but
-  measured **no wall-time change** — there is no call overhead or
-  redundant work to remove; the cost is performing the loads
-  (`Parser→List→Token→Span→end`) that many times. wasmtime + Cranelift
-  handle small Wasm calls cheaply enough that inlinability is not the
-  lever. The real fix is making each load cheaper (SoA, §1).
+  `Parser::last_end` is high (~7.6%) only because of its huge call count,
+  not per-call expense — the SoA rework already made it a single
+  `tokens.ends[pos-1]` (`array.get i32`). Precomputing it (caching the
+  value in a field) or forcing inlining removes the named function from
+  the profile but measured **no wall-time change** — there is no call
+  overhead or redundant work to remove; the cost is performing that many
+  bounds-checked `array.get`s. wasmtime + Cranelift handle small Wasm
+  calls cheaply enough that inlinability is not the lever. What is left
+  here is pure call frequency, which only a caller-side restructuring (not
+  a micro-opt) could reduce.
 - **Data-driven / bytecode-VM scan** (see below).
 
 ## Failed approaches (do not repeat)
