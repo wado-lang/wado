@@ -911,6 +911,27 @@ closed, **97%** of the failure surface cleared); the residue is the
 `Select`-availability soundness problem (a keystone sub-task) plus `wir_expect`
 fixture churn that only matters once promotion is the real vehicle.
 
+### A criterion-1 lever independent of full promotion: licm's `loop_entry_values`
+
+Of the 861 zlib rebuilds, **531 are `licm`** — `hoist_invariant_arith` calls
+`invalidate_value_graph()` once per hoist round. The earlier conclusion ("needs
+the `LoopPhi` operand model") may be stronger than necessary for the _per-round_
+rebuilds: an arith hoist appends `let t = <invariant>` to the pre-header and
+rewrites in-loop occurrences to read `t`. That edit **does not reassign any
+existing local**, so every existing local's `loop_entry_values` entry stays
+valid; only the new temp `t` needs an entry, and licm already knows `t`'s value
+(the invariant it just hoisted). So the per-round invalidate can be replaced by
+**targeted maintenance**: add `Engine::set_loop_entry_value(loop_body, t_local,
+inv_value)` and let the occurrence rewrites flow through the maintaining edit API
+(`replace_expr_kind`), dropping licm's rebuilds toward one-per-function (≈216) —
+no promotion, no cache, no coarsening, `WADO_VERIFY_VG`-checkable. Caveat: the
+_first_ arith-hoist invalidate per loop also absorbs the staleness from this
+iteration's earlier _field_-hoisting (which does restructure the loop), so closing
+that one too needs field-hoist maintenance; the per-round arith invalidates are
+the bounded, immediately-actionable slice. This is the most direct next lever on
+criterion 1 that does not wait for the whole keystone, and pairs with the
+`cse`-side reuse (the other 330) once cross-pass maintenance is sound.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
