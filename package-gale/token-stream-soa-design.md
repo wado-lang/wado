@@ -223,4 +223,4 @@ contained by discipline:
    (11), and the driver suite (calculator/json/html/sqlite/typescript/
    css3/highlight/antlr4/non-greedy typed-AST/error-recovery).
 3. Re-profile `benchmark/sqlite_parse` (`perf.md` reproduce steps) and
-   update `perf.md` §1/§3 with the measured delta. *(pending)*
+   update `perf.md` §1/§3 with the measured delta. _(pending)_

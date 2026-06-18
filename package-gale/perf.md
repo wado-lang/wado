@@ -15,18 +15,22 @@ failed approaches) and [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
 | Parser                        |          per-iter | throughput |
 | ----------------------------- | ----------------: | ---------: |
-| **Gale (generated)**          | **~3.57 ms/iter** | ~3.75 MB/s |
-| Rust `sqlparser-rs` (release) |     ~1.90 ms/iter |  7.05 MB/s |
+| **Gale (generated)**          | **~2.29 ms/iter** | ~5.83 MB/s |
+| Rust `sqlparser-rs` (release) |     ~1.62 ms/iter |  8.25 MB/s |
 
-Current gap ≈ **1.9×** vs `sqlparser-rs` release — down from the **12×**
-this table recorded one revision ago. Two things closed it: the lexer
-rework collapsed `tokenize` self-time, and the token list is now
-pre-sized (`List::with_capacity(chars.len()/4 + 1)` in `tokenize`), which
-all but eliminated `List<Token>::grow`. The fixture now parses **~38×
-faster** than the 137 ms/iter recorded when this section first lived in
-`TODO.md`, and **~5.6× faster** than the ~20 ms/iter of the previous
-revision — so the priorities below are re-derived from a fresh profile,
-not the historical one.
+Current gap ≈ **1.42×** vs `sqlparser-rs` release. The
+**token-stream SoA decomposition (§1) is now implemented** and moved Gale
+from ~3.57 → ~2.29 ms/iter (~36% faster) — closing the gap from the prior
+~1.9× to ~1.42× (gap is the hardware-robust metric: this run measured
+`sqlparser-rs` at 1.62 ms vs the 1.90 ms recorded earlier, so compare
+ratios, not absolutes across runs). The tokens are now stored
+struct-of-arrays (`TokenStream`: parallel `i32` `kinds`/`starts`/`ends` +
+flat trivia arrays); the per-token `struct.new Token` is gone from
+`tokenize`, every scan/dispatch read is a single `array.get i32`, and CST
+terminals are a bare `i32` index (no per-terminal allocation). Earlier
+wins still stand: the lexer rework collapsed `tokenize` self-time and the
+token arrays are pre-sized. The fixture now parses **~60× faster** than
+the 137 ms/iter recorded when this section first lived in `TODO.md`.
 
 > **Measurement note (read before trusting the percentages).** The
 > headline table is from the release benchmark (`mise run sqlite-parse`).
@@ -99,7 +103,17 @@ Ordered by profile self-time (but §2 is the largest once the sampler's
 under-attribution is corrected — see its spike). None are mutually
 exclusive; several multiply rather than add.
 
-### 1. Token-stream construction — `push` 24.0% + `grow` 1.0% (~25%)
+### 1. Token-stream construction — `push` 24.0% + `grow` 1.0% (~25%) — ✅ DONE
+
+**Implemented (2026-06): SoA decomposition of the token stream.** Tokens
+are a `TokenStream` of parallel `i32` arrays (`kinds`/`starts`/`ends` +
+flat trivia arrays over borrowed `chars`); a token is a bare `i32` index.
+The per-token `struct.new Token` is gone from `tokenize`, hot reads are a
+single `array.get i32`, and the typed AST / CST store a bare `i32`
+terminal (no per-terminal allocation; `ParseResult<T>` bundles the tree
+with its stream). Measured: ~3.57 → ~2.29 ms/iter on the SQLite fixture.
+Design and rationale: [`token-stream-soa-design.md`](./token-stream-soa-design.md).
+The original analysis that motivated this is kept below.
 
 The dominant _category_, and now **allocation-bound** (`push`) rather
 than reallocation-bound — the pre-size (`List::with_capacity` in
@@ -222,7 +236,12 @@ the call site. Either path closes the gap:
 (The ~40% is dev-host; release allocates faster so the share is smaller,
 but the per-parse allocation-count drop is real and host-independent.)
 
-### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%)
+### 3. `Parser` token reads — `last_end` 5.7%, `expect`, `advance` (~8%) — ✅ DONE (via §1)
+
+**Implemented (2026-06):** the §1 SoA decomposition turned `last_end` into
+a single `self.tokens.ends[pos - 1]` (`array.get i32`); the 4-step load
+chain is gone. `peek_kind` / `peek_at` are likewise one `array.get i32`,
+and `expect` / `advance` return an `i32` index. Original analysis below.
 
 `Parser::last_end` is a 4-step `Parser→List→Token→Span→end` load chain.
 It ranks high **purely because of call frequency** — it is invoked an
@@ -249,9 +268,11 @@ share is likely a touch higher than 9%.
 ### 5. Lexer char-level work (~13%, independent secondary lever)
 
 Inside lexing, work splits across `to_ascii_lowercase` (case-insensitive
-matching, 3.2%), `List<char>` buffer building, `classify_keyword` (0.9%),
-and the up-front `input.chars().collect()` into `List<char>`
-(`StrCharIter::collect`, 2.5%, in `_gale_new_parser`). Pick by what
+matching, 3.2%), `List<char>` buffer building, and `classify_keyword`
+(0.9%). (The 2.5% `StrCharIter::collect` in `_gale_new_parser` is **gone**:
+the §1 SoA rework dropped the `Parser`'s separate `input.chars().collect()`
+— the `TokenStream` borrows the lexer's chars, so the program now collects
+the source once, not twice.) Pick by what
 profiling on the predicate-correct lexer says is hottest (after Stage C
 makes predicates real — a fast tokenizer is meaningless if it tokenizes
 incorrectly). Candidates:
