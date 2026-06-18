@@ -406,10 +406,17 @@ fn check_fusion_preconditions_match(
     // --- THEN/ELSE bodies must not contain free unlabeled break/continue
     //     when the labeled block being fused contains a loop. ---
     if block_contains_loop(body, lb_block) {
-        if arm_body_has_free_unlabeled_loop_exit(body, variant_arm_body.as_expr().expect("skeleton operand")) {
+        // A promoted-value arm body has no skeleton subtree, hence no loop exit.
+        if variant_arm_body
+            .as_expr()
+            .is_some_and(|e| arm_body_has_free_unlabeled_loop_exit(body, e))
+        {
             return None;
         }
-        if arm_body_has_free_unlabeled_loop_exit(body, else_arm_body.as_expr().expect("skeleton operand")) {
+        if else_arm_body
+            .as_expr()
+            .is_some_and(|e| arm_body_has_free_unlabeled_loop_exit(body, e))
+        {
             return None;
         }
     }
@@ -573,6 +580,22 @@ fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Spa
     }
 }
 
+/// Like [`arm_body_into_block`] but accepts an `Operand`: a promoted pure value
+/// (e.g. a unit arm body) has no skeleton node, so wrap it as a single-statement
+/// block carrying the value operand.
+fn arm_body_operand_into_block(
+    engine: &mut Engine,
+    arm_body: Operand,
+    fallback_span: Span,
+) -> BlockId {
+    if let Some(e) = arm_body.as_expr() {
+        arm_body_into_block(engine, e, fallback_span)
+    } else {
+        let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body), fallback_span);
+        engine.alloc_block(vec![stmt], fallback_span)
+    }
+}
+
 /// Verify that all `break L: v` in `block` have `v` as either `null` or
 /// `VariantConstruct`. Returns the payload type of the matching case.
 fn check_lb_breaks_and_get_payload(
@@ -639,8 +662,7 @@ fn check_lb_breaks_in_stmt(
                     if ci == case_index
                         && let Some(p) = payload
                     {
-                        *payload_type =
-                            Some(body.exprs[p.as_expr().expect("skeleton operand")].type_id);
+                        *payload_type = Some(body.operand_type(p));
                     }
                     true
                 }
@@ -1164,7 +1186,7 @@ fn perform_fusion(
             };
             let variant_body = arms[0].body;
             let else_body = arms[1].body;
-            let then_block = arm_body_into_block(engine, variant_body.as_expr().expect("skeleton operand"), span);
+            let then_block = arm_body_operand_into_block(engine, variant_body, span);
             // A unit-valued else arm (the `None` case) contributes no block.
             let else_block = if else_body
                 .as_value()
@@ -1172,7 +1194,7 @@ fn perform_fusion(
             {
                 None
             } else {
-                Some(arm_body_into_block(engine, else_body.as_expr().expect("skeleton operand"), span))
+                Some(arm_body_operand_into_block(engine, else_body, span))
             };
             (then_block, else_block)
         }
@@ -1503,11 +1525,13 @@ fn transform_lb_in_expr(
             }
         }
         ExprKind::Match { expr, arms } => {
-            let mut exprs = vec![expr.as_expr().expect("skeleton operand")];
+            // Promoted-value scrutinee / arm bodies / guards have no skeleton
+            // subtree to descend into.
+            let mut exprs: Vec<ExprId> = expr.as_expr().into_iter().collect();
             for arm in arms {
-                exprs.push(arm.body.as_expr().expect("skeleton operand"));
+                exprs.extend(arm.body.as_expr());
                 if let Some(g) = arm.guard {
-                    exprs.push(g.as_expr().expect("skeleton operand"));
+                    exprs.extend(g.as_expr());
                 }
             }
             Shape::Exprs(exprs)

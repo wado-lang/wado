@@ -213,22 +213,11 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
         }
     }
 
-    // `[label:] { }` → `()` (empty block, with or without label)
-    let is_empty = match &engine.body.exprs[id].kind {
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            engine.body.blocks[*b].stmts.is_empty()
-        }
-        _ => false,
-    };
-    if is_empty {
-        // An empty block evaluates to unit; splice the pooled unit value into
-        // `id`'s position (the unit value has no skeleton node). `redirect_expr`
-        // is a no-op when `id` has no redirectable parent slot — report its
-        // result so the worklist settles instead of spinning on a non-edit.
-        let unit = engine.const_operand(crate::nir_value_graph::ValueKind::Unit, crate::tir::TypeTable::UNIT);
-        return engine.redirect_expr(id, unit);
-    }
-
+    // An empty `[label:] { }` is left as an empty Block (a unit-typed
+    // skeleton form). Collapsing it to the pooled unit value would strip the
+    // node that downstream passes — notably heap-field-sync, which appends a
+    // convergence reread into each match arm's block — rely on as an insertion
+    // point. Empty blocks are reclaimed by block-flattening / DCE instead.
     false
 }
 
