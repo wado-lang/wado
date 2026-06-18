@@ -762,6 +762,20 @@ copy_prop/inline interaction on a promoted f32 value (a missing/!mismatched
 f32↔f64 coercion or a cross-function value splice), not the extractor. A distinct
 focused trace; deferred to the next brick. Tree restored green.
 
+Width crux resolved (good news, verified): with composite-width (`adecff3ca`) and
+the `elide_local` fix in, `count_prime` now **compiles valid Wasm under early
+promotion** (was the original `i64`/`i32` invalid-Wasm), and a `VG_WMISMATCH`
+probe (panic on any extracted `Binary` whose lhs width ≠ result width, comparisons
+excluded) fires on **neither** count_prime nor coerce_float. So the
+operand-width-erasure class that blocked early promotion is **closed** — the
+remaining 111 are not width-extraction bugs. `coerce_float` specifically is a
+copy_prop/inline value-substitution bug in the float-formatting path
+(`short32`/`unpack32`'s u64 math producing a wrong digit _value_, not a wrong
+width), `extract_value` and the binary widths being correct. Next brick: trace
+that copy_prop/inline interaction (likely a promoted value spliced/propagated to a
+wrong slot), which should clear the formatting-heavy fixtures (assert / inspect /
+serde / coerce).
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
