@@ -535,9 +535,13 @@ impl<'a> NirUnparser<'a> {
     fn unparse_operand(&mut self, body: &Body, op: Operand) {
         match op {
             Operand::Value(v) => {
-                // A pure scalar constant renders as its literal; other graph
-                // values (opaques, derived nodes) render as `%id`.
-                if let Some(value) =
+                // A pure constant renders as its literal; other graph values
+                // (opaques, derived nodes) render as `%id`.
+                if let crate::nir_value_graph::ValueKind::String(s) = body.values.kind(v) {
+                    self.output.push('"');
+                    self.output.push_str(&escape_string(s));
+                    self.output.push('"');
+                } else if let Some(value) =
                     crate::const_eval::Value::from_operand(body, op, self.type_table)
                 {
                     self.output.push_str(&value.format_repr());
@@ -552,11 +556,6 @@ impl<'a> NirUnparser<'a> {
     fn unparse_expr(&mut self, body: &Body, id: ExprId) {
         let ty = body.exprs[id].type_id;
         match &body.exprs[id].kind {
-            ExprKind::StringLiteral(s) => {
-                self.output.push('"');
-                self.output.push_str(&escape_string(s));
-                self.output.push('"');
-            }
             ExprKind::BytesLiteral(bytes) => {
                 self.output
                     .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));

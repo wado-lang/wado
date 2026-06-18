@@ -679,7 +679,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if let Some(index) = local(inner.as_expr().expect("skeleton operand")) {
+                if let Some(index) = inner.as_expr().and_then(local) {
                     out.insert(index);
                 }
             }
@@ -755,7 +755,6 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::GlobalVarSet { .. }
             | ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }
-            | ExprKind::StringLiteral(_)
             | ExprKind::BytesLiteral(_)
             | ExprKind::Unit
             | ExprKind::EnumConstruct { .. } => {}

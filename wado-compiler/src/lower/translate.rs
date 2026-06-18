@@ -885,6 +885,10 @@ impl FunctionTranslator<'_, '_> {
             // (`None` variant or `ref.null`) depends only on the recorded type,
             // which the extractor reads from the pool. Born as `Operand::Value`.
             TirExprKind::Null => Some(ValueKind::Null),
+            // A string literal is a pure constant: its WIR materialisation
+            // (`translate_string_literal`) depends only on its bytes, which the
+            // extractor reads from the pool. Born as `Operand::Value`.
+            TirExprKind::StringLiteral(s) => Some(ValueKind::String(s.clone())),
             _ => None,
         };
         match vk {
@@ -1109,7 +1113,9 @@ impl FunctionTranslator<'_, '_> {
             | TirExprKind::CharLiteral(_) => {
                 unreachable!("scalar literals are interned via convert_operand, never convert_expr")
             }
-            TirExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
+            TirExprKind::StringLiteral(_) => {
+                unreachable!("string literals are interned via convert_operand, never convert_expr")
+            }
             TirExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
             TirExprKind::Null => {
                 unreachable!("Null is interned via convert_operand, never convert_expr")

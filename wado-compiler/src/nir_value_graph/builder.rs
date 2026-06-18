@@ -513,10 +513,10 @@ impl<'a> Builder<'a> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: inner,
-            } => match &self.body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+            } => inner.as_expr().and_then(|ie| match &self.body.exprs[ie].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
-            },
+            }),
             _ => None,
         };
         match target {
@@ -694,7 +694,6 @@ impl<'a> Builder<'a> {
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::StringLiteral(s) => Some(self.pool.string(s)),
             ExprKind::Unit => Some(self.pool.unit()),
 
             // ---- Local read ----

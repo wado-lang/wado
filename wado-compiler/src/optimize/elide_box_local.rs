@@ -621,7 +621,6 @@ fn walk_expr_for_leftmost(
 
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,

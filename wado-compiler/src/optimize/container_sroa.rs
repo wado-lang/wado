@@ -1127,12 +1127,15 @@ impl WhitelistChecker<'_> {
             ExprKind::Unary { op, expr: inner } => {
                 let inner = *inner;
                 if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                    && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                    && let Some(ie) = inner.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 {
                     self.mark(*index);
                     return;
                 }
-                self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
+                if let Some(ie) = inner.as_expr() {
+                    self.visit_expr(body, ie);
+                }
             }
             _ => self.walk(body, NodeRef::Expr(e)),
         }

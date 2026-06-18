@@ -120,8 +120,10 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         {
             let inner = *inner;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let ExprKind::Local { index, name } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-                let inner_type_id = body.exprs[inner.as_expr().expect("skeleton operand")].type_id;
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, name } = &body.exprs[ie].kind
+            {
+                let inner_type_id = body.exprs[ie].type_id;
                 if is_ref {
                     CopySource::Ref {
                         index: *index,
@@ -296,7 +298,8 @@ fn analyze_expr(
         ExprKind::Unary { op, expr: inner } => {
             let (op, inner) = (*op, *inner);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                && let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
                 let index = *index;
                 result.usage.entry(index).or_default().address_taken = true;

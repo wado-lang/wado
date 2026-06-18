@@ -274,13 +274,13 @@ fn register_let_binding(
     // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent.
     if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && is_valid_referent(body, expr.as_expr().expect("skeleton operand"))
+        && let Some(referent_e) = expr.as_expr()
+        && is_valid_referent(body, referent_e)
     {
-        let referent_e = *expr;
         refs.insert(
             local_index,
             RefInfo {
-                referent_e: referent_e.as_expr().expect("skeleton operand"),
+                referent_e,
                 eliminable: true,
             },
         );
@@ -387,10 +387,12 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
         && let Some(ve) = value.as_expr()
         && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && matches!(
-            body.exprs[expr.as_expr().expect("skeleton operand")].kind,
-            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-        )
+        && expr.as_expr().is_some_and(|e| {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+            )
+        })
     {
         refs.insert(
             *local_index,

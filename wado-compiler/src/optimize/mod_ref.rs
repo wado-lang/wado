@@ -273,8 +273,19 @@ impl ModRef {
     /// [`accumulate_expr`] for an operand: a promoted constant mods / refs
     /// nothing, so it is skipped.
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
-        if let Some(e) = op.as_expr() {
-            self.accumulate_expr(body, e, scope);
+        match op {
+            Operand::Expr(e) => self.accumulate_expr(body, e, scope),
+            // A promoted constant is a pure leaf except `String`, whose WIR
+            // materialisation (`translate_string_literal`) builds a fresh
+            // `String` heap object with a distinct identity at each use site.
+            Operand::Value(v) => {
+                if matches!(
+                    body.values.kind(v),
+                    crate::nir_value_graph::ValueKind::String(_)
+                ) {
+                    self.allocates = true;
+                }
+            }
         }
     }
 
@@ -502,12 +513,13 @@ impl ModRef {
 
             // === GC-allocating literals ===
             //
-            // String and bytes literals each lower to a fresh
-            // `struct.new String { repr: array.new_data<u8>(...), used: N }`
-            // (wir_build/primitive_ops.rs:82,134). They are NOT pure
-            // value-producing leaves: each evaluation site builds a
-            // distinct heap object with its own identity.
-            ExprKind::StringLiteral(_) | ExprKind::BytesLiteral(_) => {
+            // Bytes literals lower to a fresh
+            // `array.new_data<u8>(...)` (wir_build/primitive_ops.rs:134):
+            // NOT a pure value-producing leaf; each evaluation site builds a
+            // distinct heap object with its own identity. (String literals are
+            // promoted to `Operand::Value`; their allocation is recognised in
+            // `accumulate_operand`.)
+            ExprKind::BytesLiteral(_) => {
                 self.allocates = true;
             }
 
@@ -1381,8 +1393,13 @@ mod tests {
     // GC-allocating literals (String / Bytes / Null) — see B1 finding
     // -----------------------------------------------------------------
 
-    fn string_lit(body: &mut Body, s: &str) -> ExprId {
-        pe(body, ExprKind::StringLiteral(s.to_string()))
+    // A promoted string literal lives as `Operand::Value(String)`; it has no
+    // `ExprKind`. Returned as the operand a real `&"..."` would reference.
+    fn string_val(body: &mut Body, s: &str) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::String(s.to_string()), ty()),
+        )
     }
 
     fn bytes_lit(body: &mut Body) -> ExprId {
@@ -1392,10 +1409,20 @@ mod tests {
 
     #[test]
     fn string_literal_allocates() {
-        // Lowered to struct.new String { repr: array.new_data<u8>(...), used: N }
-        // (wir_build/primitive_ops.rs:82) — produces a fresh GC object with a
-        // distinct identity. is_re_evaluation_safe must therefore reject.
-        let mr = mr_expr(|b| string_lit(b, "hello"));
+        // Materialises to struct.new String { repr: array.new_data<u8>(...) }
+        // (wir_build/primitive_ops.rs:82) — a fresh GC object with a distinct
+        // identity at each use site. is_re_evaluation_safe must therefore
+        // reject even though the string is a promoted constant value.
+        let mr = mr_expr(|b| {
+            let s = string_val(b, "hello");
+            pe(
+                b,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: s,
+                },
+            )
+        });
         assert!(mr.allocates);
         assert!(!mr.is_re_evaluation_safe());
     }

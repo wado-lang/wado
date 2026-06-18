@@ -312,9 +312,10 @@ fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 && cx.struct_params.contains(index)
-                && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, cx.type_table)
+                && is_gc_heap_type(body.exprs[ie].type_id, cx.type_table)
             {
                 cx.conservative_params.insert(*index);
             }
@@ -906,11 +907,12 @@ fn visit_expr_for_alias(
             // around the call), then stop — the inner `Local` is the place
             // we take the address of, not a value-position read.
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && matches!(&body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { .. })
+                && let Some(ie) = inner.as_expr()
+                && matches!(&body.exprs[ie].kind, ExprKind::Local { .. })
             {
                 if !in_call_arg
-                    && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table)
-                    && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                    && is_gc_heap_type(body.exprs[ie].type_id, type_table)
+                    && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 {
                     out.insert(*index);
                 }
@@ -1029,7 +1031,6 @@ fn visit_expr_for_alias(
             }
             visit_block_for_alias(body, default, type_table, out);
         }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -1300,9 +1301,10 @@ fn count_field_accesses_in_expr(
             // re-read mechanism).
             let (op, inner) = (*op, *expr);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                && let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
-                if !in_call_arg && is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table) {
+                if !in_call_arg && is_gc_heap_type(body.exprs[ie].type_id, type_table) {
                     mark_local_aliased(*index, counts);
                 }
                 return;
@@ -1403,7 +1405,6 @@ fn count_field_accesses_in_expr(
             }
             count_field_accesses_in_block(body, default, counts, type_table);
         }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::GlobalVarGet { .. }
@@ -1635,12 +1636,14 @@ fn collect_call_touched_node(
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
         } = &body.exprs[e].kind
+            && let Some(ie) = inner.as_expr()
             && let ExprKind::FieldAccess {
                 expr: base,
                 field_index,
                 ..
-            } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
-            && let ExprKind::Local { index, .. } = &body.exprs[base.as_expr().expect("skeleton operand")].kind
+            } = &body.exprs[ie].kind
+            && let Some(be) = base.as_expr()
+            && let ExprKind::Local { index, .. } = &body.exprs[be].kind
         {
             touched.insert((*index, *field_index));
         }
@@ -2770,7 +2773,6 @@ fn walk_other_expr_kinds(
                 walk_operand(body, aid, states, true, out, ctx);
             }
         }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -3226,8 +3228,10 @@ fn extract_gc_local_index(body: &Body, e: ExprId, type_table: &TypeTable) -> Opt
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-                if is_gc_heap_type(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table) {
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+            {
+                if is_gc_heap_type(body.exprs[ie].type_id, type_table) {
                     Some(*index)
                 } else {
                     None

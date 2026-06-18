@@ -516,7 +516,6 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             v
         }
         // Leaves.
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -604,7 +603,7 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => extract_alias_source(body, inner.as_expr().expect("skeleton operand")),
+        } => inner.as_expr().and_then(|ie| extract_alias_source(body, ie)),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
             let StmtKind::Expr(Operand::Expr(tail_expr)) = &body.stmts[tail].kind else {
@@ -1022,7 +1021,6 @@ fn collect_modified_vars_in_expr(
             }
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -1097,14 +1095,16 @@ fn collect_licm_ref_bindings_in_stmt(
         let local_index = *local_index;
         let value = *value;
         if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+            && let Some(ve) = value.as_expr()
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: source,
-            } = &body.exprs[value.as_expr().expect("skeleton operand")].kind
+            } = &body.exprs[ve].kind
+            && let Some(se) = source.as_expr()
             && let ExprKind::Local {
                 index: source_idx,
                 name: source_name,
-            } = &body.exprs[source.as_expr().expect("skeleton operand")].kind
+            } = &body.exprs[se].kind
         {
             bindings.insert(
                 local_index,

@@ -155,7 +155,6 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -604,7 +603,6 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
         | ExprKind::Local { .. }
@@ -1977,7 +1975,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 default: splice_block(caller, callee, d, ctx),
             }
         }
-        ExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
         ExprKind::Unit => ExprKind::Unit,
         ExprKind::GlobalVarGet {

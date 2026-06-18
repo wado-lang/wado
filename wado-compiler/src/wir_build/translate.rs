@@ -1815,10 +1815,6 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::StringLiteral(s) => {
-                // String literals are constructed from data segments
-                self.translate_string_literal(s)
-            }
             ExprKind::BytesLiteral(b) => {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)

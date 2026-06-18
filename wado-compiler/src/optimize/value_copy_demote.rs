@@ -762,9 +762,10 @@ impl ElementClean<'_, '_> {
                 op: NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                let inner = *inner;
-                if !is_local(body, inner.as_expr().expect("skeleton operand"), idx) {
-                    self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
+                if let Some(ie) = inner.as_expr()
+                    && !is_local(body, ie, idx)
+                {
+                    self.visit_expr(body, ie);
                 }
             }
             _ => self.visit_expr(body, arg),

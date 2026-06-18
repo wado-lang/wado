@@ -155,7 +155,6 @@ pub struct ArenaStructPatternField {
 /// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
-    StringLiteral(String),
     BytesLiteral(Vec<u8>),
     Unit,
     Local {
@@ -1214,7 +1213,6 @@ impl Body {
                 PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
-                | ExprKind::StringLiteral(_)
                 | ExprKind::BytesLiteral(_)
                 | ExprKind::Unit
                 | ExprKind::Local { .. }

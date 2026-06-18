@@ -257,7 +257,6 @@ impl<'a> Engine<'a> {
                 Operand::Expr(e) => value_of.get(&e).copied(),
             };
             match kind {
-                ExprKind::StringLiteral(s) => pool.string(s),
                 ExprKind::Unit => pool.unit(),
                 ExprKind::Binary { left, op, right } => {
                     let lhs = operand_value(left)?;

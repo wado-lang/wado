@@ -410,7 +410,8 @@ fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> 
 fn is_immut_ref_to_candidate(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> bool {
     if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind
         && matches!(op, crate::nir::NirUnaryOp::Ref)
-        && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(ie) = inner.as_expr()
+        && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
         && candidates.contains(index)
     {
         return true;
@@ -484,7 +485,8 @@ fn escape_expr(body: &Body, id: ExprId, candidates: &IndexSet<u32>, escaped: &mu
             if matches!(
                 op,
                 crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-            ) && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            ) && let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 && candidates.contains(index)
             {
                 escaped.insert(*index);
@@ -730,7 +732,8 @@ fn soft_expr(
             if matches!(
                 op,
                 crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-            ) && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            ) && let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 && candidates.contains(index)
             {
                 hard_escaped.insert(*index);

@@ -144,8 +144,8 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 
     // `push_str` takes `&String`, so every call site — source-level
     // `push_str(&"...")` and template lowering alike — passes the literal
-    // through an explicit `Ref`. Match through it to reach the
-    // `StringLiteral`.
+    // through an explicit `Ref`. Match through it to reach the promoted
+    // `ValueKind::String` in the pool.
     let s = {
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
@@ -154,7 +154,10 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         else {
             return None;
         };
-        let ExprKind::StringLiteral(s) = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind else {
+        let Some(vid) = inner.as_value() else {
+            return None;
+        };
+        let crate::nir_value_graph::ValueKind::String(s) = engine.body.values.kind(vid) else {
             return None;
         };
         s.clone()
