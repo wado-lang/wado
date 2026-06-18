@@ -1917,6 +1917,22 @@ impl FunctionTranslator<'_, '_> {
                     OpaqueSource::Expr(e) => self.translate_expr_inner(e),
                 }
             }
+            // A `Select` (control-merge of pure values) extracts as a
+            // value-producing `if`. Sound because the arms are pure values
+            // (the builder constructs `Select` only at merges of pure values);
+            // re-emitting the `if` recomputes them in the same dominance order.
+            ValueKind::Select { cond, then, else_ } => {
+                let c = self.extract_value(cond);
+                let t = self.extract_value(then);
+                let e = self.extract_value(else_);
+                let result_ty = self.ctx.type_id_to_wir_type(self.type_table, type_id);
+                WirInstr::If {
+                    condition: Box::new(c),
+                    result: Some(result_ty),
+                    then_body: vec![t],
+                    else_body: Some(vec![e]),
+                }
+            }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
     }
