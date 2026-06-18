@@ -117,6 +117,15 @@ use value_copy_demote::demote_value_copies;
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
+/// Whether the operand-promotion keystone runs early (before the value passes),
+/// gated by `WADO_PROMOTE_EARLY`. Under construction; default off keeps the
+/// committed late-freeze behavior. See `docs/wep-2026-06-15-live-value-graph.md`.
+fn promote_early_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("WADO_PROMOTE_EARLY").is_some())
+}
+
 /// Configuration for optimization passes
 struct OptConfig {
     /// Number of fixed-point iterations
@@ -312,9 +321,13 @@ pub fn optimize(
     // extractor. Runs last so no binary-walking pass sees the promoted form;
     // orphaned arith / local-read nodes become unreachable from the skeleton
     // root and are simply not emitted.
-    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p)
-    });
+    // The late freeze is subsumed by the early promotion when the keystone flag
+    // is on (promoting before the passes covers everything the late pass would).
+    if !promote_early_enabled() {
+        run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
+            extract::freeze_pure_arith(p)
+        });
+    }
 
     project
 }
@@ -508,6 +521,18 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
+    // Operand-promotion keystone (WEP: The Live ValueGraph), gated by
+    // `WADO_PROMOTE_EARLY` while under construction. When on, pure values are
+    // frozen into `Operand::Value` *before* the value passes, so the passes can
+    // be migrated to read operands (`engine.operand_value`) instead of rebuilding
+    // the value graph — the path to `rebuilds = 0` and `value_of` retirement.
+    // Default off: the committed branch keeps the late-freeze behavior (green),
+    // so this flag is the multi-session development harness, not a behavior change.
+    if promote_early_enabled() {
+        run_pass("nir/promote_pure_values_early", project, profiler, |p| {
+            extract::freeze_pure_arith(p)
+        });
+    }
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
