@@ -1672,20 +1672,88 @@ fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> 
 
 /// Splice an operand from the callee into the caller. An effectful subtree is
 /// spliced as an expr; a promoted pure value is re-interned into the caller's
-/// pool — `ValueId`s are pool-scoped, so a callee constant must be re-allocated
-/// against the caller's pool. Sound because only self-contained scalars are
-/// promoted (no child `ValueId`s to remap).
+/// pool — `ValueId`s are pool-scoped, so the whole value tree must be
+/// re-allocated against the caller's pool with its child `ValueId`s (and
+/// `Opaque` source locals) remapped into the caller frame.
 fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx) -> Operand {
     match op {
         Operand::Expr(e) => Operand::Expr(splice_expr(caller, callee, e, ctx)),
-        Operand::Value(v) => {
-            let kind = callee.values.kind(v).clone();
-            let ty = callee
-                .values
-                .type_of(v)
-                .expect("promoted operand has a recorded type");
-            Operand::Value(caller.values.alloc_unshared(kind, ty))
+        Operand::Value(v) => Operand::Value(splice_value(caller, callee, v, ctx)),
+    }
+}
+
+/// Re-allocate a callee pure value (and its whole tree) into the caller's pool.
+/// `ValueId`s are pool-scoped, so every child id is recursively re-allocated and
+/// an `Opaque`'s source local is remapped into the caller frame — otherwise a
+/// composite value (`Binary` / `Cast` / `FieldAccess` / …) would carry child ids
+/// that denote unrelated values (often a different width) in the caller's pool.
+fn splice_value(
+    caller: &mut Body,
+    callee: &Body,
+    v: crate::nir_value_graph::ValueId,
+    ctx: &InlineCtx,
+) -> crate::nir_value_graph::ValueId {
+    use crate::nir_value_graph::{OpaqueSource, ValueKind};
+    let recorded_ty = callee.values.type_of(v);
+    let new_kind = match callee.values.kind(v).clone() {
+        ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {
+            op,
+            lhs: splice_value(caller, callee, lhs, ctx),
+            rhs: splice_value(caller, callee, rhs, ctx),
+            ty,
+        },
+        ValueKind::Unary { op, operand, ty } => ValueKind::Unary {
+            op,
+            operand: splice_value(caller, callee, operand, ctx),
+            ty,
+        },
+        ValueKind::Cast { operand, target } => ValueKind::Cast {
+            operand: splice_value(caller, callee, operand, ctx),
+            target,
+        },
+        ValueKind::Select { cond, then, else_ } => ValueKind::Select {
+            cond: splice_value(caller, callee, cond, ctx),
+            then: splice_value(caller, callee, then, ctx),
+            else_: splice_value(caller, callee, else_, ctx),
+        },
+        ValueKind::LoopPhi { entry, body_iter } => ValueKind::LoopPhi {
+            entry: splice_value(caller, callee, entry, ctx),
+            body_iter: splice_value(caller, callee, body_iter, ctx),
+        },
+        ValueKind::FieldAccess {
+            receiver,
+            field_index,
+            heap_ver,
+        } => ValueKind::FieldAccess {
+            receiver: splice_value(caller, callee, receiver, ctx),
+            field_index,
+            heap_ver,
+        },
+        ValueKind::Opaque(oid) => {
+            // Mint a fresh caller opaque, remapping its source local into the
+            // caller frame (a skeleton-`Expr` source splices that expr).
+            let new = match callee.values.opaque_source(oid) {
+                Some(OpaqueSource::Local(idx)) => caller
+                    .values
+                    .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
+                Some(OpaqueSource::Expr(e)) => {
+                    let spliced = splice_expr(caller, callee, e, ctx);
+                    caller
+                        .values
+                        .fresh_opaque_with_source(OpaqueSource::Expr(spliced))
+                }
+                None => caller.values.fresh_opaque(),
+            };
+            if let Some(t) = recorded_ty {
+                caller.values.set_type(new, t);
+            }
+            return new;
         }
+        leaf => leaf,
+    };
+    match recorded_ty {
+        Some(t) => caller.values.alloc_unshared(new_kind, t),
+        None => caller.values.intern(new_kind),
     }
 }
 

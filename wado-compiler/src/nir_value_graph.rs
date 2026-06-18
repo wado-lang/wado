@@ -506,6 +506,29 @@ impl ValuePool {
         self.opaque_sources.get(&opaque).copied()
     }
 
+    /// Every local index named by an `OpaqueSource::Local` (a promoted value
+    /// extracted as `local.get idx`). A pass that decides a local is unused must
+    /// treat these as reads — the read lives in the value pool, not the skeleton.
+    pub fn opaque_local_sources(&self) -> impl Iterator<Item = u32> + '_ {
+        self.opaque_sources.values().filter_map(|s| match s {
+            OpaqueSource::Local(idx) => Some(*idx),
+            OpaqueSource::Expr(_) => None,
+        })
+    }
+
+    /// Remap every `OpaqueSource::Local` index through `remap` (old → new).
+    /// A pass that renumbers a body's locals must call this so a promoted
+    /// `Opaque` value (extracted as `local.get idx`) still names the right slot.
+    /// A `None` entry marks a dropped local; a `Local` source pointing at one is
+    /// a bug (a live promoted value reads a dead local), so it panics.
+    pub fn remap_opaque_locals(&mut self, remap: &[Option<u32>]) {
+        for src in self.opaque_sources.values_mut() {
+            if let OpaqueSource::Local(idx) = src {
+                *idx = remap[*idx as usize].expect("promoted Opaque reads a local DAE dropped");
+            }
+        }
+    }
+
     /// Whether `id`'s value can be re-emitted by the extractor purely from the
     /// graph + side-effect-free, position-independent leaves: literal constants
     /// and `Local`-sourced opaques (a `local.get`), composed by `Binary` /

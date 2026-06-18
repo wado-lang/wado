@@ -56,7 +56,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
@@ -209,6 +209,10 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     let body = func.body.as_ref().unwrap();
     let mut reads: IndexSet<u32> = IndexSet::default();
     arena_query::collect_reads(body, &mut reads);
+    // A promoted `Opaque(Local idx)` value reads `idx` from the value pool, not
+    // the skeleton — count those so a param read only through a promoted value
+    // is not seen as dead.
+    reads.extend(body.values.opaque_local_sources());
     let kept_locals = &func.address_taken_locals;
     let stores_aliased = &func.stores_aliased_locals;
 
@@ -300,16 +304,15 @@ fn validate_call(
                 if !*dead_at_i {
                     continue;
                 }
-                match args.get(i) {
-                    Some(arg)
-                        if arena_query::is_pure_expr(
-                            body,
-                            arg.expr.as_expr().expect("skeleton operand"),
-                        ) => {}
-                    _ => {
-                        rejected.insert(key.clone());
-                        break;
-                    }
+                let pure = match args.get(i).map(|a| a.expr) {
+                    // A promoted pure value is pure by construction.
+                    Some(Operand::Value(_)) => true,
+                    Some(Operand::Expr(e)) => arena_query::is_pure_expr(body, e),
+                    None => false,
+                };
+                if !pure {
+                    rejected.insert(key.clone());
+                    break;
                 }
             }
         }
@@ -541,6 +544,10 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
     // local namespace to skip.
     if let Some(body) = func.body.as_mut() {
         remap_locals(body, &remap);
+        // Promoted `Opaque(Local idx)` values (extracted as `local.get idx`)
+        // live in the value pool, not the skeleton, so `remap_locals` misses
+        // them — remap their source indices too.
+        body.values.remap_opaque_locals(&remap);
     }
 }
 
