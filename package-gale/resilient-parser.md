@@ -21,14 +21,14 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 ## The tree
 
 ```
-CstNode  { kind: NodeKind, span, children: List<CstChild>, flags }
+CstNode  { kind: NodeKind, span, children: List<CstChild>, flags, toks: &TokenStream }
 CstChild = Token(i32) | Missing(i32) | Skipped(i32) | Node(CstNode)
 ```
 
-- `CstNode` is a pure value tree — it holds no reference to the token stream, so
-  it composes and stores freely and `ParseResult` can own both the tree and the
-  stream without a self-referential borrow. Methods that need terminal text or
-  kinds take a `&TokenStream` argument.
+- A node's terminals are `i32` indices into a `TokenStream`, so a node is only
+  meaningful with that stream. Each node holds a `&TokenStream` (a GC reference,
+  not a borrow), so node-local methods (`to_string_tree`, future `text()`) need
+  no external state. `ParseResult` references the same stream object.
 - `NodeKind` is an `i32` newtype (rule id; `K_ERROR` for a recovery region).
   Its `Display` renders the rule name and `Inspect` renders `name(id)`, so
   debugging shows names. The name table is grammar-specific, emitted by codegen.
@@ -86,7 +86,7 @@ applied; `related` carries secondary notes (e.g. "'(' opened here").
 
 ```
 parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult<CstNode>
-ParseResult { root: CstNode, tokens: TokenStream, diagnostics: List<Diagnostic> }
+ParseResult { root: CstNode, tokens: &TokenStream, diagnostics: List<Diagnostic> }
 ```
 
 One entry point, behavior tuned by a number: when `diagnostics.len()` reaches
