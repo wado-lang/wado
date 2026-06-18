@@ -615,6 +615,17 @@ findings are the deliverable.
   experiment + instrumentation were discarded (uncommitted); the branch stays
   green.
 
+  Refinement (read `record_value_tree_types`, `extract.rs:92`): the freeze's
+  width-conflict guard is actually **correct** — it recurses operands and returns
+  `false` when an operand's recorded type differs from the stamped result type, so
+  the inconsistent binaries above are **skipped, not promoted**. Therefore the
+  early-promotion invalid Wasm is **not** a freeze-guard or hash-cons-key bug; it
+  is the harder cross-pass class — a pass (`inline` / `const_fold` / `copy_prop`)
+  substitutes a different-width value into a promoted operand slot _after_ the
+  freeze, which the guard cannot see. That is fixable only by migrating those
+  passes to respect promoted-operand types, confirming early promotion is coupled
+  to the pass migration, not a bounded standalone fix.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
