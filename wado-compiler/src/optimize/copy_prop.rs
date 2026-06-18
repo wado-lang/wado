@@ -220,6 +220,13 @@ fn analyze_function_body(
         usage: IndexMap::default(),
     };
     analyze_block(body, body.root, &mut result, type_table, first_param_types);
+    // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
+    // invisible to the skeleton walk above; count it so copy-prop does not treat
+    // the local as dead / single-use and propagate or eliminate it out from under
+    // the promoted read. Empty (behavior-neutral) until operand promotion runs.
+    for idx in body.locals_read_via_promotion() {
+        result.usage.entry(idx).or_default().read_count += 2;
+    }
     result
 }
 
