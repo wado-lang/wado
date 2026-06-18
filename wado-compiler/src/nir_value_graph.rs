@@ -212,13 +212,23 @@ pub struct ValuePool {
     /// reads the value's type here. Populated by the builder / `lower` at
     /// creation; `None` until set.
     types: Vec<Option<TypeId>>,
-    /// Skeleton source for an `Opaque`: the `ExprId` whose evaluation produces
-    /// the opaque value (a `Local` read, a `Call` result kept in the skeleton).
-    /// Extraction re-emits the opaque by lowering this expr — the graph alone
-    /// cannot reconstruct an effectful / unknown leaf. Empty for opaques minted
-    /// without a recorded source (e.g. a bare parameter, materialised as its
-    /// `Local`).
-    opaque_sources: IndexMap<OpaqueId, crate::nir_arena::ExprId>,
+    /// Skeleton source for an `Opaque`: how extraction re-emits the leaf the
+    /// graph cannot reconstruct. A `Local` opaque emits `local.get idx` (self-
+    /// contained — no skeleton node to keep alive); an `Expr` opaque lowers a
+    /// scheduled skeleton expression (a call result kept in the skeleton).
+    /// Empty for opaques minted without a recorded source.
+    opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
+}
+
+/// How the extractor re-emits an [`OpaqueId`]'s value (see
+/// [`ValuePool::opaque_source`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OpaqueSource {
+    /// The runtime value of a local: extraction emits `local.get idx`.
+    Local(u32),
+    /// Produced by a skeleton expression (a call result kept in the skeleton):
+    /// extraction lowers that expr.
+    Expr(crate::nir_arena::ExprId),
 }
 
 impl ValuePool {
@@ -457,19 +467,17 @@ impl ValuePool {
         self.intern(ValueKind::Opaque(opaque))
     }
 
-    /// Allocate a fresh `Opaque` whose value is produced by the skeleton
-    /// expression `source`, recorded for extraction (the extractor re-emits the
-    /// opaque by lowering `source`).
-    pub fn fresh_opaque_with_source(&mut self, source: crate::nir_arena::ExprId) -> ValueId {
+    /// Allocate a fresh `Opaque` with a recorded extraction source.
+    pub fn fresh_opaque_with_source(&mut self, source: OpaqueSource) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
         self.opaque_sources.insert(opaque, source);
         self.intern(ValueKind::Opaque(opaque))
     }
 
-    /// The recorded skeleton source of an `Opaque`, if any.
+    /// The recorded extraction source of an `Opaque`, if any.
     #[inline]
-    pub fn opaque_source(&self, opaque: OpaqueId) -> Option<crate::nir_arena::ExprId> {
+    pub fn opaque_source(&self, opaque: OpaqueId) -> Option<OpaqueSource> {
         self.opaque_sources.get(&opaque).copied()
     }
 

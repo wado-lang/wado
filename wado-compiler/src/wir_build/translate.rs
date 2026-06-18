@@ -1902,16 +1902,20 @@ impl FunctionTranslator<'_, '_> {
                     .expect("promoted Cast operand has no recorded type");
                 self.translate_cast(crate::nir_arena::Operand::Value(operand), from_ty, target)
             }
-            // An `Opaque` stands for an effectful / non-re-emittable leaf (a
-            // local read, a call result). Its WIR is the recorded skeleton
+            // An `Opaque` stands for a leaf the graph cannot reconstruct (a
+            // local read, a call result). It is re-emitted from the recorded
             // source the builder/lower scheduled for it.
             ValueKind::Opaque(id) => {
-                let src = self
+                use crate::nir_value_graph::OpaqueSource;
+                match self
                     .body
                     .values
                     .opaque_source(id)
-                    .expect("promoted Opaque has no recorded skeleton source");
-                self.translate_expr_inner(src)
+                    .expect("promoted Opaque has no recorded extraction source")
+                {
+                    OpaqueSource::Local(idx) => self.local_get(idx),
+                    OpaqueSource::Expr(e) => self.translate_expr_inner(e),
+                }
             }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
