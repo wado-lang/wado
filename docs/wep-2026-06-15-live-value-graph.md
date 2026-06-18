@@ -519,12 +519,20 @@ default-off keeps the committed late-freeze behavior, so the branch stays green
 and continuously validated while the keystone is built up. Flip the default when
 flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
 
-- [ ] **P1 — flag-on e2e green** (the pass migration). Today flag-on is at **10**
-      O2 failures (down from 347): ~5 `wir_expect` shape churn (update the
-      fixtures once promotion is the vehicle), 3 `Select`/`elide_local` miscompiles
-      (root-caused to a liveness gap, see above), 1 fixed ICE, 1 assert-format.
-      Close the real ones so flag-on is correct (still measurement-neutral — the
-      builder still runs).
+- [ ] **P1 — flag-on e2e green** (the pass migration). Flag-on is at **5** O2
+      failures (down from 347 → 10 → 5; `2955/2960`). The 3 `Select`/`elide_local`
+      miscompiles are fixed (`7b5a8dd59`: `elide_local` uses the over-conservative
+      `opaque_local_sources` under early promotion — sound, default unchanged) and
+      the ICE earlier. The remaining 5: **4 `wir_expect` WIR-shape tests**
+      (`array_bounds_elim_le_guard_wir`, `array_bounds_elim_offset_chain`,
+      `opt_licm_invariant_arith`, `tir_optimize_bool_identity` — these _should_
+      change under promotion; fixture updates, not miscompiles) and **1 real
+      miscompile**, `assert_fail_call_arg` (the power-assert temp capturing
+      `double(x+y)` reads `0` not `14`). The latter is a multi-pass interaction —
+      `WADO_SKIP_PASS` shows skipping any of promote-early / `peephole` /
+      `copy_prop` / `inline` fixes it, so a promoted call-arg value threads wrong
+      through inline + copy-prop + a peephole rule into the diagnostic temp. Last
+      real flag-on bug; the 4 `wir_expect` are deferred fixture churn.
 - [ ] **P2 — availability-aware extraction.** Extend promotion past the
       re-emittable subset to _every_ pure value, materialising a shared or
       flow-dependent value (`Select`, shared `Binary`, `FieldAccess`) into a `let`
