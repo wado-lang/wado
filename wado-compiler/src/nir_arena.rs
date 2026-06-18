@@ -407,7 +407,7 @@ impl Body {
     /// a `TypeTable`.
     pub fn operand_const_int(&self, op: Operand) -> Option<u64> {
         match self.values.kind(op.as_value()?) {
-            ValueKind::Int(value) => Some(*value),
+            ValueKind::Int(value, _) => Some(*value),
             _ => None,
         }
     }

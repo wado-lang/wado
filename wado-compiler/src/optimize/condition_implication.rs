@@ -229,7 +229,7 @@ fn lt_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId,
 fn is_false_value(engine: &mut Engine, value: ValueId) -> bool {
     matches!(
         engine.value_kind(value),
-        ValueKind::Bool(false) | ValueKind::Int(0)
+        ValueKind::Bool(false) | ValueKind::Int(0, _)
     )
 }
 
@@ -254,7 +254,7 @@ fn decompose_add_const(engine: &mut Engine, v: ValueId) -> (ValueId, i64) {
             return (base, total);
         };
         let (lhs, rhs) = (*lhs, *rhs);
-        let ValueKind::Int(k) = engine.value_kind(rhs) else {
+        let ValueKind::Int(k, _) = engine.value_kind(rhs) else {
             return (base, total);
         };
         let Some(step) = i64::try_from(*k).ok().filter(|s| *s >= 0) else {
@@ -273,7 +273,7 @@ fn decompose_add_const(engine: &mut Engine, v: ValueId) -> (ValueId, i64) {
 /// negative to the numeric comparisons.
 fn int_const(engine: &mut Engine, v: ValueId) -> Option<i64> {
     match engine.value_kind(v) {
-        ValueKind::Int(value) => i64::try_from(*value).ok(),
+        ValueKind::Int(value, _) => i64::try_from(*value).ok(),
         _ => None,
     }
 }
@@ -287,7 +287,7 @@ fn is_plus_one_of(engine: &mut Engine, v: ValueId, base: ValueId) -> bool {
     } = engine.value_kind(v)
     {
         let (lhs, rhs) = (*lhs, *rhs);
-        return lhs == base && matches!(engine.value_kind(rhs), ValueKind::Int(1));
+        return lhs == base && matches!(engine.value_kind(rhs), ValueKind::Int(1, _));
     }
     false
 }

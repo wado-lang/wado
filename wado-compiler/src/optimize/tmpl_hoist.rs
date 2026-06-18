@@ -1279,7 +1279,7 @@ fn build_field_reset(
         TypeTable::I32,
         span,
     );
-    let zero = engine.const_operand(crate::nir_value_graph::ValueKind::Int(0), TypeTable::I32);
+    let zero = engine.const_operand(crate::nir_value_graph::ValueKind::Int(0, TypeTable::I32), TypeTable::I32);
     let assign = engine.alloc_expr(
         ExprKind::Assign {
             target: field,

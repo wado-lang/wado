@@ -628,8 +628,8 @@ fn translate_global_init(
     // emit it per the target `type_id`.
     if let Operand::Value(v) = op {
         return match body.values.kind(v) {
-            ValueKind::Int(value) => int_const(*value),
-            ValueKind::Float(bits) => float_const(f64::from_bits(*bits)),
+            ValueKind::Int(value, _) => int_const(*value),
+            ValueKind::Float(bits, _) => float_const(f64::from_bits(*bits)),
             ValueKind::Bool(b) => WirInstr::I32Const(i32::from(*b)),
             ValueKind::Char(c) => WirInstr::I32Const(*c as i32),
             _ => ref_null(),

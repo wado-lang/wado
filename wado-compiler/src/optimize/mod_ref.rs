@@ -802,7 +802,7 @@ mod tests {
     fn int(body: &mut Body, v: i64) -> Operand {
         Operand::Value(
             body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64), ty()),
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64, ty()), ty()),
         )
     }
     fn bin(

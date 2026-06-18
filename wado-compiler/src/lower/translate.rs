@@ -879,8 +879,8 @@ impl FunctionTranslator<'_, '_> {
         // `i64` must not collide).
         use crate::nir_value_graph::ValueKind;
         let vk = match &expr.kind {
-            TirExprKind::IntLiteral { value, .. } => Some(ValueKind::Int(*value)),
-            TirExprKind::FloatLiteral { value, .. } => Some(ValueKind::Float(value.to_bits())),
+            TirExprKind::IntLiteral { value, .. } => Some(ValueKind::Int(*value, expr.type_id)),
+            TirExprKind::FloatLiteral { value, .. } => Some(ValueKind::Float(value.to_bits(), expr.type_id)),
             TirExprKind::BoolLiteral(b) => Some(ValueKind::Bool(*b)),
             TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
             // `Null` is a pure constant value too: its WIR materialisation

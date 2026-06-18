@@ -214,7 +214,7 @@ pub(super) fn extract_const(
 ) -> Option<crate::const_eval::Value> {
     if !matches!(
         e.value_kind(rep),
-        ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_)
+        ValueKind::Int(_, _) | ValueKind::Float(_, _) | ValueKind::Bool(_) | ValueKind::Char(_)
     ) {
         return None;
     }
@@ -293,7 +293,7 @@ mod tests {
         // The constant `5` is a pooled value, born as `Operand::Value`.
         let five_v = body
             .values
-            .alloc_unshared(ValueKind::Int(5), TypeTable::I32);
+            .alloc_unshared(ValueKind::Int(5, TypeTable::I32), TypeTable::I32);
         let s0 = body.stmts.push(StmtNode {
             kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
@@ -330,7 +330,7 @@ mod tests {
         let StmtKind::Expr(Operand::Value(v)) = eng.body.stmts[s0].kind else {
             panic!("sum statement operand was not promoted to a value");
         };
-        assert!(matches!(eng.body.values.kind(v), ValueKind::Int(5)));
+        assert!(matches!(eng.body.values.kind(v), ValueKind::Int(5, _)));
     }
 
     #[test]

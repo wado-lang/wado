@@ -625,7 +625,7 @@ impl<'a> Interpreter<'a> {
         match body.values.kind(v) {
             ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
             ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
-            ValueKind::Int(value) => {
+            ValueKind::Int(value, _) => {
                 let Some(prim) = prim_of(ty, self.type_table).filter(|p| is_int_prim(*p)) else {
                     return Lattice::Unevaluated;
                 };
@@ -634,7 +634,7 @@ impl<'a> Interpreter<'a> {
                     prim,
                 })
             }
-            ValueKind::Float(bits) => {
+            ValueKind::Float(bits, _) => {
                 let prim = if is_f32_type(ty, self.type_table) {
                     PrimitiveType::F32
                 } else {

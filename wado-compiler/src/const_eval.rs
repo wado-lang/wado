@@ -87,14 +87,14 @@ impl Value {
         let v = op.as_value()?;
         let ty = body.values.type_of(v)?;
         match body.values.kind(v) {
-            ValueKind::Int(value) => {
+            ValueKind::Int(value, _) => {
                 let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
                 Some(Self::Int {
                     value: *value,
                     prim,
                 })
             }
-            ValueKind::Float(bits) => {
+            ValueKind::Float(bits, _) => {
                 let prim = prim_of(ty, type_table)
                     .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
                 Some(Self::Float {

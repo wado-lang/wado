@@ -1846,13 +1846,13 @@ impl FunctionTranslator<'_, '_> {
             .type_of(v)
             .expect("promoted value has no recorded type");
         match kind {
-            ValueKind::Int(value) => match self.type_table.get(type_id) {
+            ValueKind::Int(value, _) => match self.type_table.get(type_id) {
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                     WirInstr::I64Const(value as i64)
                 }
                 _ => WirInstr::I32Const(value as i32),
             },
-            ValueKind::Float(bits) => match self.type_table.get(type_id) {
+            ValueKind::Float(bits, _) => match self.type_table.get(type_id) {
                 ResolvedType::Primitive(PrimitiveType::F32) => {
                     WirInstr::F32Const(f64::from_bits(bits) as f32)
                 }

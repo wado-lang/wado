@@ -31,14 +31,14 @@ pub(crate) fn value_kind_to_const(
 ) -> Option<crate::const_eval::Value> {
     use crate::const_eval::Value;
     Some(match kind {
-        ValueKind::Int(value) => {
+        ValueKind::Int(value, _) => {
             let prim = prim.filter(|p| crate::const_eval::is_int_prim(*p))?;
             Value::Int {
                 value: *value,
                 prim,
             }
         }
-        ValueKind::Float(bits) => {
+        ValueKind::Float(bits, _) => {
             let prim = prim.filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
             Value::Float {
                 value: f64::from_bits(*bits),
@@ -119,11 +119,17 @@ impl HeapVersion {
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ValueKind {
     // ---- Literals ----
-    Int(u64),
-    /// `f64` bit pattern: distinct NaN payloads and `+0.0` / `-0.0` are
-    /// distinct values. Algebraic rules over floats must consult numeric
+    /// An integer constant with its source `TypeId`. The type is part of the
+    /// hash-cons key so a width-erased `7: i32` and `7: i64` are distinct values
+    /// (extraction reads the width from the type) — the precondition for
+    /// promoting integer values into operand slots before WIR build. Construct
+    /// via [`ValuePool::int_typed`]; never `Int(_, _)` directly outside the pool.
+    Int(u64, TypeId),
+    /// `f64` bit pattern with its source `TypeId`. Distinct NaN payloads and
+    /// `+0.0` / `-0.0` are distinct values; the type distinguishes `0.0: f32`
+    /// from `0.0: f64`. Algebraic rules over floats must consult numeric
     /// equality separately — runtime `==` is not this relation.
-    Float(u64),
+    Float(u64, TypeId),
     Bool(bool),
     Char(char),
     String(String),
@@ -263,9 +269,15 @@ impl ValuePool {
             return self.find(id);
         }
         let id = ValueId(self.values.len() as u32);
-        self.values.push(kind.clone());
         self.parent.push(id.0);
-        self.types.push(None);
+        // A typed literal carries its width in the kind; record it so extraction
+        // (which reads `type_of`) sees it without a separate `set_type` call.
+        let carried_type = match kind {
+            ValueKind::Int(_, t) | ValueKind::Float(_, t) => Some(t),
+            _ => None,
+        };
+        self.values.push(kind.clone());
+        self.types.push(carried_type);
         self.register_parent_links(id, &kind);
         self.interned.insert(kind, id);
         id
@@ -389,8 +401,8 @@ impl ValuePool {
     /// lower-ranked side, so a class containing a literal resolves to it.
     fn rep_rank(&self, id: ValueId) -> u8 {
         match self.values[id.0 as usize] {
-            ValueKind::Int(_)
-            | ValueKind::Float(_)
+            ValueKind::Int(_, _)
+            | ValueKind::Float(_, _)
             | ValueKind::Bool(_)
             | ValueKind::Char(_)
             | ValueKind::String(_)
@@ -502,7 +514,7 @@ impl ValuePool {
     ) -> bool {
         let rep = self.find(id);
         match self.kind(rep).clone() {
-            ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_) => {
+            ValueKind::Int(_, _) | ValueKind::Float(_, _) | ValueKind::Bool(_) | ValueKind::Char(_) => {
                 true
             }
             ValueKind::Opaque(op) => match self.opaque_source(op) {
@@ -580,26 +592,29 @@ impl ValuePool {
         &self.values[id.0 as usize]
     }
 
+    /// Intern an integer constant `value` of type `type_id`. The type is part
+    /// of the hash-cons key (see [`ValueKind::Int`]), so two same-valued ints of
+    /// different width are distinct values.
     #[inline]
-    pub fn int(&mut self, value: u64) -> ValueId {
-        self.intern(ValueKind::Int(value))
+    pub fn int_typed(&mut self, value: u64, type_id: TypeId) -> ValueId {
+        self.intern(ValueKind::Int(value, type_id))
     }
 
-    /// Build a Float value from a raw `f64` bit pattern. Use this when the
-    /// caller already has bit-pattern semantics in hand (e.g. carrying a
-    /// NaN payload through a rewrite). For an `f64` value, prefer
+    /// Build a Float value from a raw `f64` bit pattern of type `type_id`. Use
+    /// this when the caller already has bit-pattern semantics in hand (e.g.
+    /// carrying a NaN payload through a rewrite). For an `f64` value, prefer
     /// [`ValuePool::float`].
     #[inline]
-    pub fn float_bits(&mut self, bits: u64) -> ValueId {
-        self.intern(ValueKind::Float(bits))
+    pub fn float_bits(&mut self, bits: u64, type_id: TypeId) -> ValueId {
+        self.intern(ValueKind::Float(bits, type_id))
     }
 
-    /// Build a Float value from an `f64`. The pool keys on the bit pattern,
-    /// so `+0.0` and `-0.0` are distinct values, as are distinct NaN
-    /// payloads.
+    /// Build a Float value from an `f64` of type `type_id`. The pool keys on the
+    /// bit pattern (and type), so `+0.0` and `-0.0` are distinct values, as are
+    /// distinct NaN payloads, and `0.0: f32` differs from `0.0: f64`.
     #[inline]
-    pub fn float(&mut self, value: f64) -> ValueId {
-        self.float_bits(value.to_bits())
+    pub fn float(&mut self, value: f64, type_id: TypeId) -> ValueId {
+        self.float_bits(value.to_bits(), type_id)
     }
 
     #[inline]
@@ -685,8 +700,8 @@ mod tests {
     #[test]
     fn intern_same_int_twice_returns_same_id() {
         let mut pool = ValuePool::new();
-        let a = pool.int(42);
-        let b = pool.int(42);
+        let a = pool.int_typed(42, crate::tir::TypeTable::I32);
+        let b = pool.int_typed(42, crate::tir::TypeTable::I32);
         assert_eq!(a, b);
         assert_eq!(pool.len(), 1);
     }
@@ -694,16 +709,34 @@ mod tests {
     #[test]
     fn intern_different_ints_returns_different_ids() {
         let mut pool = ValuePool::new();
-        let a = pool.int(1);
-        let b = pool.int(2);
+        let a = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let b = pool.int_typed(2, crate::tir::TypeTable::I32);
         assert_ne!(a, b);
+        assert_eq!(pool.len(), 2);
+    }
+
+    #[test]
+    fn same_int_different_width_are_distinct_values() {
+        // The width is part of the hash-cons key, so `7: i32` and `7: i64` are
+        // distinct values that each carry their own recorded type — the
+        // precondition for promoting integer values into operand slots before
+        // WIR build (extraction reads the width from `type_of`).
+        let mut pool = ValuePool::new();
+        let a = pool.int_typed(7, crate::tir::TypeTable::I32);
+        let b = pool.int_typed(7, crate::tir::TypeTable::I64);
+        assert_ne!(a, b);
+        assert_eq!(pool.type_of(a), Some(crate::tir::TypeTable::I32));
+        assert_eq!(pool.type_of(b), Some(crate::tir::TypeTable::I64));
+        // A repeat of the same (value, type) still dedups.
+        let a2 = pool.int_typed(7, crate::tir::TypeTable::I32);
+        assert_eq!(a, a2);
         assert_eq!(pool.len(), 2);
     }
 
     #[test]
     fn different_kinds_with_same_payload_are_distinct() {
         let mut pool = ValuePool::new();
-        let i0 = pool.int(0);
+        let i0 = pool.int_typed(0, crate::tir::TypeTable::I32);
         let b_false = pool.bool(false);
         // Same numeric "0" but different ValueKind variants — distinct ids.
         assert_ne!(i0, b_false);
@@ -734,8 +767,8 @@ mod tests {
     #[test]
     fn kind_lookup_round_trips() {
         let mut pool = ValuePool::new();
-        let id = pool.int(7);
-        assert_eq!(pool.kind(id), &ValueKind::Int(7));
+        let id = pool.int_typed(7, crate::tir::TypeTable::I32);
+        assert_eq!(pool.kind(id), &ValueKind::Int(7, crate::tir::TypeTable::I32));
     }
 
     // ---- Float bit-pattern semantics ----
@@ -743,16 +776,16 @@ mod tests {
     #[test]
     fn float_pos_zero_and_neg_zero_are_distinct() {
         let mut pool = ValuePool::new();
-        let pz = pool.float(0.0);
-        let nz = pool.float(-0.0);
+        let pz = pool.float(0.0, crate::tir::TypeTable::F64);
+        let nz = pool.float(-0.0, crate::tir::TypeTable::F64);
         assert_ne!(pz, nz);
     }
 
     #[test]
     fn float_same_bit_pattern_dedupes() {
         let mut pool = ValuePool::new();
-        let a = pool.float_bits(0x7ff8_0000_0000_0001); // a NaN
-        let b = pool.float_bits(0x7ff8_0000_0000_0001);
+        let a = pool.float_bits(0x7ff8_0000_0000_0001, crate::tir::TypeTable::F64); // a NaN
+        let b = pool.float_bits(0x7ff8_0000_0000_0001, crate::tir::TypeTable::F64);
         assert_eq!(a, b);
         assert_eq!(pool.len(), 1);
     }
@@ -760,8 +793,8 @@ mod tests {
     #[test]
     fn float_distinct_nan_payloads_are_distinct_values() {
         let mut pool = ValuePool::new();
-        let a = pool.float_bits(0x7ff8_0000_0000_0001);
-        let b = pool.float_bits(0x7ff8_0000_0000_0002);
+        let a = pool.float_bits(0x7ff8_0000_0000_0001, crate::tir::TypeTable::F64);
+        let b = pool.float_bits(0x7ff8_0000_0000_0002, crate::tir::TypeTable::F64);
         assert_ne!(a, b);
     }
 
@@ -797,8 +830,8 @@ mod tests {
     #[test]
     fn same_binary_with_same_operands_dedupes() {
         let mut pool = ValuePool::new();
-        let l = pool.int(1);
-        let r = pool.int(2);
+        let l = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let r = pool.int_typed(2, crate::tir::TypeTable::I32);
         let a = pool.binary(NirBinaryOp::Add, l, r);
         let b = pool.binary(NirBinaryOp::Add, l, r);
         assert_eq!(a, b);
@@ -807,8 +840,8 @@ mod tests {
     #[test]
     fn binary_operand_order_matters() {
         let mut pool = ValuePool::new();
-        let l = pool.int(1);
-        let r = pool.int(2);
+        let l = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let r = pool.int_typed(2, crate::tir::TypeTable::I32);
         let lr = pool.binary(NirBinaryOp::Sub, l, r);
         let rl = pool.binary(NirBinaryOp::Sub, r, l);
         assert_ne!(lr, rl); // Sub is non-commutative; hash-cons just checks structure.
@@ -817,8 +850,8 @@ mod tests {
     #[test]
     fn binary_different_op_distinguishes() {
         let mut pool = ValuePool::new();
-        let l = pool.int(1);
-        let r = pool.int(2);
+        let l = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let r = pool.int_typed(2, crate::tir::TypeTable::I32);
         let add = pool.binary(NirBinaryOp::Add, l, r);
         let mul = pool.binary(NirBinaryOp::Mul, l, r);
         assert_ne!(add, mul);
@@ -827,7 +860,7 @@ mod tests {
     #[test]
     fn unary_dedupes() {
         let mut pool = ValuePool::new();
-        let inner = pool.int(5);
+        let inner = pool.int_typed(5, crate::tir::TypeTable::I32);
         let a = pool.unary(NirUnaryOp::Neg, inner);
         let b = pool.unary(NirUnaryOp::Neg, inner);
         assert_eq!(a, b);
@@ -836,7 +869,7 @@ mod tests {
     #[test]
     fn unary_different_op_distinguishes() {
         let mut pool = ValuePool::new();
-        let inner = pool.int(5);
+        let inner = pool.int_typed(5, crate::tir::TypeTable::I32);
         let neg = pool.unary(NirUnaryOp::Neg, inner);
         let not = pool.unary(NirUnaryOp::Not, inner);
         assert_ne!(neg, not);
@@ -845,7 +878,7 @@ mod tests {
     #[test]
     fn cast_dedupes_per_target_type() {
         let mut pool = ValuePool::new();
-        let inner = pool.int(5);
+        let inner = pool.int_typed(5, crate::tir::TypeTable::I32);
         let t1 = TypeId(1);
         let t2 = TypeId(2);
         let a = pool.cast(inner, t1);
@@ -861,8 +894,8 @@ mod tests {
     fn select_dedupes_structurally() {
         let mut pool = ValuePool::new();
         let cond = pool.bool(true);
-        let t = pool.int(1);
-        let e = pool.int(2);
+        let t = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let e = pool.int_typed(2, crate::tir::TypeTable::I32);
         let s1 = pool.select(cond, t, e);
         let s2 = pool.select(cond, t, e);
         assert_eq!(s1, s2);
@@ -872,8 +905,8 @@ mod tests {
     fn select_distinguishes_arm_swap() {
         let mut pool = ValuePool::new();
         let cond = pool.bool(true);
-        let t = pool.int(1);
-        let e = pool.int(2);
+        let t = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let e = pool.int_typed(2, crate::tir::TypeTable::I32);
         let normal = pool.select(cond, t, e);
         let swapped = pool.select(cond, e, t);
         assert_ne!(normal, swapped);
@@ -882,7 +915,7 @@ mod tests {
     #[test]
     fn loop_phi_dedupes_structurally() {
         let mut pool = ValuePool::new();
-        let entry = pool.int(0);
+        let entry = pool.int_typed(0, crate::tir::TypeTable::I32);
         let next = pool.fresh_opaque();
         let a = pool.loop_phi(entry, next);
         let b = pool.loop_phi(entry, next);
@@ -951,9 +984,9 @@ mod tests {
     #[test]
     fn nested_arithmetic_dedupes() {
         let mut pool = ValuePool::new();
-        let a = pool.int(1);
-        let b = pool.int(2);
-        let c = pool.int(3);
+        let a = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let b = pool.int_typed(2, crate::tir::TypeTable::I32);
+        let c = pool.int_typed(3, crate::tir::TypeTable::I32);
         // (a + b) * c, twice.
         let lhs1 = pool.binary(NirBinaryOp::Add, a, b);
         let outer1 = pool.binary(NirBinaryOp::Mul, lhs1, c);
@@ -967,14 +1000,14 @@ mod tests {
     fn full_pipeline_keeps_pool_compact() {
         let mut pool = ValuePool::new();
         let _p = pool.fresh_opaque(); // a parameter
-        let _z = pool.int(0);
-        let _o = pool.int(1);
-        let _t = pool.int(2);
+        let _z = pool.int_typed(0, crate::tir::TypeTable::I32);
+        let _o = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let _t = pool.int_typed(2, crate::tir::TypeTable::I32);
         // Re-intern everything.
         let p2 = pool.fresh_opaque();
-        let z2 = pool.int(0);
-        let o2 = pool.int(1);
-        let t2 = pool.int(2);
+        let z2 = pool.int_typed(0, crate::tir::TypeTable::I32);
+        let o2 = pool.int_typed(1, crate::tir::TypeTable::I32);
+        let t2 = pool.int_typed(2, crate::tir::TypeTable::I32);
         // `fresh_opaque` always allocates; the literals dedupe.
         assert_ne!(_p, p2);
         assert_eq!(_z, z2);
@@ -989,7 +1022,7 @@ mod tests {
     #[test]
     fn fresh_value_is_its_own_representative() {
         let mut pool = ValuePool::new();
-        let a = pool.int(1);
+        let a = pool.int_typed(1, crate::tir::TypeTable::I32);
         let b = pool.fresh_opaque();
         assert_eq!(pool.find(a), a);
         assert_eq!(pool.find(b), b);

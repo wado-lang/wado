@@ -722,8 +722,8 @@ impl<'a> Engine<'a> {
         use crate::nir_value_graph::ValueKind;
         let type_id = self.body.exprs[id].type_id;
         let kind = match value {
-            Value::Int { value, .. } => ValueKind::Int(value),
-            Value::Float { value, .. } => ValueKind::Float(value.to_bits()),
+            Value::Int { value, .. } => ValueKind::Int(value, type_id),
+            Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
             Value::Bool(b) => ValueKind::Bool(b),
             Value::Char(c) => ValueKind::Char(c),
         };
@@ -1335,7 +1335,7 @@ mod tests {
     fn lit(body: &mut Body, n: u64) -> Operand {
         Operand::Value(
             body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(n), TypeTable::I32),
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32), TypeTable::I32),
         )
     }
     fn bin(
@@ -1649,7 +1649,7 @@ mod tests {
         };
         assert!(matches!(
             body.values.kind(*v),
-            crate::nir_value_graph::ValueKind::Int(12)
+            crate::nir_value_graph::ValueKind::Int(12, _)
         ));
     }
 
