@@ -18,49 +18,49 @@ use { normalize_tree } from "./grammars/RustLexer.g4";
 test "tokenize fn declaration" {
     let tokens = rust::tokenize(&"fn main() {}");
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_FN", `expected KW_FN, got {first}`;
 }
 
 test "tokenize struct" {
     let tokens = rust::tokenize(&"struct Point { x: i32, y: i32 }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_STRUCT", `expected KW_STRUCT, got {first}`;
 }
 
 test "tokenize enum" {
     let tokens = rust::tokenize(&"enum Color { Red, Green, Blue }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_ENUM", `expected KW_ENUM, got {first}`;
 }
 
 test "tokenize impl block" {
     let tokens = rust::tokenize(&"impl Point { fn new() -> Self { Self { x: 0, y: 0 } } }");
     assert tokens.len() >= 15, `expected at least 15 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_IMPL", `expected KW_IMPL, got {first}`;
 }
 
 test "tokenize use statement" {
     let tokens = rust::tokenize(&"use std::collections::HashMap;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_USE", `expected KW_USE, got {first}`;
 }
 
 test "tokenize trait" {
     let tokens = rust::tokenize(&"trait Foo { fn bar(&self); }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_TRAIT", `expected KW_TRAIT, got {first}`;
 }
 
 test "tokenize match expression" {
     let tokens = rust::tokenize(&"match x { 1 => true, _ => false }");
     assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
-    let first = rust::token_kind_name(tokens[0].kind);
+    let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_MATCH", `expected KW_MATCH, got {first}`;
 }
 

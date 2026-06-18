@@ -3469,11 +3469,11 @@ fn op_field(op: &Op) -> String {
 /// `List<…>` declaration; other call sites read the FieldDecl directly.
 fn op_field_type(op: &Op) -> String {
     return match op {
-        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Token",
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Tok",
         RuleCall(r) => rule_type_name(&r.target_name),
         Group(g) => match &g.shape {
             SimpleCst(scst) => scst.type_name,
-            TokenOnly(_) => "Token",
+            TokenOnly(_) => "Tok",
             SingleAlt(sa) => sa.struct_name,
             General(gen) => gen.variant_type,
             Transparent => panic("op_field_type: Transparent groups have no own field type"),
@@ -4309,7 +4309,7 @@ fn join_lookahead_condition(
         let part = match access {
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
-                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}].kind`);
+                let check = ctx.kind_check_str(&sig[d], &`tokens.kinds[{idx_expr}]`);
                 `{idx_expr} < tokens.len() && {check}`;
             },
             Parse => {

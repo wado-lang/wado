@@ -19,7 +19,7 @@ test "tokenize grammar declaration" {
     let tokens = antlr4::tokenize(&"grammar Foo;");
     assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
     // Verify the first token is GRAMMAR keyword
-    let first_name = antlr4::token_kind_name(tokens[0].kind);
+    let first_name = antlr4::token_kind_name(tokens.kinds[0]);
     assert first_name == "GRAMMAR", `expected GRAMMAR, got {first_name}`;
 }
 
@@ -52,7 +52,7 @@ test "tokenize options block" {
 test "tokenize fragment" {
     let tokens = antlr4::tokenize(&"fragment DIGIT : [0-9] ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
-    let first_name = antlr4::token_kind_name(tokens[0].kind);
+    let first_name = antlr4::token_kind_name(tokens.kinds[0]);
     assert first_name == "FRAGMENT", `expected FRAGMENT, got {first_name}`;
 }
 
@@ -85,17 +85,17 @@ test "parse minimal grammar" {
 test "user channel: LINE_COMMENT routed to COMMENT channel" {
     let tokens = antlr4::tokenize(&"// hi\n42");
     // LINE_COMMENT must not appear in the main stream.
-    for let t of &tokens {
-        assert t.kind != TK_LINE_COMMENT, "LINE_COMMENT leaked into main stream — channel routing dropped";
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_LINE_COMMENT, "LINE_COMMENT leaked into main stream — channel routing dropped";
     }
     // The INT `42` must follow, carrying the LINE_COMMENT as trivia on
     // channel 3 (the COMMENT channel).
     let mut found = false;
-    for let t of &tokens {
-        if t.kind == TK_INT {
-            for let trivia of &t.leading_trivia {
-                if trivia.kind == TK_LINE_COMMENT {
-                    assert trivia.channel == 3, `expected COMMENT channel 3, got {trivia.channel}`;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_INT {
+            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                if tokens.triv_kinds[j] == TK_LINE_COMMENT {
+                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got {tokens.triv_chans[j]}`;
                     found = true;
                 }
             }
@@ -106,15 +106,15 @@ test "user channel: LINE_COMMENT routed to COMMENT channel" {
 
 test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
     let tokens = antlr4::tokenize(&"/* hi */ 42");
-    for let t of &tokens {
-        assert t.kind != TK_BLOCK_COMMENT, "BLOCK_COMMENT leaked into main stream";
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_BLOCK_COMMENT, "BLOCK_COMMENT leaked into main stream";
     }
     let mut found = false;
-    for let t of &tokens {
-        if t.kind == TK_INT {
-            for let trivia of &t.leading_trivia {
-                if trivia.kind == TK_BLOCK_COMMENT {
-                    assert trivia.channel == 3, `expected COMMENT channel 3, got {trivia.channel}`;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_INT {
+            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                if tokens.triv_kinds[j] == TK_BLOCK_COMMENT {
+                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got {tokens.triv_chans[j]}`;
                     found = true;
                 }
             }

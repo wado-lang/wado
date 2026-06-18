@@ -932,8 +932,8 @@ fn emit_stage_a_err_test_file(
     if is_lexer {
         w.line(&"let tokens = t::tokenize(&input);");
         w.line(&"let mut has_err = false;");
-        w.begin(&"for let tok of &tokens");
-        w.begin(&"if tok.kind == TK_ERROR");
+        w.begin(&"for let mut i = 0; i < tokens.len(); i += 1");
+        w.begin(&"if tokens.kinds[i] == TK_ERROR");
         w.line(&"has_err = true;");
         w.line(&"break;");
         w.end();

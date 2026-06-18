@@ -299,6 +299,15 @@ impl Tok {
     pub fn triv_hi(&self) -> i32 {
         return self.stream.triv_hi[self.idx];
     }
+
+    /// Append the text of every leading-trivia token to `out`, in source
+    /// order (no allocation).
+    pub fn push_leading_trivia_text(&self, out: &mut String) {
+        let s = self.stream;
+        for let mut j = s.triv_lo[self.idx]; j < s.triv_hi[self.idx]; j += 1 {
+            s.push_text(out, s.triv_starts[j], s.triv_ends[j]);
+        }
+    }
 }
 
 /// ParseError represents a parse failure with location and expected tokens.

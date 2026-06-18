@@ -78,8 +78,8 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
         w.line(&`walk_{root_rule}(&mut visitor, &tree);`);
         w.else_begin(&"else");
         w.line(&"let tokens = tokenize(input);");
-        w.begin(&"for let token of &tokens");
-        w.line(&"visitor.visit_token(token);");
+        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
+        w.line(&"visitor.visit_token(&Tok::new(&tokens, _i));");
         w.end();
         w.end();
     } else {
@@ -87,8 +87,8 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
         // generated module, so highlighting is tokenize-only. The old
         // fallback emitted `walk_(...)` — invalid code.
         w.line(&"let tokens = tokenize(input);");
-        w.begin(&"for let token of &tokens");
-        w.line(&"visitor.visit_token(token);");
+        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
+        w.line(&"visitor.visit_token(&Tok::new(&tokens, _i));");
         w.end();
     }
     w.line(&"return highlight_html(input, &visitor.captures);");

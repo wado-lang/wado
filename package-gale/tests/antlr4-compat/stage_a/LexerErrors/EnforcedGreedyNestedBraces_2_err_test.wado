@@ -22,8 +22,8 @@ test "stage_a_err: LexerErrors/EnforcedGreedyNestedBraces_2" {
     let input = "{ { }";
     let tokens = t::tokenize(&input);
     let mut has_err = false;
-    for let tok of &tokens {
-        if tok.kind == TK_ERROR {
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_ERROR {
             has_err = true;
             break;
         }

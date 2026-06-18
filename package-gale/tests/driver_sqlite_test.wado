@@ -21,12 +21,10 @@ fn unparse_xml(node: &CstNode) -> String {
     out.push_str(&`<{node.name}>`);
     for let child of &node.children {
         if let Token(t) = *child {
-            for let trivia of &t.leading_trivia {
-                trivia.text.push_to(&mut out);
-            }
-            let kind_name = sqlite::token_kind_name(t.kind);
+            t.push_leading_trivia_text(&mut out);
+            let kind_name = sqlite::token_kind_name(t.kind());
             out.push_str(&`<{kind_name}>`);
-            t.text.push_to(&mut out);
+            t.push_text(&mut out);
             out.push_str(&`</{kind_name}>`);
         } else if let Node(n) = *child {
             out.push_str(&unparse_xml(&n));
