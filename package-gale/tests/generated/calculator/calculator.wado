@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -2439,7 +2442,7 @@ pub fn walk_equation<V: Visitor>(v: &mut V, toks: &TokenStream, node: &EquationN
     walk_expression(v, toks, &node.expression);
     walk_relop(v, toks, &node.relop);
     walk_expression(v, toks, &node.expression_2);
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"equation", &node.span);
 }
 
@@ -2447,7 +2450,7 @@ pub fn walk_expression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Express
     v.enter_rule(1, &"expression", &node.span);
     walk_multiplyingExpression(v, toks, &node.multiplying_expression);
     for let item of &node.item_multiplying_expression_list {
-        v.visit_token(toks, item.plus_or_minus);
+        v.visit_token(toks, *(&item.plus_or_minus));
         walk_multiplyingExpression(v, toks, &item.multiplying_expression);
     }
     v.exit_rule(1, &"expression", &node.span);
@@ -2457,7 +2460,7 @@ pub fn walk_multiplyingExpression<V: Visitor>(v: &mut V, toks: &TokenStream, nod
     v.enter_rule(2, &"multiplyingExpression", &node.span);
     walk_powExpression(v, toks, &node.pow_expression);
     for let item of &node.item_pow_expression_list {
-        v.visit_token(toks, item.times_or_div);
+        v.visit_token(toks, *(&item.times_or_div));
         walk_powExpression(v, toks, &item.pow_expression);
     }
     v.exit_rule(2, &"multiplyingExpression", &node.span);
@@ -2467,7 +2470,7 @@ pub fn walk_powExpression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PowE
     v.enter_rule(3, &"powExpression", &node.span);
     walk_signedAtom(v, toks, &node.signed_atom);
     for let item of &node.pow_signed_atom_list {
-        v.visit_token(toks, item.pow);
+        v.visit_token(toks, *(&item.pow));
         walk_signedAtom(v, toks, &item.signed_atom);
     }
     v.exit_rule(3, &"powExpression", &node.span);
@@ -2477,13 +2480,13 @@ pub fn walk_signedAtom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SignedA
     match node {
         Alt0(n) => {
             v.enter_rule(4, &"signedAtom", &n.span);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             walk_signedAtom(v, toks, &n.signed_atom);
             v.exit_rule(4, &"signedAtom", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(4, &"signedAtom", &n.span);
-            v.visit_token(toks, n.minus);
+            v.visit_token(toks, *(&n.minus));
             walk_signedAtom(v, toks, &n.signed_atom);
             v.exit_rule(4, &"signedAtom", &n.span);
         }
@@ -2519,9 +2522,9 @@ pub fn walk_atom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtomNode) {
         }
         Alt3(n) => {
             v.enter_rule(5, &"atom", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(5, &"atom", &n.span);
         }
     }
@@ -2529,7 +2532,7 @@ pub fn walk_atom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtomNode) {
 
 pub fn walk_scientific<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScientificNode) {
     v.enter_rule(6, &"scientific", &node.span);
-    v.visit_token(toks, node.scientific_number);
+    v.visit_token(toks, *(&node.scientific_number));
     v.exit_rule(6, &"scientific", &node.span);
 }
 
@@ -2541,20 +2544,20 @@ pub fn walk_constant<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ConstantN
 
 pub fn walk_variable<V: Visitor>(v: &mut V, toks: &TokenStream, node: &VariableNode) {
     v.enter_rule(8, &"variable", &node.span);
-    v.visit_token(toks, node.variable);
+    v.visit_token(toks, *(&node.variable));
     v.exit_rule(8, &"variable", &node.span);
 }
 
 pub fn walk_func_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FuncNode) {
     v.enter_rule(9, &"func_", &node.span);
     walk_funcname(v, toks, &node.funcname);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_expression(v, toks, &node.expression);
     for let item of &node.comma_expression_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_expression(v, toks, &item.expression);
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(9, &"func_", &node.span);
 }
 

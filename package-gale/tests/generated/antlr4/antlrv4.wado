@@ -184,8 +184,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -195,10 +198,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -9074,7 +9077,7 @@ pub fn walk_grammarSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Gramma
     for let item of &node.mode_spec_list {
         walk_modeSpec(v, toks, item);
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"grammarSpec", &node.span);
 }
 
@@ -9082,7 +9085,7 @@ pub fn walk_grammarDecl<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Gramma
     v.enter_rule(1, &"grammarDecl", &node.span);
     walk_grammarType(v, toks, &node.grammar_type);
     walk_identifier(v, toks, &node.identifier);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(1, &"grammarDecl", &node.span);
 }
 
@@ -9090,19 +9093,19 @@ pub fn walk_grammarType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Gramma
     match node {
         Alt0(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(toks, n.lexer);
-            v.visit_token(toks, n.grammar);
+            v.visit_token(toks, *(&n.lexer));
+            v.visit_token(toks, *(&n.grammar));
             v.exit_rule(2, &"grammarType", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(toks, n.parser);
-            v.visit_token(toks, n.grammar);
+            v.visit_token(toks, *(&n.parser));
+            v.visit_token(toks, *(&n.grammar));
             v.exit_rule(2, &"grammarType", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(toks, n.grammar);
+            v.visit_token(toks, *(&n.grammar));
             v.exit_rule(2, &"grammarType", &n.span);
         }
     }
@@ -9140,19 +9143,19 @@ pub fn walk_prequelConstruct<V: Visitor>(v: &mut V, toks: &TokenStream, node: &P
 
 pub fn walk_optionsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OptionsSpecNode) {
     v.enter_rule(4, &"optionsSpec", &node.span);
-    v.visit_token(toks, node.options);
+    v.visit_token(toks, *(&node.options));
     for let item of &node.option_semi_list {
         walk_option(v, toks, &item.option);
-        v.visit_token(toks, item.semi);
+        v.visit_token(toks, *(&item.semi));
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     v.exit_rule(4, &"optionsSpec", &node.span);
 }
 
 pub fn walk_option<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OptionNode) {
     v.enter_rule(5, &"option", &node.span);
     walk_identifier(v, toks, &node.identifier);
-    v.visit_token(toks, node.assign);
+    v.visit_token(toks, *(&node.assign));
     walk_optionValue(v, toks, &node.option_value);
     v.exit_rule(5, &"option", &node.span);
 }
@@ -9163,14 +9166,14 @@ pub fn walk_optionValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Option
             v.enter_rule(6, &"optionValue", &n.span);
             walk_identifier(v, toks, &n.identifier);
             for let item of &n.dot_identifier_list {
-                v.visit_token(toks, item.dot);
+                v.visit_token(toks, *(&item.dot));
                 walk_identifier(v, toks, &item.identifier);
             }
             v.exit_rule(6, &"optionValue", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             v.exit_rule(6, &"optionValue", &n.span);
         }
         Alt2(n) => {
@@ -9180,7 +9183,7 @@ pub fn walk_optionValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Option
         }
         Alt3(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            v.visit_token(toks, n.int);
+            v.visit_token(toks, *(&n.int));
             v.exit_rule(6, &"optionValue", &n.span);
         }
     }
@@ -9188,13 +9191,13 @@ pub fn walk_optionValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Option
 
 pub fn walk_delegateGrammars<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DelegateGrammarsNode) {
     v.enter_rule(7, &"delegateGrammars", &node.span);
-    v.visit_token(toks, node.import_);
+    v.visit_token(toks, *(&node.import_));
     walk_delegateGrammar(v, toks, &node.delegate_grammar);
     for let item of &node.comma_delegate_grammar_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_delegateGrammar(v, toks, &item.delegate_grammar);
     }
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(7, &"delegateGrammars", &node.span);
 }
 
@@ -9203,7 +9206,7 @@ pub fn walk_delegateGrammar<V: Visitor>(v: &mut V, toks: &TokenStream, node: &De
         Alt0(n) => {
             v.enter_rule(8, &"delegateGrammar", &n.span);
             walk_identifier(v, toks, &n.identifier);
-            v.visit_token(toks, n.assign);
+            v.visit_token(toks, *(&n.assign));
             walk_identifier(v, toks, &n.identifier_2);
             v.exit_rule(8, &"delegateGrammar", &n.span);
         }
@@ -9217,21 +9220,21 @@ pub fn walk_delegateGrammar<V: Visitor>(v: &mut V, toks: &TokenStream, node: &De
 
 pub fn walk_tokensSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TokensSpecNode) {
     v.enter_rule(9, &"tokensSpec", &node.span);
-    v.visit_token(toks, node.tokens);
+    v.visit_token(toks, *(&node.tokens));
     if let Some(item) = &node.id_list {
         walk_idList(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     v.exit_rule(9, &"tokensSpec", &node.span);
 }
 
 pub fn walk_channelsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ChannelsSpecNode) {
     v.enter_rule(10, &"channelsSpec", &node.span);
-    v.visit_token(toks, node.channels);
+    v.visit_token(toks, *(&node.channels));
     if let Some(item) = &node.id_list {
         walk_idList(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     v.exit_rule(10, &"channelsSpec", &node.span);
 }
 
@@ -9239,21 +9242,21 @@ pub fn walk_idList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IdListNode)
     v.enter_rule(11, &"idList", &node.span);
     walk_identifier(v, toks, &node.identifier);
     for let item of &node.comma_identifier_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_identifier(v, toks, &item.identifier);
     }
     if let Some(item) = &node.comma {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(11, &"idList", &node.span);
 }
 
 pub fn walk_action_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ActionNode) {
     v.enter_rule(12, &"action_", &node.span);
-    v.visit_token(toks, node.at);
+    v.visit_token(toks, *(&node.at));
     if let Some(item) = &node.action_scope_name_coloncolon {
         walk_actionScopeName(v, toks, &item.action_scope_name);
-        v.visit_token(toks, item.coloncolon);
+        v.visit_token(toks, *(&item.coloncolon));
     }
     walk_identifier(v, toks, &node.identifier);
     walk_actionBlock(v, toks, &node.action_block);
@@ -9269,12 +9272,12 @@ pub fn walk_actionScopeName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ac
         }
         Alt1(n) => {
             v.enter_rule(13, &"actionScopeName", &n.span);
-            v.visit_token(toks, n.lexer);
+            v.visit_token(toks, *(&n.lexer));
             v.exit_rule(13, &"actionScopeName", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(13, &"actionScopeName", &n.span);
-            v.visit_token(toks, n.parser);
+            v.visit_token(toks, *(&n.parser));
             v.exit_rule(13, &"actionScopeName", &n.span);
         }
     }
@@ -9282,25 +9285,25 @@ pub fn walk_actionScopeName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ac
 
 pub fn walk_actionBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ActionBlockNode) {
     v.enter_rule(14, &"actionBlock", &node.span);
-    v.visit_token(toks, node.action);
+    v.visit_token(toks, *(&node.action));
     v.exit_rule(14, &"actionBlock", &node.span);
 }
 
 pub fn walk_argActionBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArgActionBlockNode) {
     v.enter_rule(15, &"argActionBlock", &node.span);
-    v.visit_token(toks, node.begin_argument);
+    v.visit_token(toks, *(&node.begin_argument));
     for let item of &node.argument_content_list {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.end_argument);
+    v.visit_token(toks, *(&node.end_argument));
     v.exit_rule(15, &"argActionBlock", &node.span);
 }
 
 pub fn walk_modeSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ModeSpecNode) {
     v.enter_rule(16, &"modeSpec", &node.span);
-    v.visit_token(toks, node.mode);
+    v.visit_token(toks, *(&node.mode));
     walk_identifier(v, toks, &node.identifier);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     for let item of &node.lexer_rule_spec_list {
         walk_lexerRuleSpec(v, toks, item);
     }
@@ -9335,7 +9338,7 @@ pub fn walk_parserRuleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Par
     if let Some(item) = &node.rule_modifiers {
         walk_ruleModifiers(v, toks, item);
     }
-    v.visit_token(toks, node.rule_ref);
+    v.visit_token(toks, *(&node.rule_ref));
     if let Some(item) = &node.arg_action_block {
         walk_argActionBlock(v, toks, item);
     }
@@ -9351,9 +9354,9 @@ pub fn walk_parserRuleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Par
     for let item of &node.rule_prequel_list {
         walk_rulePrequel(v, toks, item);
     }
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.colon));
     walk_ruleBlock(v, toks, &node.rule_block);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     walk_exceptionGroup(v, toks, &node.exception_group);
     v.exit_rule(19, &"parserRuleSpec", &node.span);
 }
@@ -9371,7 +9374,7 @@ pub fn walk_exceptionGroup<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Exc
 
 pub fn walk_exceptionHandler<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExceptionHandlerNode) {
     v.enter_rule(21, &"exceptionHandler", &node.span);
-    v.visit_token(toks, node.catch);
+    v.visit_token(toks, *(&node.catch));
     walk_argActionBlock(v, toks, &node.arg_action_block);
     walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(21, &"exceptionHandler", &node.span);
@@ -9379,7 +9382,7 @@ pub fn walk_exceptionHandler<V: Visitor>(v: &mut V, toks: &TokenStream, node: &E
 
 pub fn walk_finallyClause<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FinallyClauseNode) {
     v.enter_rule(22, &"finallyClause", &node.span);
-    v.visit_token(toks, node.finally);
+    v.visit_token(toks, *(&node.finally));
     walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(22, &"finallyClause", &node.span);
 }
@@ -9401,17 +9404,17 @@ pub fn walk_rulePrequel<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulePr
 
 pub fn walk_ruleReturns<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleReturnsNode) {
     v.enter_rule(24, &"ruleReturns", &node.span);
-    v.visit_token(toks, node.returns);
+    v.visit_token(toks, *(&node.returns));
     walk_argActionBlock(v, toks, &node.arg_action_block);
     v.exit_rule(24, &"ruleReturns", &node.span);
 }
 
 pub fn walk_throwsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ThrowsSpecNode) {
     v.enter_rule(25, &"throwsSpec", &node.span);
-    v.visit_token(toks, node.throws);
+    v.visit_token(toks, *(&node.throws));
     walk_qualifiedIdentifier(v, toks, &node.qualified_identifier);
     for let item of &node.comma_qualified_identifier_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_qualifiedIdentifier(v, toks, &item.qualified_identifier);
     }
     v.exit_rule(25, &"throwsSpec", &node.span);
@@ -9419,14 +9422,14 @@ pub fn walk_throwsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ThrowsS
 
 pub fn walk_localsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LocalsSpecNode) {
     v.enter_rule(26, &"localsSpec", &node.span);
-    v.visit_token(toks, node.locals);
+    v.visit_token(toks, *(&node.locals));
     walk_argActionBlock(v, toks, &node.arg_action_block);
     v.exit_rule(26, &"localsSpec", &node.span);
 }
 
 pub fn walk_ruleAction<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleActionNode) {
     v.enter_rule(27, &"ruleAction", &node.span);
-    v.visit_token(toks, node.at);
+    v.visit_token(toks, *(&node.at));
     walk_identifier(v, toks, &node.identifier);
     walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(27, &"ruleAction", &node.span);
@@ -9456,7 +9459,7 @@ pub fn walk_ruleAltList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleAl
     v.enter_rule(31, &"ruleAltList", &node.span);
     walk_labeledAlt(v, toks, &node.labeled_alt);
     for let item of &node.or_labeled_alt_list {
-        v.visit_token(toks, item.or);
+        v.visit_token(toks, *(&item.or));
         walk_labeledAlt(v, toks, &item.labeled_alt);
     }
     v.exit_rule(31, &"ruleAltList", &node.span);
@@ -9466,7 +9469,7 @@ pub fn walk_labeledAlt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Labeled
     v.enter_rule(32, &"labeledAlt", &node.span);
     walk_alternative(v, toks, &node.alternative);
     if let Some(item) = &node.pound_identifier {
-        v.visit_token(toks, item.pound);
+        v.visit_token(toks, *(&item.pound));
         walk_identifier(v, toks, &item.identifier);
     }
     v.exit_rule(32, &"labeledAlt", &node.span);
@@ -9475,15 +9478,15 @@ pub fn walk_labeledAlt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Labeled
 pub fn walk_lexerRuleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerRuleSpecNode) {
     v.enter_rule(33, &"lexerRuleSpec", &node.span);
     if let Some(item) = &node.fragment {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.token_ref);
+    v.visit_token(toks, *(&node.token_ref));
     if let Some(item) = &node.options_spec {
         walk_optionsSpec(v, toks, item);
     }
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.colon));
     walk_lexerRuleBlock(v, toks, &node.lexer_rule_block);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(33, &"lexerRuleSpec", &node.span);
 }
 
@@ -9497,7 +9500,7 @@ pub fn walk_lexerAltList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Lexer
     v.enter_rule(35, &"lexerAltList", &node.span);
     walk_lexerAlt(v, toks, &node.lexer_alt);
     for let item of &node.or_lexer_alt_list {
-        v.visit_token(toks, item.or);
+        v.visit_token(toks, *(&item.or));
         walk_lexerAlt(v, toks, &item.lexer_alt);
     }
     v.exit_rule(35, &"lexerAltList", &node.span);
@@ -9558,7 +9561,7 @@ pub fn walk_lexerElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Lexer
             v.enter_rule(38, &"lexerElement", &n.span);
             walk_actionBlock(v, toks, &n.action_block);
             if let Some(item) = &n.question {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             v.exit_rule(38, &"lexerElement", &n.span);
         }
@@ -9567,18 +9570,18 @@ pub fn walk_lexerElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Lexer
 
 pub fn walk_lexerBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerBlockNode) {
     v.enter_rule(39, &"lexerBlock", &node.span);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_lexerAltList(v, toks, &node.lexer_alt_list);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(39, &"lexerBlock", &node.span);
 }
 
 pub fn walk_lexerCommands<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerCommandsNode) {
     v.enter_rule(40, &"lexerCommands", &node.span);
-    v.visit_token(toks, node.rarrow);
+    v.visit_token(toks, *(&node.rarrow));
     walk_lexerCommand(v, toks, &node.lexer_command);
     for let item of &node.comma_lexer_command_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_lexerCommand(v, toks, &item.lexer_command);
     }
     v.exit_rule(40, &"lexerCommands", &node.span);
@@ -9589,9 +9592,9 @@ pub fn walk_lexerCommand<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Lexer
         Alt0(n) => {
             v.enter_rule(41, &"lexerCommand", &n.span);
             walk_lexerCommandName(v, toks, &n.lexer_command_name);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_lexerCommandExpr(v, toks, &n.lexer_command_expr);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(41, &"lexerCommand", &n.span);
         }
         Alt1(n) => {
@@ -9611,7 +9614,7 @@ pub fn walk_lexerCommandName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &L
         }
         Alt1(n) => {
             v.enter_rule(42, &"lexerCommandName", &n.span);
-            v.visit_token(toks, n.mode);
+            v.visit_token(toks, *(&n.mode));
             v.exit_rule(42, &"lexerCommandName", &n.span);
         }
     }
@@ -9626,7 +9629,7 @@ pub fn walk_lexerCommandExpr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &L
         }
         Alt1(n) => {
             v.enter_rule(43, &"lexerCommandExpr", &n.span);
-            v.visit_token(toks, n.int);
+            v.visit_token(toks, *(&n.int));
             v.exit_rule(43, &"lexerCommandExpr", &n.span);
         }
     }
@@ -9636,7 +9639,7 @@ pub fn walk_altList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AltListNod
     v.enter_rule(44, &"altList", &node.span);
     walk_alternative(v, toks, &node.alternative);
     for let item of &node.or_alternative_list {
-        v.visit_token(toks, item.or);
+        v.visit_token(toks, *(&item.or));
         walk_alternative(v, toks, &item.alternative);
     }
     v.exit_rule(44, &"altList", &node.span);
@@ -9682,7 +9685,7 @@ pub fn walk_element<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementNod
             v.enter_rule(46, &"element", &n.span);
             walk_actionBlock(v, toks, &n.action_block);
             if let Some(item) = &n.question {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             if let Some(item) = &n.predicate_options {
                 walk_predicateOptions(v, toks, item);
@@ -9694,13 +9697,13 @@ pub fn walk_element<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementNod
 
 pub fn walk_predicateOptions<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PredicateOptionsNode) {
     v.enter_rule(47, &"predicateOptions", &node.span);
-    v.visit_token(toks, node.lt);
+    v.visit_token(toks, *(&node.lt));
     walk_predicateOption(v, toks, &node.predicate_option);
     for let item of &node.comma_predicate_option_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_predicateOption(v, toks, &item.predicate_option);
     }
-    v.visit_token(toks, node.gt);
+    v.visit_token(toks, *(&node.gt));
     v.exit_rule(47, &"predicateOptions", &node.span);
 }
 
@@ -9714,17 +9717,17 @@ pub fn walk_predicateOption<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Pr
         Alt1(n) => {
             v.enter_rule(48, &"predicateOption", &n.span);
             walk_identifier(v, toks, &n.identifier);
-            v.visit_token(toks, n.assign);
+            v.visit_token(toks, *(&n.assign));
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
                         walk_actionBlock(v, toks, &inner.action_block);
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.int);
+                        v.visit_token(toks, *(&inner.int));
                     }
                     Alt2(inner) => {
-                        v.visit_token(toks, inner.string_literal);
+                        v.visit_token(toks, *(&inner.string_literal));
                     }
                 }
             }
@@ -9736,7 +9739,7 @@ pub fn walk_predicateOption<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Pr
 pub fn walk_labeledElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LabeledElementNode) {
     v.enter_rule(49, &"labeledElement", &node.span);
     walk_identifier(v, toks, &node.identifier);
-    v.visit_token(toks, node.assign_or_plus_assign);
+    v.visit_token(toks, *(&node.assign_or_plus_assign));
     if let Some(item) = &node.atom_or_block {
         match item {
             Atom(inner) => {
@@ -9769,25 +9772,25 @@ pub fn walk_ebnfSuffix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &EbnfSuf
     match node {
         Alt0(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(toks, n.question);
+            v.visit_token(toks, *(&n.question));
             if let Some(item) = &n.question_2 {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.star));
             if let Some(item) = &n.question {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             if let Some(item) = &n.question {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
@@ -9813,7 +9816,7 @@ pub fn walk_lexerAtom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerAto
         }
         Alt3(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            v.visit_token(toks, n.lexer_char_set);
+            v.visit_token(toks, *(&n.lexer_char_set));
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
         Alt4(n) => {
@@ -9851,7 +9854,7 @@ pub fn walk_atom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtomNode) {
 
 pub fn walk_wildcard<V: Visitor>(v: &mut V, toks: &TokenStream, node: &WildcardNode) {
     v.enter_rule(55, &"wildcard", &node.span);
-    v.visit_token(toks, node.dot);
+    v.visit_token(toks, *(&node.dot));
     if let Some(item) = &node.element_options {
         walk_elementOptions(v, toks, item);
     }
@@ -9862,13 +9865,13 @@ pub fn walk_notSet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NotSetNode)
     match node {
         Alt0(n) => {
             v.enter_rule(56, &"notSet", &n.span);
-            v.visit_token(toks, n.not);
+            v.visit_token(toks, *(&n.not));
             walk_setElement(v, toks, &n.set_element);
             v.exit_rule(56, &"notSet", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(56, &"notSet", &n.span);
-            v.visit_token(toks, n.not);
+            v.visit_token(toks, *(&n.not));
             walk_blockSet(v, toks, &n.block_set);
             v.exit_rule(56, &"notSet", &n.span);
         }
@@ -9877,13 +9880,13 @@ pub fn walk_notSet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NotSetNode)
 
 pub fn walk_blockSet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockSetNode) {
     v.enter_rule(57, &"blockSet", &node.span);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_setElement(v, toks, &node.set_element);
     for let item of &node.or_set_element_list {
-        v.visit_token(toks, item.or);
+        v.visit_token(toks, *(&item.or));
         walk_setElement(v, toks, &item.set_element);
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(57, &"blockSet", &node.span);
 }
 
@@ -9891,7 +9894,7 @@ pub fn walk_setElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SetElem
     match node {
         Alt0(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(toks, n.token_ref);
+            v.visit_token(toks, *(&n.token_ref));
             if let Some(item) = &n.element_options {
                 walk_elementOptions(v, toks, item);
             }
@@ -9899,7 +9902,7 @@ pub fn walk_setElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SetElem
         }
         Alt1(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             if let Some(item) = &n.element_options {
                 walk_elementOptions(v, toks, item);
             }
@@ -9912,7 +9915,7 @@ pub fn walk_setElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SetElem
         }
         Alt3(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(toks, n.lexer_char_set);
+            v.visit_token(toks, *(&n.lexer_char_set));
             v.exit_rule(58, &"setElement", &n.span);
         }
     }
@@ -9920,7 +9923,7 @@ pub fn walk_setElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SetElem
 
 pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
     v.enter_rule(59, &"block", &node.span);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     if let Some(item) = &node.options_spec_rule_action_colon {
         if let Some(item) = &item.options_spec {
             walk_optionsSpec(v, toks, item);
@@ -9928,16 +9931,16 @@ pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
         for let item of &item.rule_action_list {
             walk_ruleAction(v, toks, item);
         }
-        v.visit_token(toks, item.colon);
+        v.visit_token(toks, *(&item.colon));
     }
     walk_altList(v, toks, &node.alt_list);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(59, &"block", &node.span);
 }
 
 pub fn walk_ruleref<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulerefNode) {
     v.enter_rule(60, &"ruleref", &node.span);
-    v.visit_token(toks, node.rule_ref);
+    v.visit_token(toks, *(&node.rule_ref));
     if let Some(item) = &node.arg_action_block {
         walk_argActionBlock(v, toks, item);
     }
@@ -9949,9 +9952,9 @@ pub fn walk_ruleref<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulerefNod
 
 pub fn walk_characterRange<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CharacterRangeNode) {
     v.enter_rule(61, &"characterRange", &node.span);
-    v.visit_token(toks, node.string_literal);
-    v.visit_token(toks, node.range);
-    v.visit_token(toks, node.string_literal_2);
+    v.visit_token(toks, *(&node.string_literal));
+    v.visit_token(toks, *(&node.range));
+    v.visit_token(toks, *(&node.string_literal_2));
     v.exit_rule(61, &"characterRange", &node.span);
 }
 
@@ -9959,7 +9962,7 @@ pub fn walk_terminalDef<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Termin
     match node {
         Alt0(n) => {
             v.enter_rule(62, &"terminalDef", &n.span);
-            v.visit_token(toks, n.token_ref);
+            v.visit_token(toks, *(&n.token_ref));
             if let Some(item) = &n.element_options {
                 walk_elementOptions(v, toks, item);
             }
@@ -9967,7 +9970,7 @@ pub fn walk_terminalDef<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Termin
         }
         Alt1(n) => {
             v.enter_rule(62, &"terminalDef", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             if let Some(item) = &n.element_options {
                 walk_elementOptions(v, toks, item);
             }
@@ -9978,13 +9981,13 @@ pub fn walk_terminalDef<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Termin
 
 pub fn walk_elementOptions<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementOptionsNode) {
     v.enter_rule(63, &"elementOptions", &node.span);
-    v.visit_token(toks, node.lt);
+    v.visit_token(toks, *(&node.lt));
     walk_elementOption(v, toks, &node.element_option);
     for let item of &node.comma_element_option_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_elementOption(v, toks, &item.element_option);
     }
-    v.visit_token(toks, node.gt);
+    v.visit_token(toks, *(&node.gt));
     v.exit_rule(63, &"elementOptions", &node.span);
 }
 
@@ -9998,17 +10001,17 @@ pub fn walk_elementOption<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Elem
         Alt1(n) => {
             v.enter_rule(64, &"elementOption", &n.span);
             walk_identifier(v, toks, &n.identifier);
-            v.visit_token(toks, n.assign);
+            v.visit_token(toks, *(&n.assign));
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
                         walk_qualifiedIdentifier(v, toks, &inner.qualified_identifier);
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.string_literal);
+                        v.visit_token(toks, *(&inner.string_literal));
                     }
                     Alt2(inner) => {
-                        v.visit_token(toks, inner.int);
+                        v.visit_token(toks, *(&inner.int));
                     }
                 }
             }
@@ -10027,7 +10030,7 @@ pub fn walk_qualifiedIdentifier<V: Visitor>(v: &mut V, toks: &TokenStream, node:
     v.enter_rule(66, &"qualifiedIdentifier", &node.span);
     walk_identifier(v, toks, &node.identifier);
     for let item of &node.dot_identifier_list {
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
         walk_identifier(v, toks, &item.identifier);
     }
     v.exit_rule(66, &"qualifiedIdentifier", &node.span);

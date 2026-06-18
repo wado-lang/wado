@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1087,7 +1090,7 @@ pub fn parse(input: &String) -> Result<ParseResult<ANode>, ParseError> {
 pub fn walk_a<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ANode) {
     v.enter_rule(0, &"a", &node.span);
     for let item of &node.id_list {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(0, &"a", &node.span);
 }

@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1564,20 +1567,20 @@ pub fn walk_stat<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StatNode) {
         printExpr(n) => {
             v.enter_rule(1, &"stat", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.newline);
+            v.visit_token(toks, *(&n.newline));
             v.exit_rule(1, &"stat", &n.span);
         }
         assign(n) => {
             v.enter_rule(1, &"stat", &n.span);
-            v.visit_token(toks, n.id);
-            v.visit_token(toks, n.eq);
+            v.visit_token(toks, *(&n.id));
+            v.visit_token(toks, *(&n.eq));
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.newline);
+            v.visit_token(toks, *(&n.newline));
             v.exit_rule(1, &"stat", &n.span);
         }
         blank(n) => {
             v.enter_rule(1, &"stat", &n.span);
-            v.visit_token(toks, n.newline);
+            v.visit_token(toks, *(&n.newline));
             v.exit_rule(1, &"stat", &n.span);
         }
     }
@@ -1588,32 +1591,32 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
         MulDiv(n) => {
             v.enter_rule(2, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.star_or_slash);
+            v.visit_token(toks, *(&n.star_or_slash));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(2, &"expr", &n.span);
         }
         AddSub(n) => {
             v.enter_rule(2, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.plus_or_minus);
+            v.visit_token(toks, *(&n.plus_or_minus));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(2, &"expr", &n.span);
         }
         int(n) => {
             v.enter_rule(2, &"expr", &n.span);
-            v.visit_token(toks, n.int);
+            v.visit_token(toks, *(&n.int));
             v.exit_rule(2, &"expr", &n.span);
         }
         id(n) => {
             v.enter_rule(2, &"expr", &n.span);
-            v.visit_token(toks, n.id);
+            v.visit_token(toks, *(&n.id));
             v.exit_rule(2, &"expr", &n.span);
         }
         parens(n) => {
             v.enter_rule(2, &"expr", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(2, &"expr", &n.span);
         }
     }

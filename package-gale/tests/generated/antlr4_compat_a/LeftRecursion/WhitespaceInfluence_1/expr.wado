@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -2991,7 +2994,7 @@ pub fn parse(input: &String) -> Result<ParseResult<ProgNode>, ParseError> {
 pub fn walk_prog<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ProgNode) {
     v.enter_rule(0, &"prog", &node.span);
     walk_expression(v, toks, &node.expression);
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"prog", &node.span);
 }
 
@@ -2999,196 +3002,196 @@ pub fn walk_expression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Express
     match node {
         doFunction(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.id);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.id));
+            v.visit_token(toks, *(&n.lparen));
             walk_expression(v, toks, &n.expression);
             for let item of &n.comma_expression_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_expression(v, toks, &item.expression);
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(1, &"expression", &n.span);
         }
         doParenthesis(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(1, &"expression", &n.span);
         }
         doNot(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.bang);
+            v.visit_token(toks, *(&n.bang));
             walk_expression(v, toks, &n.expression);
             v.exit_rule(1, &"expression", &n.span);
         }
         doNegate(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.minus);
+            v.visit_token(toks, *(&n.minus));
             walk_expression(v, toks, &n.expression);
             v.exit_rule(1, &"expression", &n.span);
         }
         doPositiv(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             walk_expression(v, toks, &n.expression);
             v.exit_rule(1, &"expression", &n.span);
         }
         doPower(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.caret);
+            v.visit_token(toks, *(&n.caret));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doMultipy(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.star));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doDivide(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.slash);
+            v.visit_token(toks, *(&n.slash));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doModulo(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.percent);
+            v.visit_token(toks, *(&n.percent));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doMinus(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.minus);
+            v.visit_token(toks, *(&n.minus));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doPlus(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doEqual(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.eq);
+            v.visit_token(toks, *(&n.eq));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doNotEqual(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.lit_bangeq);
+            v.visit_token(toks, *(&n.lit_bangeq));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doGreather(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.gt);
+            v.visit_token(toks, *(&n.gt));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doGreatherEqual(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.lit_gteq);
+            v.visit_token(toks, *(&n.lit_gteq));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doLesser(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.lt);
+            v.visit_token(toks, *(&n.lt));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doLesserEqual(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.lit_lteq);
+            v.visit_token(toks, *(&n.lit_lteq));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doIn(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.k_in);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.k_in));
+            v.visit_token(toks, *(&n.lparen));
             walk_expression(v, toks, &n.expression_2);
             for let item of &n.comma_expression_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_expression(v, toks, &item.expression);
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(1, &"expression", &n.span);
         }
         doAnd(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.amp_or_k_and);
+            v.visit_token(toks, *(&n.amp_or_k_and));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         doOr(n) => {
             v.enter_rule(1, &"expression", &n.span);
             walk_expression(v, toks, &n.expression);
-            v.visit_token(toks, n.pipe_or_k_or);
+            v.visit_token(toks, *(&n.pipe_or_k_or));
             walk_expression(v, toks, &n.expression_2);
             v.exit_rule(1, &"expression", &n.span);
         }
         newArray(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.lbracket);
+            v.visit_token(toks, *(&n.lbracket));
             walk_expression(v, toks, &n.expression);
             for let item of &n.comma_expression_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_expression(v, toks, &item.expression);
             }
-            v.visit_token(toks, n.rbracket);
+            v.visit_token(toks, *(&n.rbracket));
             v.exit_rule(1, &"expression", &n.span);
         }
         newTrueBoolean(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.k_true);
+            v.visit_token(toks, *(&n.k_true));
             v.exit_rule(1, &"expression", &n.span);
         }
         newFalseBoolean(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.k_false);
+            v.visit_token(toks, *(&n.k_false));
             v.exit_rule(1, &"expression", &n.span);
         }
         newNumber(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.number);
+            v.visit_token(toks, *(&n.number));
             v.exit_rule(1, &"expression", &n.span);
         }
         newDateTime(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.date);
+            v.visit_token(toks, *(&n.date));
             v.exit_rule(1, &"expression", &n.span);
         }
         newIdentifier(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.id);
+            v.visit_token(toks, *(&n.id));
             v.exit_rule(1, &"expression", &n.span);
         }
         newString(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.sq_string);
+            v.visit_token(toks, *(&n.sq_string));
             v.exit_rule(1, &"expression", &n.span);
         }
         newNull(n) => {
             v.enter_rule(1, &"expression", &n.span);
-            v.visit_token(toks, n.k_null);
+            v.visit_token(toks, *(&n.k_null));
             v.exit_rule(1, &"expression", &n.span);
         }
     }

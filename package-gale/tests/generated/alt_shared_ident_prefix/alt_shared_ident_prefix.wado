@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1937,34 +1940,34 @@ pub fn parse(input: &String) -> Result<ParseResult<ProgNode>, ParseError> {
 pub fn walk_prog<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ProgNode) {
     v.enter_rule(0, &"prog", &node.span);
     walk_matchExpr(v, toks, &node.match_expr);
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"prog", &node.span);
 }
 
 pub fn walk_matchExpr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MatchExprNode) {
     v.enter_rule(1, &"matchExpr", &node.span);
-    v.visit_token(toks, node.lit_match);
-    v.visit_token(toks, node.ident);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lit_match));
+    v.visit_token(toks, *(&node.ident));
+    v.visit_token(toks, *(&node.lbrace));
     if let Some(item) = &node.arm_item_comma {
         walk_arm(v, toks, &item.arm);
         for let item of &item.comma_arm_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_arm(v, toks, &item.arm);
         }
         if let Some(item) = &item.comma {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     v.exit_rule(1, &"matchExpr", &node.span);
 }
 
 pub fn walk_arm<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArmNode) {
     v.enter_rule(2, &"arm", &node.span);
     walk_pattern(v, toks, &node.pattern);
-    v.visit_token(toks, node.lit_eqgt);
-    v.visit_token(toks, node.ident);
+    v.visit_token(toks, *(&node.lit_eqgt));
+    v.visit_token(toks, *(&node.ident));
     v.exit_rule(2, &"arm", &node.span);
 }
 
@@ -1972,44 +1975,44 @@ pub fn walk_pattern<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PatternNod
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"pattern", &n.span);
-            v.visit_token(toks, n.lit_u5f);
+            v.visit_token(toks, *(&n.lit_u5f));
             v.exit_rule(3, &"pattern", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(3, &"pattern", &n.span);
             if let Some(item) = &n.lit_mut {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
-            v.visit_token(toks, n.ident);
+            v.visit_token(toks, *(&n.ident));
             v.exit_rule(3, &"pattern", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(3, &"pattern", &n.span);
             walk_path(v, toks, &n.path);
             if let Some(item) = &n.lparen_item_rparen {
-                v.visit_token(toks, item.lparen);
+                v.visit_token(toks, *(&item.lparen));
                 if let Some(item) = &item.pattern_item {
                     walk_pattern(v, toks, &item.pattern);
                     for let item of &item.comma_pattern_list {
-                        v.visit_token(toks, item.comma);
+                        v.visit_token(toks, *(&item.comma));
                         walk_pattern(v, toks, &item.pattern);
                     }
                 }
-                v.visit_token(toks, item.rparen);
+                v.visit_token(toks, *(&item.rparen));
             }
             v.exit_rule(3, &"pattern", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(3, &"pattern", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             if let Some(item) = &n.pattern_item {
                 walk_pattern(v, toks, &item.pattern);
                 for let item of &item.comma_pattern_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_pattern(v, toks, &item.pattern);
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(3, &"pattern", &n.span);
         }
     }
@@ -2017,10 +2020,10 @@ pub fn walk_pattern<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PatternNod
 
 pub fn walk_path<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PathNode) {
     v.enter_rule(4, &"path", &node.span);
-    v.visit_token(toks, node.ident);
+    v.visit_token(toks, *(&node.ident));
     for let item of &node.lit_coloncolon_ident_list {
-        v.visit_token(toks, item.lit_coloncolon);
-        v.visit_token(toks, item.ident);
+        v.visit_token(toks, *(&item.lit_coloncolon));
+        v.visit_token(toks, *(&item.ident));
     }
     v.exit_rule(4, &"path", &node.span);
 }

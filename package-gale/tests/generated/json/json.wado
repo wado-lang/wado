@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1849,7 +1852,7 @@ pub fn parse(input: &String) -> Result<ParseResult<JsonNode>, ParseError> {
 pub fn walk_json<V: Visitor>(v: &mut V, toks: &TokenStream, node: &JsonNode) {
     v.enter_rule(0, &"json", &node.span);
     walk_value(v, toks, &node.value);
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"json", &node.span);
 }
 
@@ -1857,19 +1860,19 @@ pub fn walk_obj<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ObjNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(1, &"obj", &n.span);
-            v.visit_token(toks, n.lbrace);
+            v.visit_token(toks, *(&n.lbrace));
             walk_pair(v, toks, &n.pair);
             for let item of &n.comma_pair_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_pair(v, toks, &item.pair);
             }
-            v.visit_token(toks, n.rbrace);
+            v.visit_token(toks, *(&n.rbrace));
             v.exit_rule(1, &"obj", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(1, &"obj", &n.span);
-            v.visit_token(toks, n.lbrace);
-            v.visit_token(toks, n.rbrace);
+            v.visit_token(toks, *(&n.lbrace));
+            v.visit_token(toks, *(&n.rbrace));
             v.exit_rule(1, &"obj", &n.span);
         }
     }
@@ -1877,8 +1880,8 @@ pub fn walk_obj<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ObjNode) {
 
 pub fn walk_pair<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PairNode) {
     v.enter_rule(2, &"pair", &node.span);
-    v.visit_token(toks, node.string);
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.string));
+    v.visit_token(toks, *(&node.colon));
     walk_value(v, toks, &node.value);
     v.exit_rule(2, &"pair", &node.span);
 }
@@ -1887,19 +1890,19 @@ pub fn walk_arr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArrNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"arr", &n.span);
-            v.visit_token(toks, n.lbracket);
+            v.visit_token(toks, *(&n.lbracket));
             walk_value(v, toks, &n.value);
             for let item of &n.comma_value_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_value(v, toks, &item.value);
             }
-            v.visit_token(toks, n.rbracket);
+            v.visit_token(toks, *(&n.rbracket));
             v.exit_rule(3, &"arr", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(3, &"arr", &n.span);
-            v.visit_token(toks, n.lbracket);
-            v.visit_token(toks, n.rbracket);
+            v.visit_token(toks, *(&n.lbracket));
+            v.visit_token(toks, *(&n.rbracket));
             v.exit_rule(3, &"arr", &n.span);
         }
     }
@@ -1909,12 +1912,12 @@ pub fn walk_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ValueNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(toks, n.string);
+            v.visit_token(toks, *(&n.string));
             v.exit_rule(4, &"value", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(toks, n.number);
+            v.visit_token(toks, *(&n.number));
             v.exit_rule(4, &"value", &n.span);
         }
         Alt2(n) => {
@@ -1929,17 +1932,17 @@ pub fn walk_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ValueNode) {
         }
         Alt4(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(toks, n.lit_true);
+            v.visit_token(toks, *(&n.lit_true));
             v.exit_rule(4, &"value", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(toks, n.lit_false);
+            v.visit_token(toks, *(&n.lit_false));
             v.exit_rule(4, &"value", &n.span);
         }
         Alt6(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(toks, n.lit_null);
+            v.visit_token(toks, *(&n.lit_null));
             v.exit_rule(4, &"value", &n.span);
         }
     }

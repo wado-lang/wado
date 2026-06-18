@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1473,7 +1476,7 @@ pub fn walk_program<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ProgramNod
     for let item of &node.stmt_list {
         walk_stmt(v, toks, item);
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"program", &node.span);
 }
 
@@ -1499,40 +1502,40 @@ pub fn walk_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StmtNode) {
 
 pub fn walk_assign_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AssignStmtNode) {
     v.enter_rule(2, &"assign_stmt", &node.span);
-    v.visit_token(toks, node.key);
-    v.visit_token(toks, node.eq);
-    v.visit_token(toks, node.value);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.key));
+    v.visit_token(toks, *(&node.eq));
+    v.visit_token(toks, *(&node.value));
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(2, &"assign_stmt", &node.span);
 }
 
 pub fn walk_pair_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PairStmtNode) {
     v.enter_rule(3, &"pair_stmt", &node.span);
-    v.visit_token(toks, node.pair);
+    v.visit_token(toks, *(&node.pair));
     walk_key_rule(v, toks, &node.k);
-    v.visit_token(toks, node.colon);
-    v.visit_token(toks, node.id);
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.colon));
+    v.visit_token(toks, *(&node.id));
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(3, &"pair_stmt", &node.span);
 }
 
 pub fn walk_key_rule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyRuleNode) {
     v.enter_rule(4, &"key_rule", &node.span);
-    v.visit_token(toks, node.id);
+    v.visit_token(toks, *(&node.id));
     v.exit_rule(4, &"key_rule", &node.span);
 }
 
 pub fn walk_mix_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MixStmtNode) {
     v.enter_rule(5, &"mix_stmt", &node.span);
-    v.visit_token(toks, node.list);
-    v.visit_token(toks, node.head);
+    v.visit_token(toks, *(&node.list));
+    v.visit_token(toks, *(&node.head));
     for let item of &node.comma_rest_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         for let item of &item.rest {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
-    v.visit_token(toks, node.semi);
+    v.visit_token(toks, *(&node.semi));
     v.exit_rule(5, &"mix_stmt", &node.span);
 }
 

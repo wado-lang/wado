@@ -183,8 +183,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -194,10 +197,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -3308,13 +3311,13 @@ pub fn walk_htmlDocument<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlD
         walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.xml {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     for let item of &node.scriptlet_or_sea_ws_list_2 {
         walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.dtd {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     for let item of &node.scriptlet_or_sea_ws_list_3 {
         walk_scriptletOrSeaWs(v, toks, item);
@@ -3347,25 +3350,25 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlEl
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(toks, n.tag_open);
-            v.visit_token(toks, n.tag_name);
+            v.visit_token(toks, *(&n.tag_open));
+            v.visit_token(toks, *(&n.tag_name));
             for let item of &n.html_attribute_list {
                 walk_htmlAttribute(v, toks, item);
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.tag_close);
+                        v.visit_token(toks, *(&inner.tag_close));
                         if let Some(item) = &inner.html_content_tag_open_tag_slash_tag_name_tag_close {
                             walk_htmlContent(v, toks, &item.html_content);
-                            v.visit_token(toks, item.tag_open);
-                            v.visit_token(toks, item.tag_slash);
-                            v.visit_token(toks, item.tag_name);
-                            v.visit_token(toks, item.tag_close);
+                            v.visit_token(toks, *(&item.tag_open));
+                            v.visit_token(toks, *(&item.tag_slash));
+                            v.visit_token(toks, *(&item.tag_name));
+                            v.visit_token(toks, *(&item.tag_close));
                         }
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.tag_slash_close);
+                        v.visit_token(toks, *(&inner.tag_slash_close));
                     }
                 }
             }
@@ -3373,7 +3376,7 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlEl
         }
         Alt1(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(toks, n.scriptlet);
+            v.visit_token(toks, *(&n.scriptlet));
             v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt2(n) => {
@@ -3401,7 +3404,7 @@ pub fn walk_htmlContent<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlCo
                     walk_htmlElement(v, toks, &inner.html_element);
                 }
                 Alt1(inner) => {
-                    v.visit_token(toks, inner.cdata);
+                    v.visit_token(toks, *(&inner.cdata));
                 }
                 Alt2(inner) => {
                     walk_htmlComment(v, toks, &inner.html_comment);
@@ -3417,10 +3420,10 @@ pub fn walk_htmlContent<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlCo
 
 pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlAttributeNode) {
     v.enter_rule(5, &"htmlAttribute", &node.span);
-    v.visit_token(toks, node.tag_name);
+    v.visit_token(toks, *(&node.tag_name));
     if let Some(item) = &node.tag_equals_attvalue_value {
-        v.visit_token(toks, item.tag_equals);
-        v.visit_token(toks, item.attvalue_value);
+        v.visit_token(toks, *(&item.tag_equals));
+        v.visit_token(toks, *(&item.attvalue_value));
     }
     v.exit_rule(5, &"htmlAttribute", &node.span);
 }
@@ -3440,7 +3443,7 @@ pub fn walk_htmlMisc<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlMiscN
         }
         Alt1(n) => {
             v.enter_rule(7, &"htmlMisc", &n.span);
-            v.visit_token(toks, n.sea_ws);
+            v.visit_token(toks, *(&n.sea_ws));
             v.exit_rule(7, &"htmlMisc", &n.span);
         }
     }
@@ -3454,15 +3457,15 @@ pub fn walk_htmlComment<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlCo
 
 pub fn walk_script<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScriptNode) {
     v.enter_rule(9, &"script", &node.span);
-    v.visit_token(toks, node.script_open);
-    v.visit_token(toks, node.script_body_or_script_short_body);
+    v.visit_token(toks, *(&node.script_open));
+    v.visit_token(toks, *(&node.script_body_or_script_short_body));
     v.exit_rule(9, &"script", &node.span);
 }
 
 pub fn walk_style<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StyleNode) {
     v.enter_rule(10, &"style", &node.span);
-    v.visit_token(toks, node.style_open);
-    v.visit_token(toks, node.style_body_or_style_short_body);
+    v.visit_token(toks, *(&node.style_open));
+    v.visit_token(toks, *(&node.style_body_or_style_short_body));
     v.exit_rule(10, &"style", &node.span);
 }
 

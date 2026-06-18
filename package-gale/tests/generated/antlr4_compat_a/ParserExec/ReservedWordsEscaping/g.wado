@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1479,9 +1482,9 @@ pub fn walk_continue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ContinueN
         }
         else1(n) => {
             v.enter_rule(1, &"continue", &n.span);
-            v.visit_token(toks, n.break_);
+            v.visit_token(toks, *(&n.break_));
             for let item of &n.break__list {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             if let Some(item) = &n.group_0 {
                 match item {
@@ -1489,7 +1492,7 @@ pub fn walk_continue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ContinueN
                         walk_for(v, toks, &inner.for_);
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.if_);
+                        v.visit_token(toks, *(&inner.if_));
                     }
                 }
             }
@@ -1498,17 +1501,17 @@ pub fn walk_continue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ContinueN
         int(n) => {
             v.enter_rule(1, &"continue", &n.span);
             for let item of &n.if_ {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             for let item of &n.if__2 {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             v.exit_rule(1, &"continue", &n.span);
         }
         class(n) => {
             v.enter_rule(1, &"continue", &n.span);
             walk_continue(v, toks, &n.continue_);
-            v.visit_token(toks, n.continue__2);
+            v.visit_token(toks, *(&n.continue__2));
             v.exit_rule(1, &"continue", &n.span);
         }
     }
@@ -1522,7 +1525,7 @@ pub fn walk_args<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArgsNode) {
 
 pub fn walk_for<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ForNode) {
     v.enter_rule(3, &"for", &node.span);
-    v.visit_token(toks, node.for_);
+    v.visit_token(toks, *(&node.for_));
     v.exit_rule(3, &"for", &node.span);
 }
 

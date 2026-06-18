@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -2982,7 +2985,7 @@ pub fn parse(input: &String) -> Result<ParseResult<ANode>, ParseError> {
 pub fn walk_a<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ANode) {
     v.enter_rule(0, &"a", &node.span);
     for let item of &node.lit_1_or_lit_2_or_lit_3_or_lit_4_or_lit_5_or_lit_6_or_lit_7_or_lit_8_or_lit_9_or_lit_10_or_lit_11_or_lit_12_or_lit_13_or_lit_14_or_lit_15_or_lit_16_or_lit_17_or_lit_18_or_lit_19_or_lit_20_or_lit_21_or_lit_22_or_lit_23_or_lit_24_or_lit_25_or_lit_26_or_lit_27_or_lit_28_or_lit_29_or_lit_30_or_lit_31_or_lit_32_or_lit_33_or_lit_34_or_lit_35_or_lit_36_or_lit_37_or_lit_38_or_lit_39_or_lit_40_or_lit_41_or_lit_42_or_lit_43_or_lit_44_or_lit_45_or_lit_46_or_lit_47_or_lit_48_or_lit_49_or_lit_50_or_lit_51_or_lit_52_or_lit_53_or_lit_54_or_lit_55_or_lit_56_or_lit_57_or_lit_58_or_lit_59_or_lit_60_or_lit_61_or_lit_62_or_lit_63_or_lit_64_or_lit_65_or_lit_66_list {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(0, &"a", &node.span);
 }

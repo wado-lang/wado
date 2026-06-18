@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1245,7 +1248,7 @@ pub fn walk_prog<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ProgNode) {
     for let item of &node.item_list {
         walk_item(v, toks, item);
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"prog", &node.span);
 }
 
@@ -1253,11 +1256,11 @@ pub fn walk_item<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ItemNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(1, &"item", &n.span);
-            v.visit_token(toks, n.lit_let);
-            v.visit_token(toks, n.id);
-            v.visit_token(toks, n.eq);
-            v.visit_token(toks, n.id_2);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.lit_let));
+            v.visit_token(toks, *(&n.id));
+            v.visit_token(toks, *(&n.eq));
+            v.visit_token(toks, *(&n.id_2));
+            v.visit_token(toks, *(&n.semicolon));
             v.exit_rule(1, &"item", &n.span);
         }
         Alt1(n) => {
@@ -1270,11 +1273,11 @@ pub fn walk_item<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ItemNode) {
 
 pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
     v.enter_rule(2, &"block", &node.span);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     for let item of &node.item_list {
         walk_item(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     v.exit_rule(2, &"block", &node.span);
 }
 

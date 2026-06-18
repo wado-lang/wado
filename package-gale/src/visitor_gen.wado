@@ -149,7 +149,10 @@ fn gen_walk_field(w: &mut CodeWriter, field: &WalkField, var: &String) {
 
 fn gen_walk_action(w: &mut CodeWriter, action: &WalkAction, expr: &String) {
     match action {
-        VisitToken => w.line(&`v.visit_token(toks, {tok_index_expr(expr)});`),
+        // A terminal field is an `i32` index; `expr` is always a reference to
+        // it (`&node.field`, or a `&i32` loop/`if let` binding), so the value
+        // is the uniform deref `*(expr)` — `*(&node.field)` folds to the field.
+        VisitToken => w.line(&`v.visit_token(toks, *({expr}));`),
         WalkRule(rule_name) => w.line(&`walk_{rule_name}(v, toks, {expr});`),
         WalkGroup(cases) => gen_walk_group_match(w, expr, cases),
         WalkStruct(fields) => {
@@ -180,21 +183,6 @@ fn gen_walk_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GroupCas
         w.end();
     }
     w.end();
-}
-
-/// The `i32` token-index expression to pass to `visit_token`. A direct
-/// field access arrives as `&node.field` (strip the `&` to read the i32);
-/// a `for`/`if let` binding arrives as `item` (a `&i32`, so deref).
-fn tok_index_expr(expr: &String) -> String {
-    if expr.len() > 0 && expr.chars().next() matches { Some(c) && c == '&' } {
-        let mut base = String::with_capacity(expr.len());
-        let mut skip = true;
-        for let c of expr.chars() {
-            if skip && c == '&' { skip = false; } else { base.push(c); }
-        }
-        return base;
-    }
-    return `*{expr}`;
 }
 
 fn gen_walk_general_group_match(w: &mut CodeWriter, expr: &String, cases: &List<GeneralGroupCaseInfo>) {

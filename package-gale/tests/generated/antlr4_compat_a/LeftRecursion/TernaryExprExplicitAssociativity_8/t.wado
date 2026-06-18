@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1305,7 +1308,7 @@ pub fn parse(input: &String) -> Result<ParseResult<SNode>, ParseError> {
 pub fn walk_s<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SNode) {
     v.enter_rule(0, &"s", &node.span);
     walk_e(v, toks, &node.e);
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"s", &node.span);
 }
 
@@ -1314,36 +1317,36 @@ pub fn walk_e<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ENode) {
         Alt0(n) => {
             v.enter_rule(1, &"e", &n.span);
             walk_e(v, toks, &n.e);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.star));
             walk_e(v, toks, &n.e_2);
             v.exit_rule(1, &"e", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(1, &"e", &n.span);
             walk_e(v, toks, &n.e);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             walk_e(v, toks, &n.e_2);
             v.exit_rule(1, &"e", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(1, &"e", &n.span);
             walk_e(v, toks, &n.e);
-            v.visit_token(toks, n.question);
+            v.visit_token(toks, *(&n.question));
             walk_e(v, toks, &n.e_2);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_e(v, toks, &n.e_3);
             v.exit_rule(1, &"e", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(1, &"e", &n.span);
             walk_e(v, toks, &n.e);
-            v.visit_token(toks, n.eq);
+            v.visit_token(toks, *(&n.eq));
             walk_e(v, toks, &n.e_2);
             v.exit_rule(1, &"e", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(1, &"e", &n.span);
-            v.visit_token(toks, n.id);
+            v.visit_token(toks, *(&n.id));
             v.exit_rule(1, &"e", &n.span);
         }
     }

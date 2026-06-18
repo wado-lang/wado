@@ -77,24 +77,28 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
         w.begin(&"if let Ok(tree) = parse_result");
         w.line(&`walk_{root_rule}(&mut visitor, &tree.tokens, &tree.root);`);
         w.else_begin(&"else");
-        w.line(&"let tokens = tokenize(input);");
-        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.visit_token(&tokens, _i);");
-        w.end();
+        // Parse failed — highlight the raw token stream instead.
+        emit_tokenize_only_highlight(w);
         w.end();
     } else {
         // Lexer-only grammar: there is no `parse` / `walk_*` in the
-        // generated module, so highlighting is tokenize-only. The old
-        // fallback emitted `walk_(...)` — invalid code.
-        w.line(&"let tokens = tokenize(input);");
-        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.visit_token(&tokens, _i);");
-        w.end();
+        // generated module, so highlighting is tokenize-only.
+        emit_tokenize_only_highlight(w);
     }
     w.line(&"return highlight_html(input, &visitor.captures);");
 
     w.end();
     w.blank();
+}
+
+/// Emit the tokenize-only highlight fallback: tokenize and visit each token
+/// index directly (no parse tree). Shared by the parse-failure path and the
+/// lexer-only-grammar path.
+fn emit_tokenize_only_highlight(w: &mut CodeWriter) {
+    w.line(&"let tokens = tokenize(input);");
+    w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
+    w.line(&"visitor.visit_token(&tokens, _i);");
+    w.end();
 }
 
 fn gen_highlight_run(w: &mut CodeWriter) {

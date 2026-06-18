@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -1110,7 +1113,7 @@ pub fn walk_cppCompilationUnit<V: Visitor>(v: &mut V, toks: &TokenStream, node: 
     for let item of &node.content_list {
         walk_content(v, toks, item);
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"cppCompilationUnit", &node.span);
 }
 
@@ -1123,7 +1126,7 @@ pub fn walk_content<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ContentNod
         }
         Alt1(n) => {
             v.enter_rule(1, &"content", &n.span);
-            v.visit_token(toks, n.wildcard);
+            v.visit_token(toks, *(&n.wildcard));
             v.exit_rule(1, &"content", &n.span);
         }
     }
@@ -1131,7 +1134,7 @@ pub fn walk_content<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ContentNod
 
 pub fn walk_anything<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnythingNode) {
     v.enter_rule(2, &"anything", &node.span);
-    v.visit_token(toks, node.any_char);
+    v.visit_token(toks, *(&node.any_char));
     v.exit_rule(2, &"anything", &node.span);
 }
 

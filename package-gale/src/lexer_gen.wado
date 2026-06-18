@@ -2050,8 +2050,7 @@ fn gen_tokenize_fn(
         String::from("best_end <= start");
     };
     w.begin(&`if {no_match_guard}`);
-    w.line(&"ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());");
-    w.line(&"triv_lo = ts.trivia_mark();");
+    emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
     w.line(&"lexer.pos = start + 1;");
     w.else_begin(&"else");
 
@@ -2100,8 +2099,7 @@ fn gen_tokenize_fn(
             w.line(&"more_start = -1;");
         }
         w.else_begin(&"else");
-        w.line(&"ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());");
-        w.line(&"triv_lo = ts.trivia_mark();");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.line(&"more_start = -1;");
         w.end();
     } else {
@@ -2115,8 +2113,7 @@ fn gen_tokenize_fn(
             w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
         }
         w.else_begin(&"else");
-        w.line(&"ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());");
-        w.line(&"triv_lo = ts.trivia_mark();");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.end();
     }
 
@@ -2147,11 +2144,20 @@ fn gen_tokenize_fn(
     w.line(&"lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    // EOF sentinel: zero-length, carrying any trailing trivia.
+    // EOF sentinel: zero-length, carrying any trailing trivia. No reset
+    // follows (the stream ends here), so this stays inline rather than
+    // using `emit_token_commit`.
     w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
     w.line(&"return ts;");
     w.end();  // fn
     w.blank();
+}
+
+/// Emit a default-channel token commit: push it with the pending leading-trivia
+/// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
+fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
+    w.line(&`ts.push_token({*kind}, {*start}, {*end}, triv_lo, ts.trivia_mark());`);
+    w.line(&"triv_lo = ts.trivia_mark();");
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {

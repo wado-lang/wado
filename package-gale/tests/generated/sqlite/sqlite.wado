@@ -180,8 +180,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -191,10 +194,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -19956,30 +19959,30 @@ pub fn walk_parse<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ParseNode) {
             }
         }
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"parse", &node.span);
 }
 
 pub fn walk_error<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ErrorNode) {
     v.enter_rule(1, &"error", &node.span);
-    v.visit_token(toks, node.unexpected_char);
+    v.visit_token(toks, *(&node.unexpected_char));
     v.exit_rule(1, &"error", &node.span);
 }
 
 pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SqlStmtListNode) {
     v.enter_rule(2, &"sql_stmt_list", &node.span);
     for let item of &node.semicolon_list {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     walk_sql_stmt(v, toks, &node.sql_stmt);
     for let item of &node.semicolon_sql_stmt_list {
         for let item of &item.semicolon_list {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
         walk_sql_stmt(v, toks, &item.sql_stmt);
     }
     for let item of &node.semicolon_list_2 {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(2, &"sql_stmt_list", &node.span);
 }
@@ -19987,10 +19990,10 @@ pub fn walk_sql_stmt_list<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SqlS
 pub fn walk_sql_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SqlStmtNode) {
     v.enter_rule(3, &"sql_stmt", &node.span);
     if let Some(item) = &node.k_explain_item {
-        v.visit_token(toks, item.k_explain);
+        v.visit_token(toks, *(&item.k_explain));
         if let Some(item) = &item.k_query_k_plan {
-            v.visit_token(toks, item.k_query);
-            v.visit_token(toks, item.k_plan);
+            v.visit_token(toks, *(&item.k_query));
+            v.visit_token(toks, *(&item.k_plan));
         }
     }
     if let Some(item) = &node.alter_table_stmt_or_analyze_stmt_or_attach_stmt_or_begin_stmt_or_commit_stmt_or_compound_select_stmt_or_create_index_stmt_or_create_table_stmt_or_create_trigger_stmt_or_create_view_stmt_or_create_virtual_table_stmt_or_delete_stmt_or_delete_stmt_limited_or_detach_stmt_or_drop_index_stmt_or_drop_table_stmt_or_drop_trigger_stmt_or_drop_view_stmt_or_factored_select_stmt_or_insert_stmt_or_pragma_stmt_or_reindex_stmt_or_release_stmt_or_rollback_stmt_or_savepoint_stmt_or_simple_select_stmt_or_select_stmt_or_update_stmt_or_update_stmt_limited_or_vacuum_stmt {
@@ -20092,24 +20095,24 @@ pub fn walk_sql_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SqlStmtNo
 
 pub fn walk_alter_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AlterTableStmtNode) {
     v.enter_rule(4, &"alter_table_stmt", &node.span);
-    v.visit_token(toks, node.k_alter);
-    v.visit_token(toks, node.k_table);
+    v.visit_token(toks, *(&node.k_alter));
+    v.visit_token(toks, *(&node.k_table));
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_rename);
-                v.visit_token(toks, inner.k_to);
+                v.visit_token(toks, *(&inner.k_rename));
+                v.visit_token(toks, *(&inner.k_to));
                 walk_new_table_name(v, toks, &inner.new_table_name);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_add);
+                v.visit_token(toks, *(&inner.k_add));
                 if let Some(item) = &inner.k_column {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_column_def(v, toks, &inner.column_def);
             }
@@ -20120,7 +20123,7 @@ pub fn walk_alter_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &A
 
 pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnalyzeStmtNode) {
     v.enter_rule(5, &"analyze_stmt", &node.span);
-    v.visit_token(toks, node.k_analyze);
+    v.visit_token(toks, *(&node.k_analyze));
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
@@ -20131,7 +20134,7 @@ pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Analy
             }
             Alt2(inner) => {
                 walk_database_name(v, toks, &inner.database_name);
-                v.visit_token(toks, inner.dot);
+                v.visit_token(toks, *(&inner.dot));
                 walk_table_or_index_name(v, toks, &inner.table_or_index_name);
             }
         }
@@ -20141,24 +20144,24 @@ pub fn walk_analyze_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Analy
 
 pub fn walk_attach_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AttachStmtNode) {
     v.enter_rule(6, &"attach_stmt", &node.span);
-    v.visit_token(toks, node.k_attach);
+    v.visit_token(toks, *(&node.k_attach));
     if let Some(item) = &node.k_database {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     walk_expr(v, toks, &node.expr);
-    v.visit_token(toks, node.k_as);
+    v.visit_token(toks, *(&node.k_as));
     walk_database_name(v, toks, &node.database_name);
     v.exit_rule(6, &"attach_stmt", &node.span);
 }
 
 pub fn walk_begin_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BeginStmtNode) {
     v.enter_rule(7, &"begin_stmt", &node.span);
-    v.visit_token(toks, node.k_begin);
+    v.visit_token(toks, *(&node.k_begin));
     if let Some(item) = &node.k_deferred_or_k_immediate_or_k_exclusive {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     if let Some(item) = &node.k_transaction_transaction_name {
-        v.visit_token(toks, item.k_transaction);
+        v.visit_token(toks, *(&item.k_transaction));
         if let Some(item) = &item.transaction_name {
             walk_transaction_name(v, toks, item);
         }
@@ -20168,9 +20171,9 @@ pub fn walk_begin_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BeginSt
 
 pub fn walk_commit_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CommitStmtNode) {
     v.enter_rule(8, &"commit_stmt", &node.span);
-    v.visit_token(toks, node.k_commit_or_k_end);
+    v.visit_token(toks, *(&node.k_commit_or_k_end));
     if let Some(item) = &node.k_transaction_transaction_name {
-        v.visit_token(toks, item.k_transaction);
+        v.visit_token(toks, *(&item.k_transaction));
         if let Some(item) = &item.transaction_name {
             walk_transaction_name(v, toks, item);
         }
@@ -20188,35 +20191,35 @@ pub fn walk_compound_select_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    v.visit_token(toks, inner.k_union);
+                    v.visit_token(toks, *(&inner.k_union));
                     if let Some(item) = &inner.k_all {
-                        v.visit_token(toks, *item);
+                        v.visit_token(toks, *(item));
                     }
                 }
                 Alt1(inner) => {
-                    v.visit_token(toks, inner.k_intersect);
+                    v.visit_token(toks, *(&inner.k_intersect));
                 }
                 Alt2(inner) => {
-                    v.visit_token(toks, inner.k_except);
+                    v.visit_token(toks, *(&inner.k_except));
                 }
             }
         }
         walk_select_core(v, toks, &item.select_core);
     }
     if let Some(item) = &node.k_order_k_by_ordering_term_item {
-        v.visit_token(toks, item.k_order);
-        v.visit_token(toks, item.k_by);
+        v.visit_token(toks, *(&item.k_order));
+        v.visit_token(toks, *(&item.k_by));
         walk_ordering_term(v, toks, &item.ordering_term);
         for let item of &item.comma_ordering_term_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_ordering_term(v, toks, &item.ordering_term);
         }
     }
     if let Some(item) = &node.k_limit_expr_item {
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -20225,32 +20228,32 @@ pub fn walk_compound_select_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node
 
 pub fn walk_create_index_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CreateIndexStmtNode) {
     v.enter_rule(10, &"create_index_stmt", &node.span);
-    v.visit_token(toks, node.k_create);
+    v.visit_token(toks, *(&node.k_create));
     if let Some(item) = &node.k_unique {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.k_index);
+    v.visit_token(toks, *(&node.k_index));
     if let Some(item) = &node.k_if_k_not_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_not);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_not));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_index_name(v, toks, &node.index_name);
-    v.visit_token(toks, node.k_on);
+    v.visit_token(toks, *(&node.k_on));
     walk_table_name(v, toks, &node.table_name);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_indexed_column(v, toks, &node.indexed_column);
     for let item of &node.comma_indexed_column_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_indexed_column(v, toks, &item.indexed_column);
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     if let Some(item) = &node.k_where_expr {
-        v.visit_token(toks, item.k_where);
+        v.visit_token(toks, *(&item.k_where));
         walk_expr(v, toks, &item.expr);
     }
     v.exit_rule(10, &"create_index_stmt", &node.span);
@@ -20258,42 +20261,42 @@ pub fn walk_create_index_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
 
 pub fn walk_create_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CreateTableStmtNode) {
     v.enter_rule(11, &"create_table_stmt", &node.span);
-    v.visit_token(toks, node.k_create);
+    v.visit_token(toks, *(&node.k_create));
     if let Some(item) = &node.k_temp_or_k_temporary {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.k_table);
+    v.visit_token(toks, *(&node.k_table));
     if let Some(item) = &node.k_if_k_not_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_not);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_not));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.lparen));
                 walk_column_def(v, toks, &inner.column_def);
                 for let item of &inner.comma_column_def_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_column_def(v, toks, &item.column_def);
                 }
                 for let item of &inner.comma_table_constraint_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_table_constraint(v, toks, &item.table_constraint);
                 }
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
                 if let Some(item) = &inner.k_without_identifier {
-                    v.visit_token(toks, item.k_without);
-                    v.visit_token(toks, item.identifier);
+                    v.visit_token(toks, *(&item.k_without));
+                    v.visit_token(toks, *(&item.identifier));
                 }
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_as);
+                v.visit_token(toks, *(&inner.k_as));
                 walk_select_stmt(v, toks, &inner.select_stmt);
             }
         }
@@ -20303,72 +20306,72 @@ pub fn walk_create_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
 
 pub fn walk_create_trigger_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CreateTriggerStmtNode) {
     v.enter_rule(12, &"create_trigger_stmt", &node.span);
-    v.visit_token(toks, node.k_create);
+    v.visit_token(toks, *(&node.k_create));
     if let Some(item) = &node.k_temp_or_k_temporary {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.k_trigger);
+    v.visit_token(toks, *(&node.k_trigger));
     if let Some(item) = &node.k_if_k_not_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_not);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_not));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_trigger_name(v, toks, &node.trigger_name);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_before);
+                v.visit_token(toks, *(&inner.k_before));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_after);
+                v.visit_token(toks, *(&inner.k_after));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_instead);
-                v.visit_token(toks, inner.k_of);
+                v.visit_token(toks, *(&inner.k_instead));
+                v.visit_token(toks, *(&inner.k_of));
             }
         }
     }
     if let Some(item) = &node.group_1 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_delete);
+                v.visit_token(toks, *(&inner.k_delete));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_insert);
+                v.visit_token(toks, *(&inner.k_insert));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_update);
+                v.visit_token(toks, *(&inner.k_update));
                 if let Some(item) = &inner.k_of_column_name_item {
-                    v.visit_token(toks, item.k_of);
+                    v.visit_token(toks, *(&item.k_of));
                     walk_column_name(v, toks, &item.column_name);
                     for let item of &item.comma_column_name_list {
-                        v.visit_token(toks, item.comma);
+                        v.visit_token(toks, *(&item.comma));
                         walk_column_name(v, toks, &item.column_name);
                     }
                 }
             }
         }
     }
-    v.visit_token(toks, node.k_on);
+    v.visit_token(toks, *(&node.k_on));
     if let Some(item) = &node.database_name_dot_2 {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.k_for_k_each_k_row {
-        v.visit_token(toks, item.k_for);
-        v.visit_token(toks, item.k_each);
-        v.visit_token(toks, item.k_row);
+        v.visit_token(toks, *(&item.k_for));
+        v.visit_token(toks, *(&item.k_each));
+        v.visit_token(toks, *(&item.k_row));
     }
     if let Some(item) = &node.k_when_expr {
-        v.visit_token(toks, item.k_when);
+        v.visit_token(toks, *(&item.k_when));
         walk_expr(v, toks, &item.expr);
     }
-    v.visit_token(toks, node.k_begin);
+    v.visit_token(toks, *(&node.k_begin));
     for let item of &node.item_semicolon_list {
         if let Some(item) = &item.update_stmt_or_insert_stmt_or_delete_stmt_or_select_stmt {
             match item {
@@ -20386,59 +20389,59 @@ pub fn walk_create_trigger_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node:
                 }
             }
         }
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
     }
-    v.visit_token(toks, node.k_end);
+    v.visit_token(toks, *(&node.k_end));
     v.exit_rule(12, &"create_trigger_stmt", &node.span);
 }
 
 pub fn walk_create_view_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CreateViewStmtNode) {
     v.enter_rule(13, &"create_view_stmt", &node.span);
-    v.visit_token(toks, node.k_create);
+    v.visit_token(toks, *(&node.k_create));
     if let Some(item) = &node.k_temp_or_k_temporary {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.k_view);
+    v.visit_token(toks, *(&node.k_view));
     if let Some(item) = &node.k_if_k_not_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_not);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_not));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_view_name(v, toks, &node.view_name);
-    v.visit_token(toks, node.k_as);
+    v.visit_token(toks, *(&node.k_as));
     walk_select_stmt(v, toks, &node.select_stmt);
     v.exit_rule(13, &"create_view_stmt", &node.span);
 }
 
 pub fn walk_create_virtual_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CreateVirtualTableStmtNode) {
     v.enter_rule(14, &"create_virtual_table_stmt", &node.span);
-    v.visit_token(toks, node.k_create);
-    v.visit_token(toks, node.k_virtual);
-    v.visit_token(toks, node.k_table);
+    v.visit_token(toks, *(&node.k_create));
+    v.visit_token(toks, *(&node.k_virtual));
+    v.visit_token(toks, *(&node.k_table));
     if let Some(item) = &node.k_if_k_not_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_not);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_not));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
-    v.visit_token(toks, node.k_using);
+    v.visit_token(toks, *(&node.k_using));
     walk_module_name(v, toks, &node.module_name);
     if let Some(item) = &node.lparen_module_argument_item_rparen {
-        v.visit_token(toks, item.lparen);
+        v.visit_token(toks, *(&item.lparen));
         walk_module_argument(v, toks, &item.module_argument);
         for let item of &item.comma_module_argument_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_module_argument(v, toks, &item.module_argument);
         }
-        v.visit_token(toks, item.rparen);
+        v.visit_token(toks, *(&item.rparen));
     }
     v.exit_rule(14, &"create_virtual_table_stmt", &node.span);
 }
@@ -20448,11 +20451,11 @@ pub fn walk_delete_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Delete
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, toks, item);
     }
-    v.visit_token(toks, node.k_delete);
-    v.visit_token(toks, node.k_from);
+    v.visit_token(toks, *(&node.k_delete));
+    v.visit_token(toks, *(&node.k_from));
     walk_qualified_table_name(v, toks, &node.qualified_table_name);
     if let Some(item) = &node.k_where_expr {
-        v.visit_token(toks, item.k_where);
+        v.visit_token(toks, *(&item.k_where));
         walk_expr(v, toks, &item.expr);
     }
     v.exit_rule(15, &"delete_stmt", &node.span);
@@ -20463,27 +20466,27 @@ pub fn walk_delete_stmt_limited<V: Visitor>(v: &mut V, toks: &TokenStream, node:
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, toks, item);
     }
-    v.visit_token(toks, node.k_delete);
-    v.visit_token(toks, node.k_from);
+    v.visit_token(toks, *(&node.k_delete));
+    v.visit_token(toks, *(&node.k_from));
     walk_qualified_table_name(v, toks, &node.qualified_table_name);
     if let Some(item) = &node.k_where_expr {
-        v.visit_token(toks, item.k_where);
+        v.visit_token(toks, *(&item.k_where));
         walk_expr(v, toks, &item.expr);
     }
     if let Some(item) = &node.item_k_limit_expr_item {
         if let Some(item) = &item.k_order_k_by_ordering_term_item {
-            v.visit_token(toks, item.k_order);
-            v.visit_token(toks, item.k_by);
+            v.visit_token(toks, *(&item.k_order));
+            v.visit_token(toks, *(&item.k_by));
             walk_ordering_term(v, toks, &item.ordering_term);
             for let item of &item.comma_ordering_term_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_ordering_term(v, toks, &item.ordering_term);
             }
         }
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -20492,9 +20495,9 @@ pub fn walk_delete_stmt_limited<V: Visitor>(v: &mut V, toks: &TokenStream, node:
 
 pub fn walk_detach_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DetachStmtNode) {
     v.enter_rule(17, &"detach_stmt", &node.span);
-    v.visit_token(toks, node.k_detach);
+    v.visit_token(toks, *(&node.k_detach));
     if let Some(item) = &node.k_database {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     walk_database_name(v, toks, &node.database_name);
     v.exit_rule(17, &"detach_stmt", &node.span);
@@ -20502,15 +20505,15 @@ pub fn walk_detach_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Detach
 
 pub fn walk_drop_index_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DropIndexStmtNode) {
     v.enter_rule(18, &"drop_index_stmt", &node.span);
-    v.visit_token(toks, node.k_drop);
-    v.visit_token(toks, node.k_index);
+    v.visit_token(toks, *(&node.k_drop));
+    v.visit_token(toks, *(&node.k_index));
     if let Some(item) = &node.k_if_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_index_name(v, toks, &node.index_name);
     v.exit_rule(18, &"drop_index_stmt", &node.span);
@@ -20518,15 +20521,15 @@ pub fn walk_drop_index_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Dr
 
 pub fn walk_drop_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DropTableStmtNode) {
     v.enter_rule(19, &"drop_table_stmt", &node.span);
-    v.visit_token(toks, node.k_drop);
-    v.visit_token(toks, node.k_table);
+    v.visit_token(toks, *(&node.k_drop));
+    v.visit_token(toks, *(&node.k_table));
     if let Some(item) = &node.k_if_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     v.exit_rule(19, &"drop_table_stmt", &node.span);
@@ -20534,15 +20537,15 @@ pub fn walk_drop_table_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Dr
 
 pub fn walk_drop_trigger_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DropTriggerStmtNode) {
     v.enter_rule(20, &"drop_trigger_stmt", &node.span);
-    v.visit_token(toks, node.k_drop);
-    v.visit_token(toks, node.k_trigger);
+    v.visit_token(toks, *(&node.k_drop));
+    v.visit_token(toks, *(&node.k_trigger));
     if let Some(item) = &node.k_if_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_trigger_name(v, toks, &node.trigger_name);
     v.exit_rule(20, &"drop_trigger_stmt", &node.span);
@@ -20550,15 +20553,15 @@ pub fn walk_drop_trigger_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
 
 pub fn walk_drop_view_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DropViewStmtNode) {
     v.enter_rule(21, &"drop_view_stmt", &node.span);
-    v.visit_token(toks, node.k_drop);
-    v.visit_token(toks, node.k_view);
+    v.visit_token(toks, *(&node.k_drop));
+    v.visit_token(toks, *(&node.k_view));
     if let Some(item) = &node.k_if_k_exists {
-        v.visit_token(toks, item.k_if);
-        v.visit_token(toks, item.k_exists);
+        v.visit_token(toks, *(&item.k_if));
+        v.visit_token(toks, *(&item.k_exists));
     }
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_view_name(v, toks, &node.view_name);
     v.exit_rule(21, &"drop_view_stmt", &node.span);
@@ -20575,19 +20578,19 @@ pub fn walk_factored_select_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node
         walk_select_core(v, toks, &item.select_core);
     }
     if let Some(item) = &node.k_order_k_by_ordering_term_item {
-        v.visit_token(toks, item.k_order);
-        v.visit_token(toks, item.k_by);
+        v.visit_token(toks, *(&item.k_order));
+        v.visit_token(toks, *(&item.k_by));
         walk_ordering_term(v, toks, &item.ordering_term);
         for let item of &item.comma_ordering_term_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_ordering_term(v, toks, &item.ordering_term);
         }
     }
     if let Some(item) = &node.k_limit_expr_item {
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -20602,81 +20605,81 @@ pub fn walk_insert_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Insert
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_insert);
+                v.visit_token(toks, *(&inner.k_insert));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_replace);
+                v.visit_token(toks, *(&inner.k_replace));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_insert);
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_replace);
+                v.visit_token(toks, *(&inner.k_insert));
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_replace));
             }
             Alt3(inner) => {
-                v.visit_token(toks, inner.k_insert);
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_rollback);
+                v.visit_token(toks, *(&inner.k_insert));
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_rollback));
             }
             Alt4(inner) => {
-                v.visit_token(toks, inner.k_insert);
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_abort);
+                v.visit_token(toks, *(&inner.k_insert));
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_abort));
             }
             Alt5(inner) => {
-                v.visit_token(toks, inner.k_insert);
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_fail);
+                v.visit_token(toks, *(&inner.k_insert));
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_fail));
             }
             Alt6(inner) => {
-                v.visit_token(toks, inner.k_insert);
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_ignore);
+                v.visit_token(toks, *(&inner.k_insert));
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_ignore));
             }
         }
     }
-    v.visit_token(toks, node.k_into);
+    v.visit_token(toks, *(&node.k_into));
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.lparen_column_name_item_rparen {
-        v.visit_token(toks, item.lparen);
+        v.visit_token(toks, *(&item.lparen));
         walk_column_name(v, toks, &item.column_name);
         for let item of &item.comma_column_name_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_column_name(v, toks, &item.column_name);
         }
-        v.visit_token(toks, item.rparen);
+        v.visit_token(toks, *(&item.rparen));
     }
     if let Some(item) = &node.group_1 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_values);
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.k_values));
+                v.visit_token(toks, *(&inner.lparen));
                 walk_expr(v, toks, &inner.expr);
                 for let item of &inner.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
                 for let item of &inner.comma_lparen_expr_item_rparen_list {
-                    v.visit_token(toks, item.comma);
-                    v.visit_token(toks, item.lparen);
+                    v.visit_token(toks, *(&item.comma));
+                    v.visit_token(toks, *(&item.lparen));
                     walk_expr(v, toks, &item.expr);
                     for let item of &item.comma_expr_list {
-                        v.visit_token(toks, item.comma);
+                        v.visit_token(toks, *(&item.comma));
                         walk_expr(v, toks, &item.expr);
                     }
-                    v.visit_token(toks, item.rparen);
+                    v.visit_token(toks, *(&item.rparen));
                 }
             }
             Alt1(inner) => {
                 walk_select_stmt(v, toks, &inner.select_stmt);
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_default);
-                v.visit_token(toks, inner.k_values);
+                v.visit_token(toks, *(&inner.k_default));
+                v.visit_token(toks, *(&inner.k_values));
             }
         }
     }
@@ -20685,22 +20688,22 @@ pub fn walk_insert_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Insert
 
 pub fn walk_pragma_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PragmaStmtNode) {
     v.enter_rule(24, &"pragma_stmt", &node.span);
-    v.visit_token(toks, node.k_pragma);
+    v.visit_token(toks, *(&node.k_pragma));
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_pragma_name(v, toks, &node.pragma_name);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.eq);
+                v.visit_token(toks, *(&inner.eq));
                 walk_pragma_value(v, toks, &inner.pragma_value);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.lparen));
                 walk_pragma_value(v, toks, &inner.pragma_value);
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
         }
     }
@@ -20709,7 +20712,7 @@ pub fn walk_pragma_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Pragma
 
 pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ReindexStmtNode) {
     v.enter_rule(25, &"reindex_stmt", &node.span);
-    v.visit_token(toks, node.k_reindex);
+    v.visit_token(toks, *(&node.k_reindex));
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
@@ -20718,7 +20721,7 @@ pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Reind
             Alt1(inner) => {
                 if let Some(item) = &inner.database_name_dot {
                     walk_database_name(v, toks, &item.database_name);
-                    v.visit_token(toks, item.dot);
+                    v.visit_token(toks, *(&item.dot));
                 }
                 if let Some(item) = &inner.table_name_or_index_name {
                     match item {
@@ -20738,9 +20741,9 @@ pub fn walk_reindex_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Reind
 
 pub fn walk_release_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ReleaseStmtNode) {
     v.enter_rule(26, &"release_stmt", &node.span);
-    v.visit_token(toks, node.k_release);
+    v.visit_token(toks, *(&node.k_release));
     if let Some(item) = &node.k_savepoint {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     walk_savepoint_name(v, toks, &node.savepoint_name);
     v.exit_rule(26, &"release_stmt", &node.span);
@@ -20748,17 +20751,17 @@ pub fn walk_release_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Relea
 
 pub fn walk_rollback_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RollbackStmtNode) {
     v.enter_rule(27, &"rollback_stmt", &node.span);
-    v.visit_token(toks, node.k_rollback);
+    v.visit_token(toks, *(&node.k_rollback));
     if let Some(item) = &node.k_transaction_transaction_name {
-        v.visit_token(toks, item.k_transaction);
+        v.visit_token(toks, *(&item.k_transaction));
         if let Some(item) = &item.transaction_name {
             walk_transaction_name(v, toks, item);
         }
     }
     if let Some(item) = &node.k_to_k_savepoint_savepoint_name {
-        v.visit_token(toks, item.k_to);
+        v.visit_token(toks, *(&item.k_to));
         if let Some(item) = &item.k_savepoint {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
         walk_savepoint_name(v, toks, &item.savepoint_name);
     }
@@ -20767,7 +20770,7 @@ pub fn walk_rollback_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Roll
 
 pub fn walk_savepoint_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SavepointStmtNode) {
     v.enter_rule(28, &"savepoint_stmt", &node.span);
-    v.visit_token(toks, node.k_savepoint);
+    v.visit_token(toks, *(&node.k_savepoint));
     walk_savepoint_name(v, toks, &node.savepoint_name);
     v.exit_rule(28, &"savepoint_stmt", &node.span);
 }
@@ -20779,19 +20782,19 @@ pub fn walk_simple_select_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: 
     }
     walk_select_core(v, toks, &node.select_core);
     if let Some(item) = &node.k_order_k_by_ordering_term_item {
-        v.visit_token(toks, item.k_order);
-        v.visit_token(toks, item.k_by);
+        v.visit_token(toks, *(&item.k_order));
+        v.visit_token(toks, *(&item.k_by));
         walk_ordering_term(v, toks, &item.ordering_term);
         for let item of &item.comma_ordering_term_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_ordering_term(v, toks, &item.ordering_term);
         }
     }
     if let Some(item) = &node.k_limit_expr_item {
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -20809,19 +20812,19 @@ pub fn walk_select_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Select
         walk_select_or_values(v, toks, &item.select_or_values);
     }
     if let Some(item) = &node.k_order_k_by_ordering_term_item {
-        v.visit_token(toks, item.k_order);
-        v.visit_token(toks, item.k_by);
+        v.visit_token(toks, *(&item.k_order));
+        v.visit_token(toks, *(&item.k_by));
         walk_ordering_term(v, toks, &item.ordering_term);
         for let item of &item.comma_ordering_term_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_ordering_term(v, toks, &item.ordering_term);
         }
     }
     if let Some(item) = &node.k_limit_expr_item {
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -20832,23 +20835,23 @@ pub fn walk_select_or_values<V: Visitor>(v: &mut V, toks: &TokenStream, node: &S
     match node {
         Alt0(n) => {
             v.enter_rule(31, &"select_or_values", &n.span);
-            v.visit_token(toks, n.k_select);
+            v.visit_token(toks, *(&n.k_select));
             if let Some(item) = &n.k_distinct_or_k_all {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             walk_result_column(v, toks, &n.result_column);
             for let item of &n.comma_result_column_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_result_column(v, toks, &item.result_column);
             }
             if let Some(item) = &n.k_from_item {
-                v.visit_token(toks, item.k_from);
+                v.visit_token(toks, *(&item.k_from));
                 if let Some(item) = &item.group_0 {
                     match item {
                         Alt0(inner) => {
                             walk_table_or_subquery(v, toks, &inner.table_or_subquery);
                             for let item of &inner.comma_table_or_subquery_list {
-                                v.visit_token(toks, item.comma);
+                                v.visit_token(toks, *(&item.comma));
                                 walk_table_or_subquery(v, toks, &item.table_or_subquery);
                             }
                         }
@@ -20859,19 +20862,19 @@ pub fn walk_select_or_values<V: Visitor>(v: &mut V, toks: &TokenStream, node: &S
                 }
             }
             if let Some(item) = &n.k_where_expr {
-                v.visit_token(toks, item.k_where);
+                v.visit_token(toks, *(&item.k_where));
                 walk_expr(v, toks, &item.expr);
             }
             if let Some(item) = &n.k_group_k_by_expr_item_item {
-                v.visit_token(toks, item.k_group);
-                v.visit_token(toks, item.k_by);
+                v.visit_token(toks, *(&item.k_group));
+                v.visit_token(toks, *(&item.k_by));
                 walk_expr(v, toks, &item.expr);
                 for let item of &item.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
                 if let Some(item) = &item.k_having_expr {
-                    v.visit_token(toks, item.k_having);
+                    v.visit_token(toks, *(&item.k_having));
                     walk_expr(v, toks, &item.expr);
                 }
             }
@@ -20879,23 +20882,23 @@ pub fn walk_select_or_values<V: Visitor>(v: &mut V, toks: &TokenStream, node: &S
         }
         Alt1(n) => {
             v.enter_rule(31, &"select_or_values", &n.span);
-            v.visit_token(toks, n.k_values);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.k_values));
+            v.visit_token(toks, *(&n.lparen));
             walk_expr(v, toks, &n.expr);
             for let item of &n.comma_expr_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_expr(v, toks, &item.expr);
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             for let item of &n.comma_lparen_expr_item_rparen_list {
-                v.visit_token(toks, item.comma);
-                v.visit_token(toks, item.lparen);
+                v.visit_token(toks, *(&item.comma));
+                v.visit_token(toks, *(&item.lparen));
                 walk_expr(v, toks, &item.expr);
                 for let item of &item.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
-                v.visit_token(toks, item.rparen);
+                v.visit_token(toks, *(&item.rparen));
             }
             v.exit_rule(31, &"select_or_values", &n.span);
         }
@@ -20907,44 +20910,44 @@ pub fn walk_update_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Update
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, toks, item);
     }
-    v.visit_token(toks, node.k_update);
+    v.visit_token(toks, *(&node.k_update));
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_rollback);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_rollback));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_abort);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_abort));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_replace);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_replace));
             }
             Alt3(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_fail);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_fail));
             }
             Alt4(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_ignore);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_ignore));
             }
         }
     }
     walk_qualified_table_name(v, toks, &node.qualified_table_name);
-    v.visit_token(toks, node.k_set);
+    v.visit_token(toks, *(&node.k_set));
     walk_column_name(v, toks, &node.column_name);
-    v.visit_token(toks, node.eq);
+    v.visit_token(toks, *(&node.eq));
     walk_expr(v, toks, &node.expr);
     for let item of &node.comma_column_name_eq_expr_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_column_name(v, toks, &item.column_name);
-        v.visit_token(toks, item.eq);
+        v.visit_token(toks, *(&item.eq));
         walk_expr(v, toks, &item.expr);
     }
     if let Some(item) = &node.k_where_expr {
-        v.visit_token(toks, item.k_where);
+        v.visit_token(toks, *(&item.k_where));
         walk_expr(v, toks, &item.expr);
     }
     v.exit_rule(32, &"update_stmt", &node.span);
@@ -20955,60 +20958,60 @@ pub fn walk_update_stmt_limited<V: Visitor>(v: &mut V, toks: &TokenStream, node:
     if let Some(item) = &node.with_clause {
         walk_with_clause(v, toks, item);
     }
-    v.visit_token(toks, node.k_update);
+    v.visit_token(toks, *(&node.k_update));
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_rollback);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_rollback));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_abort);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_abort));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_replace);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_replace));
             }
             Alt3(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_fail);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_fail));
             }
             Alt4(inner) => {
-                v.visit_token(toks, inner.k_or);
-                v.visit_token(toks, inner.k_ignore);
+                v.visit_token(toks, *(&inner.k_or));
+                v.visit_token(toks, *(&inner.k_ignore));
             }
         }
     }
     walk_qualified_table_name(v, toks, &node.qualified_table_name);
-    v.visit_token(toks, node.k_set);
+    v.visit_token(toks, *(&node.k_set));
     walk_column_name(v, toks, &node.column_name);
-    v.visit_token(toks, node.eq);
+    v.visit_token(toks, *(&node.eq));
     walk_expr(v, toks, &node.expr);
     for let item of &node.comma_column_name_eq_expr_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_column_name(v, toks, &item.column_name);
-        v.visit_token(toks, item.eq);
+        v.visit_token(toks, *(&item.eq));
         walk_expr(v, toks, &item.expr);
     }
     if let Some(item) = &node.k_where_expr {
-        v.visit_token(toks, item.k_where);
+        v.visit_token(toks, *(&item.k_where));
         walk_expr(v, toks, &item.expr);
     }
     if let Some(item) = &node.item_k_limit_expr_item {
         if let Some(item) = &item.k_order_k_by_ordering_term_item {
-            v.visit_token(toks, item.k_order);
-            v.visit_token(toks, item.k_by);
+            v.visit_token(toks, *(&item.k_order));
+            v.visit_token(toks, *(&item.k_by));
             walk_ordering_term(v, toks, &item.ordering_term);
             for let item of &item.comma_ordering_term_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_ordering_term(v, toks, &item.ordering_term);
             }
         }
-        v.visit_token(toks, item.k_limit);
+        v.visit_token(toks, *(&item.k_limit));
         walk_expr(v, toks, &item.expr);
         if let Some(item) = &item.item_expr {
-            v.visit_token(toks, item.k_offset_or_comma);
+            v.visit_token(toks, *(&item.k_offset_or_comma));
             walk_expr(v, toks, &item.expr);
         }
     }
@@ -21017,7 +21020,7 @@ pub fn walk_update_stmt_limited<V: Visitor>(v: &mut V, toks: &TokenStream, node:
 
 pub fn walk_vacuum_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &VacuumStmtNode) {
     v.enter_rule(34, &"vacuum_stmt", &node.span);
-    v.visit_token(toks, node.k_vacuum);
+    v.visit_token(toks, *(&node.k_vacuum));
     v.exit_rule(34, &"vacuum_stmt", &node.span);
 }
 
@@ -21041,16 +21044,16 @@ pub fn walk_type_name<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TypeName
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.lparen));
                 walk_signed_number(v, toks, &inner.signed_number);
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.lparen));
                 walk_signed_number(v, toks, &inner.signed_number);
-                v.visit_token(toks, inner.comma);
+                v.visit_token(toks, *(&inner.comma));
                 walk_signed_number(v, toks, &inner.signed_number_2);
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
         }
     }
@@ -21060,41 +21063,41 @@ pub fn walk_type_name<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TypeName
 pub fn walk_column_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ColumnConstraintNode) {
     v.enter_rule(37, &"column_constraint", &node.span);
     if let Some(item) = &node.k_constraint_name {
-        v.visit_token(toks, item.k_constraint);
+        v.visit_token(toks, *(&item.k_constraint));
         walk_name(v, toks, &item.name);
     }
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_primary);
-                v.visit_token(toks, inner.k_key);
+                v.visit_token(toks, *(&inner.k_primary));
+                v.visit_token(toks, *(&inner.k_key));
                 if let Some(item) = &inner.k_asc_or_k_desc {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_conflict_clause(v, toks, &inner.conflict_clause);
                 if let Some(item) = &inner.k_autoincrement {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
             }
             Alt1(inner) => {
                 if let Some(item) = &inner.k_not {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
-                v.visit_token(toks, inner.k_null);
+                v.visit_token(toks, *(&inner.k_null));
                 walk_conflict_clause(v, toks, &inner.conflict_clause);
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_unique);
+                v.visit_token(toks, *(&inner.k_unique));
                 walk_conflict_clause(v, toks, &inner.conflict_clause);
             }
             Alt3(inner) => {
-                v.visit_token(toks, inner.k_check);
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.k_check));
+                v.visit_token(toks, *(&inner.lparen));
                 walk_expr(v, toks, &inner.expr);
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
             Alt4(inner) => {
-                v.visit_token(toks, inner.k_default);
+                v.visit_token(toks, *(&inner.k_default));
                 if let Some(item) = &inner.group_1 {
                     match item {
                         Alt0(inner) => {
@@ -21104,15 +21107,15 @@ pub fn walk_column_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
                             walk_literal_value(v, toks, &inner.literal_value);
                         }
                         Alt2(inner) => {
-                            v.visit_token(toks, inner.lparen);
+                            v.visit_token(toks, *(&inner.lparen));
                             walk_expr(v, toks, &inner.expr);
-                            v.visit_token(toks, inner.rparen);
+                            v.visit_token(toks, *(&inner.rparen));
                         }
                     }
                 }
             }
             Alt5(inner) => {
-                v.visit_token(toks, inner.k_collate);
+                v.visit_token(toks, *(&inner.k_collate));
                 walk_collation_name(v, toks, &inner.collation_name);
             }
             Alt6(inner) => {
@@ -21126,9 +21129,9 @@ pub fn walk_column_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
 pub fn walk_conflict_clause<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ConflictClauseNode) {
     v.enter_rule(38, &"conflict_clause", &node.span);
     if let Some(item) = &node.k_on_k_conflict_item {
-        v.visit_token(toks, item.k_on);
-        v.visit_token(toks, item.k_conflict);
-        v.visit_token(toks, item.k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace);
+        v.visit_token(toks, *(&item.k_on));
+        v.visit_token(toks, *(&item.k_conflict));
+        v.visit_token(toks, *(&item.k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace));
     }
     v.exit_rule(38, &"conflict_clause", &node.span);
 }
@@ -21142,7 +21145,7 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
         }
         Alt1(n) => {
             v.enter_rule(39, &"expr", &n.span);
-            v.visit_token(toks, n.bind_parameter);
+            v.visit_token(toks, *(&n.bind_parameter));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt2(n) => {
@@ -21150,10 +21153,10 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
             if let Some(item) = &n.item_table_name_dot {
                 if let Some(item) = &item.database_name_dot {
                     walk_database_name(v, toks, &item.database_name);
-                    v.visit_token(toks, item.dot);
+                    v.visit_token(toks, *(&item.dot));
                 }
                 walk_table_name(v, toks, &item.table_name);
-                v.visit_token(toks, item.dot);
+                v.visit_token(toks, *(&item.dot));
             }
             walk_column_name(v, toks, &n.column_name);
             v.exit_rule(39, &"expr", &n.span);
@@ -21167,42 +21170,42 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
         Alt4(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.lit_pipepipe);
+            v.visit_token(toks, *(&n.lit_pipepipe));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.star_or_slash_or_percent);
+            v.visit_token(toks, *(&n.star_or_slash_or_percent));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt6(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.plus_or_minus);
+            v.visit_token(toks, *(&n.plus_or_minus));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt7(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.lit_ltlt_or_lit_gtgt_or_amp_or_pipe);
+            v.visit_token(toks, *(&n.lit_ltlt_or_lit_gtgt_or_amp_or_pipe));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt8(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.lt_or_lit_lteq_or_gt_or_lit_gteq);
+            v.visit_token(toks, *(&n.lt_or_lit_lteq_or_gt_or_lit_gteq));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt9(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt);
+            v.visit_token(toks, *(&n.eq_or_lit_eqeq_or_lit_bangeq_or_lit_ltgt));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
@@ -21210,13 +21213,13 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.k_not {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
-            v.visit_token(toks, n.k_in);
+            v.visit_token(toks, *(&n.k_in));
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.lparen);
+                        v.visit_token(toks, *(&inner.lparen));
                         if let Some(item) = &inner.group_1 {
                             match item {
                                 Alt0(inner) => {
@@ -21225,18 +21228,18 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
                                 Alt1(inner) => {
                                     walk_expr(v, toks, &inner.expr);
                                     for let item of &inner.comma_expr_list {
-                                        v.visit_token(toks, item.comma);
+                                        v.visit_token(toks, *(&item.comma));
                                         walk_expr(v, toks, &item.expr);
                                     }
                                 }
                             }
                         }
-                        v.visit_token(toks, inner.rparen);
+                        v.visit_token(toks, *(&inner.rparen));
                     }
                     Alt1(inner) => {
                         if let Some(item) = &inner.database_name_dot {
                             walk_database_name(v, toks, &item.database_name);
-                            v.visit_token(toks, item.dot);
+                            v.visit_token(toks, *(&item.dot));
                         }
                         walk_table_name(v, toks, &inner.table_name);
                     }
@@ -21247,62 +21250,62 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
         Alt11(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.k_and);
+            v.visit_token(toks, *(&n.k_and));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt12(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.k_or);
+            v.visit_token(toks, *(&n.k_or));
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt13(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_function_name(v, toks, &n.function_name);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             if let Some(item) = &n.group_2 {
                 match item {
                     Alt0(inner) => {
                         if let Some(item) = &inner.k_distinct {
-                            v.visit_token(toks, *item);
+                            v.visit_token(toks, *(item));
                         }
                         walk_expr(v, toks, &inner.expr);
                         for let item of &inner.comma_expr_list {
-                            v.visit_token(toks, item.comma);
+                            v.visit_token(toks, *(&item.comma));
                             walk_expr(v, toks, &item.expr);
                         }
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.star);
+                        v.visit_token(toks, *(&inner.star));
                     }
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt14(n) => {
             v.enter_rule(39, &"expr", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt15(n) => {
             v.enter_rule(39, &"expr", &n.span);
-            v.visit_token(toks, n.k_cast);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.k_cast));
+            v.visit_token(toks, *(&n.lparen));
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.k_as);
+            v.visit_token(toks, *(&n.k_as));
             walk_type_name(v, toks, &n.type_name);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt16(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.k_collate);
+            v.visit_token(toks, *(&n.k_collate));
             walk_collation_name(v, toks, &n.collation_name);
             v.exit_rule(39, &"expr", &n.span);
         }
@@ -21310,12 +21313,12 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.k_not {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
-            v.visit_token(toks, n.k_like_or_k_glob_or_k_regexp_or_k_match);
+            v.visit_token(toks, *(&n.k_like_or_k_glob_or_k_regexp_or_k_match));
             walk_expr(v, toks, &n.expr_2);
             if let Some(item) = &n.k_escape_expr {
-                v.visit_token(toks, item.k_escape);
+                v.visit_token(toks, *(&item.k_escape));
                 walk_expr(v, toks, &item.expr);
             }
             v.exit_rule(39, &"expr", &n.span);
@@ -21326,14 +21329,14 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
             if let Some(item) = &n.group_3 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.k_isnull);
+                        v.visit_token(toks, *(&inner.k_isnull));
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.k_notnull);
+                        v.visit_token(toks, *(&inner.k_notnull));
                     }
                     Alt2(inner) => {
-                        v.visit_token(toks, inner.k_not);
-                        v.visit_token(toks, inner.k_null);
+                        v.visit_token(toks, *(&inner.k_not));
+                        v.visit_token(toks, *(&inner.k_null));
                     }
                 }
             }
@@ -21342,9 +21345,9 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
         Alt19(n) => {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
-            v.visit_token(toks, n.k_is);
+            v.visit_token(toks, *(&n.k_is));
             if let Some(item) = &n.k_not {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             walk_expr(v, toks, &n.expr_2);
             v.exit_rule(39, &"expr", &n.span);
@@ -21353,41 +21356,41 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
             v.enter_rule(39, &"expr", &n.span);
             walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.k_not {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
-            v.visit_token(toks, n.k_between);
+            v.visit_token(toks, *(&n.k_between));
             walk_expr(v, toks, &n.expr_2);
-            v.visit_token(toks, n.k_and);
+            v.visit_token(toks, *(&n.k_and));
             walk_expr(v, toks, &n.expr_3);
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt21(n) => {
             v.enter_rule(39, &"expr", &n.span);
             if let Some(item) = &n.item_k_exists {
-                v.visit_token(toks, item.k_exists);
+                v.visit_token(toks, *(&item.k_exists));
             }
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_select_stmt(v, toks, &n.select_stmt);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt22(n) => {
             v.enter_rule(39, &"expr", &n.span);
-            v.visit_token(toks, n.k_case);
+            v.visit_token(toks, *(&n.k_case));
             if let Some(item) = &n.expr {
                 walk_expr(v, toks, item);
             }
             for let item of &n.k_when_expr_k_then_expr_list {
-                v.visit_token(toks, item.k_when);
+                v.visit_token(toks, *(&item.k_when));
                 walk_expr(v, toks, &item.expr);
-                v.visit_token(toks, item.k_then);
+                v.visit_token(toks, *(&item.k_then));
                 walk_expr(v, toks, &item.expr_2);
             }
             if let Some(item) = &n.k_else_expr {
-                v.visit_token(toks, item.k_else);
+                v.visit_token(toks, *(&item.k_else));
                 walk_expr(v, toks, &item.expr);
             }
-            v.visit_token(toks, n.k_end);
+            v.visit_token(toks, *(&n.k_end));
             v.exit_rule(39, &"expr", &n.span);
         }
         Alt23(n) => {
@@ -21400,31 +21403,31 @@ pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
 
 pub fn walk_foreign_key_clause<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ForeignKeyClauseNode) {
     v.enter_rule(40, &"foreign_key_clause", &node.span);
-    v.visit_token(toks, node.k_references);
+    v.visit_token(toks, *(&node.k_references));
     walk_foreign_table(v, toks, &node.foreign_table);
     if let Some(item) = &node.lparen_column_name_item_rparen {
-        v.visit_token(toks, item.lparen);
+        v.visit_token(toks, *(&item.lparen));
         walk_column_name(v, toks, &item.column_name);
         for let item of &item.comma_column_name_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_column_name(v, toks, &item.column_name);
         }
-        v.visit_token(toks, item.rparen);
+        v.visit_token(toks, *(&item.rparen));
     }
     if let Some(item) = &node.k_not_k_deferrable_item {
         if let Some(item) = &item.k_not {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
-        v.visit_token(toks, item.k_deferrable);
+        v.visit_token(toks, *(&item.k_deferrable));
         if let Some(item) = &item.group_2 {
             match item {
                 Alt0(inner) => {
-                    v.visit_token(toks, inner.k_initially);
-                    v.visit_token(toks, inner.k_deferred);
+                    v.visit_token(toks, *(&inner.k_initially));
+                    v.visit_token(toks, *(&inner.k_deferred));
                 }
                 Alt1(inner) => {
-                    v.visit_token(toks, inner.k_initially);
-                    v.visit_token(toks, inner.k_immediate);
+                    v.visit_token(toks, *(&inner.k_initially));
+                    v.visit_token(toks, *(&inner.k_immediate));
                 }
             }
         }
@@ -21434,21 +21437,21 @@ pub fn walk_foreign_key_clause<V: Visitor>(v: &mut V, toks: &TokenStream, node: 
 
 pub fn walk_raise_function<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RaiseFunctionNode) {
     v.enter_rule(41, &"raise_function", &node.span);
-    v.visit_token(toks, node.k_raise);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.k_raise));
+    v.visit_token(toks, *(&node.lparen));
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_ignore);
+                v.visit_token(toks, *(&inner.k_ignore));
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_rollback_or_k_abort_or_k_fail);
-                v.visit_token(toks, inner.comma);
+                v.visit_token(toks, *(&inner.k_rollback_or_k_abort_or_k_fail));
+                v.visit_token(toks, *(&inner.comma));
                 walk_error_message(v, toks, &inner.error_message);
             }
         }
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(41, &"raise_function", &node.span);
 }
 
@@ -21456,11 +21459,11 @@ pub fn walk_indexed_column<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ind
     v.enter_rule(42, &"indexed_column", &node.span);
     walk_column_name(v, toks, &node.column_name);
     if let Some(item) = &node.k_collate_collation_name {
-        v.visit_token(toks, item.k_collate);
+        v.visit_token(toks, *(&item.k_collate));
         walk_collation_name(v, toks, &item.collation_name);
     }
     if let Some(item) = &node.k_asc_or_k_desc {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(42, &"indexed_column", &node.span);
 }
@@ -21468,7 +21471,7 @@ pub fn walk_indexed_column<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ind
 pub fn walk_table_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TableConstraintNode) {
     v.enter_rule(43, &"table_constraint", &node.span);
     if let Some(item) = &node.k_constraint_name {
-        v.visit_token(toks, item.k_constraint);
+        v.visit_token(toks, *(&item.k_constraint));
         walk_name(v, toks, &item.name);
     }
     if let Some(item) = &node.group_0 {
@@ -21477,39 +21480,39 @@ pub fn walk_table_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &T
                 if let Some(item) = &inner.group_1 {
                     match item {
                         Alt0(inner) => {
-                            v.visit_token(toks, inner.k_primary);
-                            v.visit_token(toks, inner.k_key);
+                            v.visit_token(toks, *(&inner.k_primary));
+                            v.visit_token(toks, *(&inner.k_key));
                         }
                         Alt1(inner) => {
-                            v.visit_token(toks, inner.k_unique);
+                            v.visit_token(toks, *(&inner.k_unique));
                         }
                     }
                 }
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.lparen));
                 walk_indexed_column(v, toks, &inner.indexed_column);
                 for let item of &inner.comma_indexed_column_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_indexed_column(v, toks, &item.indexed_column);
                 }
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
                 walk_conflict_clause(v, toks, &inner.conflict_clause);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_check);
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.k_check));
+                v.visit_token(toks, *(&inner.lparen));
                 walk_expr(v, toks, &inner.expr);
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.k_foreign);
-                v.visit_token(toks, inner.k_key);
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.k_foreign));
+                v.visit_token(toks, *(&inner.k_key));
+                v.visit_token(toks, *(&inner.lparen));
                 walk_column_name(v, toks, &inner.column_name);
                 for let item of &inner.comma_column_name_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_column_name(v, toks, &item.column_name);
                 }
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
                 walk_foreign_key_clause(v, toks, &inner.foreign_key_clause);
             }
         }
@@ -21519,13 +21522,13 @@ pub fn walk_table_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &T
 
 pub fn walk_with_clause<V: Visitor>(v: &mut V, toks: &TokenStream, node: &WithClauseNode) {
     v.enter_rule(44, &"with_clause", &node.span);
-    v.visit_token(toks, node.k_with);
+    v.visit_token(toks, *(&node.k_with));
     if let Some(item) = &node.k_recursive {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     walk_common_table_expression(v, toks, &node.common_table_expression);
     for let item of &node.comma_common_table_expression_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_common_table_expression(v, toks, &item.common_table_expression);
     }
     v.exit_rule(44, &"with_clause", &node.span);
@@ -21535,19 +21538,19 @@ pub fn walk_qualified_table_name<V: Visitor>(v: &mut V, toks: &TokenStream, node
     v.enter_rule(45, &"qualified_table_name", &node.span);
     if let Some(item) = &node.database_name_dot {
         walk_database_name(v, toks, &item.database_name);
-        v.visit_token(toks, item.dot);
+        v.visit_token(toks, *(&item.dot));
     }
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_indexed);
-                v.visit_token(toks, inner.k_by);
+                v.visit_token(toks, *(&inner.k_indexed));
+                v.visit_token(toks, *(&inner.k_by));
                 walk_index_name(v, toks, &inner.index_name);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_not);
-                v.visit_token(toks, inner.k_indexed);
+                v.visit_token(toks, *(&inner.k_not));
+                v.visit_token(toks, *(&inner.k_indexed));
             }
         }
     }
@@ -21558,11 +21561,11 @@ pub fn walk_ordering_term<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Orde
     v.enter_rule(46, &"ordering_term", &node.span);
     walk_expr(v, toks, &node.expr);
     if let Some(item) = &node.k_collate_collation_name {
-        v.visit_token(toks, item.k_collate);
+        v.visit_token(toks, *(&item.k_collate));
         walk_collation_name(v, toks, &item.collation_name);
     }
     if let Some(item) = &node.k_asc_or_k_desc {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(46, &"ordering_term", &node.span);
 }
@@ -21581,7 +21584,7 @@ pub fn walk_pragma_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Pragm
         }
         Alt2(n) => {
             v.enter_rule(47, &"pragma_value", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             v.exit_rule(47, &"pragma_value", &n.span);
         }
     }
@@ -21591,18 +21594,18 @@ pub fn walk_common_table_expression<V: Visitor>(v: &mut V, toks: &TokenStream, n
     v.enter_rule(48, &"common_table_expression", &node.span);
     walk_table_name(v, toks, &node.table_name);
     if let Some(item) = &node.lparen_column_name_item_rparen {
-        v.visit_token(toks, item.lparen);
+        v.visit_token(toks, *(&item.lparen));
         walk_column_name(v, toks, &item.column_name);
         for let item of &item.comma_column_name_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_column_name(v, toks, &item.column_name);
         }
-        v.visit_token(toks, item.rparen);
+        v.visit_token(toks, *(&item.rparen));
     }
-    v.visit_token(toks, node.k_as);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.k_as));
+    v.visit_token(toks, *(&node.lparen));
     walk_select_stmt(v, toks, &node.select_stmt);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(48, &"common_table_expression", &node.span);
 }
 
@@ -21610,14 +21613,14 @@ pub fn walk_result_column<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Resu
     match node {
         Alt0(n) => {
             v.enter_rule(49, &"result_column", &n.span);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.star));
             v.exit_rule(49, &"result_column", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(49, &"result_column", &n.span);
             walk_table_name(v, toks, &n.table_name);
-            v.visit_token(toks, n.dot);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.dot));
+            v.visit_token(toks, *(&n.star));
             v.exit_rule(49, &"result_column", &n.span);
         }
         Alt2(n) => {
@@ -21625,7 +21628,7 @@ pub fn walk_result_column<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Resu
             walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.k_as_column_alias {
                 if let Some(item) = &item.k_as {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_column_alias(v, toks, &item.column_alias);
             }
@@ -21640,25 +21643,25 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
             v.enter_rule(50, &"table_or_subquery", &n.span);
             if let Some(item) = &n.schema_name_dot {
                 walk_schema_name(v, toks, &item.schema_name);
-                v.visit_token(toks, item.dot);
+                v.visit_token(toks, *(&item.dot));
             }
             walk_table_name(v, toks, &n.table_name);
             if let Some(item) = &n.k_as_table_alias {
                 if let Some(item) = &item.k_as {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_table_alias(v, toks, &item.table_alias);
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.k_indexed);
-                        v.visit_token(toks, inner.k_by);
+                        v.visit_token(toks, *(&inner.k_indexed));
+                        v.visit_token(toks, *(&inner.k_by));
                         walk_index_name(v, toks, &inner.index_name);
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.k_not);
-                        v.visit_token(toks, inner.k_indexed);
+                        v.visit_token(toks, *(&inner.k_not));
+                        v.visit_token(toks, *(&inner.k_indexed));
                     }
                 }
             }
@@ -21668,21 +21671,21 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
             v.enter_rule(50, &"table_or_subquery", &n.span);
             if let Some(item) = &n.schema_name_dot {
                 walk_schema_name(v, toks, &item.schema_name);
-                v.visit_token(toks, item.dot);
+                v.visit_token(toks, *(&item.dot));
             }
             walk_table_function_name(v, toks, &n.table_function_name);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             if let Some(item) = &n.expr_item {
                 walk_expr(v, toks, &item.expr);
                 for let item of &item.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             if let Some(item) = &n.k_as_table_alias {
                 if let Some(item) = &item.k_as {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_table_alias(v, toks, &item.table_alias);
             }
@@ -21690,13 +21693,13 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
         }
         Alt2(n) => {
             v.enter_rule(50, &"table_or_subquery", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             if let Some(item) = &n.group_1 {
                 match item {
                     Alt0(inner) => {
                         walk_table_or_subquery(v, toks, &inner.table_or_subquery);
                         for let item of &inner.comma_table_or_subquery_list {
-                            v.visit_token(toks, item.comma);
+                            v.visit_token(toks, *(&item.comma));
                             walk_table_or_subquery(v, toks, &item.table_or_subquery);
                         }
                     }
@@ -21705,17 +21708,17 @@ pub fn walk_table_or_subquery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
                     }
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(50, &"table_or_subquery", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(50, &"table_or_subquery", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_select_stmt(v, toks, &n.select_stmt);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             if let Some(item) = &n.k_as_table_alias {
                 if let Some(item) = &item.k_as {
-                    v.visit_token(toks, *item);
+                    v.visit_token(toks, *(item));
                 }
                 walk_table_alias(v, toks, &item.table_alias);
             }
@@ -21739,31 +21742,31 @@ pub fn walk_join_operator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Join
     match node {
         Alt0(n) => {
             v.enter_rule(52, &"join_operator", &n.span);
-            v.visit_token(toks, n.comma);
+            v.visit_token(toks, *(&n.comma));
             v.exit_rule(52, &"join_operator", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(52, &"join_operator", &n.span);
             if let Some(item) = &n.k_natural {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.k_left);
+                        v.visit_token(toks, *(&inner.k_left));
                         if let Some(item) = &inner.k_outer {
-                            v.visit_token(toks, *item);
+                            v.visit_token(toks, *(item));
                         }
                     }
                     Alt1(inner) => {
-                        v.visit_token(toks, inner.k_inner);
+                        v.visit_token(toks, *(&inner.k_inner));
                     }
                     Alt2(inner) => {
-                        v.visit_token(toks, inner.k_cross);
+                        v.visit_token(toks, *(&inner.k_cross));
                     }
                 }
             }
-            v.visit_token(toks, n.k_join);
+            v.visit_token(toks, *(&n.k_join));
             v.exit_rule(52, &"join_operator", &n.span);
         }
     }
@@ -21774,18 +21777,18 @@ pub fn walk_join_constraint<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Jo
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.k_on);
+                v.visit_token(toks, *(&inner.k_on));
                 walk_expr(v, toks, &inner.expr);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.k_using);
-                v.visit_token(toks, inner.lparen);
+                v.visit_token(toks, *(&inner.k_using));
+                v.visit_token(toks, *(&inner.lparen));
                 walk_column_name(v, toks, &inner.column_name);
                 for let item of &inner.comma_column_name_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_column_name(v, toks, &item.column_name);
                 }
-                v.visit_token(toks, inner.rparen);
+                v.visit_token(toks, *(&inner.rparen));
             }
         }
     }
@@ -21796,23 +21799,23 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Select
     match node {
         Alt0(n) => {
             v.enter_rule(54, &"select_core", &n.span);
-            v.visit_token(toks, n.k_select);
+            v.visit_token(toks, *(&n.k_select));
             if let Some(item) = &n.k_distinct_or_k_all {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             walk_result_column(v, toks, &n.result_column);
             for let item of &n.comma_result_column_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_result_column(v, toks, &item.result_column);
             }
             if let Some(item) = &n.k_from_item {
-                v.visit_token(toks, item.k_from);
+                v.visit_token(toks, *(&item.k_from));
                 if let Some(item) = &item.group_0 {
                     match item {
                         Alt0(inner) => {
                             walk_table_or_subquery(v, toks, &inner.table_or_subquery);
                             for let item of &inner.comma_table_or_subquery_list {
-                                v.visit_token(toks, item.comma);
+                                v.visit_token(toks, *(&item.comma));
                                 walk_table_or_subquery(v, toks, &item.table_or_subquery);
                             }
                         }
@@ -21823,19 +21826,19 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Select
                 }
             }
             if let Some(item) = &n.k_where_expr {
-                v.visit_token(toks, item.k_where);
+                v.visit_token(toks, *(&item.k_where));
                 walk_expr(v, toks, &item.expr);
             }
             if let Some(item) = &n.k_group_k_by_expr_item_item {
-                v.visit_token(toks, item.k_group);
-                v.visit_token(toks, item.k_by);
+                v.visit_token(toks, *(&item.k_group));
+                v.visit_token(toks, *(&item.k_by));
                 walk_expr(v, toks, &item.expr);
                 for let item of &item.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
                 if let Some(item) = &item.k_having_expr {
-                    v.visit_token(toks, item.k_having);
+                    v.visit_token(toks, *(&item.k_having));
                     walk_expr(v, toks, &item.expr);
                 }
             }
@@ -21843,23 +21846,23 @@ pub fn walk_select_core<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Select
         }
         Alt1(n) => {
             v.enter_rule(54, &"select_core", &n.span);
-            v.visit_token(toks, n.k_values);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.k_values));
+            v.visit_token(toks, *(&n.lparen));
             walk_expr(v, toks, &n.expr);
             for let item of &n.comma_expr_list {
-                v.visit_token(toks, item.comma);
+                v.visit_token(toks, *(&item.comma));
                 walk_expr(v, toks, &item.expr);
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             for let item of &n.comma_lparen_expr_item_rparen_list {
-                v.visit_token(toks, item.comma);
-                v.visit_token(toks, item.lparen);
+                v.visit_token(toks, *(&item.comma));
+                v.visit_token(toks, *(&item.lparen));
                 walk_expr(v, toks, &item.expr);
                 for let item of &item.comma_expr_list {
-                    v.visit_token(toks, item.comma);
+                    v.visit_token(toks, *(&item.comma));
                     walk_expr(v, toks, &item.expr);
                 }
-                v.visit_token(toks, item.rparen);
+                v.visit_token(toks, *(&item.rparen));
             }
             v.exit_rule(54, &"select_core", &n.span);
         }
@@ -21870,23 +21873,23 @@ pub fn walk_compound_operator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
     match node {
         Alt0(n) => {
             v.enter_rule(55, &"compound_operator", &n.span);
-            v.visit_token(toks, n.k_union);
+            v.visit_token(toks, *(&n.k_union));
             v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(55, &"compound_operator", &n.span);
-            v.visit_token(toks, n.k_union);
-            v.visit_token(toks, n.k_all);
+            v.visit_token(toks, *(&n.k_union));
+            v.visit_token(toks, *(&n.k_all));
             v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(55, &"compound_operator", &n.span);
-            v.visit_token(toks, n.k_intersect);
+            v.visit_token(toks, *(&n.k_intersect));
             v.exit_rule(55, &"compound_operator", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(55, &"compound_operator", &n.span);
-            v.visit_token(toks, n.k_except);
+            v.visit_token(toks, *(&n.k_except));
             v.exit_rule(55, &"compound_operator", &n.span);
         }
     }
@@ -21895,9 +21898,9 @@ pub fn walk_compound_operator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
 pub fn walk_signed_number<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SignedNumberNode) {
     v.enter_rule(56, &"signed_number", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.numeric_literal);
+    v.visit_token(toks, *(&node.numeric_literal));
     v.exit_rule(56, &"signed_number", &node.span);
 }
 
@@ -21915,7 +21918,7 @@ pub fn walk_unary_operator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Una
 
 pub fn walk_error_message<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ErrorMessageNode) {
     v.enter_rule(59, &"error_message", &node.span);
-    v.visit_token(toks, node.string_literal);
+    v.visit_token(toks, *(&node.string_literal));
     v.exit_rule(59, &"error_message", &node.span);
 }
 
@@ -22052,19 +22055,19 @@ pub fn walk_table_alias<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TableA
     match node {
         Alt0(n) => {
             v.enter_rule(80, &"table_alias", &n.span);
-            v.visit_token(toks, n.identifier);
+            v.visit_token(toks, *(&n.identifier));
             v.exit_rule(80, &"table_alias", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(80, &"table_alias", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             v.exit_rule(80, &"table_alias", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(80, &"table_alias", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_table_alias(v, toks, &n.table_alias);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(80, &"table_alias", &n.span);
         }
     }
@@ -22080,7 +22083,7 @@ pub fn walk_any_name<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNameNo
     match node {
         Alt0(n) => {
             v.enter_rule(82, &"any_name", &n.span);
-            v.visit_token(toks, n.identifier);
+            v.visit_token(toks, *(&n.identifier));
             v.exit_rule(82, &"any_name", &n.span);
         }
         Alt1(n) => {
@@ -22090,14 +22093,14 @@ pub fn walk_any_name<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNameNo
         }
         Alt2(n) => {
             v.enter_rule(82, &"any_name", &n.span);
-            v.visit_token(toks, n.string_literal);
+            v.visit_token(toks, *(&n.string_literal));
             v.exit_rule(82, &"any_name", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(82, &"any_name", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_any_name(v, toks, &n.any_name);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(82, &"any_name", &n.span);
         }
     }

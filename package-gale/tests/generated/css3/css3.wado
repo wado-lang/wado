@@ -183,8 +183,11 @@ pub struct TokenStream {
 
 impl TokenStream {
     /// Empty stream over `chars` (a borrow of the source char list, like
-    /// `LexerSlice`). Pre-size the per-token arrays to roughly one token per
-    /// four characters (the old `tokenize` heuristic).
+    /// `LexerSlice`). Pre-size every array to roughly one token per four
+    /// characters (the old `tokenize` heuristic). Trivia is pre-sized too:
+    /// most languages emit a whitespace token between tokens, so the flat
+    /// trivia arrays grow to about the same length — leaving them at `[]`
+    /// re-grows them from zero on every parse.
     pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
@@ -194,10 +197,10 @@ impl TokenStream {
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
             chars,
-            triv_kinds: [],
-            triv_starts: [],
-            triv_ends: [],
-            triv_chans: [],
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
         };
     }
 
@@ -39340,28 +39343,28 @@ pub fn walk_stylesheet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Stylesh
     for let item of &node.charset_item_list {
         walk_charset(v, toks, &item.charset);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
     for let item of &node.imports_item_list {
         walk_imports(v, toks, &item.imports);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
     for let item of &node.namespace__item_list {
         walk_namespace_(v, toks, &item.namespace_);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
     for let item of &node.nested_statement_item_list {
         walk_nestedStatement(v, toks, &item.nested_statement);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(toks, *item);
+            v.visit_token(toks, *(item));
         }
     }
-    v.visit_token(toks, node.eof);
+    v.visit_token(toks, *(&node.eof));
     v.exit_rule(0, &"stylesheet", &node.span);
 }
 
@@ -39369,19 +39372,19 @@ pub fn walk_charset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CharsetNod
     match node {
         goodCharset(n) => {
             v.enter_rule(1, &"charset", &n.span);
-            v.visit_token(toks, n.charset);
+            v.visit_token(toks, *(&n.charset));
             walk_ws(v, toks, &n.ws);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             walk_ws(v, toks, &n.ws_2);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.semicolon));
             walk_ws(v, toks, &n.ws_3);
             v.exit_rule(1, &"charset", &n.span);
         }
         badCharset(n) => {
             v.enter_rule(1, &"charset", &n.span);
-            v.visit_token(toks, n.charset);
+            v.visit_token(toks, *(&n.charset));
             walk_ws(v, toks, &n.ws);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(1, &"charset", &n.span);
         }
@@ -39392,12 +39395,12 @@ pub fn walk_imports<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ImportsNod
     match node {
         goodImport0(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(toks, n.import_);
+            v.visit_token(toks, *(&n.import_));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39406,18 +39409,18 @@ pub fn walk_imports<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ImportsNod
             }
             walk_ws(v, toks, &n.ws_2);
             walk_mediaQueryList(v, toks, &n.media_query_list);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.semicolon));
             walk_ws(v, toks, &n.ws_3);
             v.exit_rule(2, &"imports", &n.span);
         }
         goodImport1(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(toks, n.import_);
+            v.visit_token(toks, *(&n.import_));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_1 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39425,18 +39428,18 @@ pub fn walk_imports<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ImportsNod
                 }
             }
             walk_ws(v, toks, &n.ws_2);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.semicolon));
             walk_ws(v, toks, &n.ws_3);
             v.exit_rule(2, &"imports", &n.span);
         }
         badImport0(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(toks, n.import_);
+            v.visit_token(toks, *(&n.import_));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_2 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39449,12 +39452,12 @@ pub fn walk_imports<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ImportsNod
         }
         badImport1(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(toks, n.import_);
+            v.visit_token(toks, *(&n.import_));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_3 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39471,7 +39474,7 @@ pub fn walk_namespace_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Namespa
     match node {
         goodNamespace(n) => {
             v.enter_rule(3, &"namespace_", &n.span);
-            v.visit_token(toks, n.namespace);
+            v.visit_token(toks, *(&n.namespace));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.namespace_prefix_ws {
                 walk_namespacePrefix(v, toks, &item.namespace_prefix);
@@ -39480,7 +39483,7 @@ pub fn walk_namespace_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Namespa
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39488,13 +39491,13 @@ pub fn walk_namespace_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Namespa
                 }
             }
             walk_ws(v, toks, &n.ws_2);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.semicolon));
             walk_ws(v, toks, &n.ws_3);
             v.exit_rule(3, &"namespace_", &n.span);
         }
         badNamespace(n) => {
             v.enter_rule(3, &"namespace_", &n.span);
-            v.visit_token(toks, n.namespace);
+            v.visit_token(toks, *(&n.namespace));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.namespace_prefix_ws {
                 walk_namespacePrefix(v, toks, &item.namespace_prefix);
@@ -39503,7 +39506,7 @@ pub fn walk_namespace_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Namespa
             if let Some(item) = &n.group_1 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.string_);
+                        v.visit_token(toks, *(&inner.string_));
                     }
                     Alt1(inner) => {
                         walk_url(v, toks, &inner.url);
@@ -39524,7 +39527,7 @@ pub fn walk_namespacePrefix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Na
 
 pub fn walk_media<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaNode) {
     v.enter_rule(5, &"media", &node.span);
-    v.visit_token(toks, node.media);
+    v.visit_token(toks, *(&node.media));
     walk_ws(v, toks, &node.ws);
     walk_mediaQueryList(v, toks, &node.media_query_list);
     walk_groupRuleBody(v, toks, &node.group_rule_body);
@@ -39537,7 +39540,7 @@ pub fn walk_mediaQueryList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Med
     if let Some(item) = &node.media_query_item {
         walk_mediaQuery(v, toks, &item.media_query);
         for let item of &item.comma_ws_media_query_list {
-            v.visit_token(toks, item.comma);
+            v.visit_token(toks, *(&item.comma));
             walk_ws(v, toks, &item.ws);
             walk_mediaQuery(v, toks, &item.media_query);
         }
@@ -39551,13 +39554,13 @@ pub fn walk_mediaQuery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaQu
         Alt0(n) => {
             v.enter_rule(7, &"mediaQuery", &n.span);
             if let Some(item) = &n.mediaonly_or_not {
-                v.visit_token(toks, *item);
+                v.visit_token(toks, *(item));
             }
             walk_ws(v, toks, &n.ws);
             walk_mediaType(v, toks, &n.media_type);
             walk_ws(v, toks, &n.ws_2);
             for let item of &n.and_ws_media_expression_list {
-                v.visit_token(toks, item.and);
+                v.visit_token(toks, *(&item.and));
                 walk_ws(v, toks, &item.ws);
                 walk_mediaExpression(v, toks, &item.media_expression);
             }
@@ -39567,7 +39570,7 @@ pub fn walk_mediaQuery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaQu
             v.enter_rule(7, &"mediaQuery", &n.span);
             walk_mediaExpression(v, toks, &n.media_expression);
             for let item of &n.and_ws_media_expression_list {
-                v.visit_token(toks, item.and);
+                v.visit_token(toks, *(&item.and));
                 walk_ws(v, toks, &item.ws);
                 walk_mediaExpression(v, toks, &item.media_expression);
             }
@@ -39584,15 +39587,15 @@ pub fn walk_mediaType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaTyp
 
 pub fn walk_mediaExpression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaExpressionNode) {
     v.enter_rule(9, &"mediaExpression", &node.span);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_ws(v, toks, &node.ws);
     walk_mediaFeature(v, toks, &node.media_feature);
     if let Some(item) = &node.colon_ws_expr {
-        v.visit_token(toks, item.colon);
+        v.visit_token(toks, *(&item.colon));
         walk_ws(v, toks, &item.ws);
         walk_expr(v, toks, &item.expr);
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(9, &"mediaExpression", &node.span);
 }
@@ -39606,31 +39609,31 @@ pub fn walk_mediaFeature<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Media
 
 pub fn walk_page<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PageNode) {
     v.enter_rule(11, &"page", &node.span);
-    v.visit_token(toks, node.page);
+    v.visit_token(toks, *(&node.page));
     walk_ws(v, toks, &node.ws);
     if let Some(item) = &node.pseudo_page {
         walk_pseudoPage(v, toks, item);
     }
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.declaration {
         walk_declaration(v, toks, item);
     }
     for let item of &node.semicolon_ws_declaration_list {
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
         walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.declaration {
             walk_declaration(v, toks, item);
         }
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_3);
     v.exit_rule(11, &"page", &node.span);
 }
 
 pub fn walk_pseudoPage<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PseudoPageNode) {
     v.enter_rule(12, &"pseudoPage", &node.span);
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.colon));
     walk_ident(v, toks, &node.ident);
     walk_ws(v, toks, &node.ws);
     v.exit_rule(12, &"pseudoPage", &node.span);
@@ -39640,7 +39643,7 @@ pub fn walk_selectorGroup<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Sele
     v.enter_rule(13, &"selectorGroup", &node.span);
     walk_selector(v, toks, &node.selector);
     for let item of &node.comma_ws_selector_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_ws(v, toks, &item.ws);
         walk_selector(v, toks, &item.selector);
     }
@@ -39663,25 +39666,25 @@ pub fn walk_combinator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Combina
     match node {
         Alt0(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(toks, n.plus);
+            v.visit_token(toks, *(&n.plus));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(toks, n.greater);
+            v.visit_token(toks, *(&n.greater));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(toks, n.tilde);
+            v.visit_token(toks, *(&n.tilde));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(toks, n.space);
+            v.visit_token(toks, *(&n.space));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
@@ -39705,7 +39708,7 @@ pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, toks: &TokenStream, no
             for let item of &n.group_0_list {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.hash);
+                        v.visit_token(toks, *(&inner.hash));
                     }
                     Alt1(inner) => {
                         walk_className(v, toks, &inner.class_name);
@@ -39728,7 +39731,7 @@ pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, toks: &TokenStream, no
             for let item of &n.group_1_list {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(toks, inner.hash);
+                        v.visit_token(toks, *(&inner.hash));
                     }
                     Alt1(inner) => {
                         walk_className(v, toks, &inner.class_name);
@@ -39766,11 +39769,11 @@ pub fn walk_typeNamespacePrefix<V: Visitor>(v: &mut V, toks: &TokenStream, node:
                 walk_ident(v, toks, &inner.ident);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.star);
+                v.visit_token(toks, *(&inner.star));
             }
         }
     }
-    v.visit_token(toks, node.pipe);
+    v.visit_token(toks, *(&node.pipe));
     v.exit_rule(18, &"typeNamespacePrefix", &node.span);
 }
 
@@ -39785,20 +39788,20 @@ pub fn walk_universal<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Universa
     if let Some(item) = &node.type_namespace_prefix {
         walk_typeNamespacePrefix(v, toks, item);
     }
-    v.visit_token(toks, node.star);
+    v.visit_token(toks, *(&node.star));
     v.exit_rule(20, &"universal", &node.span);
 }
 
 pub fn walk_className<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ClassNameNode) {
     v.enter_rule(21, &"className", &node.span);
-    v.visit_token(toks, node.dot);
+    v.visit_token(toks, *(&node.dot));
     walk_ident(v, toks, &node.ident);
     v.exit_rule(21, &"className", &node.span);
 }
 
 pub fn walk_attrib<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AttribNode) {
     v.enter_rule(22, &"attrib", &node.span);
-    v.visit_token(toks, node.lbracket);
+    v.visit_token(toks, *(&node.lbracket));
     walk_ws(v, toks, &node.ws);
     if let Some(item) = &node.type_namespace_prefix {
         walk_typeNamespacePrefix(v, toks, item);
@@ -39806,7 +39809,7 @@ pub fn walk_attrib<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AttribNode)
     walk_ident(v, toks, &node.ident);
     walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.item_ws_item_ws {
-        v.visit_token(toks, item.prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch);
+        v.visit_token(toks, *(&item.prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch));
         walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.group_0 {
             match item {
@@ -39814,21 +39817,21 @@ pub fn walk_attrib<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AttribNode)
                     walk_ident(v, toks, &inner.ident);
                 }
                 Alt1(inner) => {
-                    v.visit_token(toks, inner.string_);
+                    v.visit_token(toks, *(&inner.string_));
                 }
             }
         }
         walk_ws(v, toks, &item.ws_2);
     }
-    v.visit_token(toks, node.rbracket);
+    v.visit_token(toks, *(&node.rbracket));
     v.exit_rule(22, &"attrib", &node.span);
 }
 
 pub fn walk_pseudo<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PseudoNode) {
     v.enter_rule(23, &"pseudo", &node.span);
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.colon));
     if let Some(item) = &node.colon_2 {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     if let Some(item) = &node.ident_or_functional_pseudo {
         match item {
@@ -39845,10 +39848,10 @@ pub fn walk_pseudo<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PseudoNode)
 
 pub fn walk_functionalPseudo<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FunctionalPseudoNode) {
     v.enter_rule(24, &"functionalPseudo", &node.span);
-    v.visit_token(toks, node.function_);
+    v.visit_token(toks, *(&node.function_));
     walk_ws(v, toks, &node.ws);
     walk_expression(v, toks, &node.expression);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(24, &"functionalPseudo", &node.span);
 }
 
@@ -39858,22 +39861,22 @@ pub fn walk_expression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Express
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    v.visit_token(toks, inner.plus);
+                    v.visit_token(toks, *(&inner.plus));
                 }
                 Alt1(inner) => {
-                    v.visit_token(toks, inner.minus);
+                    v.visit_token(toks, *(&inner.minus));
                 }
                 Alt2(inner) => {
-                    v.visit_token(toks, inner.dimension);
+                    v.visit_token(toks, *(&inner.dimension));
                 }
                 Alt3(inner) => {
-                    v.visit_token(toks, inner.unknowndimension);
+                    v.visit_token(toks, *(&inner.unknowndimension));
                 }
                 Alt4(inner) => {
-                    v.visit_token(toks, inner.number);
+                    v.visit_token(toks, *(&inner.number));
                 }
                 Alt5(inner) => {
-                    v.visit_token(toks, inner.string_);
+                    v.visit_token(toks, *(&inner.string_));
                 }
                 Alt6(inner) => {
                     walk_ident(v, toks, &inner.ident);
@@ -39887,11 +39890,11 @@ pub fn walk_expression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Express
 
 pub fn walk_negation<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NegationNode) {
     v.enter_rule(26, &"negation", &node.span);
-    v.visit_token(toks, node.pseudonot);
+    v.visit_token(toks, *(&node.pseudonot));
     walk_ws(v, toks, &node.ws);
     walk_negationArg(v, toks, &node.negation_arg);
     walk_ws(v, toks, &node.ws_2);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(26, &"negation", &node.span);
 }
 
@@ -39909,7 +39912,7 @@ pub fn walk_negationArg<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Negati
         }
         Alt2(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            v.visit_token(toks, n.hash);
+            v.visit_token(toks, *(&n.hash));
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt3(n) => {
@@ -39934,25 +39937,25 @@ pub fn walk_operator_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Operator
     match node {
         goodOperator0(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(toks, n.slash);
+            v.visit_token(toks, *(&n.slash));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         goodOperator1(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(toks, n.comma);
+            v.visit_token(toks, *(&n.comma));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         goodOperator2(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(toks, n.space);
+            v.visit_token(toks, *(&n.space));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         badOperator(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(toks, n.eq);
+            v.visit_token(toks, *(&n.eq));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
@@ -39969,19 +39972,19 @@ pub fn walk_property_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Property
         }
         goodProperty1(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(toks, n.variable);
+            v.visit_token(toks, *(&n.variable));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(29, &"property_", &n.span);
         }
         badProperty0(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(toks, n.star);
+            v.visit_token(toks, *(&n.star));
             walk_ident(v, toks, &n.ident);
             v.exit_rule(29, &"property_", &n.span);
         }
         badProperty1(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(toks, n.lit_u5f);
+            v.visit_token(toks, *(&n.lit_u5f));
             walk_ident(v, toks, &n.ident);
             v.exit_rule(29, &"property_", &n.span);
         }
@@ -39993,12 +39996,12 @@ pub fn walk_ruleset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulesetNod
         knownRuleset(n) => {
             v.enter_rule(30, &"ruleset", &n.span);
             walk_selectorGroup(v, toks, &n.selector_group);
-            v.visit_token(toks, n.lbrace);
+            v.visit_token(toks, *(&n.lbrace));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.declaration_list {
                 walk_declarationList(v, toks, item);
             }
-            v.visit_token(toks, n.rbrace);
+            v.visit_token(toks, *(&n.rbrace));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(30, &"ruleset", &n.span);
         }
@@ -40007,12 +40010,12 @@ pub fn walk_ruleset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulesetNod
             for let item of &n.any__list {
                 walk_any_(v, toks, item);
             }
-            v.visit_token(toks, n.lbrace);
+            v.visit_token(toks, *(&n.lbrace));
             walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.declaration_list {
                 walk_declarationList(v, toks, item);
             }
-            v.visit_token(toks, n.rbrace);
+            v.visit_token(toks, *(&n.rbrace));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(30, &"ruleset", &n.span);
         }
@@ -40022,13 +40025,13 @@ pub fn walk_ruleset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulesetNod
 pub fn walk_declarationList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DeclarationListNode) {
     v.enter_rule(31, &"declarationList", &node.span);
     for let item of &node.semicolon_ws_list {
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
         walk_ws(v, toks, &item.ws);
     }
     walk_declaration(v, toks, &node.declaration);
     walk_ws(v, toks, &node.ws);
     for let item of &node.semicolon_ws_declaration_list {
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
         walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.declaration {
             walk_declaration(v, toks, item);
@@ -40042,7 +40045,7 @@ pub fn walk_declaration<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Declar
         knownDeclaration(n) => {
             v.enter_rule(32, &"declaration", &n.span);
             walk_property_(v, toks, &n.property_);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_ws(v, toks, &n.ws);
             walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.prio {
@@ -40053,7 +40056,7 @@ pub fn walk_declaration<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Declar
         unknownDeclaration(n) => {
             v.enter_rule(32, &"declaration", &n.span);
             walk_property_(v, toks, &n.property_);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_ws(v, toks, &n.ws);
             walk_value(v, toks, &n.value);
             v.exit_rule(32, &"declaration", &n.span);
@@ -40063,7 +40066,7 @@ pub fn walk_declaration<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Declar
 
 pub fn walk_prio<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PrioNode) {
     v.enter_rule(33, &"prio", &node.span);
-    v.visit_token(toks, node.important);
+    v.visit_token(toks, *(&node.important));
     walk_ws(v, toks, &node.ws);
     v.exit_rule(33, &"prio", &node.span);
 }
@@ -40079,7 +40082,7 @@ pub fn walk_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ValueNode) {
                 walk_block(v, toks, &inner.block);
             }
             Alt2(inner) => {
-                v.visit_token(toks, inner.atkeyword);
+                v.visit_token(toks, *(&inner.atkeyword));
                 walk_ws(v, toks, &inner.ws);
             }
         }
@@ -40121,13 +40124,13 @@ pub fn walk_term<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TermNode) {
         }
         knownTerm3(n) => {
             v.enter_rule(36, &"term", &n.span);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm4(n) => {
             v.enter_rule(36, &"term", &n.span);
-            v.visit_token(toks, n.unicoderange);
+            v.visit_token(toks, *(&n.unicoderange));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
@@ -40179,27 +40182,27 @@ pub fn walk_term<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TermNode) {
 
 pub fn walk_function_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FunctionNode) {
     v.enter_rule(37, &"function_", &node.span);
-    v.visit_token(toks, node.function_);
+    v.visit_token(toks, *(&node.function_));
     walk_ws(v, toks, &node.ws);
     walk_expr(v, toks, &node.expr);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(37, &"function_", &node.span);
 }
 
 pub fn walk_dxImageTransform<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DxImageTransformNode) {
     v.enter_rule(38, &"dxImageTransform", &node.span);
-    v.visit_token(toks, node.dximagetransform);
+    v.visit_token(toks, *(&node.dximagetransform));
     walk_ws(v, toks, &node.ws);
     walk_expr(v, toks, &node.expr);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(38, &"dxImageTransform", &node.span);
 }
 
 pub fn walk_hexcolor<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HexcolorNode) {
     v.enter_rule(39, &"hexcolor", &node.span);
-    v.visit_token(toks, node.hash);
+    v.visit_token(toks, *(&node.hash));
     walk_ws(v, toks, &node.ws);
     v.exit_rule(39, &"hexcolor", &node.span);
 }
@@ -40207,36 +40210,36 @@ pub fn walk_hexcolor<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HexcolorN
 pub fn walk_number<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NumberNode) {
     v.enter_rule(40, &"number", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.number);
+    v.visit_token(toks, *(&node.number));
     v.exit_rule(40, &"number", &node.span);
 }
 
 pub fn walk_percentage<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PercentageNode) {
     v.enter_rule(41, &"percentage", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.percentage);
+    v.visit_token(toks, *(&node.percentage));
     v.exit_rule(41, &"percentage", &node.span);
 }
 
 pub fn walk_dimension<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DimensionNode) {
     v.enter_rule(42, &"dimension", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.dimension);
+    v.visit_token(toks, *(&node.dimension));
     v.exit_rule(42, &"dimension", &node.span);
 }
 
 pub fn walk_unknownDimension<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UnknownDimensionNode) {
     v.enter_rule(43, &"unknownDimension", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
-    v.visit_token(toks, node.unknowndimension);
+    v.visit_token(toks, *(&node.unknowndimension));
     v.exit_rule(43, &"unknownDimension", &node.span);
 }
 
@@ -40274,7 +40277,7 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
         }
         Alt5(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
@@ -40286,37 +40289,37 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
         }
         Alt7(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.hash);
+            v.visit_token(toks, *(&n.hash));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt8(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.unicoderange);
+            v.visit_token(toks, *(&n.unicoderange));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt9(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.includes);
+            v.visit_token(toks, *(&n.includes));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt10(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.dashmatch);
+            v.visit_token(toks, *(&n.dashmatch));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt11(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt12(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.function_);
+            v.visit_token(toks, *(&n.function_));
             walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
@@ -40328,13 +40331,13 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
                     }
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt13(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
@@ -40346,13 +40349,13 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
                     }
                 }
             }
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt14(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(toks, n.lbracket);
+            v.visit_token(toks, *(&n.lbracket));
             walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
@@ -40364,7 +40367,7 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
                     }
                 }
             }
-            v.visit_token(toks, n.rbracket);
+            v.visit_token(toks, *(&n.rbracket));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
@@ -40373,7 +40376,7 @@ pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
 
 pub fn walk_atRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtRuleNode) {
     v.enter_rule(45, &"atRule", &node.span);
-    v.visit_token(toks, node.atkeyword);
+    v.visit_token(toks, *(&node.atkeyword));
     walk_ws(v, toks, &node.ws);
     for let item of &node.any__list {
         walk_any_(v, toks, item);
@@ -40384,7 +40387,7 @@ pub fn walk_atRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtRuleNode)
                 walk_block(v, toks, &inner.block);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.semicolon);
+                v.visit_token(toks, *(&inner.semicolon));
                 walk_ws(v, toks, &inner.ws);
             }
         }
@@ -40401,25 +40404,25 @@ pub fn walk_unused<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UnusedNode)
         }
         Alt1(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(toks, n.atkeyword);
+            v.visit_token(toks, *(&n.atkeyword));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(toks, n.semicolon);
+            v.visit_token(toks, *(&n.semicolon));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(toks, n.cdo);
+            v.visit_token(toks, *(&n.cdo));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(toks, n.cdc);
+            v.visit_token(toks, *(&n.cdc));
             walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
@@ -40428,7 +40431,7 @@ pub fn walk_unused<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UnusedNode)
 
 pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
     v.enter_rule(47, &"block", &node.span);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws);
     for let item of &node.group_0_list {
         match item {
@@ -40445,16 +40448,16 @@ pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
                 walk_block(v, toks, &inner.block);
             }
             Alt4(inner) => {
-                v.visit_token(toks, inner.atkeyword);
+                v.visit_token(toks, *(&inner.atkeyword));
                 walk_ws(v, toks, &inner.ws);
             }
             Alt5(inner) => {
-                v.visit_token(toks, inner.semicolon);
+                v.visit_token(toks, *(&inner.semicolon));
                 walk_ws(v, toks, &inner.ws);
             }
         }
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(47, &"block", &node.span);
 }
@@ -40516,19 +40519,19 @@ pub fn walk_nestedStatement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ne
 
 pub fn walk_groupRuleBody<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GroupRuleBodyNode) {
     v.enter_rule(49, &"groupRuleBody", &node.span);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws);
     for let item of &node.nested_statement_list {
         walk_nestedStatement(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(49, &"groupRuleBody", &node.span);
 }
 
 pub fn walk_supportsRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsRuleNode) {
     v.enter_rule(50, &"supportsRule", &node.span);
-    v.visit_token(toks, node.supports);
+    v.visit_token(toks, *(&node.supports));
     walk_ws(v, toks, &node.ws);
     walk_supportsCondition(v, toks, &node.supports_condition);
     walk_ws(v, toks, &node.ws_2);
@@ -40565,11 +40568,11 @@ pub fn walk_supportsConditionInParens<V: Visitor>(v: &mut V, toks: &TokenStream,
     match node {
         Alt0(n) => {
             v.enter_rule(52, &"supportsConditionInParens", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_ws(v, toks, &n.ws);
             walk_supportsCondition(v, toks, &n.supports_condition);
             walk_ws(v, toks, &n.ws_2);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(52, &"supportsConditionInParens", &n.span);
         }
         Alt1(n) => {
@@ -40587,9 +40590,9 @@ pub fn walk_supportsConditionInParens<V: Visitor>(v: &mut V, toks: &TokenStream,
 
 pub fn walk_supportsNegation<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsNegationNode) {
     v.enter_rule(53, &"supportsNegation", &node.span);
-    v.visit_token(toks, node.not);
+    v.visit_token(toks, *(&node.not));
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.space);
+    v.visit_token(toks, *(&node.space));
     walk_ws(v, toks, &node.ws_2);
     walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     v.exit_rule(53, &"supportsNegation", &node.span);
@@ -40600,11 +40603,11 @@ pub fn walk_supportsConjunction<V: Visitor>(v: &mut V, toks: &TokenStream, node:
     walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     for let item of &node.ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list {
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.space);
+        v.visit_token(toks, *(&item.space));
         walk_ws(v, toks, &item.ws_2);
-        v.visit_token(toks, item.and);
+        v.visit_token(toks, *(&item.and));
         walk_ws(v, toks, &item.ws_3);
-        v.visit_token(toks, item.space_2);
+        v.visit_token(toks, *(&item.space_2));
         walk_ws(v, toks, &item.ws_4);
         walk_supportsConditionInParens(v, toks, &item.supports_condition_in_parens);
     }
@@ -40616,11 +40619,11 @@ pub fn walk_supportsDisjunction<V: Visitor>(v: &mut V, toks: &TokenStream, node:
     walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     for let item of &node.ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list {
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.space);
+        v.visit_token(toks, *(&item.space));
         walk_ws(v, toks, &item.ws_2);
-        v.visit_token(toks, item.or);
+        v.visit_token(toks, *(&item.or));
         walk_ws(v, toks, &item.ws_3);
-        v.visit_token(toks, item.space_2);
+        v.visit_token(toks, *(&item.space_2));
         walk_ws(v, toks, &item.ws_4);
         walk_supportsConditionInParens(v, toks, &item.supports_condition_in_parens);
     }
@@ -40629,16 +40632,16 @@ pub fn walk_supportsDisjunction<V: Visitor>(v: &mut V, toks: &TokenStream, node:
 
 pub fn walk_supportsDeclarationCondition<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsDeclarationConditionNode) {
     v.enter_rule(56, &"supportsDeclarationCondition", &node.span);
-    v.visit_token(toks, node.lparen);
+    v.visit_token(toks, *(&node.lparen));
     walk_ws(v, toks, &node.ws);
     walk_declaration(v, toks, &node.declaration);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(56, &"supportsDeclarationCondition", &node.span);
 }
 
 pub fn walk_generalEnclosed<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GeneralEnclosedNode) {
     v.enter_rule(57, &"generalEnclosed", &node.span);
-    v.visit_token(toks, node.function__or_lparen);
+    v.visit_token(toks, *(&node.function__or_lparen));
     for let item of &node.any__or_unused_list {
         match item {
             Any(inner) => {
@@ -40649,7 +40652,7 @@ pub fn walk_generalEnclosed<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Ge
             }
         }
     }
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     v.exit_rule(57, &"generalEnclosed", &node.span);
 }
 
@@ -40657,16 +40660,16 @@ pub fn walk_url<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UrlNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(58, &"url", &n.span);
-            v.visit_token(toks, n.url_);
+            v.visit_token(toks, *(&n.url_));
             walk_ws(v, toks, &n.ws);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             walk_ws(v, toks, &n.ws_2);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             v.exit_rule(58, &"url", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(58, &"url", &n.span);
-            v.visit_token(toks, n.url);
+            v.visit_token(toks, *(&n.url));
             v.exit_rule(58, &"url", &n.span);
         }
     }
@@ -40674,21 +40677,21 @@ pub fn walk_url<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UrlNode) {
 
 pub fn walk_var_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &VarNode) {
     v.enter_rule(59, &"var_", &node.span);
-    v.visit_token(toks, node.var);
+    v.visit_token(toks, *(&node.var));
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.variable);
+    v.visit_token(toks, *(&node.variable));
     walk_ws(v, toks, &node.ws_2);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     walk_ws(v, toks, &node.ws_3);
     v.exit_rule(59, &"var_", &node.span);
 }
 
 pub fn walk_calc<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcNode) {
     v.enter_rule(60, &"calc", &node.span);
-    v.visit_token(toks, node.calc);
+    v.visit_token(toks, *(&node.calc));
     walk_ws(v, toks, &node.ws);
     walk_calcSum(v, toks, &node.calc_sum);
-    v.visit_token(toks, node.rparen);
+    v.visit_token(toks, *(&node.rparen));
     walk_ws(v, toks, &node.ws_2);
     v.exit_rule(60, &"calc", &node.span);
 }
@@ -40697,11 +40700,11 @@ pub fn walk_calcSum<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcSumNod
     v.enter_rule(61, &"calcSum", &node.span);
     walk_calcProduct(v, toks, &node.calc_product);
     for let item of &node.space_ws_item_ws_space_ws_calc_product_list {
-        v.visit_token(toks, item.space);
+        v.visit_token(toks, *(&item.space));
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.plus_or_minus);
+        v.visit_token(toks, *(&item.plus_or_minus));
         walk_ws(v, toks, &item.ws_2);
-        v.visit_token(toks, item.space_2);
+        v.visit_token(toks, *(&item.space_2));
         walk_ws(v, toks, &item.ws_3);
         walk_calcProduct(v, toks, &item.calc_product);
     }
@@ -40714,12 +40717,12 @@ pub fn walk_calcProduct<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcPr
     for let item of &node.group_0_list {
         match item {
             Alt0(inner) => {
-                v.visit_token(toks, inner.star);
+                v.visit_token(toks, *(&inner.star));
                 walk_ws(v, toks, &inner.ws);
                 walk_calcValue(v, toks, &inner.calc_value);
             }
             Alt1(inner) => {
-                v.visit_token(toks, inner.slash);
+                v.visit_token(toks, *(&inner.slash));
                 walk_ws(v, toks, &inner.ws);
                 walk_number(v, toks, &inner.number);
                 walk_ws(v, toks, &inner.ws_2);
@@ -40757,10 +40760,10 @@ pub fn walk_calcValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcValu
         }
         Alt4(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            v.visit_token(toks, n.lparen);
+            v.visit_token(toks, *(&n.lparen));
             walk_ws(v, toks, &n.ws);
             walk_calcSum(v, toks, &n.calc_sum);
-            v.visit_token(toks, n.rparen);
+            v.visit_token(toks, *(&n.rparen));
             walk_ws(v, toks, &n.ws_2);
             v.exit_rule(63, &"calcValue", &n.span);
         }
@@ -40769,21 +40772,21 @@ pub fn walk_calcValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcValu
 
 pub fn walk_fontFaceRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFaceRuleNode) {
     v.enter_rule(64, &"fontFaceRule", &node.span);
-    v.visit_token(toks, node.fontface);
+    v.visit_token(toks, *(&node.fontface));
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.font_face_declaration {
         walk_fontFaceDeclaration(v, toks, item);
     }
     for let item of &node.semicolon_ws_font_face_declaration_list {
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
         walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.font_face_declaration {
             walk_fontFaceDeclaration(v, toks, item);
         }
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_3);
     v.exit_rule(64, &"fontFaceRule", &node.span);
 }
@@ -40793,7 +40796,7 @@ pub fn walk_fontFaceDeclaration<V: Visitor>(v: &mut V, toks: &TokenStream, node:
         knownFontFaceDeclaration(n) => {
             v.enter_rule(65, &"fontFaceDeclaration", &n.span);
             walk_property_(v, toks, &n.property_);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_ws(v, toks, &n.ws);
             walk_expr(v, toks, &n.expr);
             v.exit_rule(65, &"fontFaceDeclaration", &n.span);
@@ -40801,7 +40804,7 @@ pub fn walk_fontFaceDeclaration<V: Visitor>(v: &mut V, toks: &TokenStream, node:
         unknownFontFaceDeclaration(n) => {
             v.enter_rule(65, &"fontFaceDeclaration", &n.span);
             walk_property_(v, toks, &n.property_);
-            v.visit_token(toks, n.colon);
+            v.visit_token(toks, *(&n.colon));
             walk_ws(v, toks, &n.ws);
             walk_value(v, toks, &n.value);
             v.exit_rule(65, &"fontFaceDeclaration", &n.span);
@@ -40811,18 +40814,18 @@ pub fn walk_fontFaceDeclaration<V: Visitor>(v: &mut V, toks: &TokenStream, node:
 
 pub fn walk_keyframesRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframesRuleNode) {
     v.enter_rule(66, &"keyframesRule", &node.span);
-    v.visit_token(toks, node.keyframes);
+    v.visit_token(toks, *(&node.keyframes));
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.space);
+    v.visit_token(toks, *(&node.space));
     walk_ws(v, toks, &node.ws_2);
     walk_ident(v, toks, &node.ident);
     walk_ws(v, toks, &node.ws_3);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_4);
     for let item of &node.keyframe_block_list {
         walk_keyframeBlock(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_5);
     v.exit_rule(66, &"keyframesRule", &node.span);
 }
@@ -40830,24 +40833,24 @@ pub fn walk_keyframesRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Keyf
 pub fn walk_keyframeBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframeBlockNode) {
     v.enter_rule(67, &"keyframeBlock", &node.span);
     walk_keyframeSelector(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.keyframe_selector);
-    v.visit_token(toks, node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.lbrace);
+    v.visit_token(toks, *(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.lbrace));
     walk_ws(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws);
     if let Some(item) = &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.declaration_list {
         walk_declarationList(v, toks, item);
     }
-    v.visit_token(toks, node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.rbrace);
+    v.visit_token(toks, *(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.rbrace));
     walk_ws(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws_2);
     v.exit_rule(67, &"keyframeBlock", &node.span);
 }
 
 pub fn walk_keyframeSelector<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframeSelectorNode) {
     v.enter_rule(68, &"keyframeSelector", &node.span);
-    v.visit_token(toks, node.from__or_to_or_percentage);
+    v.visit_token(toks, *(&node.from__or_to_or_percentage));
     walk_ws(v, toks, &node.ws);
     for let item of &node.comma_ws_item_ws_list {
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.from__or_to_or_percentage);
+        v.visit_token(toks, *(&item.from__or_to_or_percentage));
         walk_ws(v, toks, &item.ws_2);
     }
     v.exit_rule(68, &"keyframeSelector", &node.span);
@@ -40855,46 +40858,46 @@ pub fn walk_keyframeSelector<V: Visitor>(v: &mut V, toks: &TokenStream, node: &K
 
 pub fn walk_viewport<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ViewportNode) {
     v.enter_rule(69, &"viewport", &node.span);
-    v.visit_token(toks, node.viewport);
+    v.visit_token(toks, *(&node.viewport));
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.declaration_list {
         walk_declarationList(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_3);
     v.exit_rule(69, &"viewport", &node.span);
 }
 
 pub fn walk_counterStyle<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CounterStyleNode) {
     v.enter_rule(70, &"counterStyle", &node.span);
-    v.visit_token(toks, node.counterstyle);
+    v.visit_token(toks, *(&node.counterstyle));
     walk_ws(v, toks, &node.ws);
     walk_ident(v, toks, &node.ident);
     walk_ws(v, toks, &node.ws_2);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_3);
     if let Some(item) = &node.declaration_list {
         walk_declarationList(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_4);
     v.exit_rule(70, &"counterStyle", &node.span);
 }
 
 pub fn walk_fontFeatureValuesRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFeatureValuesRuleNode) {
     v.enter_rule(71, &"fontFeatureValuesRule", &node.span);
-    v.visit_token(toks, node.fontfeaturevalues);
+    v.visit_token(toks, *(&node.fontfeaturevalues));
     walk_ws(v, toks, &node.ws);
     walk_fontFamilyNameList(v, toks, &node.font_family_name_list);
     walk_ws(v, toks, &node.ws_2);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_3);
     for let item of &node.feature_value_block_list {
         walk_featureValueBlock(v, toks, item);
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_4);
     v.exit_rule(71, &"fontFeatureValuesRule", &node.span);
 }
@@ -40904,7 +40907,7 @@ pub fn walk_fontFamilyNameList<V: Visitor>(v: &mut V, toks: &TokenStream, node: 
     walk_fontFamilyName(v, toks, &node.font_family_name);
     for let item of &node.ws_comma_ws_font_family_name_list {
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.comma);
+        v.visit_token(toks, *(&item.comma));
         walk_ws(v, toks, &item.ws_2);
         walk_fontFamilyName(v, toks, &item.font_family_name);
     }
@@ -40915,7 +40918,7 @@ pub fn walk_fontFamilyName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &Fon
     match node {
         Alt0(n) => {
             v.enter_rule(73, &"fontFamilyName", &n.span);
-            v.visit_token(toks, n.string_);
+            v.visit_token(toks, *(&n.string_));
             v.exit_rule(73, &"fontFamilyName", &n.span);
         }
         Alt1(n) => {
@@ -40934,27 +40937,27 @@ pub fn walk_featureValueBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &
     v.enter_rule(74, &"featureValueBlock", &node.span);
     walk_featureType(v, toks, &node.feature_type);
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.lbrace);
+    v.visit_token(toks, *(&node.lbrace));
     walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.feature_value_definition {
         walk_featureValueDefinition(v, toks, item);
     }
     for let item of &node.ws_semicolon_ws_feature_value_definition_list {
         walk_ws(v, toks, &item.ws);
-        v.visit_token(toks, item.semicolon);
+        v.visit_token(toks, *(&item.semicolon));
         walk_ws(v, toks, &item.ws_2);
         if let Some(item) = &item.feature_value_definition {
             walk_featureValueDefinition(v, toks, item);
         }
     }
-    v.visit_token(toks, node.rbrace);
+    v.visit_token(toks, *(&node.rbrace));
     walk_ws(v, toks, &node.ws_3);
     v.exit_rule(74, &"featureValueBlock", &node.span);
 }
 
 pub fn walk_featureType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FeatureTypeNode) {
     v.enter_rule(75, &"featureType", &node.span);
-    v.visit_token(toks, node.atkeyword);
+    v.visit_token(toks, *(&node.atkeyword));
     v.exit_rule(75, &"featureType", &node.span);
 }
 
@@ -40962,7 +40965,7 @@ pub fn walk_featureValueDefinition<V: Visitor>(v: &mut V, toks: &TokenStream, no
     v.enter_rule(76, &"featureValueDefinition", &node.span);
     walk_ident(v, toks, &node.ident);
     walk_ws(v, toks, &node.ws);
-    v.visit_token(toks, node.colon);
+    v.visit_token(toks, *(&node.colon));
     walk_ws(v, toks, &node.ws_2);
     walk_number(v, toks, &node.number);
     for let item of &node.ws_number_list {
@@ -40981,7 +40984,7 @@ pub fn walk_ident<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IdentNode) {
 pub fn walk_ws<V: Visitor>(v: &mut V, toks: &TokenStream, node: &WsNode) {
     v.enter_rule(78, &"ws", &node.span);
     for let item of &node.comment_or_space_list {
-        v.visit_token(toks, *item);
+        v.visit_token(toks, *(item));
     }
     v.exit_rule(78, &"ws", &node.span);
 }
