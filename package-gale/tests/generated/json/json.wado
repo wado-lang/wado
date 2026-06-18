@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -1201,10 +1201,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -1212,10 +1212,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -1227,7 +1227,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -1235,7 +1235,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -1246,7 +1246,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -1267,12 +1267,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -1796,13 +1796,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1819,132 +1822,132 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_json(input: &String) -> Result<JsonNode, ParseError> {
+pub fn parse_json(input: &String) -> Result<ParseResult<JsonNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_json(p));
 }
 
-pub fn parse_obj(input: &String) -> Result<ObjNode, ParseError> {
+pub fn parse_obj(input: &String) -> Result<ParseResult<ObjNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_obj(p));
 }
 
-pub fn parse_pair(input: &String) -> Result<PairNode, ParseError> {
+pub fn parse_pair(input: &String) -> Result<ParseResult<PairNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_pair(p));
 }
 
-pub fn parse_arr(input: &String) -> Result<ArrNode, ParseError> {
+pub fn parse_arr(input: &String) -> Result<ParseResult<ArrNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_arr(p));
 }
 
-pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
+pub fn parse_value(input: &String) -> Result<ParseResult<ValueNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_value(p));
 }
 
-pub fn parse(input: &String) -> Result<JsonNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<JsonNode>, ParseError> {
     return parse_json(input);
 }
 
-pub fn walk_json<V: Visitor>(v: &mut V, node: &JsonNode) {
+pub fn walk_json<V: Visitor>(v: &mut V, toks: &TokenStream, node: &JsonNode) {
     v.enter_rule(0, &"json", &node.span);
-    walk_value(v, &node.value);
-    v.visit_token(&node.eof);
+    walk_value(v, toks, &node.value);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"json", &node.span);
 }
 
-pub fn walk_obj<V: Visitor>(v: &mut V, node: &ObjNode) {
+pub fn walk_obj<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ObjNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(1, &"obj", &n.span);
-            v.visit_token(&n.lbrace);
-            walk_pair(v, &n.pair);
+            v.visit_token(toks, n.lbrace);
+            walk_pair(v, toks, &n.pair);
             for let item of &n.comma_pair_list {
-                v.visit_token(&item.comma);
-                walk_pair(v, &item.pair);
+                v.visit_token(toks, item.comma);
+                walk_pair(v, toks, &item.pair);
             }
-            v.visit_token(&n.rbrace);
+            v.visit_token(toks, n.rbrace);
             v.exit_rule(1, &"obj", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(1, &"obj", &n.span);
-            v.visit_token(&n.lbrace);
-            v.visit_token(&n.rbrace);
+            v.visit_token(toks, n.lbrace);
+            v.visit_token(toks, n.rbrace);
             v.exit_rule(1, &"obj", &n.span);
         }
     }
 }
 
-pub fn walk_pair<V: Visitor>(v: &mut V, node: &PairNode) {
+pub fn walk_pair<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PairNode) {
     v.enter_rule(2, &"pair", &node.span);
-    v.visit_token(&node.string);
-    v.visit_token(&node.colon);
-    walk_value(v, &node.value);
+    v.visit_token(toks, node.string);
+    v.visit_token(toks, node.colon);
+    walk_value(v, toks, &node.value);
     v.exit_rule(2, &"pair", &node.span);
 }
 
-pub fn walk_arr<V: Visitor>(v: &mut V, node: &ArrNode) {
+pub fn walk_arr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArrNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"arr", &n.span);
-            v.visit_token(&n.lbracket);
-            walk_value(v, &n.value);
+            v.visit_token(toks, n.lbracket);
+            walk_value(v, toks, &n.value);
             for let item of &n.comma_value_list {
-                v.visit_token(&item.comma);
-                walk_value(v, &item.value);
+                v.visit_token(toks, item.comma);
+                walk_value(v, toks, &item.value);
             }
-            v.visit_token(&n.rbracket);
+            v.visit_token(toks, n.rbracket);
             v.exit_rule(3, &"arr", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(3, &"arr", &n.span);
-            v.visit_token(&n.lbracket);
-            v.visit_token(&n.rbracket);
+            v.visit_token(toks, n.lbracket);
+            v.visit_token(toks, n.rbracket);
             v.exit_rule(3, &"arr", &n.span);
         }
     }
 }
 
-pub fn walk_value<V: Visitor>(v: &mut V, node: &ValueNode) {
+pub fn walk_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ValueNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(&n.string);
+            v.visit_token(toks, n.string);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(&n.number);
+            v.visit_token(toks, n.number);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(4, &"value", &n.span);
-            walk_obj(v, &n.obj);
+            walk_obj(v, toks, &n.obj);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(4, &"value", &n.span);
-            walk_arr(v, &n.arr);
+            walk_arr(v, toks, &n.arr);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(&n.lit_true);
+            v.visit_token(toks, n.lit_true);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(&n.lit_false);
+            v.visit_token(toks, n.lit_false);
             v.exit_rule(4, &"value", &n.span);
         }
         Alt6(n) => {
             v.enter_rule(4, &"value", &n.span);
-            v.visit_token(&n.lit_null);
+            v.visit_token(toks, n.lit_null);
             v.exit_rule(4, &"value", &n.span);
         }
     }
 }
 
-pub fn to_tree(node: &JsonNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_json(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<JsonNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_json(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

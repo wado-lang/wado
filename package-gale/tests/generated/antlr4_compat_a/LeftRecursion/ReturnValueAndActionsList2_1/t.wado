@@ -254,63 +254,20 @@ impl TokenStream {
         self.push_text(&mut s, start, end);
         return s;
     }
-}
 
-/// Tok is a terminal handle: an `i32` index into a `TokenStream` plus a
-/// borrow of that stream. Generated parsers store a `Tok` in each CST
-/// terminal field and hand it to `Visitor::visit_token`; it carries the
-/// stream so the CST stays self-contained (text/span/trivia render without
-/// threading the stream through the walk). No per-token aggregate is built
-/// in the lexer or on the scan hot path — a `Tok` is created only when a
-/// terminal is committed into the tree.
-pub struct Tok {
-    pub stream: &TokenStream,
-    pub idx: i32,
-}
-
-impl Tok {
-    pub fn new(stream: &TokenStream, idx: i32) -> Tok with stores[stream] {
-        return Tok { stream, idx };
+    /// Append token `i`'s text to `out` (no allocation).
+    pub fn push_token_text(&self, out: &mut String, i: i32) {
+        self.push_text(out, self.starts[i], self.ends[i]);
     }
 
-    pub fn kind(&self) -> i32 {
-        return self.stream.kinds[self.idx];
-    }
-
-    pub fn span(&self) -> Span {
-        return self.stream.span_at(self.idx);
-    }
-
-    pub fn is_empty_text(&self) -> bool {
-        return self.stream.is_empty_text(self.idx);
-    }
-
-    pub fn text(&self) -> String {
-        return self.stream.token_text(self.idx);
-    }
-
-    /// Append this token's text to `out` without allocating.
-    pub fn push_text(&self, out: &mut String) {
-        self.stream.push_text(out, self.stream.starts[self.idx], self.stream.ends[self.idx]);
-    }
-
-    pub fn triv_lo(&self) -> i32 {
-        return self.stream.triv_lo[self.idx];
-    }
-
-    pub fn triv_hi(&self) -> i32 {
-        return self.stream.triv_hi[self.idx];
-    }
-
-    /// Append the text of every leading-trivia token to `out`, in source
-    /// order (no allocation).
-    pub fn push_leading_trivia_text(&self, out: &mut String) {
-        let s = self.stream;
-        for let mut j = s.triv_lo[self.idx]; j < s.triv_hi[self.idx]; j += 1 {
-            s.push_text(out, s.triv_starts[j], s.triv_ends[j]);
+    /// Append the text of token `i`'s leading trivia, in source order.
+    pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
+        for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+            self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
         }
     }
 }
+
 
 /// ParseError represents a parse failure with location and expected tokens.
 ///
@@ -384,18 +341,29 @@ impl Display for ParseError {
 //! where `lex.wado` is concatenated first.
 
 
-/// CstChild is either a terminal token (a `Tok` handle into the stream) or a
-/// non-terminal sub-tree.
+/// A parse result: the typed root node plus the `TokenStream` its terminal
+/// `i32` indices point into. A token is a bare index, so the tree is only
+/// meaningful alongside its stream; bundling them keeps every consumer
+/// self-contained without per-terminal allocation.
+pub struct ParseResult<T> {
+    pub root: T,
+    pub tokens: TokenStream,
+}
+
+/// CstChild is either a terminal token (its `i32` index into the stream) or
+/// a non-terminal sub-tree.
 pub variant CstChild {
-    Token(Tok),
+    Token(i32),
     Node(CstNode),
 }
 
-/// CstNode is a generic (untyped) concrete syntax tree node.
+/// CstNode is a generic (untyped) concrete syntax tree node. It borrows the
+/// `TokenStream` so terminal text/span render from the stored `i32` indices.
 pub struct CstNode {
     pub name: String,
     pub span: Span,
     pub children: List<CstChild>,
+    pub toks: &TokenStream,
 }
 
 impl CstNode {
@@ -412,9 +380,10 @@ impl CstNode {
 fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     out.push_str(&`({node.name}`);
     for let child of &node.children {
-        if let Token(t) = *child {
-            if !t.is_empty_text() {
-                out.push_str(&` {t.text()}`);
+        if let Token(i) = *child {
+            if !node.toks.is_empty_text(i) {
+                out.push_str(&" ");
+                node.toks.push_token_text(out, i);
             }
         } else if let Node(n) = *child {
             out.push_str(&" ");
@@ -432,24 +401,30 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
 /// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
 /// String compares while visitors that care about the name (TreeRecorder)
 /// can still use it.
+///
+/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index
+/// (tokens are bare indices), so a visitor reads kind/text/span/trivia from
+/// the stream on demand.
 pub trait Visitor {
     fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn visit_token(&mut self, token: &Tok) {
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
     }
 }
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
+/// It holds the `TokenStream` so the built `CstNode`s can carry it.
 pub struct TreeRecorder {
     events: List<TreeEvent>,
+    toks: &TokenStream,
 }
 
 variant TreeEvent {
     Enter(TreeEnterInfo),
     Exit,
-    VisitToken(Tok),
+    VisitToken(i32),
 }
 
 struct TreeEnterInfo {
@@ -458,13 +433,13 @@ struct TreeEnterInfo {
 }
 
 impl TreeRecorder {
-    pub fn new() -> TreeRecorder {
-        return TreeRecorder { events: [] };
+    pub fn new(toks: &TokenStream) -> TreeRecorder with stores[toks] {
+        return TreeRecorder { events: [], toks };
     }
 
     pub fn build(&self) -> CstNode {
         let mut pos = 0;
-        return tree_build_node(&self.events, &mut pos);
+        return tree_build_node(&self.events, self.toks, &mut pos);
     }
 }
 
@@ -477,12 +452,12 @@ impl Visitor for TreeRecorder {
         self.events.push(TreeEvent::Exit);
     }
 
-    fn visit_token(&mut self, token: &Tok) {
-        self.events.push(TreeEvent::VisitToken(*token));
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        self.events.push(TreeEvent::VisitToken(idx));
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -496,13 +471,13 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.push(CstChild::Node(tree_build_node(events, pos)));
-            } else if let VisitToken(t) = ev {
-                children.push(CstChild::Token(t));
+                children.push(CstChild::Node(tree_build_node(events, toks, pos)));
+            } else if let VisitToken(i) = ev {
+                children.push(CstChild::Token(i));
                 *pos += 1;
             }
         }
-        return CstNode { name: info.name, span: info.span, children };
+        return CstNode { name: info.name, span: info.span, children, toks };
     }
     panic("TreeRecorder: expected Enter event");
 }
@@ -710,7 +685,7 @@ pub enum TokenKind {
 pub struct SNode {
     pub span: Span,
     pub expr: ExprNode,
-    pub eof: Tok,
+    pub eof: i32,
 }
 
 pub variant ExprNode {
@@ -723,27 +698,27 @@ pub variant ExprNode {
 pub struct ExprFactor {
     pub span: Span,
     pub a: ExprNode,
-    pub star: Tok,
+    pub star: i32,
     pub a_2: ExprNode,
 }
 
 pub struct ExprComma {
     pub span: Span,
     pub b: List<ExprNode>,
-    pub comma: Tok,
+    pub comma: i32,
     pub b_2: List<ExprNode>,
 }
 
 pub struct ExprSend {
     pub span: Span,
     pub b: List<ExprNode>,
-    pub lit_gtgt: Tok,
+    pub lit_gtgt: i32,
     pub c: ExprNode,
 }
 
 pub struct ExprJustId {
     pub span: Span,
-    pub id: Tok,
+    pub id: i32,
 }
 
 global TK_ID: i32 = 0;
@@ -991,10 +966,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -1002,10 +977,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -1017,7 +992,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -1025,7 +1000,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -1036,7 +1011,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -1057,12 +1032,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -1273,13 +1248,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1296,65 +1274,65 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_s(input: &String) -> Result<SNode, ParseError> {
+pub fn parse_s(input: &String) -> Result<ParseResult<SNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_s(p));
 }
 
-pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+pub fn parse_expr(input: &String) -> Result<ParseResult<ExprNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_expr(p));
 }
 
-pub fn parse(input: &String) -> Result<SNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<SNode>, ParseError> {
     return parse_s(input);
 }
 
-pub fn walk_s<V: Visitor>(v: &mut V, node: &SNode) {
+pub fn walk_s<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SNode) {
     v.enter_rule(0, &"s", &node.span);
-    walk_expr(v, &node.expr);
-    v.visit_token(&node.eof);
+    walk_expr(v, toks, &node.expr);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"s", &node.span);
 }
 
-pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
+pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
     match node {
         Factor(n) => {
             v.enter_rule(1, &"expr", &n.span);
-            walk_expr(v, &n.a);
-            v.visit_token(&n.star);
-            walk_expr(v, &n.a_2);
+            walk_expr(v, toks, &n.a);
+            v.visit_token(toks, n.star);
+            walk_expr(v, toks, &n.a_2);
             v.exit_rule(1, &"expr", &n.span);
         }
         Comma(n) => {
             v.enter_rule(1, &"expr", &n.span);
             for let item of &n.b {
-                walk_expr(v, item);
+                walk_expr(v, toks, item);
             }
-            v.visit_token(&n.comma);
+            v.visit_token(toks, n.comma);
             for let item of &n.b_2 {
-                walk_expr(v, item);
+                walk_expr(v, toks, item);
             }
             v.exit_rule(1, &"expr", &n.span);
         }
         Send(n) => {
             v.enter_rule(1, &"expr", &n.span);
             for let item of &n.b {
-                walk_expr(v, item);
+                walk_expr(v, toks, item);
             }
-            v.visit_token(&n.lit_gtgt);
-            walk_expr(v, &n.c);
+            v.visit_token(toks, n.lit_gtgt);
+            walk_expr(v, toks, &n.c);
             v.exit_rule(1, &"expr", &n.span);
         }
         JustId(n) => {
             v.enter_rule(1, &"expr", &n.span);
-            v.visit_token(&n.id);
+            v.visit_token(toks, n.id);
             v.exit_rule(1, &"expr", &n.span);
         }
     }
 }
 
-pub fn to_tree(node: &SNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_s(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<SNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_s(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

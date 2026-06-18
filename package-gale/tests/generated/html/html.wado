@@ -460,7 +460,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -2272,10 +2272,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -2283,10 +2283,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -2298,7 +2298,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -2306,7 +2306,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -2317,7 +2317,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -2338,12 +2338,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -3228,13 +3228,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -3251,118 +3254,118 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_html_document(input: &String) -> Result<HtmlDocumentNode, ParseError> {
+pub fn parse_html_document(input: &String) -> Result<ParseResult<HtmlDocumentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_document(p));
 }
 
-pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ScriptletOrSeaWsNode, ParseError> {
+pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ParseResult<ScriptletOrSeaWsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_scriptlet_or_sea_ws(p));
 }
 
-pub fn parse_html_elements(input: &String) -> Result<HtmlElementsNode, ParseError> {
+pub fn parse_html_elements(input: &String) -> Result<ParseResult<HtmlElementsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_elements(p));
 }
 
-pub fn parse_html_element(input: &String) -> Result<HtmlElementNode, ParseError> {
+pub fn parse_html_element(input: &String) -> Result<ParseResult<HtmlElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_element(p));
 }
 
-pub fn parse_html_content(input: &String) -> Result<HtmlContentNode, ParseError> {
+pub fn parse_html_content(input: &String) -> Result<ParseResult<HtmlContentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_content(p));
 }
 
-pub fn parse_html_attribute(input: &String) -> Result<HtmlAttributeNode, ParseError> {
+pub fn parse_html_attribute(input: &String) -> Result<ParseResult<HtmlAttributeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_attribute(p));
 }
 
-pub fn parse_html_chardata(input: &String) -> Result<HtmlChardataNode, ParseError> {
+pub fn parse_html_chardata(input: &String) -> Result<ParseResult<HtmlChardataNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_chardata(p));
 }
 
-pub fn parse_html_misc(input: &String) -> Result<HtmlMiscNode, ParseError> {
+pub fn parse_html_misc(input: &String) -> Result<ParseResult<HtmlMiscNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_misc(p));
 }
 
-pub fn parse_html_comment(input: &String) -> Result<HtmlCommentNode, ParseError> {
+pub fn parse_html_comment(input: &String) -> Result<ParseResult<HtmlCommentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_comment(p));
 }
 
-pub fn parse_script(input: &String) -> Result<ScriptNode, ParseError> {
+pub fn parse_script(input: &String) -> Result<ParseResult<ScriptNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_script(p));
 }
 
-pub fn parse_style(input: &String) -> Result<StyleNode, ParseError> {
+pub fn parse_style(input: &String) -> Result<ParseResult<StyleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_style(p));
 }
 
-pub fn parse(input: &String) -> Result<HtmlDocumentNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<HtmlDocumentNode>, ParseError> {
     return parse_html_document(input);
 }
 
-pub fn walk_htmlDocument<V: Visitor>(v: &mut V, node: &HtmlDocumentNode) {
+pub fn walk_htmlDocument<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlDocumentNode) {
     v.enter_rule(0, &"htmlDocument", &node.span);
     for let item of &node.scriptlet_or_sea_ws_list {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.xml {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     for let item of &node.scriptlet_or_sea_ws_list_2 {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.dtd {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     for let item of &node.scriptlet_or_sea_ws_list_3 {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     for let item of &node.html_elements_list {
-        walk_htmlElements(v, item);
+        walk_htmlElements(v, toks, item);
     }
     v.exit_rule(0, &"htmlDocument", &node.span);
 }
 
-pub fn walk_scriptletOrSeaWs<V: Visitor>(v: &mut V, node: &ScriptletOrSeaWsNode) {
+pub fn walk_scriptletOrSeaWs<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScriptletOrSeaWsNode) {
     v.enter_rule(1, &"scriptletOrSeaWs", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(1, &"scriptletOrSeaWs", &node.span);
 }
 
-pub fn walk_htmlElements<V: Visitor>(v: &mut V, node: &HtmlElementsNode) {
+pub fn walk_htmlElements<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlElementsNode) {
     v.enter_rule(2, &"htmlElements", &node.span);
     for let item of &node.html_misc_list {
-        walk_htmlMisc(v, item);
+        walk_htmlMisc(v, toks, item);
     }
-    walk_htmlElement(v, &node.html_element);
+    walk_htmlElement(v, toks, &node.html_element);
     for let item of &node.html_misc_list_2 {
-        walk_htmlMisc(v, item);
+        walk_htmlMisc(v, toks, item);
     }
     v.exit_rule(2, &"htmlElements", &node.span);
 }
 
-pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
+pub fn walk_htmlElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlElementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(&n.tag_open);
-            v.visit_token(&n.tag_name);
+            v.visit_token(toks, n.tag_open);
+            v.visit_token(toks, n.tag_name);
             for let item of &n.html_attribute_list {
-                walk_htmlAttribute(v, item);
+                walk_htmlAttribute(v, toks, item);
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.tag_close);
+                        v.visit_token(toks, inner.tag_close);
                         if let Some(item) = &inner.html_content_tag_open_tag_slash_tag_name_tag_close {
-                            walk_htmlContent(v, &item.html_content);
-                            v.visit_token(&item.tag_open);
-                            v.visit_token(&item.tag_slash);
-                            v.visit_token(&item.tag_name);
-                            v.visit_token(&item.tag_close);
+                            walk_htmlContent(v, toks, &item.html_content);
+                            v.visit_token(toks, item.tag_open);
+                            v.visit_token(toks, item.tag_slash);
+                            v.visit_token(toks, item.tag_name);
+                            v.visit_token(toks, item.tag_close);
                         }
                     }
                     Alt1(inner) => {
-                        v.visit_token(&inner.tag_slash_close);
+                        v.visit_token(toks, inner.tag_slash_close);
                     }
                 }
             }
@@ -3370,102 +3373,102 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
         }
         Alt1(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(&n.scriptlet);
+            v.visit_token(toks, n.scriptlet);
             v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            walk_script(v, &n.script);
+            walk_script(v, toks, &n.script);
             v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            walk_style(v, &n.style);
+            walk_style(v, toks, &n.style);
             v.exit_rule(3, &"htmlElement", &n.span);
         }
     }
 }
 
-pub fn walk_htmlContent<V: Visitor>(v: &mut V, node: &HtmlContentNode) {
+pub fn walk_htmlContent<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlContentNode) {
     v.enter_rule(4, &"htmlContent", &node.span);
     if let Some(item) = &node.html_chardata {
-        walk_htmlChardata(v, item);
+        walk_htmlChardata(v, toks, item);
     }
     for let item of &node.item_html_chardata_list {
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    walk_htmlElement(v, &inner.html_element);
+                    walk_htmlElement(v, toks, &inner.html_element);
                 }
                 Alt1(inner) => {
-                    v.visit_token(&inner.cdata);
+                    v.visit_token(toks, inner.cdata);
                 }
                 Alt2(inner) => {
-                    walk_htmlComment(v, &inner.html_comment);
+                    walk_htmlComment(v, toks, &inner.html_comment);
                 }
             }
         }
         if let Some(item) = &item.html_chardata {
-            walk_htmlChardata(v, item);
+            walk_htmlChardata(v, toks, item);
         }
     }
     v.exit_rule(4, &"htmlContent", &node.span);
 }
 
-pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, node: &HtmlAttributeNode) {
+pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlAttributeNode) {
     v.enter_rule(5, &"htmlAttribute", &node.span);
-    v.visit_token(&node.tag_name);
+    v.visit_token(toks, node.tag_name);
     if let Some(item) = &node.tag_equals_attvalue_value {
-        v.visit_token(&item.tag_equals);
-        v.visit_token(&item.attvalue_value);
+        v.visit_token(toks, item.tag_equals);
+        v.visit_token(toks, item.attvalue_value);
     }
     v.exit_rule(5, &"htmlAttribute", &node.span);
 }
 
-pub fn walk_htmlChardata<V: Visitor>(v: &mut V, node: &HtmlChardataNode) {
+pub fn walk_htmlChardata<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlChardataNode) {
     v.enter_rule(6, &"htmlChardata", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(6, &"htmlChardata", &node.span);
 }
 
-pub fn walk_htmlMisc<V: Visitor>(v: &mut V, node: &HtmlMiscNode) {
+pub fn walk_htmlMisc<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlMiscNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(7, &"htmlMisc", &n.span);
-            walk_htmlComment(v, &n.html_comment);
+            walk_htmlComment(v, toks, &n.html_comment);
             v.exit_rule(7, &"htmlMisc", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(7, &"htmlMisc", &n.span);
-            v.visit_token(&n.sea_ws);
+            v.visit_token(toks, n.sea_ws);
             v.exit_rule(7, &"htmlMisc", &n.span);
         }
     }
 }
 
-pub fn walk_htmlComment<V: Visitor>(v: &mut V, node: &HtmlCommentNode) {
+pub fn walk_htmlComment<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlCommentNode) {
     v.enter_rule(8, &"htmlComment", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(8, &"htmlComment", &node.span);
 }
 
-pub fn walk_script<V: Visitor>(v: &mut V, node: &ScriptNode) {
+pub fn walk_script<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScriptNode) {
     v.enter_rule(9, &"script", &node.span);
-    v.visit_token(&node.script_open);
-    v.visit_token(&node.script_body_or_script_short_body);
+    v.visit_token(toks, node.script_open);
+    v.visit_token(toks, node.script_body_or_script_short_body);
     v.exit_rule(9, &"script", &node.span);
 }
 
-pub fn walk_style<V: Visitor>(v: &mut V, node: &StyleNode) {
+pub fn walk_style<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StyleNode) {
     v.enter_rule(10, &"style", &node.span);
-    v.visit_token(&node.style_open);
-    v.visit_token(&node.style_body_or_style_short_body);
+    v.visit_token(toks, node.style_open);
+    v.visit_token(toks, node.style_body_or_style_short_body);
     v.exit_rule(10, &"style", &node.span);
 }
 
-pub fn to_tree(node: &HtmlDocumentNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_htmlDocument(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<HtmlDocumentNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_htmlDocument(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 
