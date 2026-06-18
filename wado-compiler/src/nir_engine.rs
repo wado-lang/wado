@@ -444,7 +444,27 @@ impl<'a> Engine<'a> {
             &fresh,
             &exprs,
         ) {
-            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}");
+            // Report the offending pair's kinds and both graphs' ids, so a verify
+            // failure points at the exact stale node rather than a generic message.
+            let detail = crate::nir_value_graph::builder::first_overmerge_pair(
+                &mut self.body.values,
+                maintained,
+                &fresh,
+                &exprs,
+            )
+            .map(|(a, b)| {
+                format!(
+                    "\n  {a:?} = {:?}\n  {b:?} = {:?}\n  maintained: {a:?}->{:?} {b:?}->{:?}\n  fresh: {a:?}->{:?} {b:?}->{:?}",
+                    self.body.exprs[a].kind,
+                    self.body.exprs[b].kind,
+                    maintained.value_of.get(&a),
+                    maintained.value_of.get(&b),
+                    fresh.value_of.get(&a),
+                    fresh.value_of.get(&b),
+                )
+            })
+            .unwrap_or_default();
+            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}{detail}");
         }
     }
 

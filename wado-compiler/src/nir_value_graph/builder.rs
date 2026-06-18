@@ -318,6 +318,33 @@ pub(crate) fn partitions_agree(
 /// [`partitions_agree`] (strict equality) over-reports on this design — it flags
 /// the safe coarsening too. `Err` names the first expression pair the maintained
 /// graph merges but a fresh build splits (the only unsound direction).
+/// Debug aid: the first `(prev_e, e)` pair the maintained graph merges but a
+/// fresh build splits, for instrumenting a verify failure.
+#[allow(dead_code)]
+pub(crate) fn first_overmerge_pair(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Option<(ExprId, ExprId)> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Some((prev_e, e));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    None
+}
+
 pub(crate) fn partition_refines(
     pool: &mut ValuePool,
     maintained: &ValueGraphBuild,

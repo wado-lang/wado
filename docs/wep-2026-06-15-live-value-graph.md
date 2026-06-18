@@ -581,9 +581,23 @@ findings are the deliverable.
 
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
-`cse → store_load_forward` over-merge, different exprs). Currently benign (e2e
-green), but it falsifies the earlier "clean across the corpus" claim and is the
-same downstream-stale flaw — it disappears under operand promotion.
+`cse → store_load_forward` over-merge). Currently benign (e2e green), but it
+falsifies the earlier "clean across the corpus" claim and is the same
+downstream-stale flaw — it disappears under operand promotion.
+
+Root-caused exactly (`-O2`, `verify_maintained_graph` now prints the pair): the
+maintained graph merges `expr53 = Local{index:9 "m"}` with
+`expr41 = Binary{Shl}`, both pinned to a stale `ValueId(1268)`; a fresh build
+correctly splits them (`1644` vs `1650`). At the session's first build `m` and
+the shift were legitimately equal (`let m = … << …`). A later
+`store_load_forward` edit changed the shift's operand, so the two diverge — but
+`maintain_value_after_edit` propagates only up the **expr-ancestor chain**, and a
+`Let` / `Assign` **Stmt** boundary breaks that chain, so the local's _reader_
+exprs (`expr53`) are never revisited and keep the stale id. A maintenance-only
+fix would have to drop every reader of a local whose defining RHS is edited
+(flow analysis on each edit); the frozen-`Operand::Value` model removes the
+staleness by construction. This is the load-bearing case for promotion, now with
+an exact repro.
 
 ## Operand-promotion migration order
 
