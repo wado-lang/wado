@@ -153,6 +153,126 @@ impl Token {
 // with reference-containing fields triggers a compiler bug
 // (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
 
+/// TokenStream is the struct-of-arrays token storage for generated parsers.
+/// A "token" is an `i32` index into these parallel arrays; no per-token
+/// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)
+/// are read on every scan/dispatch step as a single `array.get i32`; the
+/// trivia and source-char data are cold, materialised on demand only by the
+/// diagnostic / round-trip paths.
+///
+/// `Token` above stays the value-typed vocabulary for Gale's own `.g4` front
+/// end; the generated-parser runtime uses `TokenStream` instead.
+///
+/// Layout invariant: the per-token arrays (`kinds` / `starts` / `ends` /
+/// `triv_lo` / `triv_hi`) always share a length, because `push_token` is the
+/// only writer and advances all five together. Hidden / skip tokens ("trivia")
+/// live in the flat `triv_*` arrays in source order; each parser token owns the
+/// half-open range `[triv_lo[i], triv_hi[i])`.
+pub struct TokenStream {
+    pub kinds: List<i32>,
+    pub starts: List<i32>,
+    pub ends: List<i32>,
+    pub triv_lo: List<i32>,
+    pub triv_hi: List<i32>,
+    pub chars: &List<char>,
+    pub triv_kinds: List<i32>,
+    pub triv_starts: List<i32>,
+    pub triv_ends: List<i32>,
+    pub triv_chans: List<i32>,
+}
+
+impl TokenStream {
+    /// Empty stream over `chars` (a borrow of the source char list, like
+    /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
+    /// per four chars; trivia tracks token count, so `[]` would re-grow from
+    /// zero every parse.
+    pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
+        let cap = chars.len() / 4 + 1;
+        return TokenStream {
+            kinds: List::with_capacity(cap),
+            starts: List::with_capacity(cap),
+            ends: List::with_capacity(cap),
+            triv_lo: List::with_capacity(cap),
+            triv_hi: List::with_capacity(cap),
+            chars,
+            triv_kinds: List::with_capacity(cap),
+            triv_starts: List::with_capacity(cap),
+            triv_ends: List::with_capacity(cap),
+            triv_chans: List::with_capacity(cap),
+        };
+    }
+
+    pub fn len(&self) -> i32 {
+        return self.kinds.len();
+    }
+
+    /// The next trivia index — the lexer records this as a token's `triv_lo`
+    /// before accumulating that token's leading trivia, and again as `triv_hi`
+    /// after.
+    pub fn trivia_mark(&self) -> i32 {
+        return self.triv_kinds.len();
+    }
+
+    /// Append one hidden / skip token to the flat trivia arrays.
+    pub fn push_trivia(&mut self, kind: i32, start: i32, end: i32, channel: i32) {
+        self.triv_kinds.push(kind);
+        self.triv_starts.push(start);
+        self.triv_ends.push(end);
+        self.triv_chans.push(channel);
+    }
+
+    /// Append one parser (default-channel) token. The sole writer of the
+    /// per-token arrays, so their lengths stay in lockstep by construction.
+    pub fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
+        self.kinds.push(kind);
+        self.starts.push(start);
+        self.ends.push(end);
+        self.triv_lo.push(triv_lo);
+        self.triv_hi.push(triv_hi);
+    }
+
+    pub fn kind_at(&self, i: i32) -> i32 {
+        return self.kinds[i];
+    }
+
+    pub fn span_at(&self, i: i32) -> Span {
+        return Span::new(self.starts[i], self.ends[i]);
+    }
+
+    pub fn is_empty_text(&self, i: i32) -> bool {
+        return self.starts[i] >= self.ends[i];
+    }
+
+    /// Append `chars[start..end]` to `out` (no allocation).
+    pub fn push_text(&self, out: &mut String, start: i32, end: i32) {
+        for let mut j = start; j < end; j += 1 {
+            out.push(self.chars[j]);
+        }
+    }
+
+    /// Materialise token `i`'s text as an owned `String` (cold path).
+    pub fn token_text(&self, i: i32) -> String {
+        let start = self.starts[i];
+        let end = self.ends[i];
+        let mut s = String::with_capacity(end - start);
+        self.push_text(&mut s, start, end);
+        return s;
+    }
+
+    /// Append token `i`'s text to `out` (no allocation).
+    pub fn push_token_text(&self, out: &mut String, i: i32) {
+        self.push_text(out, self.starts[i], self.ends[i]);
+    }
+
+    /// Append the text of token `i`'s leading trivia, in source order.
+    pub fn push_leading_trivia_text(&self, out: &mut String, i: i32) {
+        for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
+            self.push_text(out, self.triv_starts[j], self.triv_ends[j]);
+        }
+    }
+}
+
+
 /// ParseError represents a parse failure with location and expected tokens.
 ///
 /// `message` is the local "expected X, got Y" description, kept free of
@@ -225,17 +345,28 @@ impl Display for ParseError {
 //! where `lex.wado` is concatenated first.
 
 
-/// CstChild is either a terminal token or a non-terminal sub-tree.
+/// A parse result: the typed root node plus the `TokenStream` its `i32`
+/// terminal indices point into. A token is a bare index, so the tree is
+/// meaningful only with its stream — hence they travel bundled.
+pub struct ParseResult<T> {
+    pub root: T,
+    pub tokens: TokenStream,
+}
+
+/// CstChild is either a terminal token (its `i32` index into the stream) or
+/// a non-terminal sub-tree.
 pub variant CstChild {
-    Token(Token),
+    Token(i32),
     Node(CstNode),
 }
 
-/// CstNode is a generic (untyped) concrete syntax tree node.
+/// CstNode is a generic (untyped) concrete syntax tree node. It borrows the
+/// `TokenStream` so terminal text/span render from the stored `i32` indices.
 pub struct CstNode {
     pub name: String,
     pub span: Span,
     pub children: List<CstChild>,
+    pub toks: &TokenStream,
 }
 
 impl CstNode {
@@ -252,9 +383,10 @@ impl CstNode {
 fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     out.push_str(&`({node.name}`);
     for let child of &node.children {
-        if let Token(t) = *child {
-            if !t.text.is_empty() {
-                out.push_str(&` {t.text}`);
+        if let Token(i) = *child {
+            if !node.toks.is_empty_text(i) {
+                out.push_str(&" ");
+                node.toks.push_token_text(out, i);
             }
         } else if let Node(n) = *child {
             out.push_str(&" ");
@@ -272,24 +404,29 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
 /// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
 /// String compares while visitors that care about the name (TreeRecorder)
 /// can still use it.
+///
+/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index,
+/// so a visitor reads kind/text/span/trivia from the stream on demand.
 pub trait Visitor {
     fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn visit_token(&mut self, token: &Token) {
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
     }
 }
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
+/// It holds the `TokenStream` so the built `CstNode`s can carry it.
 pub struct TreeRecorder {
     events: List<TreeEvent>,
+    toks: &TokenStream,
 }
 
 variant TreeEvent {
     Enter(TreeEnterInfo),
     Exit,
-    VisitToken(Token),
+    VisitToken(i32),
 }
 
 struct TreeEnterInfo {
@@ -298,13 +435,13 @@ struct TreeEnterInfo {
 }
 
 impl TreeRecorder {
-    pub fn new() -> TreeRecorder {
-        return TreeRecorder { events: [] };
+    pub fn new(toks: &TokenStream) -> TreeRecorder with stores[toks] {
+        return TreeRecorder { events: [], toks };
     }
 
     pub fn build(&self) -> CstNode {
         let mut pos = 0;
-        return tree_build_node(&self.events, &mut pos);
+        return tree_build_node(&self.events, self.toks, &mut pos);
     }
 }
 
@@ -317,12 +454,12 @@ impl Visitor for TreeRecorder {
         self.events.push(TreeEvent::Exit);
     }
 
-    fn visit_token(&mut self, token: &Token) {
-        self.events.push(TreeEvent::VisitToken(*token));
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        self.events.push(TreeEvent::VisitToken(idx));
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -336,13 +473,13 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.push(CstChild::Node(tree_build_node(events, pos)));
-            } else if let VisitToken(t) = ev {
-                children.push(CstChild::Token(t));
+                children.push(CstChild::Node(tree_build_node(events, toks, pos)));
+            } else if let VisitToken(i) = ev {
+                children.push(CstChild::Token(i));
                 *pos += 1;
             }
         }
-        return CstNode { name: info.name, span: info.span, children };
+        return CstNode { name: info.name, span: info.span, children, toks };
     }
     panic("TreeRecorder: expected Enter event");
 }
@@ -412,11 +549,9 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Used by Stage L (token-stream equivalence) tests against the upstream
 /// `LexerExec` / etc. `[output]` blocks.
 ///
-/// - `tokens` is the public-channel stream returned by the generated
-///   `tokenize(input)`. Skip-channel tokens never reach this array, so no
-///   filtering is needed here.
-/// - `input` is the original source; passed in so line/col can be
-///   computed from byte offsets (Gale's `Token` does not carry these).
+/// - `tokens` is the `TokenStream` returned by the generated
+///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
+///   non-default-channel trivia is interleaved.
 /// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
 ///   tokens print as `<EOF>` text with type id `-1`.
 ///
@@ -429,8 +564,8 @@ pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode>
 /// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
 /// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
 /// escaped; backslashes and quotes pass through unchanged.
-pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> String {
-    let chars: List<char> = input.chars().collect();
+pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
+    let chars = tokens.chars;
     // Char index where each line begins; built once so each token's `line:col`
     // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
     let mut line_starts: List<i32> = [0];
@@ -442,19 +577,40 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
     let mut out = String::with_capacity(tokens.len() * 32);
     let mut index = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
-        let tok = &tokens[i];
-        // Non-default-channel tokens (`-> channel(HIDDEN)`) are parked in the
-        // next token's `leading_trivia`; ANTLR4 still dumps them in source
-        // order with a `channel=N` attribute, so interleave them ahead of the
-        // host token. Skip tokens (channel 0) are discarded — neither printed
-        // nor indexed (matching ANTLR4's `Lexer.skip()`).
-        for let tr of &tok.leading_trivia {
-            if tr.channel != 0 {
-                emit_lexer_token(&mut out, tr, &line_starts, index, eof_kind);
+        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
+        // token's trivia range; ANTLR4 still dumps it in source order with a
+        // `channel=N` attribute, so interleave it ahead of the host token.
+        // Skip trivia (channel 0) is discarded — neither printed nor indexed
+        // (matching ANTLR4's `Lexer.skip()`).
+        let lo = tokens.triv_lo[i];
+        let hi = tokens.triv_hi[i];
+        for let mut t = lo; t < hi; t += 1 {
+            if tokens.triv_chans[t] != 0 {
+                emit_lexer_token(
+                    &mut out,
+                    tokens,
+                    tokens.triv_kinds[t],
+                    tokens.triv_starts[t],
+                    tokens.triv_ends[t],
+                    tokens.triv_chans[t],
+                    &line_starts,
+                    index,
+                    eof_kind,
+                );
                 index += 1;
             }
         }
-        emit_lexer_token(&mut out, tok, &line_starts, index, eof_kind);
+        emit_lexer_token(
+            &mut out,
+            tokens,
+            tokens.kinds[i],
+            tokens.starts[i],
+            tokens.ends[i],
+            0,
+            &line_starts,
+            index,
+            eof_kind,
+        );
         index += 1;
     }
     return out;
@@ -464,14 +620,24 @@ pub fn to_lexer_string(tokens: &Array<Token>, input: &String, eof_kind: i32) -> 
 /// `to_lexer_string` for both main-stream tokens and interleaved
 /// non-default-channel trivia. `channel=N` is printed only for non-default
 /// channels, matching ANTLR4.
-fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, index: i32, eof_kind: i32) {
-    let is_eof = tok.kind == eof_kind;
+fn emit_lexer_token(
+    out: &mut String,
+    tokens: &TokenStream,
+    kind: i32,
+    start: i32,
+    end: i32,
+    channel: i32,
+    line_starts: &List<i32>,
+    index: i32,
+    eof_kind: i32,
+) {
+    let is_eof = kind == eof_kind;
     let mut text_buf = String::with_capacity(16);
     if is_eof {
         text_buf.push_str(&"<EOF>");
     } else {
-        for let mut j = tok.text.start; j < tok.text.end; j += 1 {
-            let c = tok.text.chars[j];
+        for let mut j = start; j < end; j += 1 {
+            let c = tokens.chars[j];
             match c {
                 '\n' => text_buf.push_str(&"\\n"),
                 '\r' => text_buf.push_str(&"\\r"),
@@ -480,13 +646,13 @@ fn emit_lexer_token(out: &mut String, tok: &Token, line_starts: &List<i32>, inde
             }
         }
     }
-    let type_id = if is_eof { -1 } else { tok.kind + 1 };
-    let line_col = line_col_from_starts(line_starts, tok.span.start);
+    let type_id = if is_eof { -1 } else { kind + 1 };
+    let line_col = line_col_from_starts(line_starts, start);
     let line = line_col.0;
     let col = line_col.1;
-    let end_inclusive = tok.span.end - 1;
-    let channel_attr = if tok.channel != 0 { `channel={tok.channel},` } else { String::from("") };
-    out.push_str(&`[@{index},{tok.span.start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+    let end_inclusive = end - 1;
+    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
+    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
 }
 
 /// Compute (line, column) at a 0-based char index in `chars`, with
@@ -527,9 +693,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 }
 //! Runtime FOLLOW-continuation gate for tail-greedy loops. Emitted into a
 //! generated parser only when lowering constructed a caller-FOLLOW gate
-//! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
-//! `./lex.wado` import is stripped at `#include_str` time.
-
+//! (`GenContext::emit_follow`); gate-free grammars carry none of this.
 
 /// `follow` is the caller's deterministic K-prefix continuation:
 /// `follow[d]` is the set of token kinds that may appear at input depth
@@ -547,10 +711,11 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 /// carried at runtime, not code baked into a specialised function.
 ///
 /// `eof_kind` is the token kind reported past the end of the stream, so a
-/// caller continuation ending in EOF gates correctly. Used by both the
-/// parse side (`tokens = &p.tokens`, `pos = p.pos`) and the scan side
-/// (raw `tokens` / `pos`), keeping the longest-match tournament's view in
-/// lockstep with parse.
+/// caller continuation ending in EOF gates correctly. `tokens` is the bare
+/// `kinds` array (`&p.kinds` on the parse side, the scan `kinds` array on the
+/// scan side) — gating only reads token kinds, and a flat `&Array<i32>` keeps
+/// scan frames a slot smaller than the `List` wrapper or `&TokenStream`
+/// would, which matters for deeply recursive scan grammars.
 pub global EMPTY_FOLLOW: List<List<i32>> = [];
 
 /// Prepend a static local prefix to an inherited FOLLOW continuation.
@@ -572,7 +737,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -583,7 +748,7 @@ pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, 
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {
@@ -628,16 +793,16 @@ pub enum TokenKind {
 pub struct HtmlDocumentNode {
     pub span: Span,
     pub scriptlet_or_sea_ws_list: List<ScriptletOrSeaWsNode>,
-    pub xml: Option<Token>,
+    pub xml: Option<i32>,
     pub scriptlet_or_sea_ws_list_2: List<ScriptletOrSeaWsNode>,
-    pub dtd: Option<Token>,
+    pub dtd: Option<i32>,
     pub scriptlet_or_sea_ws_list_3: List<ScriptletOrSeaWsNode>,
     pub html_elements_list: List<HtmlElementsNode>,
 }
 
 pub struct ScriptletOrSeaWsNode {
     pub span: Span,
-    pub token: Token,
+    pub token: i32,
 }
 
 pub struct HtmlElementsNode {
@@ -656,10 +821,10 @@ pub variant HtmlElementNode {
 
 pub struct HtmlContentTagOpenTagSlashTagNameTagCloseItem {
     pub html_content: HtmlContentNode,
-    pub tag_open: Token,
-    pub tag_slash: Token,
-    pub tag_name: Token,
-    pub tag_close: Token,
+    pub tag_open: i32,
+    pub tag_slash: i32,
+    pub tag_name: i32,
+    pub tag_close: i32,
 }
 
 pub variant HtmlElementGroup0 {
@@ -668,25 +833,25 @@ pub variant HtmlElementGroup0 {
 }
 
 pub struct HtmlElementGroup0Alt0 {
-    pub tag_close: Token,
+    pub tag_close: i32,
     pub html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem>,
 }
 
 pub struct HtmlElementGroup0Alt1 {
-    pub tag_slash_close: Token,
+    pub tag_slash_close: i32,
 }
 
 pub struct HtmlElementAlt0 {
     pub span: Span,
-    pub tag_open: Token,
-    pub tag_name: Token,
+    pub tag_open: i32,
+    pub tag_name: i32,
     pub html_attribute_list: List<HtmlAttributeNode>,
     pub group_0: Option<HtmlElementGroup0>,
 }
 
 pub struct HtmlElementAlt1 {
     pub span: Span,
-    pub scriptlet: Token,
+    pub scriptlet: i32,
 }
 
 pub struct HtmlElementAlt2 {
@@ -710,7 +875,7 @@ pub struct HtmlContentGroup0Alt0 {
 }
 
 pub struct HtmlContentGroup0Alt1 {
-    pub cdata: Token,
+    pub cdata: i32,
 }
 
 pub struct HtmlContentGroup0Alt2 {
@@ -729,19 +894,19 @@ pub struct HtmlContentNode {
 }
 
 pub struct TagEqualsAttvalueValueItem {
-    pub tag_equals: Token,
-    pub attvalue_value: Token,
+    pub tag_equals: i32,
+    pub attvalue_value: i32,
 }
 
 pub struct HtmlAttributeNode {
     pub span: Span,
-    pub tag_name: Token,
+    pub tag_name: i32,
     pub tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem>,
 }
 
 pub struct HtmlChardataNode {
     pub span: Span,
-    pub token: Token,
+    pub token: i32,
 }
 
 pub variant HtmlMiscNode {
@@ -756,24 +921,24 @@ pub struct HtmlMiscAlt0 {
 
 pub struct HtmlMiscAlt1 {
     pub span: Span,
-    pub sea_ws: Token,
+    pub sea_ws: i32,
 }
 
 pub struct HtmlCommentNode {
     pub span: Span,
-    pub token: Token,
+    pub token: i32,
 }
 
 pub struct ScriptNode {
     pub span: Span,
-    pub script_open: Token,
-    pub script_body_or_script_short_body: Token,
+    pub script_open: i32,
+    pub script_body_or_script_short_body: i32,
 }
 
 pub struct StyleNode {
     pub span: Span,
-    pub style_open: Token,
-    pub style_body_or_style_short_body: Token,
+    pub style_open: i32,
+    pub style_body_or_style_short_body: i32,
 }
 
 global TK_HTML_COMMENT: i32 = 0;
@@ -1944,10 +2109,10 @@ fn try_ATTRIBUTE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> Array<Token> {
+pub fn tokenize(input: &String) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);
-    let mut trivia: List<Token> = [];
+    let mut ts = TokenStream::new(&lexer.chars);
+    let mut triv_lo = ts.trivia_mark();
     let mut mode_stack: List<i32> = [];
     let mut current_mode: i32 = 0;
     while !lexer.at_end() {
@@ -2012,21 +2177,19 @@ pub fn tokenize(input: &String) -> Array<Token> {
             if end > best_end { best_end = end; best_kind = TK_ATTRIBUTE; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
-            let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);
-            tokens.push(tok);
-            trivia = [];
+            ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
+            triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
             let tok_start = start;
             let is_skip = false;
             if is_skip {
-                trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));
+                ts.push_trivia(best_kind, tok_start, best_end, 0);
             } else if best_channel != 0 {
-                trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));
+                ts.push_trivia(best_kind, tok_start, best_end, best_channel);
             } else {
-                let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);
-                tokens.push(tok);
-                trivia = [];
+                ts.push_token(best_kind, tok_start, best_end, triv_lo, ts.trivia_mark());
+                triv_lo = ts.trivia_mark();
             }
             if best_push_mode >= 0 {
                 mode_stack.push(current_mode);
@@ -2045,8 +2208,8 @@ pub fn tokenize(input: &String) -> Array<Token> {
             lexer.pos = best_end;
         }
     }
-    tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));
-    return tokens.to_array();
+    ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());
+    return ts;
 }
 
 pub fn token_kind_name(kind: i32) -> String {
@@ -2081,19 +2244,20 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 struct Parser {
-    tokens: Array<Token>,
+    tokens: TokenStream,
+    kinds: Array<i32>,
     pos: i32,
-    chars: List<char>,
     pending: Option<ParseError>,
 }
 
 impl Parser {
-    fn new(tokens: Array<Token>, chars: List<char>) -> Parser {
-        return Parser { tokens, pos: 0, chars, pending: null };
+    fn new(tokens: TokenStream) -> Parser {
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
-        let lc = line_col_at(&self.chars, span.start);
+        let lc = line_col_at(self.tokens.chars, span.start);
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
@@ -2104,70 +2268,71 @@ impl Parser {
         }
     }
 
-    fn peek(&self) -> &Token {
-        return &self.tokens[self.pos];
+    fn peek_start(&self) -> i32 {
+        return self.tokens.starts[self.pos];
+    }
+
+    fn peek_span(&self) -> Span {
+        return self.tokens.span_at(self.pos);
     }
 
     fn peek_kind(&self) -> i32 {
-        return self.tokens[self.pos].kind;
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
         if idx >= self.tokens.len() { return TK_EOF; }
-        return self.tokens[idx].kind;
+        return self.kinds[idx];
     }
 
-    fn advance(&mut self) -> Token {
-        let tok = self.tokens[self.pos];
+    fn advance(&mut self) -> i32 {
+        let i = self.pos;
         self.pos += 1;
-        return tok;
+        return i;
     }
 
     fn last_end(&self) -> i32 {
         if self.pos == 0 { return 0; }
-        return self.tokens[self.pos - 1].span.end;
+        return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Token, ParseError> {
-        if self.tokens[self.pos].kind == kind {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+        if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(self.tokens[self.pos]);
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
-        let tok = &self.tokens[self.pos];
         let name = token_kind_name(kind);
         return Result::Err(self.error(
-            `expected {name}, got "{tok.text}"`,
-            tok.span,
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             [name],
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Token, ParseError> {
-        let tok = &self.tokens[self.pos];
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
-            `expected {name}, got "{tok.text}"`,
-            tok.span,
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             [name],
         ));
     }
 
-    fn match_any(&mut self) -> Result<Token, ParseError> {
-        if self.tokens[self.pos].kind != TK_EOF {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
+        if self.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `expected any token, got "{tok.text}"`,
-            tok.span,
+            `expected any token, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["any token"],
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Token, ParseError> {
-        let k = self.tokens[self.pos].kind;
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
             for let x of excluded {
@@ -2180,64 +2345,62 @@ impl Parser {
                 return Result::Ok(self.advance());
             }
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `unexpected token "{tok.text}"`,
-            tok.span,
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["set complement"],
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Token, ParseError> {
-        let k = self.tokens[self.pos].kind;
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+        let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(self.tokens[self.pos]);
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
         }
-        let tok = &self.tokens[self.pos];
         return Result::Err(self.error(
-            `unexpected token "{tok.text}"`,
-            tok.span,
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
             ["token set"],
         ));
     }
 }
 
-fn scan_html_document(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens[pos].kind == TK_XML && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_XML && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_XML { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_XML { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens[pos].kind == TK_DTD && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_DTD && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        if pos >= tokens.len() || tokens[pos].kind != TK_DTD { pos = -1; } else { pos += 1; }
+        if pos >= tokens.len() || tokens[pos] != TK_DTD { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    while pos < tokens.len() && _gale_kind_set_1(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_elements(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2246,16 +2409,16 @@ fn scan_html_document(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_scriptlet_or_sea_ws(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos].kind) {
+fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_elements(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos]) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2263,7 +2426,7 @@ fn scan_html_elements(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> 
     }
     pos = scan_html_element(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2272,45 +2435,45 @@ fn scan_html_elements(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> 
     return pos;
 }
 
-fn scan_html_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_TAG_OPEN {
             pos = start;
             try_0: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break try_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break try_0; }
                 pos += 1;
-                while pos < tokens.len() && tokens[pos].kind == TK_TAG_NAME {
+                while pos < tokens.len() && tokens[pos] == TK_TAG_NAME {
                     let sp = pos;
                     pos = scan_html_attribute(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
                 let gp_0 = pos;
-                let sgk_0 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _gale_kind_set_4(sgk_0) {
                     sg_0: {
                         pos = gp_0;
                         sg_0_0: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_0_0; }
+                            if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_0_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_3(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            if pos < tokens.len() && _gale_kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                 let sp = pos;
                                 sg_1_done: {
                                     sg_1: {
                                         pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1, 0);
                                         if pos < 0 { break sg_1; }
-                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break sg_1; }
                                         pos += 1;
-                                        if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break sg_1; }
+                                        if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_1; }
                                         pos += 1;
                                         break sg_1_done;
                                     }
@@ -2322,7 +2485,7 @@ fn scan_html_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
                         }
                         pos = gp_0;
                         sg_0_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH_CLOSE { break sg_0_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH_CLOSE { break sg_0_1; }
                             pos += 1;
                             break sg_0;
                         }
@@ -2335,7 +2498,7 @@ fn scan_html_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
         } else if alt_kind == TK_SCRIPTLET {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPTLET { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SCRIPTLET { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2363,19 +2526,19 @@ fn scan_html_element(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_html_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_7(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _gale_kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
                 let gp_3 = pos;
-                let sgk_3 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if _gale_kind_set_7(sgk_3) {
                     sg_3: {
                         pos = gp_3;
@@ -2386,7 +2549,7 @@ fn scan_html_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
                         }
                         pos = gp_3;
                         sg_3_1: {
-                            if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_3_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_3_1; }
                             pos += 1;
                             break sg_3;
                         }
@@ -2399,7 +2562,7 @@ fn scan_html_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
                         pos = gp_3;
                     }
                 }
-                if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -2414,17 +2577,17 @@ fn scan_html_content(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_html_attribute(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos].kind == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_EQUALS { break sg_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_EQUALS { break sg_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_ATTVALUE_VALUE { break sg_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_ATTVALUE_VALUE { break sg_4; }
                 pos += 1;
                 break sg_4_done;
             }
@@ -2435,17 +2598,17 @@ fn scan_html_attribute(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>
     return pos;
 }
 
-fn scan_html_chardata(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) {
+fn scan_html_chardata(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_misc(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _gale_kind_set_6(alt_kind) {
             pos = start;
@@ -2458,7 +2621,7 @@ fn scan_html_misc(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &E
         } else if alt_kind == TK_SEA_WS {
             pos = start;
             try_1: {
-                if pos >= tokens.len() || tokens[pos].kind != TK_SEA_WS { break try_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_SEA_WS { break try_1; }
                 pos += 1;
                 break scan_alts;
             }
@@ -2470,28 +2633,28 @@ fn scan_html_misc(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &E
     return pos;
 }
 
-fn scan_html_comment(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_6(tokens[pos].kind) {
+fn scan_html_comment(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+    if pos < tokens.len() && _gale_kind_set_6(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_script(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_OPEN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
     let gp_5 = pos;
     sg_5: {
         pos = gp_5;
         sg_5_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_BODY { break sg_5_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_BODY { break sg_5_0; }
             pos += 1;
             break sg_5;
         }
         pos = gp_5;
         sg_5_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_SHORT_BODY { break sg_5_1; }
             pos += 1;
             break sg_5;
         }
@@ -2500,21 +2663,21 @@ fn scan_script(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPT
     return pos;
 }
 
-fn scan_style(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_OPEN { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
     let gp_6 = pos;
     sg_6: {
         pos = gp_6;
         sg_6_0: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_BODY { break sg_6_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_STYLE_BODY { break sg_6_0; }
             pos += 1;
             break sg_6;
         }
         pos = gp_6;
         sg_6_1: {
-            if pos >= tokens.len() || tokens[pos].kind != TK_STYLE_SHORT_BODY { break sg_6_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_STYLE_SHORT_BODY { break sg_6_1; }
             pos += 1;
             break sg_6;
         }
@@ -2524,13 +2687,13 @@ fn scan_style(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>> = &EMPTY
 }
 
 fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlDocumentNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let mut scriptlet_or_sea_ws_list: List<ScriptletOrSeaWsNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -2548,7 +2711,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW)?;
         scriptlet_or_sea_ws_list.push(scriptlet_or_sea_ws);
     }
-    let xml: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let xml: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_XML {
         let xml = p.expect(TK_XML)?;
@@ -2558,10 +2721,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     };
     let mut scriptlet_or_sea_ws_list_2: List<ScriptletOrSeaWsNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan_2; }
@@ -2579,7 +2742,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW)?;
         scriptlet_or_sea_ws_list_2.push(scriptlet_or_sea_ws);
     }
-    let dtd: Option<Token> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let dtd: Option<i32> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_DTD {
         let dtd = p.expect(TK_DTD)?;
@@ -2589,10 +2752,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     };
     let mut scriptlet_or_sea_ws_list_3: List<ScriptletOrSeaWsNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_3: i32 = -1;
         rep_scan_3: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan_3; }
@@ -2612,10 +2775,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     let mut html_elements_list: List<HtmlElementsNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_4: i32 = -1;
         rep_scan_4: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_html_elements(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan_4; }
@@ -2649,7 +2812,7 @@ fn _parse_html_document(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ScriptletOrSeaWsNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if _gale_kind_set_0(kind) {
         let token = p.expect(kind)?;
@@ -2660,7 +2823,7 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     return Result::Err(p.error(
         "expected scriptletOrSeaWs",
-        p.peek().span,
+        p.peek_span(),
         ["TK_SCRIPTLET", "TK_SEA_WS"],
     ));
 }
@@ -2670,12 +2833,12 @@ fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlElementsNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let mut html_misc_list: List<HtmlMiscNode> = [];
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan; }
@@ -2696,10 +2859,10 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let html_element = _parse_html_element(p, &follow_prepend(&FOLLOW_MASK_0, follow))?;
     let mut html_misc_list_2: List<HtmlMiscNode> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
             if pos < 0 { break rep_scan_2; }
@@ -2730,7 +2893,7 @@ fn _parse_html_elements(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlElementNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
         let tag_open = p.expect(TK_TAG_OPEN)?;
@@ -2739,7 +2902,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 pos = scan_html_attribute(tokens, pos, &EMPTY_FOLLOW, 0);
                 if pos < 0 { break rep_scan; }
@@ -2763,21 +2926,21 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             let tag_close = p.expect(TK_TAG_CLOSE)?;
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
-                let tokens = &p.tokens;
+                let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break opt_scan; }
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_OPEN { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_SLASH { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_NAME { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break opt_scan; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos].kind != TK_TAG_CLOSE { break opt_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break opt_scan; }
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
+            let html_content_tag_open_tag_slash_tag_name_tag_close: Option<HtmlContentTagOpenTagSlashTagNameTagCloseItem> = if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
                 let html_content = _parse_html_content(p, &FOLLOW_MASK_1)?;
                 let tag_open = p.expect(TK_TAG_OPEN)?;
                 let tag_slash = p.expect(TK_TAG_SLASH)?;
@@ -2836,7 +2999,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     }
     return Result::Err(p.error(
         "expected htmlElement",
-        p.peek().span,
+        p.peek_span(),
         ["TK_TAG_OPEN", "TK_SCRIPTLET", "TK_SCRIPT_OPEN", "TK_STYLE_OPEN"],
     ));
 }
@@ -2846,8 +3009,8 @@ fn _parse_html_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlContentNode, ParseError> {
-    let start = p.peek().span.start;
-    let html_chardata: Option<HtmlChardataNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let start = p.peek_start();
+    let html_chardata: Option<HtmlChardataNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
         null
     } else if _gale_kind_set_8(p.peek_kind()) {
         let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW)?;
@@ -2857,15 +3020,15 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     };
     let mut item_html_chardata_list: List<ItemHtmlChardataOptItem> = [];
     loop {
-        if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
-            let tokens = &p.tokens;
+            let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
             sg_7_done: {
                 sg_7: {
                     let gp_8 = pos;
-                    let sgk_8 = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };
+                    let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _gale_kind_set_7(sgk_8) {
                         sg_8: {
                             pos = gp_8;
@@ -2876,7 +3039,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             }
                             pos = gp_8;
                             sg_8_1: {
-                                if pos >= tokens.len() || tokens[pos].kind != TK_CDATA { break sg_8_1; }
+                                if pos >= tokens.len() || tokens[pos] != TK_CDATA { break sg_8_1; }
                                 pos += 1;
                                 break sg_8;
                             }
@@ -2889,7 +3052,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             pos = gp_8;
                         }
                     }
-                    if pos < tokens.len() && _gale_kind_set_8(tokens[pos].kind) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                         let sp = pos;
                         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }
@@ -2921,7 +3084,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }));
         }
         let group_0 = group_0_inner;
-        let html_chardata: Option<HtmlChardataNode> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let html_chardata: Option<HtmlChardataNode> = if follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
             null
         } else if _gale_kind_set_8(p.peek_kind()) {
             let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW)?;
@@ -2947,9 +3110,9 @@ fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlAttributeNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let tag_name = p.expect(TK_TAG_NAME)?;
-    let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if !(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
+    let tag_equals_attvalue_value: Option<TagEqualsAttvalueValueItem> = if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
         let tag_equals = p.expect(TK_TAG_EQUALS)?;
         let attvalue_value = p.expect(TK_ATTVALUE_VALUE)?;
         let tag_equals_attvalue_value = TagEqualsAttvalueValueItem {
@@ -2972,7 +3135,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlChardataNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if _gale_kind_set_8(kind) {
         let token = p.expect(kind)?;
@@ -2983,7 +3146,7 @@ fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     return Result::Err(p.error(
         "expected htmlChardata",
-        p.peek().span,
+        p.peek_span(),
         ["TK_HTML_TEXT", "TK_SEA_WS"],
     ));
 }
@@ -2993,7 +3156,7 @@ fn _parse_html_chardata(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 }
 
 fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlMiscNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if _gale_kind_set_6(kind) {
         let html_comment = _parse_html_comment(p, follow)?;
@@ -3011,7 +3174,7 @@ fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     }
     return Result::Err(p.error(
         "expected htmlMisc",
-        p.peek().span,
+        p.peek_span(),
         ["TK_HTML_COMMENT", "TK_HTML_CONDITIONAL_COMMENT", "TK_SEA_WS"],
     ));
 }
@@ -3021,7 +3184,7 @@ fn _parse_html_misc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<HtmlCommentNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let kind = p.peek_kind();
     if _gale_kind_set_6(kind) {
         let token = p.expect(kind)?;
@@ -3032,7 +3195,7 @@ fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     }
     return Result::Err(p.error(
         "expected htmlComment",
-        p.peek().span,
+        p.peek_span(),
         ["TK_HTML_COMMENT", "TK_HTML_CONDITIONAL_COMMENT"],
     ));
 }
@@ -3042,7 +3205,7 @@ fn _parse_html_comment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_script__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ScriptNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let script_open = p.expect(TK_SCRIPT_OPEN)?;
     let script_body_or_script_short_body = p.match_set([TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY])?;
     return Result::Ok(ScriptNode {
@@ -3057,7 +3220,7 @@ fn _parse_script(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Re
 }
 
 fn _parse_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<StyleNode, ParseError> {
-    let start = p.peek().span.start;
+    let start = p.peek_start();
     let style_open = p.expect(TK_STYLE_OPEN)?;
     let style_body_or_style_short_body = p.match_set([TK_STYLE_BODY, TK_STYLE_SHORT_BODY])?;
     return Result::Ok(StyleNode {
@@ -3079,19 +3242,21 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
     let tokens = tokenize(input);
-    let chars: List<char> = input.chars().collect();
-    return Parser::new(tokens, chars);
+    return Parser::new(tokens);
 }
 
 fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
@@ -3103,118 +3268,118 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_html_document(input: &String) -> Result<HtmlDocumentNode, ParseError> {
+pub fn parse_html_document(input: &String) -> Result<ParseResult<HtmlDocumentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_document(p));
 }
 
-pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ScriptletOrSeaWsNode, ParseError> {
+pub fn parse_scriptlet_or_sea_ws(input: &String) -> Result<ParseResult<ScriptletOrSeaWsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_scriptlet_or_sea_ws(p));
 }
 
-pub fn parse_html_elements(input: &String) -> Result<HtmlElementsNode, ParseError> {
+pub fn parse_html_elements(input: &String) -> Result<ParseResult<HtmlElementsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_elements(p));
 }
 
-pub fn parse_html_element(input: &String) -> Result<HtmlElementNode, ParseError> {
+pub fn parse_html_element(input: &String) -> Result<ParseResult<HtmlElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_element(p));
 }
 
-pub fn parse_html_content(input: &String) -> Result<HtmlContentNode, ParseError> {
+pub fn parse_html_content(input: &String) -> Result<ParseResult<HtmlContentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_content(p));
 }
 
-pub fn parse_html_attribute(input: &String) -> Result<HtmlAttributeNode, ParseError> {
+pub fn parse_html_attribute(input: &String) -> Result<ParseResult<HtmlAttributeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_attribute(p));
 }
 
-pub fn parse_html_chardata(input: &String) -> Result<HtmlChardataNode, ParseError> {
+pub fn parse_html_chardata(input: &String) -> Result<ParseResult<HtmlChardataNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_chardata(p));
 }
 
-pub fn parse_html_misc(input: &String) -> Result<HtmlMiscNode, ParseError> {
+pub fn parse_html_misc(input: &String) -> Result<ParseResult<HtmlMiscNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_misc(p));
 }
 
-pub fn parse_html_comment(input: &String) -> Result<HtmlCommentNode, ParseError> {
+pub fn parse_html_comment(input: &String) -> Result<ParseResult<HtmlCommentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_html_comment(p));
 }
 
-pub fn parse_script(input: &String) -> Result<ScriptNode, ParseError> {
+pub fn parse_script(input: &String) -> Result<ParseResult<ScriptNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_script(p));
 }
 
-pub fn parse_style(input: &String) -> Result<StyleNode, ParseError> {
+pub fn parse_style(input: &String) -> Result<ParseResult<StyleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_style(p));
 }
 
-pub fn parse(input: &String) -> Result<HtmlDocumentNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<HtmlDocumentNode>, ParseError> {
     return parse_html_document(input);
 }
 
-pub fn walk_htmlDocument<V: Visitor>(v: &mut V, node: &HtmlDocumentNode) {
+pub fn walk_htmlDocument<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlDocumentNode) {
     v.enter_rule(0, &"htmlDocument", &node.span);
     for let item of &node.scriptlet_or_sea_ws_list {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.xml {
-        v.visit_token(item);
+        v.visit_token(toks, *(item));
     }
     for let item of &node.scriptlet_or_sea_ws_list_2 {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     if let Some(item) = &node.dtd {
-        v.visit_token(item);
+        v.visit_token(toks, *(item));
     }
     for let item of &node.scriptlet_or_sea_ws_list_3 {
-        walk_scriptletOrSeaWs(v, item);
+        walk_scriptletOrSeaWs(v, toks, item);
     }
     for let item of &node.html_elements_list {
-        walk_htmlElements(v, item);
+        walk_htmlElements(v, toks, item);
     }
     v.exit_rule(0, &"htmlDocument", &node.span);
 }
 
-pub fn walk_scriptletOrSeaWs<V: Visitor>(v: &mut V, node: &ScriptletOrSeaWsNode) {
+pub fn walk_scriptletOrSeaWs<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScriptletOrSeaWsNode) {
     v.enter_rule(1, &"scriptletOrSeaWs", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(1, &"scriptletOrSeaWs", &node.span);
 }
 
-pub fn walk_htmlElements<V: Visitor>(v: &mut V, node: &HtmlElementsNode) {
+pub fn walk_htmlElements<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlElementsNode) {
     v.enter_rule(2, &"htmlElements", &node.span);
     for let item of &node.html_misc_list {
-        walk_htmlMisc(v, item);
+        walk_htmlMisc(v, toks, item);
     }
-    walk_htmlElement(v, &node.html_element);
+    walk_htmlElement(v, toks, &node.html_element);
     for let item of &node.html_misc_list_2 {
-        walk_htmlMisc(v, item);
+        walk_htmlMisc(v, toks, item);
     }
     v.exit_rule(2, &"htmlElements", &node.span);
 }
 
-pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
+pub fn walk_htmlElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlElementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(&n.tag_open);
-            v.visit_token(&n.tag_name);
+            v.visit_token(toks, *(&n.tag_open));
+            v.visit_token(toks, *(&n.tag_name));
             for let item of &n.html_attribute_list {
-                walk_htmlAttribute(v, item);
+                walk_htmlAttribute(v, toks, item);
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.tag_close);
+                        v.visit_token(toks, *(&inner.tag_close));
                         if let Some(item) = &inner.html_content_tag_open_tag_slash_tag_name_tag_close {
-                            walk_htmlContent(v, &item.html_content);
-                            v.visit_token(&item.tag_open);
-                            v.visit_token(&item.tag_slash);
-                            v.visit_token(&item.tag_name);
-                            v.visit_token(&item.tag_close);
+                            walk_htmlContent(v, toks, &item.html_content);
+                            v.visit_token(toks, *(&item.tag_open));
+                            v.visit_token(toks, *(&item.tag_slash));
+                            v.visit_token(toks, *(&item.tag_name));
+                            v.visit_token(toks, *(&item.tag_close));
                         }
                     }
                     Alt1(inner) => {
-                        v.visit_token(&inner.tag_slash_close);
+                        v.visit_token(toks, *(&inner.tag_slash_close));
                     }
                 }
             }
@@ -3222,102 +3387,102 @@ pub fn walk_htmlElement<V: Visitor>(v: &mut V, node: &HtmlElementNode) {
         }
         Alt1(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            v.visit_token(&n.scriptlet);
+            v.visit_token(toks, *(&n.scriptlet));
             v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            walk_script(v, &n.script);
+            walk_script(v, toks, &n.script);
             v.exit_rule(3, &"htmlElement", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(3, &"htmlElement", &n.span);
-            walk_style(v, &n.style);
+            walk_style(v, toks, &n.style);
             v.exit_rule(3, &"htmlElement", &n.span);
         }
     }
 }
 
-pub fn walk_htmlContent<V: Visitor>(v: &mut V, node: &HtmlContentNode) {
+pub fn walk_htmlContent<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlContentNode) {
     v.enter_rule(4, &"htmlContent", &node.span);
     if let Some(item) = &node.html_chardata {
-        walk_htmlChardata(v, item);
+        walk_htmlChardata(v, toks, item);
     }
     for let item of &node.item_html_chardata_list {
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    walk_htmlElement(v, &inner.html_element);
+                    walk_htmlElement(v, toks, &inner.html_element);
                 }
                 Alt1(inner) => {
-                    v.visit_token(&inner.cdata);
+                    v.visit_token(toks, *(&inner.cdata));
                 }
                 Alt2(inner) => {
-                    walk_htmlComment(v, &inner.html_comment);
+                    walk_htmlComment(v, toks, &inner.html_comment);
                 }
             }
         }
         if let Some(item) = &item.html_chardata {
-            walk_htmlChardata(v, item);
+            walk_htmlChardata(v, toks, item);
         }
     }
     v.exit_rule(4, &"htmlContent", &node.span);
 }
 
-pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, node: &HtmlAttributeNode) {
+pub fn walk_htmlAttribute<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlAttributeNode) {
     v.enter_rule(5, &"htmlAttribute", &node.span);
-    v.visit_token(&node.tag_name);
+    v.visit_token(toks, *(&node.tag_name));
     if let Some(item) = &node.tag_equals_attvalue_value {
-        v.visit_token(&item.tag_equals);
-        v.visit_token(&item.attvalue_value);
+        v.visit_token(toks, *(&item.tag_equals));
+        v.visit_token(toks, *(&item.attvalue_value));
     }
     v.exit_rule(5, &"htmlAttribute", &node.span);
 }
 
-pub fn walk_htmlChardata<V: Visitor>(v: &mut V, node: &HtmlChardataNode) {
+pub fn walk_htmlChardata<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlChardataNode) {
     v.enter_rule(6, &"htmlChardata", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(6, &"htmlChardata", &node.span);
 }
 
-pub fn walk_htmlMisc<V: Visitor>(v: &mut V, node: &HtmlMiscNode) {
+pub fn walk_htmlMisc<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlMiscNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(7, &"htmlMisc", &n.span);
-            walk_htmlComment(v, &n.html_comment);
+            walk_htmlComment(v, toks, &n.html_comment);
             v.exit_rule(7, &"htmlMisc", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(7, &"htmlMisc", &n.span);
-            v.visit_token(&n.sea_ws);
+            v.visit_token(toks, *(&n.sea_ws));
             v.exit_rule(7, &"htmlMisc", &n.span);
         }
     }
 }
 
-pub fn walk_htmlComment<V: Visitor>(v: &mut V, node: &HtmlCommentNode) {
+pub fn walk_htmlComment<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HtmlCommentNode) {
     v.enter_rule(8, &"htmlComment", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(8, &"htmlComment", &node.span);
 }
 
-pub fn walk_script<V: Visitor>(v: &mut V, node: &ScriptNode) {
+pub fn walk_script<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ScriptNode) {
     v.enter_rule(9, &"script", &node.span);
-    v.visit_token(&node.script_open);
-    v.visit_token(&node.script_body_or_script_short_body);
+    v.visit_token(toks, *(&node.script_open));
+    v.visit_token(toks, *(&node.script_body_or_script_short_body));
     v.exit_rule(9, &"script", &node.span);
 }
 
-pub fn walk_style<V: Visitor>(v: &mut V, node: &StyleNode) {
+pub fn walk_style<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StyleNode) {
     v.enter_rule(10, &"style", &node.span);
-    v.visit_token(&node.style_open);
-    v.visit_token(&node.style_body_or_style_short_body);
+    v.visit_token(toks, *(&node.style_open));
+    v.visit_token(toks, *(&node.style_body_or_style_short_body));
     v.exit_rule(10, &"style", &node.span);
 }
 
-pub fn to_tree(node: &HtmlDocumentNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_htmlDocument(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<HtmlDocumentNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_htmlDocument(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

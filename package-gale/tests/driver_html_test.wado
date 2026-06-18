@@ -23,13 +23,11 @@ fn unparse_xml(node: &CstNode) -> String {
     let mut out = String::with_capacity(256);
     out.push_str(&`<{node.name}>`);
     for let child of &node.children {
-        if let Token(t) = *child {
-            for let trivia of &t.leading_trivia {
-                trivia.text.push_to(&mut out);
-            }
-            let kind_name = html::token_kind_name(t.kind);
+        if let Token(i) = *child {
+            node.toks.push_leading_trivia_text(&mut out, i);
+            let kind_name = html::token_kind_name(node.toks.kinds[i]);
             out.push_str(&`<{kind_name}>`);
-            t.text.push_to(&mut out);
+            node.toks.push_token_text(&mut out, i);
             out.push_str(&`</{kind_name}>`);
         } else if let Node(n) = *child {
             out.push_str(&unparse_xml(&n));
@@ -152,21 +150,21 @@ test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
     let tokens = html::tokenize(&"<p class=\"x\">");
     // No main-channel token may have kind TAG_WHITESPACE — HIDDEN tokens
     // are hidden from the parser.
-    for let t of &tokens {
-        assert t.kind != TK_TAG_WHITESPACE, "TAG_WHITESPACE leaked into main token stream";
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_TAG_WHITESPACE, "TAG_WHITESPACE leaked into main token stream";
     }
     // After `<p` the next non-hidden token is the TAG_NAME `class`; the
     // space between `p` and `class` must show up in its leading_trivia.
     // (The first TAG_NAME is `p`; we want the second.)
     let mut tag_name_count = 0;
     let mut found_hidden_ws = false;
-    for let t of &tokens {
-        if t.kind == TK_TAG_NAME {
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_TAG_NAME {
             tag_name_count += 1;
             if tag_name_count == 2 {
-                for let trivia of &t.leading_trivia {
-                    if trivia.kind == TK_TAG_WHITESPACE {
-                        assert trivia.channel == 1, `expected HIDDEN channel 1, got {trivia.channel}`;
+                for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                    if tokens.triv_kinds[j] == TK_TAG_WHITESPACE {
+                        assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got {tokens.triv_chans[j]}`;
                         found_hidden_ws = true;
                     }
                 }

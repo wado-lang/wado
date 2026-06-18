@@ -26,28 +26,28 @@ fn assert_tree(input: &String, expected: &String) {
 test "tokenize variable declaration" {
     let tokens = ts::tokenize(&"let x = 42;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Let", `expected Let, got {first}`;
 }
 
 test "tokenize const declaration" {
     let tokens = ts::tokenize(&"const name = \"hello\";");
     assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Const", `expected Const, got {first}`;
 }
 
 test "tokenize function declaration" {
     let tokens = ts::tokenize(&"function add(a, b) { return a + b; }");
     assert tokens.len() >= 10, `expected at least 10 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Function_", `expected Function_, got {first}`;
 }
 
 test "tokenize class declaration" {
     let tokens = ts::tokenize(&"class Foo extends Bar { constructor() {} }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Class", `expected Class, got {first}`;
 }
 
@@ -59,7 +59,7 @@ test "tokenize arrow function" {
 test "tokenize import statement" {
     let tokens = ts::tokenize(&"import { foo } from 'bar';");
     assert tokens.len() >= 6, `expected at least 6 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Import", `expected Import, got {first}`;
 }
 
@@ -81,7 +81,7 @@ test "tokenize interface" {
 test "tokenize enum" {
     let tokens = ts::tokenize(&"enum Color { Red, Green, Blue }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got {tokens.len()}`;
-    let first = ts::token_kind_name(tokens[0].kind);
+    let first = ts::token_kind_name(tokens.kinds[0]);
     assert first == "Enum", `expected Enum, got {first}`;
 }
 
@@ -413,9 +413,9 @@ test "type override: BackTickInside rewrites kind to BackTick" {
     // pair of open/close delimiters.
     let tokens = ts::tokenize(&"`hi`");
     let mut backtick_count = 0;
-    for let t of &tokens {
-        assert t.kind != TK_BackTickInside, "BackTickInside leaked into stream — type(BackTick) override dropped";
-        if t.kind == TK_BackTick {
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_BackTickInside, "BackTickInside leaked into stream — type(BackTick) override dropped";
+        if tokens.kinds[i] == TK_BackTick {
             backtick_count += 1;
         }
     }
@@ -429,17 +429,17 @@ test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
     // after keyword classification; we locate it by position (second
     // non-EOF main-channel token).
     let tokens = ts::tokenize(&"let x");
-    for let t of &tokens {
-        assert t.kind != TK_WhiteSpaces, "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_WhiteSpaces, "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
     }
     // `let` must be the first main-channel token.
-    assert tokens[0].kind == TK_Let, `expected first token = Let, got kind {tokens[0].kind}`;
+    assert tokens.kinds[0] == TK_Let, `expected first token = Let, got kind {tokens.kinds[0]}`;
     // The second token (the `x` identifier) must carry the HIDDEN
     // whitespace as leading trivia on channel 1.
     let mut found_hidden = false;
-    for let trivia of &tokens[1].leading_trivia {
-        if trivia.kind == TK_WhiteSpaces {
-            assert trivia.channel == 1, `expected HIDDEN channel 1, got {trivia.channel}`;
+    for let mut j = tokens.triv_lo[1]; j < tokens.triv_hi[1]; j += 1 {
+        if tokens.triv_kinds[j] == TK_WhiteSpaces {
+            assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got {tokens.triv_chans[j]}`;
             found_hidden = true;
         }
     }

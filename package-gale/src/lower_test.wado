@@ -1726,9 +1726,9 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
             panic("expected Span kind for leading field");
         }
         assert s.body.fields[1].name == "id";
-        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[1].type_str == "i32";
         assert s.body.fields[2].name == "colon";
-        assert s.body.fields[2].type_str == "Token";
+        assert s.body.fields[2].type_str == "i32";
         assert s.body.fields[3].name == "expr";
         assert s.body.fields[3].type_str == "ExprNode", s.body.fields[3].type_str;
         if let Plain = &s.body.fields[3].kind {
@@ -1772,14 +1772,14 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
         // [span, int_list, int]
         assert s.body.fields.len() == 3, `expected 3 fields, got {s.body.fields.len()}`;
         assert s.body.fields[1].name == "int_list";
-        assert s.body.fields[1].type_str == "List<Token>";
+        assert s.body.fields[1].type_str == "List<i32>";
         if let List = &s.body.fields[1].kind {
             assert true;
         } else {
             panic("expected List kind for Star Repeat");
         }
         assert s.body.fields[2].name == "int";
-        assert s.body.fields[2].type_str == "Option<Token>";
+        assert s.body.fields[2].type_str == "Option<i32>";
         if let Optional = &s.body.fields[2].kind {
             assert true;
         } else {
@@ -1844,9 +1844,9 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
                     }
                     let inner_fields = &go.alts[0].fields;
                     assert inner_fields.len() == 2, `expected 2 inner fields, got {inner_fields.len()}`;
-                    assert inner_fields[0].type_str == "Token";
+                    assert inner_fields[0].type_str == "i32";
                     assert inner_fields[1].name == "b", inner_fields[1].name;
-                    assert inner_fields[1].type_str == "List<Token>", inner_fields[1].type_str;
+                    assert inner_fields[1].type_str == "List<i32>", inner_fields[1].type_str;
                 } else {
                     panic("expected GroupShape::SingleAlt");
                 }
@@ -1892,11 +1892,11 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
                 let inner_fields = &go.alts[0].fields;
                 assert inner_fields.len() == 3, `expected 3 inner fields, got {inner_fields.len()}`;
                 assert inner_fields[0].name == "id";
-                assert inner_fields[0].type_str == "Token";
+                assert inner_fields[0].type_str == "i32";
                 assert inner_fields[1].name == "eq";
-                assert inner_fields[1].type_str == "Token";
+                assert inner_fields[1].type_str == "i32";
                 assert inner_fields[2].name == "int";
-                assert inner_fields[2].type_str == "Token";
+                assert inner_fields[2].type_str == "i32";
                 // None of them is the Span sentinel — the outer rule
                 // struct already carries the span.
                 for let f of inner_fields {
@@ -1966,7 +1966,7 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
                 let alt1_fields = &go.alts[1].fields;
                 assert alt1_fields.len() == 2, `alt 1 expected 2 fields, got {alt1_fields.len()}`;
                 assert alt1_fields[0].name == "lit_go";
-                assert alt1_fields[0].type_str == "Token";
+                assert alt1_fields[0].type_str == "i32";
                 assert alt1_fields[1].name == "expr";
                 assert alt1_fields[1].type_str == "ExprNode";
             } else {
@@ -2075,7 +2075,7 @@ test "lower Group field decls match shape's outer field/type" {
         // parser_gen's `gen_consume_group_store_optional` storage pattern.
         assert s.body.fields.len() == 4, `expected 4 fields, got {s.body.fields.len()}`;
         assert s.body.fields[1].name == "k_a_or_k_b";
-        assert s.body.fields[1].type_str == "Token";
+        assert s.body.fields[1].type_str == "i32";
         assert s.body.fields[2].name == "stmt_or_expr";
         assert s.body.fields[2].type_str == "Option<StmtOrExprGroup>", s.body.fields[2].type_str;
         assert s.body.fields[3].name == "a_b";

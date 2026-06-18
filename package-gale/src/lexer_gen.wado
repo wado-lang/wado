@@ -1886,13 +1886,14 @@ fn gen_tokenize_fn(
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&"Array<Token>");
+    f.set_return_type(&"TokenStream");
     f.emit_begin(w);
     w.line(&"let mut lexer = Lexer::new(input);");
-    // Pre-size to roughly one token per 4 input chars to avoid repeated grow().
-    // `trivia` is reset to `[]` after each non-trivia token so pre-sizing is wasted there.
-    w.line(&"let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);");
-    w.line(&"let mut trivia: List<Token> = [];");
+    // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
+    // per-token aggregate. `triv_lo` marks where the current token's leading
+    // trivia begins; it advances to the next mark after each emitted token.
+    w.line(&"let mut ts = TokenStream::new(&lexer.chars);");
+    w.line(&"let mut triv_lo = ts.trivia_mark();");
 
     if has_more_rules {
         // Tracks the start position of a pending `more` sequence; -1 means
@@ -2049,11 +2050,7 @@ fn gen_tokenize_fn(
         String::from("best_end <= start");
     };
     w.begin(&`if {no_match_guard}`);
-    w.line(
-        &"let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);",
-    );
-    w.line(&"tokens.push(tok);");
-    w.line(&"trivia = [];");
+    emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
     w.line(&"lexer.pos = start + 1;");
     w.else_begin(&"else");
 
@@ -2091,44 +2088,32 @@ fn gen_tokenize_fn(
         w.begin(&"if best_more");
         w.line(&"if more_start < 0 { more_start = start; }");
         w.else_begin(&"else if is_skip");
-        w.line(&"trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
         w.line(&"more_start = -1;");
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin(&"else if best_channel != 0");
-            w.line(
-                &"trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
-            );
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
             w.line(&"more_start = -1;");
         }
         w.else_begin(&"else");
-        w.line(
-            &"let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
-        );
-        w.line(&"tokens.push(tok);");
-        w.line(&"trivia = [];");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.line(&"more_start = -1;");
         w.end();
     } else {
         w.begin(&"if is_skip");
-        w.line(&"trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin(&"else if best_channel != 0");
-            w.line(
-                &"trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
-            );
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
         }
         w.else_begin(&"else");
-        w.line(
-            &"let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
-        );
-        w.line(&"tokens.push(tok);");
-        w.line(&"trivia = [];");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.end();
     }
 
@@ -2159,12 +2144,20 @@ fn gen_tokenize_fn(
     w.line(&"lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    w.line(
-        &"tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));",
-    );
-    w.line(&"return tokens.to_array();");
+    // EOF sentinel: zero-length, carrying any trailing trivia. No reset
+    // follows (the stream ends here), so this stays inline rather than
+    // using `emit_token_commit`.
+    w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
+    w.line(&"return ts;");
     w.end();  // fn
     w.blank();
+}
+
+/// Emit a default-channel token commit: push it with the pending leading-trivia
+/// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
+fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
+    w.line(&`ts.push_token({*kind}, {*start}, {*end}, triv_lo, ts.trivia_mark());`);
+    w.line(&"triv_lo = ts.trivia_mark();");
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {

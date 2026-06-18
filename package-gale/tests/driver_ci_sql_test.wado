@@ -18,24 +18,24 @@ fn assert_tree(input: &String, expected: &String) {
 
 test "tokenize keyword lowercase" {
     let tokens = ci::tokenize(&"if foo");
-    assert ci::token_kind_name(tokens[0].kind) == "IF";
-    assert ci::token_kind_name(tokens[1].kind) == "IDENT";
+    assert ci::token_kind_name(tokens.kinds[0]) == "IF";
+    assert ci::token_kind_name(tokens.kinds[1]) == "IDENT";
 }
 
 test "tokenize keyword uppercase" {
     let tokens = ci::tokenize(&"IF foo");
-    assert ci::token_kind_name(tokens[0].kind) == "IF";
+    assert ci::token_kind_name(tokens.kinds[0]) == "IF";
 }
 
 test "tokenize keyword mixed case" {
     let tokens = ci::tokenize(&"If foo");
-    assert ci::token_kind_name(tokens[0].kind) == "IF";
+    assert ci::token_kind_name(tokens.kinds[0]) == "IF";
 }
 
 test "identifier range folds to uppercase" {
     // IDENT is [a-z_]+, but with grammar-level CI it must accept [A-Z] too.
     let tokens = ci::tokenize(&"IF FOO");
-    assert ci::token_kind_name(tokens[1].kind) == "IDENT";
+    assert ci::token_kind_name(tokens.kinds[1]) == "IDENT";
 }
 
 test "parse accepts any casing" {

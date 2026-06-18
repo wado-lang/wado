@@ -159,10 +159,14 @@ fn join_kinds(kinds: &List<String>) -> String {
 
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut s = StructSpec::new("Parser");
-    s.add_field(&"tokens", &"Array<Token>");
+    s.add_field(&"tokens", &"TokenStream");
+    // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
+    // array (not the `List<i32>` wrapper) so reading `kinds[pos]` is a single
+    // `array.get` with nothing for the optimizer to hoist into an extra local;
+    // a `&List<i32>` would cost every deeply-recursive scan frame one more
+    // slot, overflowing the wasm stack on pathological grammars.
+    s.add_field(&"kinds", &"Array<i32>");
     s.add_field(&"pos", &"i32");
-    // Source chars; error sites resolve `span.start` into `line:col` via `line_col_at`.
-    s.add_field(&"chars", &"List<char>");
     // Deepest speculative failure seen (a scan-gated repetition re-parses a
     // malformed element to harvest a precise inner error). The input-entry
     // reports it over the shallow "expected <closer>" error when it reaches
@@ -188,11 +192,11 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     ImplSpec::new("Parser").emit_begin(w);
 
     let mut f = FnSpec::new("new");
-    f.add_param(&"tokens", &"Array<Token>");
-    f.add_param(&"chars", &"List<char>");
+    f.add_param(&"tokens", &"TokenStream");
     f.set_return_type(&"Parser");
     f.emit_begin(w);
-    let mut init = String::from("tokens, pos: 0, chars, pending: null");
+    w.line(&"let kinds = tokens.kinds.to_array();");
+    let mut init = String::from("tokens, kinds, pos: 0, pending: null");
     if trace {
         init.push_str(&", trace_depth: 0");
     }
@@ -212,7 +216,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     fe.add_param(&"expected", &"List<String>");
     fe.set_return_type(&"ParseError");
     fe.emit_begin(w);
-    w.line(&"let lc = line_col_at(&self.chars, span.start);");
+    w.line(&"let lc = line_col_at(self.tokens.chars, span.start);");
     w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
     w.end();
     w.blank();
@@ -231,11 +235,21 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.blank();
 
 
-    let mut f2 = FnSpec::new("peek");
+    // A "token" handed to the rest of the parser is its `i32` index into the
+    // stream; node fields store that index, not a Token aggregate.
+    let mut f2 = FnSpec::new("peek_start");
     f2.set_receiver(&"&self");
-    f2.set_return_type(&"&Token");
+    f2.set_return_type(&"i32");
     f2.emit_begin(w);
-    w.line(&"return &self.tokens[self.pos];");
+    w.line(&"return self.tokens.starts[self.pos];");
+    w.end();
+    w.blank();
+
+    let mut f2b = FnSpec::new("peek_span");
+    f2b.set_receiver(&"&self");
+    f2b.set_return_type(&"Span");
+    f2b.emit_begin(w);
+    w.line(&"return self.tokens.span_at(self.pos);");
     w.end();
     w.blank();
 
@@ -243,7 +257,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f3.set_receiver(&"&self");
     f3.set_return_type(&"i32");
     f3.emit_begin(w);
-    w.line(&"return self.tokens[self.pos].kind;");
+    w.line(&"return self.kinds[self.pos];");
     w.end();
     w.blank();
 
@@ -254,17 +268,17 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f4.emit_begin(w);
     w.line(&"let idx = self.pos + offset;");
     w.line(&"if idx >= self.tokens.len() { return TK_EOF; }");
-    w.line(&"return self.tokens[idx].kind;");
+    w.line(&"return self.kinds[idx];");
     w.end();
     w.blank();
 
     let mut f5 = FnSpec::new("advance");
     f5.set_receiver(&"&mut self");
-    f5.set_return_type(&"Token");
+    f5.set_return_type(&"i32");
     f5.emit_begin(w);
-    w.line(&"let tok = self.tokens[self.pos];");
+    w.line(&"let i = self.pos;");
     w.line(&"self.pos += 1;");
-    w.line(&"return tok;");
+    w.line(&"return i;");
     w.end();
     w.blank();
 
@@ -273,7 +287,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f6.set_return_type(&"i32");
     f6.emit_begin(w);
     w.line(&"if self.pos == 0 { return 0; }");
-    w.line(&"return self.tokens[self.pos - 1].span.end;");
+    w.line(&"return self.tokens.ends[self.pos - 1];");
     w.end();
     w.blank();
 
@@ -284,20 +298,19 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
-    f7.set_return_type(&"Result<Token, ParseError>");
+    f7.set_return_type(&"Result<i32, ParseError>");
     f7.emit_begin(w);
-    w.begin(&"if self.tokens[self.pos].kind == kind");
+    w.begin(&"if self.kinds[self.pos] == kind");
     w.begin(&"if kind == TK_EOF");
-    w.line(&"return Result::Ok(self.tokens[self.pos]);");
+    w.line(&"return Result::Ok(self.pos);");
     w.end();
     w.line(&"return Result::Ok(self.advance());");
     w.end();
-    w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"let name = token_kind_name(kind);");
     w.line(&"return Result::Err(self.error(");
     w.indent();
-    w.line(&"`expected {name}, got \"{tok.text}\"`,");
-    w.line(&"tok.span,");
+    w.line(&"`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[name],");
     w.dedent();
     w.line(&"));");
@@ -307,13 +320,12 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f8 = FnSpec::new("fail");
     f8.set_receiver(&"&self");
     f8.add_param(&"name", &"String");
-    f8.set_return_type(&"Result<Token, ParseError>");
+    f8.set_return_type(&"Result<i32, ParseError>");
     f8.emit_begin(w);
-    w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"return Result::Err(self.error(");
     w.indent();
-    w.line(&"`expected {name}, got \"{tok.text}\"`,");
-    w.line(&"tok.span,");
+    w.line(&"`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[name],");
     w.dedent();
     w.line(&"));");
@@ -324,16 +336,15 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // Fails at EOF.
     let mut f9 = FnSpec::new("match_any");
     f9.set_receiver(&"&mut self");
-    f9.set_return_type(&"Result<Token, ParseError>");
+    f9.set_return_type(&"Result<i32, ParseError>");
     f9.emit_begin(w);
-    w.begin(&"if self.tokens[self.pos].kind != TK_EOF");
+    w.begin(&"if self.kinds[self.pos] != TK_EOF");
     w.line(&"return Result::Ok(self.advance());");
     w.end();
-    w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"return Result::Err(self.error(");
     w.indent();
-    w.line(&"`expected any token, got \"{tok.text}\"`,");
-    w.line(&"tok.span,");
+    w.line(&"`expected any token, got \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"any token\"],");
     w.dedent();
     w.line(&"));");
@@ -345,9 +356,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f10 = FnSpec::new("match_not");
     f10.set_receiver(&"&mut self");
     f10.add_param(&"excluded", &"List<i32>");
-    f10.set_return_type(&"Result<Token, ParseError>");
+    f10.set_return_type(&"Result<i32, ParseError>");
     f10.emit_begin(w);
-    w.line(&"let k = self.tokens[self.pos].kind;");
+    w.line(&"let k = self.kinds[self.pos];");
     w.begin(&"if k != TK_EOF");
     w.line(&"let mut blocked = false;");
     w.begin(&"for let x of excluded");
@@ -360,11 +371,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.end();
-    w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"return Result::Err(self.error(");
     w.indent();
-    w.line(&"`unexpected token \"{tok.text}\"`,");
-    w.line(&"tok.span,");
+    w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"set complement\"],");
     w.dedent();
     w.line(&"));");
@@ -377,22 +387,21 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f11 = FnSpec::new("match_set");
     f11.set_receiver(&"&mut self");
     f11.add_param(&"included", &"List<i32>");
-    f11.set_return_type(&"Result<Token, ParseError>");
+    f11.set_return_type(&"Result<i32, ParseError>");
     f11.emit_begin(w);
-    w.line(&"let k = self.tokens[self.pos].kind;");
+    w.line(&"let k = self.kinds[self.pos];");
     w.begin(&"for let x of included");
     w.begin(&"if x == k");
     w.begin(&"if k == TK_EOF");
-    w.line(&"return Result::Ok(self.tokens[self.pos]);");
+    w.line(&"return Result::Ok(self.pos);");
     w.end();
     w.line(&"return Result::Ok(self.advance());");
     w.end();
     w.end();
-    w.line(&"let tok = &self.tokens[self.pos];");
     w.line(&"return Result::Err(self.error(");
     w.indent();
-    w.line(&"`unexpected token \"{tok.text}\"`,");
-    w.line(&"tok.span,");
+    w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
+    w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"token set\"],");
     w.dedent();
     w.line(&"));");
@@ -447,7 +456,7 @@ fn gen_alt_scan_if_possible(
     let scan_name = `{*fn_name}_scan_{alt_index}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f);
@@ -537,7 +546,7 @@ fn gen_scan_function_named(
     }
 
     let mut f = FnSpec::new(fn_name);
-    f.add_param(&"tokens", &"&Array<Token>");
+    f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
     // Accept (and ignore) min_prec so call sites pass it uniformly
     // regardless of whether the target rule is left-recursive. See
@@ -579,7 +588,7 @@ fn gen_scan_function_named(
         // by making scan_X functions reachable. Behaviourally identical to
         // the longest-match tournament: every alt consumes exactly one
         // token, so longest-match and first-success-wins both pick whatever
-        // alt's token equals `tokens[pos].kind`.
+        // alt's token equals `tokens[pos]`.
         let mut firsts: List<String> = [];
         for let alt of &rule.alternatives {
             let t = single_token_first(&alt.elements[0]);
@@ -587,7 +596,7 @@ fn gen_scan_function_named(
                 firsts.push(t);
             }
         }
-        let check = ctx.kind_check_str(&firsts, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&firsts, &"tokens[pos]");
         w.begin(&`if pos < tokens.len() && {check}`);
         w.line(&"return pos + 1;");
         w.end();
@@ -638,7 +647,7 @@ fn gen_scan_lr_functions(
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param(&"tokens", &"&Array<Token>");
+    fa.add_param(&"tokens", &"&Array<i32>");
     fa.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut fa);
@@ -667,7 +676,7 @@ fn gen_scan_lr_functions(
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param(&"tokens", &"&Array<Token>");
+    f2.add_param(&"tokens", &"&Array<i32>");
     f2.add_param(&"pos", &"i32");
     if ctx.emit_follow() {
         add_follow_param(&mut f2);
@@ -713,7 +722,7 @@ fn gen_scan_lr_suffix_helpers(
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param(&"tokens", &"&Array<Token>");
+        f.add_param(&"tokens", &"&Array<i32>");
         f.add_param(&"pos", &"i32");
         if ctx.emit_follow() {
             add_follow_param(&mut f);
@@ -758,7 +767,7 @@ fn gen_lr_suffix_dispatch_atn(
         );
     } else {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.tokens, p.pos, TK_EOF, min_prec);`,
+            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
         );
     }
     w.line(&`let _lr_pos0 = {pos_expr};`);
@@ -824,7 +833,7 @@ fn gen_lr_suffix_dispatch(
 
     w.begin(&"loop");
     if side.scan {
-        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+        w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     } else {
         w.line(&"let suffix_kind = p.peek_kind();");
     }
@@ -962,7 +971,7 @@ fn gen_lr_overlap_dispatch(
             w.else_begin(&`else if suffix_kind == {*shared_tk}`);
         }
         let second_accessor = if side.scan {
-            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1].kind } else { TK_EOF };");
+            w.line(&"let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };");
             "second_kind";
         } else {
             "p.peek_at(1)";
@@ -1115,7 +1124,7 @@ fn gen_scan_multi_alt(w: &mut CodeWriter, alts: &List<Alternative>, scan_alts: &
 
     w.line(&"let start = pos;");
     w.line(&"let mut pos = pos;");
-    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos].kind } else { TK_EOF };");
+    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
 
     w.begin(&"scan_alts:");
 
@@ -1262,7 +1271,7 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 }
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
-/// `tokens[pos + d].kind` (guarded by `pos + d < tokens.len()`) instead
+/// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
 /// of `p.peek_at(d)`. Multi-token sets route through
 /// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
@@ -1283,7 +1292,7 @@ fn gen_scan_op_element(
     min_prec_override: i32 = 0,
 ) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1320,14 +1329,14 @@ fn gen_scan_op_element(
         return;
     }
     if let Wildcard = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens[pos].kind == {*k}`);
+            check_parts.push(`tokens[pos] == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1336,7 +1345,7 @@ fn gen_scan_op_element(
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ {*fail_stmt} \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ {*fail_stmt} \}`);
         w.line(&"pos += 1;");
         return;
     }
@@ -1360,7 +1369,7 @@ fn gen_scan_op_element(
 /// failed iteration means "skip", not abort.
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     if let Token(t) = se {
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] != {t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let RuleCall(rc) = se {
@@ -1379,13 +1388,13 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         return;
     }
     if let Wildcard = se {
-        w.line(&"if pos >= tokens.len() || tokens[pos].kind == TK_EOF { pos = -1; } else { pos += 1; }");
+        w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
         return;
     }
     if let Excluded(e) = se {
         let mut check_parts: List<String> = [];
         for let k of &e.kinds {
-            check_parts.push(`tokens[pos].kind == {*k}`);
+            check_parts.push(`tokens[pos] == {*k}`);
         }
         let mut check = String::with_capacity(64);
         for let mut i = 0; i < check_parts.len(); i += 1 {
@@ -1394,7 +1403,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             }
             check.push_str(&check_parts[i]);
         }
-        w.line(&`if pos >= tokens.len() || tokens[pos].kind == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
+        w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || {check} \{ pos = -1; \} else \{ pos += 1; \}`);
         return;
     }
     if let Group(ge) = se {
@@ -1448,7 +1457,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if effective_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&effective_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&effective_first, &"tokens[pos]");
         // Caller-FOLLOW gate wins: `if pos < len && peek matches first AND
         // NOT caller_follow_gate { try iter }`. When `caller_follow_gate` is
         // empty (no `follow`), the guard collapses to the regular shape.
@@ -1468,7 +1477,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         let guard = if caller_follow_gate.is_empty() {
             `pos < tokens.len() && {check}`;
         } else {
@@ -1488,7 +1497,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         if loop_first.is_empty() {
             return;
         }
-        let check = ctx.kind_check_str(&loop_first, &"tokens[pos].kind");
+        let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
         // Plus's subsequent iters get the K-prefix gate; the mandatory
         // first iter ran above.
         let guard = if caller_follow_gate.is_empty() {
@@ -1587,7 +1596,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let gate_emitted = lenient && !has_wildcard && union_first.len() > 0;
     if gate_emitted {
         let sgk_var = `sgk_{gc}`;
-        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos].kind \} else \{ TK_EOF \};`);
+        w.line(&`let {sgk_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
         let gate = ctx.kind_check_str(&union_first, &sgk_var);
         w.begin(&`if {gate}`);
     }
@@ -1766,9 +1775,8 @@ fn gen_trace_helpers(w: &mut CodeWriter) {
     w.line(&"fn trace_tok(p: &Parser) -> String {");
     w.indent();
     w.line(&"if p.pos >= p.tokens.len() { return String::from(\"<eof>\"); }");
-    w.line(&"let t = &p.tokens[p.pos];");
-    w.line(&"if t.text.is_empty() { return String::from(\"<eof>\"); }");
-    w.line(&"return `'{t.text}'`;");
+    w.line(&"if p.tokens.is_empty_text(p.pos) { return String::from(\"<eof>\"); }");
+    w.line(&"return `'{p.tokens.token_text(p.pos)}'`;");
     w.dedent();
     w.line(&"}");
     w.blank();
@@ -1938,7 +1946,7 @@ fn gen_parse_fn_simple_named(
     }
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line(&"let start = p.peek().span.start;");
+    w.line(&"let start = p.peek_start();");
     let body = rule_alt_body(lowered_rule, 0).unwrap();
     gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, ctx);
     w.end();
@@ -1961,7 +1969,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     }
     f.set_return_type(&`Result<{type_name}, ParseError>`);
     f.emit_begin(w);
-    w.line(&"let start = p.peek().span.start;");
+    w.line(&"let start = p.peek_start();");
     w.line(&"let kind = p.peek_kind();");
 
     let mut firsts: List<String> = [];
@@ -2102,7 +2110,7 @@ fn gen_parse_fn_named(
                     }
                     f.set_return_type(&`Result<{type_name}, ParseError>`);
                     f.emit_begin(w);
-                    w.line(&"let start = p.peek().span.start;");
+                    w.line(&"let start = p.peek_start();");
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
                     gen_alt_body(
                         w,
@@ -2142,7 +2150,7 @@ fn gen_parse_fn_named(
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         if needs_start {
-            w.line(&"let start = p.peek().span.start;");
+            w.line(&"let start = p.peek_start();");
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -2185,7 +2193,7 @@ fn gen_parse_fn_named(
         });
         f2.set_return_type(&`Result<{type_name}, ParseError>`);
         f2.emit_begin(w);
-        w.line(&"let start = p.peek().span.start;");
+        w.line(&"let start = p.peek_start();");
         w.line(&`let mut result = {*fn_name}_atom(p{follow_sep(ctx.emit_follow())})?;`);
         let atn_class = if let LeftRecursive(l) = lowered_rule {
             l.atn_class;
@@ -2211,7 +2219,7 @@ fn gen_parse_fn_named(
         f.set_return_type(&`Result<{type_name}, ParseError>`);
         f.emit_begin(w);
         if needs_start {
-            w.line(&"let start = p.peek().span.start;");
+            w.line(&"let start = p.peek_start();");
         }
         if has_overlaps {
             gen_multi_alt_body_alt(
@@ -2797,7 +2805,7 @@ fn gen_op_opt_scan_guard_for_group(
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
     w.begin(&`{scan_label}:`);
-    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     if g_op.scan_alts.len() == 1 {
@@ -2940,7 +2948,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     // rather than emit a parser that silently mispredicts. No corpus grammar
     // has a `??` inside an LR rule.
     assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
-    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.tokens, p.pos, TK_EOF)`;
+    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -2951,7 +2959,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
-        return `!(follow_yields(&p.tokens, p.pos, follow, TK_EOF)) && ({*cond})`;
+        return `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && ({*cond})`;
     }
     return *cond;
 }
@@ -3468,11 +3476,11 @@ fn op_field(op: &Op) -> String {
 /// `List<…>` declaration; other call sites read the FieldDecl directly.
 fn op_field_type(op: &Op) -> String {
     return match op {
-        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "Token",
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "i32",
         RuleCall(r) => rule_type_name(&r.target_name),
         Group(g) => match &g.shape {
             SimpleCst(scst) => scst.type_name,
-            TokenOnly(_) => "Token",
+            TokenOnly(_) => "i32",
             SingleAlt(sa) => sa.struct_name,
             General(gen) => gen.variant_type,
             Transparent => panic("op_field_type: Transparent groups have no own field type"),
@@ -3850,7 +3858,7 @@ fn gen_op_repeat_optional_rulecall(
     // doesn't swallow tokens the caller needs. Empty (`follow` absent)
     // falls through to the regular `first_check` shape.
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.tokens, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
     } else {
         "";
     };
@@ -3895,7 +3903,7 @@ fn gen_op_repeat_optional_leaf(
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.tokens, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
     } else {
         "";
     };
@@ -3930,7 +3938,7 @@ fn gen_op_repeat_optional_leaf(
 /// (`gate_caller_follow`).
 fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     if rep_op.gate_caller_follow {
-        w.line(&"if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }");
+        w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
     }
 }
 
@@ -4308,7 +4316,7 @@ fn join_lookahead_condition(
         let part = match access {
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + {d}` };
-                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}].kind`);
+                let check = ctx.kind_check_str(&sig[d], &`tokens[{idx_expr}]`);
                 `{idx_expr} < tokens.len() && {check}`;
             },
             Parse => {
@@ -4347,7 +4355,7 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 /// ```
 /// let mut opt_scan_pos_N: i32 = -1;
 /// opt_scan_N: {
-///     let tokens = &p.tokens;
+///     let tokens = &p.kinds;
 ///     let mut pos: i32 = p.pos;
 ///     /* inline scan of inner; on fail: break opt_scan_N; */
 ///     opt_scan_pos_N = pos;
@@ -4382,7 +4390,7 @@ fn gen_scan_guard_with_prefix(
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut {scan_pos_var}: i32 = -1;`);
     w.begin(&`{scan_label}:`);
-    w.line(&"let tokens = &p.tokens;");
+    w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break {scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
@@ -4489,7 +4497,7 @@ fn gen_scan_winner_tournament(
         let alt_index = sorted_group[k];
         let scan_label = dedup_name(&"gd_scan", name_counts);
         w.begin(&`{scan_label}:`);
-        w.line(&"let tokens = &p.tokens;");
+        w.line(&"let tokens = &p.kinds;");
         w.line(&"let mut pos: i32 = p.pos;");
         let sb = &scan_alts[alt_index];
         gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
@@ -5323,7 +5331,7 @@ fn gen_lr_call_with_prec(
     // (mutating) parse when the scan confirms the suffix would succeed.
     if use_prec {
         w.begin(&`if {prec} >= min_prec`);
-        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(&`if {*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
@@ -5331,7 +5339,7 @@ fn gen_lr_call_with_prec(
         w.line(&"break;");
         w.end();
     } else {
-        w.begin(&`if {*scan_suffix_fn}(&p.tokens, p.pos) < 0`);
+        w.begin(&`if {*scan_suffix_fn}(&p.kinds, p.pos) < 0`);
         w.line(&"break;");
         w.end();
         w.line(&`result = {*suffix_fn}(p, result, start{follow_sep(emit_follow)})?;`);
@@ -5453,7 +5461,7 @@ fn gen_prediction_code_inner(
                     // (ANTLR4-compatible): scan each alt, pick the one
                     // advancing pos the furthest; ties go to the first alt
                     // in grammar order.
-                    w.line(&"let _sd_tokens = &p.tokens;");
+                    w.line(&"let _sd_tokens = &p.kinds;");
                     w.line(&"let _sd_pos = p.pos;");
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -5506,7 +5514,7 @@ fn gen_prediction_code_inner(
                             let is_full = has_scan && alt_scan_is_full(&alts[idx].elements, ctx);
                             if is_full {
                                 // Full scan: success guarantees parse success.
-                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 if ctx.is_trace() {
                                     w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
                                 }
@@ -5514,7 +5522,7 @@ fn gen_prediction_code_inner(
                                 w.end();
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
-                                w.begin(&`if {*fn_name}_scan_{idx}(&p.tokens, p.pos) >= 0`);
+                                w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 w.line(&`let r_{idx} = {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
@@ -5719,7 +5727,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, trace: bool) {
     let mut f = FnSpec::new("parse");
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.set_return_type(&`Result<ParseResult<{header.type_name}>, ParseError>`);
     f.emit_begin(w);
     w.line(&`return parse_{header.snake_name}(input);`);
     w.end();
@@ -5761,14 +5769,18 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
     gru.add_generic(&"T");
     gru.add_param(&"input", &"&String");
     gru.add_param(&"run", &"fn(&mut Parser) -> Result<T, ParseError>");
-    gru.set_return_type(&"Result<T, ParseError>");
+    gru.set_return_type(&"Result<ParseResult<T>, ParseError>");
     gru.emit_begin(w);
     w.line(&"let mut parser = _gale_new_parser(input);");
     w.line(&"let _result = run(&mut parser);");
     w.begin(&"if let Err(_e) = _result");
     w.line(&"return Result::Err(_gale_pick_error(&parser, _e));");
     w.end();
-    w.line(&"return _result;");
+    // Bundle the typed root with the TokenStream its `i32` terminals index.
+    w.begin(&"if let Ok(_root) = _result");
+    w.line(&"return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });");
+    w.end();
+    w.line(&"unreachable();");
     w.end();
     w.blank();
 
@@ -5777,8 +5789,7 @@ fn gen_parse_entry_helpers(w: &mut CodeWriter, trace: bool) {
     np.set_return_type(&"Parser");
     np.emit_begin(w);
     w.line(&"let tokens = tokenize(input);");
-    w.line(&"let chars: List<char> = input.chars().collect();");
-    w.line(&"return Parser::new(tokens, chars);");
+    w.line(&"return Parser::new(tokens);");
     w.end();
     w.blank();
 
@@ -5810,7 +5821,7 @@ fn gen_parse_rule_input_entry(w: &mut CodeWriter, rule: &Rule) {
     let mut f = FnSpec::new(&`parse_{header.snake_name}`);
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&`Result<{header.type_name}, ParseError>`);
+    f.set_return_type(&`Result<ParseResult<{header.type_name}>, ParseError>`);
     f.emit_begin(w);
     // The wrapper's defaulted `follow`/`min_prec` absorb the LR / gated cases,
     // so this one closure form is uniform across all rules.
@@ -5922,7 +5933,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
     w.line(&`return Result::Err(p.error(`);
     w.indent();
     w.line(&`{msg},`);
-    w.line(&"p.peek().span,");
+    w.line(&"p.peek_span(),");
     w.write(&"[");
     for let mut i = 0; i < expected.len(); i += 1 {
         if i > 0 {

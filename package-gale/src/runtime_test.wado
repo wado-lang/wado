@@ -1,4 +1,4 @@
-use { Span, Token, LexerSlice, ParseError } from "./runtime/lex.wado";
+use { Span, Token, LexerSlice, ParseError, TokenStream } from "./runtime/lex.wado";
 use { CstNode, CstChild, TreeRecorder, Visitor } from "./runtime/cst.wado";
 use { normalize_tree, to_lexer_string } from "./runtime/tools.wado";
 use {
@@ -13,17 +13,32 @@ fn ls(text: String) -> LexerSlice {
     return LexerSlice::from_string(text);
 }
 
+/// Build a TokenStream over `src` from `[kind, start, end]` token specs (no
+/// trivia). The returned stream borrows a fresh char list; GC keeps it alive.
+fn stream_of(src: String, specs: List<[i32, i32, i32]>) -> TokenStream {
+    let chars: List<char> = src.chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    for let s of &specs {
+        let lo = ts.trivia_mark();
+        ts.push_token(s.0, s.1, s.2, lo, ts.trivia_mark());
+    }
+    return ts;
+}
+
 test "to_lexer_string interleaves non-default-channel trivia in source order" {
     // `A: 'a' -> mode(for);` then `B: 'b' -> channel(break);` (channel 2).
     // The B token is non-default-channel, so the generated tokenizer parks it
     // in the following token's leading_trivia. ANTLR4 still emits it into the
     // stream in source order with a `channel=N` attribute and a sequential
     // index. Mirrors `LexerExec/ReservedWordsEscaping`.
-    let a = Token::new(0, ls("a"), Span::new(0, 1));
-    let b = Token::with_channel(1, ls("b"), Span::new(1, 2), [], 2);
-    let eof = Token::with_trivia(2, ls(""), Span::new(2, 2), [b]);
-    let tokens: List<Token> = [a, eof];
-    let actual = to_lexer_string(&tokens.to_array(), &"ab", 2);
+    let chars: List<char> = "ab".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo_a = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a', channel 0
+    let lo_eof = ts.trivia_mark();
+    ts.push_trivia(1, 1, 2, 2);  // 'b', channel 2 (hidden)
+    ts.push_token(2, 2, 2, lo_eof, ts.trivia_mark());  // EOF carrying 'b' as trivia
+    let actual = to_lexer_string(&ts, 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,1:1='b',<2>,channel=2,1:1]
 [@2,2:1='<EOF>',<-1>,1:2]
@@ -35,11 +50,14 @@ test "to_lexer_string skips default-channel (skip) trivia without consuming an i
     // Skip tokens also land in leading_trivia but carry channel 0; ANTLR4
     // discards them entirely, so they must neither appear in the dump nor
     // advance the `@index` counter.
-    let a = Token::new(0, ls("a"), Span::new(0, 1));
-    let ws = Token::new(1, ls(" "), Span::new(1, 2));
-    let c = Token::with_trivia(0, ls("c"), Span::new(2, 3), [ws]);
-    let tokens: List<Token> = [a, c];
-    let actual = to_lexer_string(&tokens.to_array(), &"a c", 2);
+    let chars: List<char> = "a c".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo_a = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a'
+    let lo_c = ts.trivia_mark();
+    ts.push_trivia(1, 1, 2, 0);  // ' ' skip (channel 0)
+    ts.push_token(0, 2, 3, lo_c, ts.trivia_mark());  // 'c' with skip trivia
+    let actual = to_lexer_string(&ts, 2);
     let expected = "[@0,0:0='a',<1>,1:0]
 [@1,2:2='c',<1>,1:2]
 ";
@@ -50,6 +68,45 @@ test "Span::new creates span" {
     let s = Span::new(0, 5);
     assert s.start == 0;
     assert s.end == 5;
+}
+
+test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
+    // Source "ab c": tokens 'a'(0..1), 'b'(1..2), 'c'(3..4); a single space
+    // (1 char) is leading trivia of 'c'.
+    let chars: List<char> = "ab c".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+
+    let lo0 = ts.trivia_mark();
+    ts.push_token(10, 0, 1, lo0, ts.trivia_mark());
+    let lo1 = ts.trivia_mark();
+    ts.push_token(11, 1, 2, lo1, ts.trivia_mark());
+    // 'c' has one leading space (skip/hidden trivia on channel 0).
+    let lo2 = ts.trivia_mark();
+    ts.push_trivia(99, 2, 3, 0);
+    ts.push_token(12, 3, 4, lo2, ts.trivia_mark());
+
+    assert ts.len() == 3;
+    assert ts.kind_at(0) == 10;
+    assert ts.kind_at(2) == 12;
+    assert ts.span_at(2) == Span::new(3, 4);
+    assert ts.token_text(0) == "a";
+    assert ts.token_text(2) == "c";
+    assert !ts.is_empty_text(0);
+
+    // Token 2 owns exactly the one trivia entry; tokens 0 and 1 own none.
+    assert ts.triv_lo[0] == ts.triv_hi[0];
+    assert ts.triv_hi[2] - ts.triv_lo[2] == 1;
+    assert ts.triv_kinds[ts.triv_lo[2]] == 99;
+    assert ts.triv_chans[ts.triv_lo[2]] == 0;
+}
+
+test "TokenStream empty-text token reports empty (EOF sentinel)" {
+    let chars: List<char> = "x".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo = ts.trivia_mark();
+    ts.push_token(0, 1, 1, lo, ts.trivia_mark());
+    assert ts.is_empty_text(0);
+    assert ts.token_text(0) == "";
 }
 
 test "ParseError::new leaves position at defaults" {
@@ -182,28 +239,36 @@ test "ParseError::new creates error" {
 }
 
 test "TreeRecorder builds CstNode" {
-    let mut rec = TreeRecorder::new();
+    let ts = stream_of("hello world", [
+        [1, 0, 5],
+        [2, 6, 11],
+    ]);
+    let mut rec = TreeRecorder::new(&ts);
     rec.enter_rule(0, &"root", &Span::new(0, 10));
-    rec.visit_token(&Token::new(1, ls("hello"), Span::new(0, 5)));
-    rec.visit_token(&Token::new(2, ls("world"), Span::new(6, 11)));
+    rec.visit_token(&ts, 0);
+    rec.visit_token(&ts, 1);
     rec.exit_rule(0, &"root", &Span::new(0, 10));
     let tree = rec.build();
     assert tree.name == "root";
     assert tree.children.len() == 2;
-    if let Token(t) = tree.children[0] {
-        assert t.text.to_string() == "hello";
+    if let Token(i) = tree.children[0] {
+        assert ts.token_text(i) == "hello";
     } else {
         panic("expected Token");
     }
 }
 
 test "TreeRecorder builds nested tree" {
-    let mut rec = TreeRecorder::new();
+    let ts = stream_of("a234567890b", [
+        [1, 0, 1],
+        [2, 10, 11],
+    ]);
+    let mut rec = TreeRecorder::new(&ts);
     rec.enter_rule(0, &"parent", &Span::new(0, 20));
     rec.enter_rule(1, &"child", &Span::new(0, 5));
-    rec.visit_token(&Token::new(1, ls("a"), Span::new(0, 1)));
+    rec.visit_token(&ts, 0);
     rec.exit_rule(1, &"child", &Span::new(0, 5));
-    rec.visit_token(&Token::new(2, ls("b"), Span::new(10, 11)));
+    rec.visit_token(&ts, 1);
     rec.exit_rule(0, &"parent", &Span::new(0, 20));
     let tree = rec.build();
     assert tree.name == "parent";
@@ -217,23 +282,31 @@ test "TreeRecorder builds nested tree" {
 }
 
 test "to_string_tree leaf token" {
-    let mut rec = TreeRecorder::new();
+    let ts = stream_of("42", [
+        [1, 0, 2],
+    ]);
+    let mut rec = TreeRecorder::new(&ts);
     rec.enter_rule(0, &"root", &Span::new(0, 2));
-    rec.visit_token(&Token::new(1, ls("42"), Span::new(0, 2)));
+    rec.visit_token(&ts, 0);
     rec.exit_rule(0, &"root", &Span::new(0, 2));
     let tree = rec.build();
     assert tree.to_string_tree() == "(root 42)";
 }
 
 test "to_string_tree nested" {
-    let mut rec = TreeRecorder::new();
+    let ts = stream_of("x  + y", [
+        [1, 0, 1],
+        [2, 3, 4],
+        [1, 5, 6],
+    ]);
+    let mut rec = TreeRecorder::new(&ts);
     rec.enter_rule(0, &"a", &Span::new(0, 10));
     rec.enter_rule(1, &"b", &Span::new(0, 2));
-    rec.visit_token(&Token::new(1, ls("x"), Span::new(0, 1)));
+    rec.visit_token(&ts, 0);
     rec.exit_rule(1, &"b", &Span::new(0, 2));
-    rec.visit_token(&Token::new(2, ls("+"), Span::new(3, 4)));
+    rec.visit_token(&ts, 1);
     rec.enter_rule(1, &"b", &Span::new(5, 7));
-    rec.visit_token(&Token::new(1, ls("y"), Span::new(5, 6)));
+    rec.visit_token(&ts, 2);
     rec.exit_rule(1, &"b", &Span::new(5, 7));
     rec.exit_rule(0, &"a", &Span::new(0, 10));
     let tree = rec.build();
@@ -241,10 +314,14 @@ test "to_string_tree nested" {
 }
 
 test "to_string_tree skips empty text tokens" {
-    let mut rec = TreeRecorder::new();
+    let ts = stream_of("x", [
+        [1, 0, 1],
+        [0, 1, 1],
+    ]);
+    let mut rec = TreeRecorder::new(&ts);
     rec.enter_rule(0, &"root", &Span::new(0, 5));
-    rec.visit_token(&Token::new(1, ls("x"), Span::new(0, 1)));
-    rec.visit_token(&Token::new(0, ls(""), Span::new(1, 1)));
+    rec.visit_token(&ts, 0);
+    rec.visit_token(&ts, 1);
     rec.exit_rule(0, &"root", &Span::new(0, 5));
     let tree = rec.build();
     assert tree.to_string_tree() == "(root x)";
@@ -303,11 +380,16 @@ test "HighlightVisitor collects captures from tokens" {
         rule_names: ["root"],
         overrides: [],
     };
+    let ts = stream_of("01234567", [
+        [0, 0, 4],
+        [1, 5, 7],
+        [2, 7, 8],
+    ]);
     let mut visitor = HighlightVisitor::new(mapping);
     visitor.enter_rule(0, &"root", &Span::new(0, 10));
-    visitor.visit_token(&Token::new(0, ls("\"hi\""), Span::new(0, 4)));
-    visitor.visit_token(&Token::new(1, ls("42"), Span::new(5, 7)));
-    visitor.visit_token(&Token::new(2, ls(" "), Span::new(7, 8)));
+    visitor.visit_token(&ts, 0);
+    visitor.visit_token(&ts, 1);
+    visitor.visit_token(&ts, 2);
     visitor.exit_rule(0, &"root", &Span::new(0, 10));
     assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "string";
@@ -326,12 +408,16 @@ test "HighlightVisitor applies context overrides" {
             HighlightOverride { rule_name: "pair", token_kind: 0, capture: "string.special.key" },
         ],
     };
+    let ts = stream_of("0123456789012345", [
+        [0, 0, 5],
+        [0, 11, 16],
+    ]);
     let mut visitor = HighlightVisitor::new(mapping);
     visitor.enter_rule(0, &"root", &Span::new(0, 20));
     visitor.enter_rule(1, &"pair", &Span::new(0, 10));
-    visitor.visit_token(&Token::new(0, ls("\"key\""), Span::new(0, 5)));
+    visitor.visit_token(&ts, 0);
     visitor.exit_rule(1, &"pair", &Span::new(0, 10));
-    visitor.visit_token(&Token::new(0, ls("\"val\""), Span::new(11, 16)));
+    visitor.visit_token(&ts, 1);
     visitor.exit_rule(0, &"root", &Span::new(0, 20));
     assert visitor.captures[0].capture == "string.special.key";
     assert visitor.captures[1].capture == "string";
@@ -343,11 +429,14 @@ test "HighlightVisitor handles trivia" {
         rule_names: ["root"],
         overrides: [],
     };
+    let chars: List<char> = "0123456789a".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo = ts.trivia_mark();
+    ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
+    ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword
     let mut visitor = HighlightVisitor::new(mapping);
-    let trivia: List<Token> = [Token::new(0, ls("/* hi */"), Span::new(0, 8))];
-    let token = Token::with_trivia(1, ls("if"), Span::new(9, 11), trivia);
     visitor.enter_rule(0, &"root", &Span::new(0, 11));
-    visitor.visit_token(&token);
+    visitor.visit_token(&ts, 0);
     visitor.exit_rule(0, &"root", &Span::new(0, 11));
     assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "comment";

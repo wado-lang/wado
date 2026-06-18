@@ -129,7 +129,7 @@ test "generate single-alt struct" {
     assert str_contains(&output, &"pub struct JsonNode {");
     assert str_contains(&output, &"    pub span: Span,");
     assert str_contains(&output, &"    pub value: ValueNode,");
-    assert str_contains(&output, &"    pub eof: Token,");
+    assert str_contains(&output, &"    pub eof: i32,");
 }
 
 test "generate multi-alt variant with labels" {
@@ -173,7 +173,7 @@ test "generate multi-alt variant with labels" {
     assert str_contains(&output, &"    Pass(ExprPass),");
     assert str_contains(&output, &"pub struct ExprBinOp {");
     assert str_contains(&output, &"    pub expr: ExprNode,");
-    assert str_contains(&output, &"    pub plus: Token,");
+    assert str_contains(&output, &"    pub plus: i32,");
     assert str_contains(&output, &"    pub term: TermNode,");
     assert str_contains(&output, &"pub struct ExprPass {");
 }
@@ -256,7 +256,7 @@ test "generate repeat fields" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"    pub item_list: List<ItemNode>,");
-    assert str_contains(&output, &"    pub comma: Option<Token>,");
+    assert str_contains(&output, &"    pub comma: Option<i32>,");
 }
 
 test "generate duplicate field names" {
@@ -376,7 +376,7 @@ test "generate wildcard element" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub struct AnyNode {");
-    assert str_contains(&output, &"    pub wildcard: Token,");
+    assert str_contains(&output, &"    pub wildcard: i32,");
     assert str_contains(&output, &"let wildcard = p.match_any()?;");
 }
 
@@ -411,7 +411,7 @@ test "generate parser not element" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub struct ExceptCommaNode {");
-    assert str_contains(&output, &"    pub not_comma: Token,");
+    assert str_contains(&output, &"    pub not_comma: i32,");
     assert str_contains(&output, &"let not_comma = p.match_not([TK_COMMA])?;");
 }
 
@@ -748,7 +748,7 @@ test "generate lexer channel" {
     // Non-default channels must be routed to trivia, not tokens — ANTLR4
     // hides channels other than DEFAULT from parser rules.
     assert str_contains(&output, &"else if best_channel != 0");
-    assert str_contains(&output, &"Token::with_channel");
+    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
 }
 
 test "generate lexer hidden channel routes to trivia" {
@@ -771,7 +771,7 @@ ID : [a-z]+ ;";
     // stream.
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"else if best_channel != 0");
-    assert str_contains(&output, &"trivia.push(Token::with_channel(");
+    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
 }
 
 test "generate left-associative LR alt passes own_prec+1 on right operand" {
@@ -934,7 +934,7 @@ b : 'y' ;
     assert str_contains(&output, &"return _gale_run(input, |p: &mut Parser| _parse_b(p));");
     assert str_contains(
         &output,
-        &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError>",
+        &"fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError>",
     );
     assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
     assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
@@ -1032,13 +1032,13 @@ C : 'c' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub struct TokNode {");
-    assert str_contains(&output, &"pub token: Token");
+    assert str_contains(&output, &"pub token: i32");
     assert !str_contains(&output, &"pub variant TokNode");
     // Parser is a kind-set check + one construction, not an N-way cascade.
     assert str_contains(&output, &"let token = p.expect(kind)?;");
     assert str_contains(&output, &"TokNode {");
     // Walk visits the single token directly.
-    assert str_contains(&output, &"v.visit_token(&node.token);");
+    assert str_contains(&output, &"v.visit_token(toks, node.token);");
 }
 
 test "labeled single-token alts stay a variant (CST/parse/walk in lockstep)" {
@@ -1399,7 +1399,7 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"let mut val: List<Token>");
+    assert str_contains(&body, &"let mut val: List<i32>");
     assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])");
     assert str_contains(&body, &"val.push(");
 }

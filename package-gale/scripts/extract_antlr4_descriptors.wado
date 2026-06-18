@@ -932,8 +932,8 @@ fn emit_stage_a_err_test_file(
     if is_lexer {
         w.line(&"let tokens = t::tokenize(&input);");
         w.line(&"let mut has_err = false;");
-        w.begin(&"for let tok of &tokens");
-        w.begin(&"if tok.kind == TK_ERROR");
+        w.begin(&"for let mut i = 0; i < tokens.len(); i += 1");
+        w.begin(&"if tokens.kinds[i] == TK_ERROR");
         w.line(&"has_err = true;");
         w.line(&"break;");
         w.end();
@@ -994,7 +994,7 @@ fn emit_stage_a_tokens_test_file(
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
     w.line(&"let tokens = t::tokenize(&input);");
-    w.line(&"let actual = t::to_lexer_string(&tokens, &input, TK_EOF);");
+    w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
     w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
     w.end();
     return w.to_string();

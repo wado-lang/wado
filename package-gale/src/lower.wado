@@ -3563,12 +3563,12 @@ fn op_field_decl(op: &Op) -> Option<FieldDecl> {
     return match op {
         Token(t) => Option::Some(FieldDecl {
             name: t.field,
-            type_str: "Token",
+            type_str: "i32",
             kind: FieldKind::Plain,
         }),
         Literal(l) => Option::Some(FieldDecl {
             name: l.field,
-            type_str: "Token",
+            type_str: "i32",
             kind: FieldKind::Plain,
         }),
         RuleCall(r) => Option::Some(FieldDecl {
@@ -3578,12 +3578,12 @@ fn op_field_decl(op: &Op) -> Option<FieldDecl> {
         }),
         Wildcard(w) => Option::Some(FieldDecl {
             name: w.field,
-            type_str: "Token",
+            type_str: "i32",
             kind: FieldKind::Plain,
         }),
         Excluded(e) => Option::Some(FieldDecl {
             name: e.field,
-            type_str: "Token",
+            type_str: "i32",
             kind: FieldKind::Plain,
         }),
         Repeat(rep) => repeat_field_decl(rep),
@@ -3649,7 +3649,7 @@ fn op_field_decl_for_repeat_inner(op: &Op) -> Option<FieldDecl> {
             Transparent => transparent_group_inner_decl(g),
             TokenOnly(to) => Option::Some(FieldDecl {
                 name: to.field,
-                type_str: "Token",
+                type_str: "i32",
                 kind: FieldKind::Plain,
             }),
             SimpleCst(scst) => Option::Some(FieldDecl {
@@ -3683,7 +3683,7 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
         Transparent => transparent_group_inner_decl(g),
         TokenOnly(to) => Option::Some(FieldDecl {
             name: to.field,
-            type_str: "Token",
+            type_str: "i32",
             kind: FieldKind::Plain,
         }),
         // Standalone SimpleCst / General groups surface as
