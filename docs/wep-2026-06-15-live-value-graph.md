@@ -932,6 +932,22 @@ the bounded, immediately-actionable slice. This is the most direct next lever on
 criterion 1 that does not wait for the whole keystone, and pairs with the
 `cse`-side reuse (the other 330) once cross-pass maintenance is sound.
 
+Correction after reading `hoist_invariant_arith`: the lever is more entangled than
+a one-line `set_loop_entry_value`. The hoisted `let t` is **deferred** — appended
+to `all_hoist_stmts` and prepended before the loop only _after the whole
+`licm_loop` finishes_ — while the in-loop occurrences are rewritten to `Local t`
+_during_ the round. So between rounds the body holds `Local t` reads with **no
+`t` definition in the pre-header yet**; the value graph would see `t` as a
+fallback `Opaque`, and `loop_entry_values` has no entry to set. That transient
+inconsistency is the real reason for the per-round `invalidate`. Making it
+maintainable therefore means restructuring licm to **insert each `let t` into the
+pre-header immediately** (not defer to the caller), then maintain `value_of` +
+`loop_entry_values` across that concrete edit (`replace_expr_kind` already
+maintains the occurrence rewrites; the new `let t` adds one entry whose value is
+the hoisted invariant). Bounded and self-contained, but a real refactor of licm's
+insertion order, not a drop-in — flagged accurately so the keystone session does
+not under-scope it.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
