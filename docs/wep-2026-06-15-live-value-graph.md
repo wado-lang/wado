@@ -662,6 +662,22 @@ findings are the deliverable.
   passes to respect promoted-operand types, confirming early promotion is coupled
   to the pass migration, not a bounded standalone fix.
 
+  Composite-width landed (commit `adecff3ca`): `ValueKind::Binary` / `Unary` now
+  carry the result `TypeId` in the key (part 1 above). Re-tested early promotion —
+  **still invalid Wasm**, and instrumentation pinned a contradiction: the freeze
+  redirects **0** width-mismatched binaries (`lhs_ty != ty`) directly (the guard
+  works), yet early-freeze-**alone** (late freeze disabled) still emits the
+  `i64`/`i32` mismatch on count_prime. So a mismatched `Shr` (`lhs = Int(2,i32)`,
+  `ty = u64`) is extracted as a **descendant** of a redirected value via a path
+  `record_value_tree_types` + `value_fully_reemittable_locally` should both
+  reject (they recurse `Binary`/`Unary`/`Select`; `Cast`/`FieldAccess` children
+  make a parent non-reemittable). The descendant reaching extraction contradicts
+  that model — the next focused step is to instrument the **top** promoted operand
+  and walk its value tree to see exactly how the `i32`-lhs `u64`-`Shr` is reached
+  (and the upstream cause: a `u64` shift whose lhs literal is typed `i32` in NIR —
+  a leaf-mistyping to fix at its source). Experiment + instrumentation discarded;
+  branch green at `adecff3ca`.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
