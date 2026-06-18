@@ -800,6 +800,23 @@ Future-gap (not yet exercised, will open when their kinds are promoted):
 `field_scalarize` (FieldAccess promotion) and `mod_ref` (any promotion before
 const_folding). Tracked so the keystone migration re-checks them.
 
+Next high-leverage culprit: a `copy_prop` + `inline` interaction (skipping
+_either_ fixes it) that miscompiles a _value_ — not a width — under early
+promotion. Confirmed shared across batches: `coerce_float` (`f32 PI: 0.0000004`)
+and `allocator_freelist_*` (a corrupted pointer `0xfffffff8` = -8 trapping in
+`fl_unlink`), so it likely accounts for a large slice of the 111 (the formatting
+
+- allocator families). Localization so far: `extract_value` and binary widths are
+  correct; `copy_prop`'s `analyze_copy_binding` bails on a promoted-value _source_
+  (`value.as_expr()?`), so the source is never promoted; the `read_count += 2`
+  liveness fix (commit `5c0c2c31d`) does not resolve it. The `source_scope_stable`
+  range check _should_ stay sound with a promoted `Opaque(Local target)` read
+  present, so the mechanism resists static reasoning and wants empirical
+  instrumentation (print when copy_prop propagates a binding whose target is in
+  `locals_read_via_promotion`, on `allocator_freelist_align`, and diff the WIR
+  with/without copy_prop). Deferred to the next session as the next batch-clearing
+  brick.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
