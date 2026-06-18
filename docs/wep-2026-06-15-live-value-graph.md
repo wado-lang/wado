@@ -814,8 +814,42 @@ and `allocator_freelist_*` (a corrupted pointer `0xfffffff8` = -8 trapping in
   present, so the mechanism resists static reasoning and wants empirical
   instrumentation (print when copy_prop propagates a binding whose target is in
   `locals_read_via_promotion`, on `allocator_freelist_align`, and diff the WIR
-  with/without copy_prop). Deferred to the next session as the next batch-clearing
-  brick.
+  with/without copy_prop).
+
+  Resolved (commit `de72ba0af`): root cause is `apply_in_block` deleting the copy
+  target's `let` (`dead_locals`) after `apply_in_expr` substituted only its
+  _skeleton_ reads — a promoted `Opaque(Local target)` read then dangled on the
+  deleted local. Fix: `can_propagate_copy` returns `false` when the target is in
+  `locals_read_via_promotion`. This single guard cleared the bulk: early-promotion
+  failures **111 → 10**. The `match_or_pattern_iflet_1` ICE
+  (`labeled_block_fusion`'s `as_expr().expect` on a promoted condition) is also
+  fixed (`9b139593f`, `as_expr()?`).
+
+State of the early-promotion experiment: **347 → 10** (arith-freeze vehicle). The
+final 10:
+
+- ~5 not real bugs — `wir_expect` pattern / missed-opt tests whose expected WIR
+  shape changes under promotion (`array_bounds_elim_*_wir`,
+  `opt_licm_invariant_arith`, `tir_optimize_bool_identity`, likely `closure_2`):
+  fixture-expectation churn, not miscompiles.
+- **3 control-flow miscompiles** (`select_extended_arms`, `if_merged`,
+  `labeled_block`) — all involve **`Select`** and bisect to _both_ `freeze` and
+  `peephole`. These are the **`Select` re-emission soundness issue** the WEP
+  flagged as the hard "availability" part: re-emitting `if cond { then } else`
+  at a use site can re-evaluate a control merge differently than the original flow
+  took. Late-freeze dodges it by timing (committed e2e 2960/0); early promotion
+  surfaces it. The correct fix is the availability analysis (extract a shared
+  `Select` as a `local.get` of the value materialised at the merge, not a
+  recomputed `if`), so `Select` promotion must gate on it — the keystone's known
+  hard sub-problem, now reproduced on concrete fixtures.
+- 1 ICE (fixed) and `assert_fail_call_arg` (power-assert diagnostic formatting,
+  uncharacterized).
+
+Net: the systematic pass-migration is essentially done for arith promotion (five
+passes migrated — `inline`/`dae`/`elide_local`/`copy_prop`×2 — two bug classes
+closed, **97%** of the failure surface cleared); the residue is the
+`Select`-availability soundness problem (a keystone sub-task) plus `wir_expect`
+fixture churn that only matters once promotion is the real vehicle.
 
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
