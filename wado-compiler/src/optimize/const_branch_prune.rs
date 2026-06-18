@@ -104,7 +104,6 @@ fn stmt_has_break_to(body: &Body, stmt: StmtId, label: &str) -> bool {
     has_break_to(body, NodeRef::Stmt(stmt), label)
 }
 
-
 fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
     has_break_to(body, NodeRef::Expr(expr), label)
 }
@@ -205,7 +204,11 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             // value to promote, so leave it untouched (return `false` so the
             // engine does not spin on it).
             if let Some(inner) = value
-                && !expr_has_break_to(engine.body, inner.as_expr().expect("skeleton operand"), &label)
+                && !expr_has_break_to(
+                    engine.body,
+                    inner.as_expr().expect("skeleton operand"),
+                    &label,
+                )
             {
                 engine.become_expr(id, inner.as_expr().expect("skeleton operand"));
                 return true;
@@ -351,9 +354,12 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
         }
         // Unit expression statement → drop.
         if let StmtKind::Expr(op) = &engine.body.stmts[stmt].kind
-            && op
-                .as_value()
-                .is_some_and(|v| matches!(engine.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit))
+            && op.as_value().is_some_and(|v| {
+                matches!(
+                    engine.body.values.kind(v),
+                    crate::nir_value_graph::ValueKind::Unit
+                )
+            })
         {
             continue;
         }

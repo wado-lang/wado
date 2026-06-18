@@ -31,7 +31,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -111,7 +111,9 @@ impl Rule for RefElimRule {
             // `r.field` for an eliminable ref `r` → resolved referent.
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind else {
+                let ExprKind::Local { index, .. } =
+                    &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                else {
                     return false;
                 };
                 let index = *index;
@@ -133,7 +135,9 @@ impl Rule for RefElimRule {
                 expr: inner,
             } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind else {
+                let ExprKind::Local { index, .. } =
+                    &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                else {
                     return false;
                 };
                 let Some(&source_e) = self.deref_sources.get(index) else {
@@ -201,7 +205,9 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 fn is_valid_referent(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            is_valid_referent(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => false,
     }
 }
@@ -319,8 +325,15 @@ fn analyze_node(
     }
 }
 
-fn analyze_expr_operand(body: &Body, op: Operand, rebound: &IndexSet<u32>, refs: &mut IndexMap<u32, RefInfo>)  {
-    if let Some(e) = op.as_expr() { analyze_expr(body, e, rebound, refs); }
+fn analyze_expr_operand(
+    body: &Body,
+    op: Operand,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    if let Some(e) = op.as_expr() {
+        analyze_expr(body, e, rebound, refs);
+    }
 }
 
 fn analyze_expr(
@@ -335,7 +348,8 @@ fn analyze_expr(
         // non-Local inner so nested ref uses are still classified.
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
                 && refs.contains_key(index)
             {
                 return;
@@ -425,8 +439,10 @@ fn deref_collect_node(body: &Body, node: NodeRef, refs: &mut IndexMap<u32, Deref
     }
 }
 
-fn deref_collect_expr_operand(body: &Body, op: Operand, refs: &mut IndexMap<u32, DerefOnlyRef>)  {
-    if let Some(e) = op.as_expr() { deref_collect_expr(body, e, refs); }
+fn deref_collect_expr_operand(body: &Body, op: Operand, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    if let Some(e) = op.as_expr() {
+        deref_collect_expr(body, e, refs);
+    }
 }
 
 fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
@@ -437,7 +453,9 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            {
                 let index = *index;
                 if let Some(info) = refs.get_mut(&index) {
                     info.use_count += 1;

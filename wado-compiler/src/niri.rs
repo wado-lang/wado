@@ -1216,7 +1216,9 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = sink.body().exprs[condition.as_expr().expect("skeleton operand")].kind.clone();
+                let cond_kind = sink.body().exprs[condition.as_expr().expect("skeleton operand")]
+                    .kind
+                    .clone();
                 sink.replace_kind(e, cond_kind);
             } else {
                 sink.replace_kind(
@@ -1690,7 +1692,7 @@ fn try_match_bool_discriminator_a(
 /// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        | ExprKind::Local { .. } => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
                 && is_speculatable_operand_a(body, *left)

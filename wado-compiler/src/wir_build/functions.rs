@@ -611,9 +611,9 @@ fn translate_global_init(
     use crate::wir::WirInstr;
 
     let int_const = |value: u64| match type_table.get(type_id) {
-        ResolvedType::Primitive(
-            PrimitiveType::I64 | PrimitiveType::U64,
-        ) => WirInstr::I64Const(value as i64),
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+            WirInstr::I64Const(value as i64)
+        }
         _ => WirInstr::I32Const(value as i32),
     };
     let float_const = |value: f64| match type_table.get(type_id) {

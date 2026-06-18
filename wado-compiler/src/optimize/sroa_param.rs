@@ -283,7 +283,6 @@ fn check_node(
     }
 }
 
-
 fn check_expr(
     body: &Body,
     id: ExprId,
@@ -296,10 +295,9 @@ fn check_expr(
         ExprKind::Local { index, .. } if *index == idx => false,
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if inner
-                .as_expr()
-                .is_some_and(|e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == idx))
-            {
+            if inner.as_expr().is_some_and(
+                |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == idx),
+            ) {
                 return true;
             }
             check_operand(body, inner, idx, candidates)
@@ -331,8 +329,7 @@ fn check_expr(
             if place_root_local(body, target) == Some(idx) {
                 return false;
             }
-            check_expr(body, target, idx, candidates)
-                && check_operand(body, value, idx, candidates)
+            check_expr(body, target, idx, candidates) && check_operand(body, value, idx, candidates)
         }
         _ => {
             let mut kids = Vec::new();
@@ -429,7 +426,9 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             let inner = *inner;
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
-            body.exprs[id].kind = body.exprs[inner.as_expr().expect("skeleton operand")].kind.clone();
+            body.exprs[id].kind = body.exprs[inner.as_expr().expect("skeleton operand")]
+                .kind
+                .clone();
             return;
         }
     }
@@ -515,7 +514,6 @@ fn rewrite_calls_node(
     }
     changed
 }
-
 
 fn rewrite_call_expr(
     body: &mut Body,
@@ -604,8 +602,16 @@ fn rewrite_call_expr(
     }
 }
 
-fn rewrite_arg_operand(body: &mut Body, op: Operand, info: &SroaInfo, scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>, type_table: &TypeTable)  {
-    if let Some(e) = op.as_expr() { rewrite_arg(body, e, info, scalar_param_struct, type_table); }
+fn rewrite_arg_operand(
+    body: &mut Body,
+    op: Operand,
+    info: &SroaInfo,
+    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        rewrite_arg(body, e, info, scalar_param_struct, type_table);
+    }
 }
 
 fn rewrite_arg(

@@ -273,7 +273,6 @@ fn collect_escaping_in_operand(body: &Body, op: Operand, escaping: &mut IndexSet
     }
 }
 
-
 fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
@@ -455,7 +454,6 @@ fn collect_local_refs_operand(body: &Body, op: Operand, locals: &mut IndexSet<u3
     }
 }
 
-
 fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -614,9 +612,12 @@ fn transform_expr(
             v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => {
-            Walk::Exprs([*left, *right].into_iter().filter_map(Operand::as_expr).collect())
-        }
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(
+            [*left, *right]
+                .into_iter()
+                .filter_map(Operand::as_expr)
+                .collect(),
+        ),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. } => {
@@ -629,7 +630,11 @@ fn transform_expr(
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(condition.as_expr().expect("skeleton operand"), *then_branch, *else_branch),
+        } => Walk::CondBlocks(
+            condition.as_expr().expect("skeleton operand"),
+            *then_branch,
+            *else_branch,
+        ),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -679,7 +684,8 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             let type_id = *type_id;
             let value_span = body.exprs[value.as_expr().expect("skeleton operand")].span;
             // Try pre-lowered form: String::with_capacity(N)
-            if let ExprKind::Call { func, .. } = &body.exprs[value.as_expr().expect("skeleton operand")].kind
+            if let ExprKind::Call { func, .. } =
+                &body.exprs[value.as_expr().expect("skeleton operand")].kind
                 && func.method_info.is_some()
                 && func.name == "String::with_capacity"
             {
@@ -702,7 +708,10 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                     let repr_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Backing.field_name())?;
-                    if !array_new_has_capacity(body, repr_field.value.as_expr().expect("skeleton operand")) {
+                    if !array_new_has_capacity(
+                        body,
+                        repr_field.value.as_expr().expect("skeleton operand"),
+                    ) {
                         return None;
                     }
                     // Verify used field is 0
@@ -729,10 +738,12 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == "__tmpl" => match &body.exprs[val.as_expr().expect("skeleton operand")].kind {
-            ExprKind::Local { index, .. } if *index == buf_local_index => {}
-            _ => return None,
-        },
+        } if label == "__tmpl" => {
+            match &body.exprs[val.as_expr().expect("skeleton operand")].kind {
+                ExprKind::Local { index, .. } if *index == buf_local_index => {}
+                _ => return None,
+            }
+        }
         _ => return None,
     }
 
@@ -1041,7 +1052,8 @@ fn extract_formatter_fields_from_block(
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local = extract_local_from_ref(body, buf_field.value.as_expr().expect("skeleton operand"))?;
+    let buf_inner_local =
+        extract_local_from_ref(body, buf_field.value.as_expr().expect("skeleton operand"))?;
     for s in &body.blocks[block].stmts {
         match &body.stmts[*s].kind {
             StmtKind::Let {
@@ -1080,12 +1092,14 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
-        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => args
-            .first()
-            .and_then(|a| match &body.exprs[a.expr.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Local { index, .. } => Some(*index),
-                _ => None,
-            }),
+        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
+            args.first().and_then(|a| {
+                match &body.exprs[a.expr.as_expr().expect("skeleton operand")].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                }
+            })
+        }
         _ => None,
     }
 }
@@ -1099,7 +1113,8 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
 /// as `expr_mentions_local`. Pinned by the `references_local_matches_only_aliases_not_mentions`
 /// unit test below.
 fn references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
-    op.as_expr().map_or(false, |e| references_local(body, e, local_index))
+    op.as_expr()
+        .map_or(false, |e| references_local(body, e, local_index))
 }
 
 fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
@@ -1116,7 +1131,8 @@ fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
 /// Handles both `&mut local` (NIR form) and `ref.as_non_null(local)` patterns.
 fn buf_field_references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
-    op.as_expr().map_or(false, |e| buf_field_references_local(body, e, local_index))
+    op.as_expr()
+        .map_or(false, |e| buf_field_references_local(body, e, local_index))
 }
 
 fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
@@ -1125,12 +1141,20 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => is_local(body, inner.as_expr().expect("skeleton operand"), local_index),
+        } => is_local(
+            body,
+            inner.as_expr().expect("skeleton operand"),
+            local_index,
+        ),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && is_local(body, args[0].expr.as_expr().expect("skeleton operand"), local_index)
+                && is_local(
+                    body,
+                    args[0].expr.as_expr().expect("skeleton operand"),
+                    local_index,
+                )
         }
         _ => false,
     }
@@ -1478,9 +1502,12 @@ fn rename_local_in_expr(
             v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => {
-            Walk::Exprs([*left, *right].into_iter().filter_map(Operand::as_expr).collect())
-        }
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(
+            [*left, *right]
+                .into_iter()
+                .filter_map(Operand::as_expr)
+                .collect(),
+        ),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. } => {
@@ -1499,7 +1526,11 @@ fn rename_local_in_expr(
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(condition.as_expr().expect("skeleton operand"), *then_branch, *else_branch),
+        } => Walk::CondBlocks(
+            condition.as_expr().expect("skeleton operand"),
+            *then_branch,
+            *else_branch,
+        ),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };

@@ -57,9 +57,16 @@ enum BlockCut {
 /// cost estimate.
 fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e)) => BlockCut::Cold,
+        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e)) => {
+            BlockCut::Cold
+        }
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
-        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| type_table.is_never(body.exprs[e].type_id)) => BlockCut::Diverges,
+        StmtKind::Expr(e)
+            if e.as_expr()
+                .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)) =>
+        {
+            BlockCut::Diverges
+        }
         _ => BlockCut::None,
     }
 }
@@ -145,8 +152,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard
-                            .map_or(0, |g| count_operand(body, g, type_table))
+                        arm.guard.map_or(0, |g| count_operand(body, g, type_table))
                             + count_operand(body, arm.body, type_table)
                     })
                     .sum::<usize>()
@@ -155,7 +161,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
-        | ExprKind::BytesLiteral(_)
+        ExprKind::BytesLiteral(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => 0,
@@ -172,9 +178,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
                     .map(|a| count_operand(body, *a, type_table))
                     .sum::<usize>()
         }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            count_operand(body, *functor, type_table)
-        }
+        ExprKind::ClosureToCanonical { functor, .. } => count_operand(body, *functor, type_table),
         ExprKind::Switch {
             scrutinee,
             arms,
@@ -439,7 +443,11 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
             collect_callees_from_operand(body, *value, callees);
         }
-        StmtKind::Expr(value) => { if let Some(e) = value.as_expr() { collect_callees_from_expr(body, e, callees); } }
+        StmtKind::Expr(value) => {
+            if let Some(e) = value.as_expr() {
+                collect_callees_from_expr(body, e, callees);
+            }
+        }
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
                 collect_callees_from_operand(body, expr, callees);
@@ -603,7 +611,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        | ExprKind::BytesLiteral(_)
+        ExprKind::BytesLiteral(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -794,7 +802,9 @@ fn inline_calls_in_block(
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 Shape::Block(*b)
             }
-            StmtKind::Break { value: Some(v), .. } => v.as_expr().map_or(Shape::None, Shape::Nested),
+            StmtKind::Break { value: Some(v), .. } => {
+                v.as_expr().map_or(Shape::None, Shape::Nested)
+            }
             StmtKind::LetDestructure { value, .. } => {
                 value.as_expr().map_or(Shape::None, Shape::Nested)
             }

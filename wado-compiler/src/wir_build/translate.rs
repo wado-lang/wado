@@ -2337,12 +2337,15 @@ impl FunctionTranslator<'_, '_> {
                 expr: inner,
                 case_index,
                 case_name: _,
-            } => self.translate_variant_test(inner.as_expr().expect("skeleton operand"), *case_index),
+            } => {
+                self.translate_variant_test(inner.as_expr().expect("skeleton operand"), *case_index)
+            }
             ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
                 payload_type: _,
-            } => self.translate_variant_payload(inner.as_expr().expect("skeleton operand"), *case_index),
+            } => self
+                .translate_variant_payload(inner.as_expr().expect("skeleton operand"), *case_index),
             ExprKind::VariantConstruct {
                 variant_type,
                 case_index,
@@ -2410,9 +2413,11 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(callee.as_expr().expect("skeleton operand"), args, expr.type_id)
-            }
+            ExprKind::IndirectCall { callee, args } => self.translate_indirect_call(
+                callee.as_expr().expect("skeleton operand"),
+                args,
+                expr.type_id,
+            ),
             ExprKind::ClosureToCanonical {
                 functor,
                 functor_id,

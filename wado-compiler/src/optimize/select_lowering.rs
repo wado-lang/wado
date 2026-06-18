@@ -16,7 +16,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind, Operand};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -125,20 +125,25 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 /// operators over leaf-pure operands, none of which traps. See the original
 /// pass doc for the full rationale.
 fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
-    op.as_expr().map_or(false, |e| is_select_eligible(body, e, type_table))
+    op.as_expr()
+        .map_or(false, |e| is_select_eligible(body, e, type_table))
 }
 
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[id].kind {
-        | ExprKind::Local { .. } => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
                 && is_select_eligible_operand(body, *inner, type_table)
         }
         ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && left.as_expr().is_none_or(|e| is_select_eligible(body, e, type_table))
-                && right.as_expr().is_none_or(|e| is_select_eligible(body, e, type_table))
+                && left
+                    .as_expr()
+                    .is_none_or(|e| is_select_eligible(body, e, type_table))
+                && right
+                    .as_expr()
+                    .is_none_or(|e| is_select_eligible(body, e, type_table))
         }
         ExprKind::Cast {
             expr: inner,

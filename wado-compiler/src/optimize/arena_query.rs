@@ -37,7 +37,9 @@ pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, inner.as_expr().expect("skeleton operand")),
+        | ExprKind::Index { expr: inner, .. } => {
+            projection_root_local(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => None,
     }
 }
@@ -125,7 +127,8 @@ pub(super) fn is_local_operand(body: &Body, op: Operand, idx: u32) -> bool {
 /// Whether `idx` appears anywhere in the operand. A promoted constant mentions
 /// no local.
 pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
-    op.as_expr().is_some_and(|e| expr_mentions_local(body, e, idx))
+    op.as_expr()
+        .is_some_and(|e| expr_mentions_local(body, e, idx))
 }
 
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
@@ -165,7 +168,7 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
-        | ExprKind::BytesLiteral(_)
+        ExprKind::BytesLiteral(_)
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,

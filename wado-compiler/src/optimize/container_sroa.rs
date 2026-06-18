@@ -686,8 +686,13 @@ fn element_layout_of(
 ///    fall through to form (1) on the inner constructor call. Neither the
 ///    label string nor the builder method name is inspected — only the
 ///    shape of the wrapper.
-fn recognize_init_operand(body: &Body, op: Operand, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
-    op.as_expr().map_or(None, |e| recognize_init(body, e, sig_kinds))
+fn recognize_init_operand(
+    body: &Body,
+    op: Operand,
+    sig_kinds: &SigKindIndex,
+) -> Option<CandidateInit> {
+    op.as_expr()
+        .map_or(None, |e| recognize_init(body, e, sig_kinds))
 }
 
 fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
@@ -753,7 +758,9 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     let brk_val = *brk_val;
     // Break value must be a zero-argument method call whose receiver is `__b`
     // (possibly wrapped in `&`/`&mut`).
-    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val.as_expr().expect("skeleton operand")].kind else {
+    let ExprKind::MethodCall { receiver, args, .. } =
+        &body.exprs[brk_val.as_expr().expect("skeleton operand")].kind
+    else {
         return None;
     };
     if !args.is_empty() {
@@ -765,7 +772,9 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner_ref,
         } => {
-            let ExprKind::Local { index, .. } = &body.exprs[inner_ref.as_expr().expect("skeleton operand")].kind else {
+            let ExprKind::Local { index, .. } =
+                &body.exprs[inner_ref.as_expr().expect("skeleton operand")].kind
+            else {
                 return None;
             };
             *index
@@ -964,7 +973,9 @@ impl WhitelistChecker<'_> {
                 }
                 let receiver = *receiver;
                 let arg0 = args[0].expr;
-                let Some(other) = receiver_local(body, receiver.as_expr().expect("skeleton operand")) else {
+                let Some(other) =
+                    receiver_local(body, receiver.as_expr().expect("skeleton operand"))
+                else {
                     // Receiver isn't a bare local — recurse normally.
                     self.visit_expr(body, e);
                     return false;
@@ -1102,7 +1113,8 @@ impl WhitelistChecker<'_> {
                 } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
                     && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
-                    && let Some(rec_local) = receiver_local(body, receiver.as_expr().expect("skeleton operand"))
+                    && let Some(rec_local) =
+                        receiver_local(body, receiver.as_expr().expect("skeleton operand"))
                     && self.safe.contains(&rec_local)
                 {
                     Some((rec_local, args[0].expr))
@@ -1161,7 +1173,9 @@ fn receiver_local(body: &Body, e: ExprId) -> Option<u32> {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            {
                 Some(*index)
             } else {
                 None
@@ -1294,7 +1308,8 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
-                let per_field = self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout)?;
+                let per_field =
+                    self.decompose_source(engine, arg_ids[0].as_expr()?, arity, &layout)?;
                 let sig = sig_key_of(&func)?;
                 let mut out = Vec::with_capacity(arity);
                 for (k, elem_expr) in per_field.into_iter().enumerate() {
@@ -1415,7 +1430,8 @@ impl Rewriter<'_, '_> {
             } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
-                let other = receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))?;
+                let other =
+                    receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))?;
                 if !ctx.decomposed.contains(&other) {
                     return None;
                 }
@@ -1539,7 +1555,8 @@ impl Rewriter<'_, '_> {
             } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1
-                && let Some(rec_local) = receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
+                && let Some(rec_local) =
+                    receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
                 && ctx.decomposed.contains(&rec_local)
             {
                 sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
@@ -1595,7 +1612,8 @@ impl Rewriter<'_, '_> {
             ..
         } = &engine.body.exprs[e].kind
         {
-            if let Some(rec_local) = receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
+            if let Some(rec_local) =
+                receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
                 && ctx.decomposed.contains(&rec_local)
                 && args.is_empty()
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
@@ -1833,8 +1851,7 @@ fn build_index_reader_call(
 /// re-evaluated N times with no observable side effects).
 fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. } => true,
+        ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
         ExprKind::Binary { left, right, .. } => {
             is_duplicable_operand(body, *left) && is_duplicable_operand(body, *right)
         }

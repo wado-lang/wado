@@ -384,7 +384,8 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = projection_root_local(body, inner.as_expr().expect("skeleton operand")) {
+            if let Some(r) = projection_root_local(body, inner.as_expr().expect("skeleton operand"))
+            {
                 out.insert(r);
             }
         }
@@ -410,21 +411,17 @@ fn collect_mut_escaped_node(
             // promoted-value receiver carries no local root, so it aliases
             // nothing.
             if let Some(re) = receiver.as_expr()
-                && method_mutates_receiver(
-                    body,
-                    re,
-                    func,
-                    first_param_types,
-                    type_table,
-                    true,
-                )
+                && method_mutates_receiver(body, re, func, first_param_types, type_table, true)
                 && let Some(r) = projection_root_local(body, re)
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = arg.expr.as_expr().and_then(|e| projection_root_local(body, e))
+                    && let Some(r) = arg
+                        .expr
+                        .as_expr()
+                        .and_then(|e| projection_root_local(body, e))
                 {
                     out.insert(r);
                 }

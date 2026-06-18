@@ -26,7 +26,7 @@
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -84,7 +84,9 @@ impl Rule for ValueCopyElideRule<'_> {
             let Some(arg) = args.first().map(|a| a.expr) else {
                 continue;
             };
-            let arg_kind = engine.body.exprs[arg.as_expr().expect("skeleton operand")].kind.clone();
+            let arg_kind = engine.body.exprs[arg.as_expr().expect("skeleton operand")]
+                .kind
+                .clone();
             engine.replace_expr_kind(value, arg_kind);
             changed = true;
         }
@@ -205,8 +207,14 @@ fn classify_expr(
 /// potentially field-mutated, following pure projections (`FieldAccess`,
 /// `VariantPayload`, `Cast`, `Unary`). Mirrors `copy_prop`'s
 /// `mark_potentially_mutated_local`.
-fn mark_root_field_mutated_operand(body: &Body, op: Operand, usage: &mut IndexMap<u32, LocalUsage>)  {
-    if let Some(e) = op.as_expr() { mark_root_field_mutated(body, e, usage); }
+fn mark_root_field_mutated_operand(
+    body: &Body,
+    op: Operand,
+    usage: &mut IndexMap<u32, LocalUsage>,
+) {
+    if let Some(e) = op.as_expr() {
+        mark_root_field_mutated(body, e, usage);
+    }
 }
 
 fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, LocalUsage>) {
@@ -227,7 +235,6 @@ fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, 
 // ──────────────────────────────────────────────────────────────────────────────
 // Wrapper stripping
 // ──────────────────────────────────────────────────────────────────────────────
-
 
 fn is_value_copy_call(
     body: &Body,
@@ -254,7 +261,9 @@ fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::Unary { expr: inner, .. } => arg_source_root(body, inner.as_expr().expect("skeleton operand")),
+        | ExprKind::Unary { expr: inner, .. } => {
+            arg_source_root(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => None,
     }
 }

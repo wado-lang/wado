@@ -502,10 +502,9 @@ impl ValuePool {
     ) -> bool {
         let rep = self.find(id);
         match self.kind(rep).clone() {
-            ValueKind::Int(_)
-            | ValueKind::Float(_)
-            | ValueKind::Bool(_)
-            | ValueKind::Char(_) => true,
+            ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_) => {
+                true
+            }
             ValueKind::Opaque(op) => match self.opaque_source(op) {
                 Some(OpaqueSource::Local(idx)) => !mut_locals.contains(&idx),
                 _ => false,

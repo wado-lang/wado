@@ -105,9 +105,9 @@ impl Collector<'_> {
         match func.monomorphized_builtin_name().as_deref() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
-            Some("builtin::array_clone" | "builtin::array_clone_shallow") => {
-                args.first().map(|a| clone_source_type(body, a.expr.as_expr().expect("skeleton operand")))
-            }
+            Some("builtin::array_clone" | "builtin::array_clone_shallow") => args
+                .first()
+                .map(|a| clone_source_type(body, a.expr.as_expr().expect("skeleton operand"))),
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
             Some("builtin::copy_value") => Some(node.type_id),
@@ -191,7 +191,9 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
         _ => arg.into(),
     };
     match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-        ExprKind::FieldAccess { expr, .. } => body.exprs[expr.as_expr().expect("skeleton operand")].type_id,
+        ExprKind::FieldAccess { expr, .. } => {
+            body.exprs[expr.as_expr().expect("skeleton operand")].type_id
+        }
         _ => body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
     }
 }

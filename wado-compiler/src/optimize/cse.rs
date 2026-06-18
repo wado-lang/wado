@@ -391,8 +391,10 @@ fn collect_exprs_in_block(body: &Body, block: BlockId, out: &mut Vec<ExprId>) {
     }
 }
 
-fn collect_exprs_in_operand(body: &Body, op: Operand, out: &mut Vec<ExprId>)  {
-    if let Some(e) = op.as_expr() { collect_exprs_in_expr(body, e, out); }
+fn collect_exprs_in_operand(body: &Body, op: Operand, out: &mut Vec<ExprId>) {
+    if let Some(e) = op.as_expr() {
+        collect_exprs_in_expr(body, e, out);
+    }
 }
 
 fn collect_exprs_in_expr(body: &Body, expr: ExprId, out: &mut Vec<ExprId>) {

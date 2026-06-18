@@ -68,7 +68,9 @@
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -524,7 +526,7 @@ impl ModRef {
             }
 
             // === Pure value-producing leaves ===
-            | ExprKind::Dead => {}
+            ExprKind::Dead => {}
         }
     }
 
@@ -1396,16 +1398,15 @@ mod tests {
     // A promoted string literal lives as `Operand::Value(String)`; it has no
     // `ExprKind`. Returned as the operand a real `&"..."` would reference.
     fn string_val(body: &mut Body, s: &str) -> Operand {
-        Operand::Value(
-            body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::String(s.to_string()), ty()),
-        )
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::String(s.to_string()),
+            ty(),
+        ))
     }
 
     fn bytes_lit(body: &mut Body) -> ExprId {
         pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
     }
-
 
     #[test]
     fn string_literal_allocates() {

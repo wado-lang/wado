@@ -19,7 +19,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind, Operand};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -172,7 +172,8 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if place_root_local(body, inner.as_expr().expect("skeleton operand")) == Some(local) {
+                if place_root_local(body, inner.as_expr().expect("skeleton operand")) == Some(local)
+                {
                     return true;
                 }
             }
@@ -265,8 +266,16 @@ fn analyze_stmt(
     }
 }
 
-fn analyze_expr_operand(body: &Body, op: Operand, result: &mut AnalysisResult, type_table: &TypeTable, fpt: &FirstParamTypes)  {
-    if let Some(e) = op.as_expr() { analyze_expr(body, e, result, type_table, fpt); }
+fn analyze_expr_operand(
+    body: &Body,
+    op: Operand,
+    result: &mut AnalysisResult,
+    type_table: &TypeTable,
+    fpt: &FirstParamTypes,
+) {
+    if let Some(e) = op.as_expr() {
+        analyze_expr(body, e, result, type_table, fpt);
+    }
 }
 
 fn analyze_expr(
@@ -286,7 +295,8 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                && let ExprKind::Local { index, .. } =
+                    &body.exprs[inner.as_expr().expect("skeleton operand")].kind
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
@@ -367,8 +377,10 @@ fn analyze_expr(
     }
 }
 
-fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut AnalysisResult)  {
-    if let Some(e) = op.as_expr() { mark_potentially_mutated_local(body, e, result); }
+fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut AnalysisResult) {
+    if let Some(e) = op.as_expr() {
+        mark_potentially_mutated_local(body, e, result);
+    }
 }
 
 fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut AnalysisResult) {
@@ -376,7 +388,6 @@ fn mark_potentially_mutated_local(body: &Body, expr: ExprId, result: &mut Analys
         result.usage.entry(root).or_default().has_field_mutation = true;
     }
 }
-
 
 fn may_mutate_through_arg(body: &Body, expr: ExprId, type_table: &TypeTable) -> bool {
     matches!(

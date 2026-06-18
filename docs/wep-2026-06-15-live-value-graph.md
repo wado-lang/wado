@@ -421,6 +421,60 @@ is tracked against the three acceptance criteria, not against incidental speedup
 - [ ] **Retire the intra-procedural iteration count.** The graph and worklist
       self-converge; keep an outer round count only for the interprocedural cycle.
 
+### Extraction proven; the rebuild win is all-or-nothing
+
+A late, in-pipeline freeze pass (`optimize/extract.rs::freeze_pure_arith`,
+run after every other pass) was built to exercise the extractor end-to-end on
+real programs. It redirects a pure-arith node (`Binary` / pure `Unary`) to its
+`Operand::Value` when the value is re-emittable, and WIR build materialises it
+via `extract_value`. It is full-e2e green (7397/0). What it established:
+
+- The extractor works on real arithmetic: `extract_value` lowers
+  `Binary` / `Unary` recursively (shared with the skeleton path via
+  `emit_binary_wir` / `emit_unary_wir`) and re-emits an `Opaque` leaf as
+  `local.get idx` (`OpaqueSource::Local`) or a scheduled skeleton expr
+  (`OpaqueSource::Expr`).
+- Soundness constraints the extractor needs, each now enforced and tested:
+  - Only single-assignment locals freeze (`mut` / loop locals reject — a
+    `local.get` at the use site must read the opaque's version).
+  - `ValueKind` is type-erased and hash-consed, so a value shared between two
+    differently-typed uses (`a+b` as `i32` and `i64`; `0.0` as `f32`/`f64`)
+    can carry only one width — freeze skips on a width conflict; `Cast` is
+    excluded (operand source type unrecoverable from the value tree).
+  - The WEP's "main code-quality risk" is real: freezing a multi-use value
+    duplicates its computation (`t*t` extracted twice loses `local.tee`). The
+    freeze skips values whose extraction duplicates `Binary` / `Unary` work —
+    a conservative stand-in for the share-vs-duplicate cost model.
+  - The verify oracle compares only _live_ exprs (an orphaned node a freeze
+    redirected away is never emitted and cannot miscompile).
+
+The decisive finding: this freeze does **not** move `rebuilds` (measured 119,
+unchanged). `rebuilds` is **all-or-nothing** — the per-pass `builder::build`
+walks the body to derive every value not already in an operand slot, so it
+runs in full until _every_ value (locals, calls, `FieldAccess`, `Select`,
+`LoopPhi`) is frozen. Partial freezing, late or early, leaves the build intact.
+A persisted derived `value_of` is not a path either: cross-pass reuse needs
+precise per-edit maintenance, which for flow values is exactly operand
+promotion (the side-table-reuse alternative coarsens — a quality regression —
+and `licm::hoist_invariant_arith` still `invalidate_value_graph()`s because
+`loop_entry_values` recurrence is unmaintained). So criteria 1/2 sit behind one
+atomic change with no intermediate measurable win:
+
+1. Relocate the builder's `current_value` flow-walk into `lower::translate`;
+   build the graph once while lowering.
+2. Freeze every read into its operand slot: single-assignment `Local` →
+   `Opaque(Local)`; call result → scheduled skeleton `let` + `Opaque(Expr)`;
+   merges → `Select`; loop recurrence → `LoopPhi`; pure `FieldAccess` at a
+   heap version. Extend `extract_value` per kind (the arith/opaque half is
+   proven above).
+3. Migrate every value- and skeleton-walking pass to consume `Operand` /
+   `Body::values`; structural passes (`inline` / `sroa`) grow the graph at
+   splice points. Retire `value_of` and per-pass `builder::build`.
+
+Done this round (prerequisites): scalars / `Null` / `String` / `Unit` promoted;
+`ExprKind::Dead` tombstone split; the extraction machinery + `OpaqueSource` +
+`value_fully_reemittable_locally` + the freeze, all full-e2e green.
+
 ## Operand-promotion migration order
 
 The representation change is wide and lands red across the pipeline. The order

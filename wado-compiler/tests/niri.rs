@@ -64,13 +64,19 @@ fn int_lit(value: u64, type_id: TypeId, _repr: &str) -> Build {
 
 fn float_lit(value: f64, type_id: TypeId, _repr: &str) -> Build {
     Rc::new(move |b| {
-        Operand::Value(b.values.alloc_unshared(ValueKind::Float(value.to_bits()), type_id))
+        Operand::Value(
+            b.values
+                .alloc_unshared(ValueKind::Float(value.to_bits()), type_id),
+        )
     })
 }
 
 fn bool_lit(value: bool) -> Build {
     Rc::new(move |b| {
-        Operand::Value(b.values.alloc_unshared(ValueKind::Bool(value), TypeTable::BOOL))
+        Operand::Value(
+            b.values
+                .alloc_unshared(ValueKind::Bool(value), TypeTable::BOOL),
+        )
     })
 }
 
@@ -2086,14 +2092,7 @@ fn match_expr(scrutinee: Build, arms: Vec<ArmBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let expr = scrutinee(b);
         let arms = arms.iter().map(|a| a(b)).collect();
-        Operand::Expr(pe(
-            b,
-            ExprKind::Match {
-                expr,
-                arms,
-            },
-            type_id,
-        ))
+        Operand::Expr(pe(b, ExprKind::Match { expr, arms }, type_id))
     })
 }
 

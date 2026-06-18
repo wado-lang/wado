@@ -513,10 +513,12 @@ impl<'a> Builder<'a> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: inner,
-            } => inner.as_expr().and_then(|ie| match &self.body.exprs[ie].kind {
-                ExprKind::Local { index, .. } => Some(*index),
-                _ => None,
-            }),
+            } => inner
+                .as_expr()
+                .and_then(|ie| match &self.body.exprs[ie].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                }),
             _ => None,
         };
         match target {
@@ -592,9 +594,10 @@ impl<'a> Builder<'a> {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                let v = self
-                    .walk_operand(value)
-                    .unwrap_or_else(|| self.pool.fresh_opaque_with_source(OpaqueSource::Local(local_index)));
+                let v = self.walk_operand(value).unwrap_or_else(|| {
+                    self.pool
+                        .fresh_opaque_with_source(OpaqueSource::Local(local_index))
+                });
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
@@ -786,8 +789,10 @@ impl<'a> Builder<'a> {
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        let bare_local =
-                            matches!(&self.body.exprs[recv.as_expr().expect("skeleton operand")].kind, ExprKind::Local { .. });
+                        let bare_local = matches!(
+                            &self.body.exprs[recv.as_expr().expect("skeleton operand")].kind,
+                            ExprKind::Local { .. }
+                        );
                         let root = self.receiver_root(recv.as_expr().expect("skeleton operand"));
                         let recv_v = self.walk_operand(*recv);
                         Some((root, recv_v, bare_local))
@@ -946,10 +951,14 @@ impl<'a> Builder<'a> {
                 // Reference look-through: a read `r.f` where `r = &v` forwards
                 // from `v`'s field slot (the pointee's current VN / root),
                 // using `v`'s live slot state so a stale forward is impossible.
-                let (recv, root) = match self.reference_lookthrough(inner.as_expr().expect("skeleton operand")) {
-                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                    None => (walked, self.receiver_root(inner.as_expr().expect("skeleton operand"))),
-                };
+                let (recv, root) =
+                    match self.reference_lookthrough(inner.as_expr().expect("skeleton operand")) {
+                        Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
+                        None => (
+                            walked,
+                            self.receiver_root(inner.as_expr().expect("skeleton operand")),
+                        ),
+                    };
                 let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
@@ -1033,7 +1042,6 @@ impl<'a> Builder<'a> {
         }
     }
 
-
     /// Seed the field-store map from a `let x = S { f: v, … }` binding so a
     /// later `x.f` read forwards `v`. Wrappers are peered through to the
     /// sole producing tail: an unlabeled `Block`'s trailing expression, or a
@@ -1093,7 +1101,9 @@ impl<'a> Builder<'a> {
                         .iter()
                         .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || value.as_expr().is_some_and(|ve| block_breaks_to_node(self.body, NodeRef::Expr(ve), &label))
+                        || value.as_expr().is_some_and(|ve| {
+                            block_breaks_to_node(self.body, NodeRef::Expr(ve), &label)
+                        })
                     {
                         return;
                     }
@@ -1110,10 +1120,7 @@ impl<'a> Builder<'a> {
         };
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
-        let pairs: Vec<(u32, Operand)> = fields
-            .iter()
-            .map(|f| (f.field_index, f.value))
-            .collect();
+        let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
         for (field_index, field_value) in pairs {
             // A promoted constant field is its own `ValueId`; a skeleton field is
             // resolved through `value_of`.
@@ -1693,7 +1700,9 @@ fn is_builtin_pure_call(func: &FunctionRef) -> bool {
 fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            root_local_of(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => None,
     }
 }
@@ -1721,7 +1730,6 @@ fn collect_loop_heap_node(body: &Body, node: NodeRef, eff: &mut LoopHeapEffects)
         collect_loop_heap_node(body, c, eff);
     }
 }
-
 
 fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
     match &body.exprs[e].kind {
@@ -1770,7 +1778,8 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Call { func, args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
+                    && let ExprKind::Local { index, .. } =
+                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1780,12 +1789,15 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[receiver.as_expr().expect("skeleton operand")].kind
+            {
                 eff.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
+                    && let ExprKind::Local { index, .. } =
+                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1843,8 +1855,10 @@ fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::I
     }
 }
 
-fn collect_writes_in_operand(body: &Body, op: Operand, out: &mut crate::hashmap::IndexSet<u32>)  {
-    if let Some(e) = op.as_expr() { collect_writes_in_expr(body, e, out); }
+fn collect_writes_in_operand(body: &Body, op: Operand, out: &mut crate::hashmap::IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_writes_in_expr(body, e, out);
+    }
 }
 
 fn collect_writes_in_expr(body: &Body, expr: ExprId, out: &mut crate::hashmap::IndexSet<u32>) {
@@ -1938,10 +1952,10 @@ mod tests {
     }
 
     fn int_lit(body: &mut Body, value: u64) -> Operand {
-        Operand::Value(
-            body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(value), TypeTable::I32),
-        )
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(value),
+            TypeTable::I32,
+        ))
     }
 
     fn local_ref(body: &mut Body, idx: u32) -> ExprId {
@@ -2022,7 +2036,12 @@ mod tests {
         )
     }
 
-    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: impl Into<Operand>) -> StmtId {
+    fn field_assign_stmt(
+        body: &mut Body,
+        recv: ExprId,
+        field_index: u32,
+        value: impl Into<Operand>,
+    ) -> StmtId {
         let target = field_access(body, recv, field_index);
         let assign = alloc_expr(
             body,

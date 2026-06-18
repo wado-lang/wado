@@ -779,10 +779,8 @@ impl<'a> NirUnparser<'a> {
                 ..
             } => {
                 let struct_name = struct_name.clone();
-                let field_data: Vec<(String, Operand)> = fields
-                    .iter()
-                    .map(|f| (f.name.clone(), f.value))
-                    .collect();
+                let field_data: Vec<(String, Operand)> =
+                    fields.iter().map(|f| (f.name.clone(), f.value)).collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
                 if matches!(self.type_table.get(ty), crate::tir::ResolvedType::Ref(_)) {

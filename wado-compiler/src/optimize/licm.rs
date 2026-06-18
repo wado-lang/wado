@@ -25,7 +25,9 @@ use std::cell::Cell;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
@@ -458,23 +460,26 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => inner.as_expr().map(Child::Expr).into_iter().collect(),
+        | ExprKind::VariantPayload { expr: inner, .. } => {
+            inner.as_expr().map(Child::Expr).into_iter().collect()
+        }
         ExprKind::Binary { left, right, .. }
         | ExprKind::Index {
             expr: left,
             index: right,
         } => [*left, *right].into_iter().filter_map(op_child).collect(),
-        ExprKind::Assign { target, value } => {
-            [Some(Child::Expr(*target)), op_child(*value)].into_iter().flatten().collect()
-        }
+        ExprKind::Assign { target, value } => [Some(Child::Expr(*target)), op_child(*value)]
+            .into_iter()
+            .flatten()
+            .collect(),
         ExprKind::Call { args, .. } => args.iter().filter_map(|a| op_child(a.expr)).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            op_child(*receiver).into_iter()
-                .chain(args.iter().filter_map(|a| op_child(a.expr)))
-                .collect()
-        }
+        ExprKind::MethodCall { receiver, args, .. } => op_child(*receiver)
+            .into_iter()
+            .chain(args.iter().filter_map(|a| op_child(a.expr)))
+            .collect(),
         ExprKind::CmRawCall { args, .. } => args.iter().filter_map(|a| op_child(*a)).collect(),
-        ExprKind::IndirectCall { callee, args } => op_child(*callee).into_iter()
+        ExprKind::IndirectCall { callee, args } => op_child(*callee)
+            .into_iter()
             .chain(args.iter().filter_map(|a| op_child(*a)))
             .collect(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
@@ -483,7 +488,10 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             then_branch,
             else_branch,
         } => {
-            let mut v: Vec<Child> = op_child(*condition).into_iter().chain(std::iter::once(Child::Block(*then_branch))).collect();
+            let mut v: Vec<Child> = op_child(*condition)
+                .into_iter()
+                .chain(std::iter::once(Child::Block(*then_branch)))
+                .collect();
             if let Some(eb) = else_branch {
                 v.push(Child::Block(*eb));
             }
@@ -503,20 +511,25 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             arms,
             default,
             ..
-        } => op_child(*scrutinee).into_iter()
+        } => op_child(*scrutinee)
+            .into_iter()
             .chain(arms.iter().map(|a| Child::Block(*a)))
             .chain(std::iter::once(Child::Block(*default)))
             .collect(),
         ExprKind::Match { expr, arms } => {
             let mut v: Vec<Child> = op_child(*expr).into_iter().collect();
             for arm in arms {
-                if let Some(c) = op_child(arm.body) { v.push(c); }
-                if let Some(g) = arm.guard.and_then(op_child) { v.push(g); }
+                if let Some(c) = op_child(arm.body) {
+                    v.push(c);
+                }
+                if let Some(g) = arm.guard.and_then(op_child) {
+                    v.push(g);
+                }
             }
             v
         }
         // Leaves.
-        | ExprKind::BytesLiteral(_)
+        ExprKind::BytesLiteral(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -533,15 +546,19 @@ fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
             value.as_expr().map(Child::Expr).into_iter().collect()
         }
         StmtKind::Expr(value) => value.as_expr().map(Child::Expr).into_iter().collect(),
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.iter().filter_map(|v| v.as_expr().map(Child::Expr)).collect()
-        }
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => value
+            .iter()
+            .filter_map(|v| v.as_expr().map(Child::Expr))
+            .collect(),
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut v = vec![Child::Expr(condition.as_expr().expect("skeleton operand")), Child::Block(*then_block)];
+            let mut v = vec![
+                Child::Expr(condition.as_expr().expect("skeleton operand")),
+                Child::Block(*then_block),
+            ];
             if let Some(eb) = else_block {
                 v.push(Child::Block(*eb));
             }
@@ -572,8 +589,15 @@ fn collect_modified_vars_in_block(
 /// Mark a local as fully modified if it has a GC struct type and is passed to a
 /// function call (callees can mutate any field). Immutable `&T` locals are
 /// skipped — no callee can mutate the pointee through them.
-fn mark_gc_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
-    if let Some(e) = op.as_expr() { mark_gc_local_as_fully_modified(body, e, modified, type_table); }
+fn mark_gc_local_as_fully_modified_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        mark_gc_local_as_fully_modified(body, e, modified, type_table);
+    }
 }
 
 fn mark_gc_local_as_fully_modified(
@@ -603,7 +627,9 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => inner.as_expr().and_then(|ie| extract_alias_source(body, ie)),
+        } => inner
+            .as_expr()
+            .and_then(|ie| extract_alias_source(body, ie)),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
             let StmtKind::Expr(Operand::Expr(tail_expr)) = &body.stmts[tail].kind else {
@@ -623,7 +649,9 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
             if brk_label != label {
                 return None;
             }
-            brk_value.as_expr().and_then(|e| extract_alias_source(body, e))
+            brk_value
+                .as_expr()
+                .and_then(|e| extract_alias_source(body, e))
         }
         _ => None,
     }
@@ -642,8 +670,10 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 /// Mark a local as fully modified, traversing through unary ops and nested
 /// field accesses to the root.
-fn mark_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars)  {
-    if let Some(e) = op.as_expr() { mark_local_as_fully_modified(body, e, modified); }
+fn mark_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars) {
+    if let Some(e) = op.as_expr() {
+        mark_local_as_fully_modified(body, e, modified);
+    }
 }
 
 fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedVars) {
@@ -663,7 +693,9 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
 fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            is_pure_field_chain(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => false,
     }
 }
@@ -680,8 +712,15 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
 
 /// If `expr` is a `&mut`-reference to a struct passed to a call, record its
 /// pointee as clobbered.
-fn record_mut_ref_clobber_operand(body: &Body, op: Operand, modified: &mut ModifiedVars, type_table: &TypeTable)  {
-    if let Some(e) = op.as_expr() { record_mut_ref_clobber(body, e, modified, type_table); }
+fn record_mut_ref_clobber_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        record_mut_ref_clobber(body, e, modified, type_table);
+    }
 }
 
 fn record_mut_ref_clobber(
@@ -722,7 +761,10 @@ fn record_written_field_type(
         ..
     } = &body.exprs[target].kind
     {
-        let pointee = strip_references(body.exprs[inner.as_expr().expect("skeleton operand")].type_id, type_table);
+        let pointee = strip_references(
+            body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
+            type_table,
+        );
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
@@ -747,7 +789,9 @@ fn mark_assignment_target_as_modified(
             let inner = *inner;
             let field_index = *field_index;
             record_written_field_type(body, e, modified, type_table);
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            {
                 modified.insert_field(*index, field_index);
             } else if is_pure_field_chain(body, inner.as_expr().expect("skeleton operand")) {
                 // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
@@ -878,7 +922,6 @@ fn collect_modified_vars_in_operand(
         collect_modified_vars_in_expr(body, e, modified, type_table);
     }
 }
-
 
 fn collect_modified_vars_in_expr(
     body: &Body,
@@ -1021,7 +1064,7 @@ fn collect_modified_vars_in_expr(
             }
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        | ExprKind::BytesLiteral(_)
+        ExprKind::BytesLiteral(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1030,7 +1073,13 @@ fn collect_modified_vars_in_expr(
             let expr = *expr;
             let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, Option<ExprId>)> = arms
                 .iter()
-                .map(|a| (a.pattern, a.guard.and_then(Operand::as_expr), a.body.as_expr()))
+                .map(|a| {
+                    (
+                        a.pattern,
+                        a.guard.and_then(Operand::as_expr),
+                        a.body.as_expr(),
+                    )
+                })
                 .collect();
             collect_modified_vars_in_operand(body, expr, modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
@@ -1124,7 +1173,6 @@ fn collect_licm_ref_bindings_in_stmt(
     }
 }
 
-
 fn collect_licm_ref_bindings_in_expr(
     body: &Body,
     e: ExprId,
@@ -1209,7 +1257,6 @@ fn find_hoist_candidates_in_stmt(
     }
 }
 
-
 fn find_hoist_candidates_in_expr(
     body: &Body,
     e: ExprId,
@@ -1225,7 +1272,8 @@ fn find_hoist_candidates_in_expr(
         field_index,
         field_name,
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, name } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let ExprKind::Local { index, name } =
+            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
@@ -1330,7 +1378,7 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
 /// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
 fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        | ExprKind::Local { .. } => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)
                 && left
@@ -1588,7 +1636,8 @@ fn replace_hoisted_in_expr(
         field_index,
         ..
     } = &engine.body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let ExprKind::Local { index, .. } =
+            &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
     {
         let index = *index;
         let field_index = *field_index;

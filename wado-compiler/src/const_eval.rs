@@ -89,7 +89,10 @@ impl Value {
         match body.values.kind(v) {
             ValueKind::Int(value) => {
                 let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
-                Some(Self::Int { value: *value, prim })
+                Some(Self::Int {
+                    value: *value,
+                    prim,
+                })
             }
             ValueKind::Float(bits) => {
                 let prim = prim_of(ty, type_table)

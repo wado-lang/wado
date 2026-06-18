@@ -1218,7 +1218,7 @@ impl Body {
                 PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
-                | ExprKind::BytesLiteral(_)
+                ExprKind::BytesLiteral(_)
                 | ExprKind::Dead
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }

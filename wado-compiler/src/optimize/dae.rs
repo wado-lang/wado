@@ -280,7 +280,6 @@ fn validate_in_body(
     }
 }
 
-
 fn validate_call(
     body: &Body,
     id: ExprId,
@@ -302,7 +301,11 @@ fn validate_call(
                     continue;
                 }
                 match args.get(i) {
-                    Some(arg) if arena_query::is_pure_expr(body, arg.expr.as_expr().expect("skeleton operand")) => {}
+                    Some(arg)
+                        if arena_query::is_pure_expr(
+                            body,
+                            arg.expr.as_expr().expect("skeleton operand"),
+                        ) => {}
                     _ => {
                         rejected.insert(key.clone());
                         break;
@@ -326,7 +329,9 @@ fn validate_call(
             // If the rewriter drops the receiver, the MethodCall collapses to
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
-            if drops_receiver && !arena_query::is_pure_expr(body, receiver.as_expr().expect("skeleton operand")) {
+            if drops_receiver
+                && !arena_query::is_pure_expr(body, receiver.as_expr().expect("skeleton operand"))
+            {
                 rejected.insert(key.clone());
             } else {
                 // params[i+1] maps to args[i] regardless of whether position 0
@@ -411,7 +416,6 @@ fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>
     }
     changed
 }
-
 
 fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let key = match &body.exprs[id].kind {

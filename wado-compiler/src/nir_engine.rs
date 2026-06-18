@@ -1600,8 +1600,7 @@ mod tests {
                 ExprKind::Binary { left, op, right } => (*op, *left, *right),
                 _ => return false,
             };
-            let (Some(lv), Some(rv)) =
-                (e.body.operand_const_int(l), e.body.operand_const_int(r))
+            let (Some(lv), Some(rv)) = (e.body.operand_const_int(l), e.body.operand_const_int(r))
             else {
                 return false;
             };
@@ -1717,10 +1716,10 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = Operand::Value(
-                b.values
-                    .alloc_unshared(crate::nir_value_graph::ValueKind::Unit, crate::tir::TypeTable::UNIT),
-            );
+            let unit = Operand::Value(b.values.alloc_unshared(
+                crate::nir_value_graph::ValueKind::Unit,
+                crate::tir::TypeTable::UNIT,
+            ));
             let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]

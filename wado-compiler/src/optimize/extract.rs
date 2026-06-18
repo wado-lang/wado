@@ -285,7 +285,9 @@ mod tests {
             TypeTable::I32,
         );
         // The constant `5` is a pooled value, born as `Operand::Value`.
-        let five_v = body.values.alloc_unshared(ValueKind::Int(5), TypeTable::I32);
+        let five_v = body
+            .values
+            .alloc_unshared(ValueKind::Int(5), TypeTable::I32);
         let s0 = body.stmts.push(StmtNode {
             kind: StmtKind::Expr(sum.into()),
             span: Span::default(),

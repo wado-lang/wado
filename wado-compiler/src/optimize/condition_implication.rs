@@ -691,8 +691,12 @@ impl ArenaOptVisitor for ConditionEliminator {
             _ => None,
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
-            let mut changed = condition.as_expr().is_some_and(|ce| self.visit_expr(engine, ce));
-            let dom = condition.as_expr().and_then(|ce| extract_dominating_guard(engine, ce));
+            let mut changed = condition
+                .as_expr()
+                .is_some_and(|ce| self.visit_expr(engine, ce));
+            let dom = condition
+                .as_expr()
+                .and_then(|ce| extract_dominating_guard(engine, ce));
             let scope_len = self.dom_guards.len();
             if let Some(dg) = dom {
                 self.dom_guards.push(dg);

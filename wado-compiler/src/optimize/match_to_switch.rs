@@ -302,7 +302,10 @@ fn build_switch(
 /// statement slot.
 fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
     let (op, span) = match body {
-        Operand::Expr(e) => (Operand::Expr(engine.clone_expr(e)), engine.body.exprs[e].span),
+        Operand::Expr(e) => (
+            Operand::Expr(engine.clone_expr(e)),
+            engine.body.exprs[e].span,
+        ),
         Operand::Value(_) => (body, arm_span),
     };
     let stmt = engine.alloc_stmt(StmtKind::Expr(op), span);

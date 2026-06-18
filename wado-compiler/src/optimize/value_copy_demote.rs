@@ -222,7 +222,8 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
     for s in &body.blocks[body.root].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
-            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[v.as_expr().expect("skeleton operand")].kind
+            && let ExprKind::StructLiteral { fields, .. } =
+                &body.exprs[v.as_expr().expect("skeleton operand")].kind
         {
             return fields.iter().any(|fld| {
                 fld.name == SeqField::Backing.field_name()
@@ -334,7 +335,9 @@ fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
         | ExprKind::Index { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => arg_source_root(body, inner.as_expr().expect("skeleton operand")),
+        | ExprKind::VariantPayload { expr: inner, .. } => {
+            arg_source_root(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => None,
     }
 }
@@ -875,7 +878,9 @@ impl ElementImmutable<'_, '_, '_> {
                     let value = *value;
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
                         let index = *index;
-                        if is_self_derived_operand(body, value,
+                        if is_self_derived_operand(
+                            body,
+                            value,
                             &self.tainted,
                             self.analyzer.type_table,
                         ) {
@@ -1096,8 +1101,14 @@ fn is_self_derived_op(
         .is_some_and(|e| is_self_derived(body, e, tainted, tt))
 }
 
-fn is_self_derived_operand(body: &Body, op: Operand, tainted: &IndexSet<u32>, tt: &Rc<RefCell<TypeTable>>) -> bool {
-    op.as_expr().map_or(false, |e| is_self_derived(body, e, tainted, tt))
+fn is_self_derived_operand(
+    body: &Body,
+    op: Operand,
+    tainted: &IndexSet<u32>,
+    tt: &Rc<RefCell<TypeTable>>,
+) -> bool {
+    op.as_expr()
+        .map_or(false, |e| is_self_derived(body, e, tainted, tt))
 }
 
 fn is_self_derived(

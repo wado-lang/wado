@@ -40,7 +40,9 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, Rule};
 
 use super::mod_ref::{ModRef, can_move_past};
@@ -135,7 +137,9 @@ fn candidate_inner(body: &Body, stmt: StmtId) -> Operand {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[value.as_expr().expect("skeleton operand")].kind else {
+    let ExprKind::StructLiteral { fields, .. } =
+        &body.exprs[value.as_expr().expect("skeleton operand")].kind
+    else {
         unreachable!("guarded by describe_candidate");
     };
     fields[0].value
@@ -212,7 +216,11 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         StmtKind::LetDestructure { pattern, value, .. } => {
             let (pattern, value) = (*pattern, *value);
             record_pattern_defs(body, pattern, stats);
-            stats_node(body, NodeRef::Expr(value.as_expr().expect("skeleton operand")), stats);
+            stats_node(
+                body,
+                NodeRef::Expr(value.as_expr().expect("skeleton operand")),
+                stats,
+            );
         }
         _ => {
             let mut kids = Vec::new();
@@ -224,7 +232,6 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
     }
 }
 
-
 fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
     match &body.exprs[id].kind {
         ExprKind::FieldAccess {
@@ -234,14 +241,20 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
         } => {
             let inner = *inner;
             let field_name = field_name.clone();
-            if let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            {
                 let index = *index;
                 let s = stats.entry(index).or_default();
                 s.total_reads += 1;
                 s.fieldaccess_reads += 1;
                 s.field_names.insert(field_name);
             } else {
-                stats_node(body, NodeRef::Expr(inner.as_expr().expect("skeleton operand")), stats);
+                stats_node(
+                    body,
+                    NodeRef::Expr(inner.as_expr().expect("skeleton operand")),
+                    stats,
+                );
             }
         }
         ExprKind::Local { index, .. } => {
@@ -399,24 +412,20 @@ fn walk_stmt_for_leftmost(
 ) -> LeftmostWalk {
     match &body.stmts[stmt].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            match value
-                .as_expr()
-                .map_or(LeftmostWalk::Blocked, |ve| {
-                    walk_expr_for_leftmost(body, ve, candidate, field_name)
-                }) {
+            match value.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
+                walk_expr_for_leftmost(body, ve, candidate, field_name)
+            }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
         }
-        StmtKind::Expr(e) => e
-            .as_expr()
-            .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, candidate, field_name)),
+        StmtKind::Expr(e) => e.as_expr().map_or(LeftmostWalk::Pure, |e| {
+            walk_expr_for_leftmost(body, e, candidate, field_name)
+        }),
         StmtKind::Return { value: Some(v) } | StmtKind::Break { value: Some(v), .. } => {
-            match v
-                .as_expr()
-                .map_or(LeftmostWalk::Blocked, |ve| {
-                    walk_expr_for_leftmost(body, ve, candidate, field_name)
-                }) {
+            match v.as_expr().map_or(LeftmostWalk::Blocked, |ve| {
+                walk_expr_for_leftmost(body, ve, candidate, field_name)
+            }) {
                 LeftmostWalk::Found => LeftmostWalk::Found,
                 _ => LeftmostWalk::Blocked,
             }
@@ -437,8 +446,9 @@ fn walk_operand_for_leftmost(
     field_name: &str,
 ) -> LeftmostWalk {
     // A promoted constant is a pure leaf.
-    op.as_expr()
-        .map_or(LeftmostWalk::Pure, |e| walk_expr_for_leftmost(body, e, candidate, field_name))
+    op.as_expr().map_or(LeftmostWalk::Pure, |e| {
+        walk_expr_for_leftmost(body, e, candidate, field_name)
+    })
 }
 
 fn walk_expr_for_leftmost(
@@ -453,7 +463,8 @@ fn walk_expr_for_leftmost(
         ..
     } = &body.exprs[expr].kind
         && fname == field_name
-        && let ExprKind::Local { index, .. } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let ExprKind::Local { index, .. } =
+            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
         && *index == candidate
     {
         return LeftmostWalk::Found;
@@ -490,13 +501,17 @@ fn walk_expr_for_leftmost(
             walk_children_observable(body, args.into_iter(), candidate, field_name)
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let children: Vec<ExprId> = receiver.as_expr().into_iter()
+            let children: Vec<ExprId> = receiver
+                .as_expr()
+                .into_iter()
                 .chain(args.iter().filter_map(|a| a.expr.as_expr()))
                 .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let children: Vec<ExprId> = callee.as_expr().into_iter()
+            let children: Vec<ExprId> = callee
+                .as_expr()
+                .into_iter()
                 .chain(args.iter().filter_map(|o| o.as_expr()))
                 .collect();
             walk_children_observable(body, children.into_iter(), candidate, field_name)
@@ -521,8 +536,7 @@ fn walk_expr_for_leftmost(
                         LeftmostWalk::Found => LeftmostWalk::Found,
                         LeftmostWalk::Blocked => LeftmostWalk::Blocked,
                         LeftmostWalk::Pure => {
-                            match walk_operand_for_leftmost(body, right, candidate, field_name)
-                            {
+                            match walk_operand_for_leftmost(body, right, candidate, field_name) {
                                 LeftmostWalk::Pure => LeftmostWalk::Pure,
                                 _ => LeftmostWalk::Blocked,
                             }

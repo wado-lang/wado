@@ -205,7 +205,9 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand")),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand"))
+        }
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,

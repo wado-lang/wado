@@ -1926,8 +1926,7 @@ fn remove_dead_global_sets_block(
 /// Side-effect check for an operand. A promoted `Operand::Value` is a pure
 /// constant — no side effects, nothing to walk.
 fn operand_has_side_effects(body: &Body, op: Operand) -> bool {
-    op.as_expr()
-        .is_some_and(|e| expr_has_side_effects(body, e))
+    op.as_expr().is_some_and(|e| expr_has_side_effects(body, e))
 }
 
 fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
@@ -1950,8 +1949,7 @@ fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
         ExprKind::Match { expr, arms } => {
             operand_has_side_effects(body, *expr)
                 || arms.iter().any(|a| {
-                    a.guard
-                        .is_some_and(|g| operand_has_side_effects(body, g))
+                    a.guard.is_some_and(|g| operand_has_side_effects(body, g))
                         || operand_has_side_effects(body, a.body)
                 })
         }
@@ -1976,9 +1974,7 @@ fn block_has_side_effects(body: &Body, block: BlockId) -> bool {
         .any(|s| match &body.stmts[*s].kind {
             StmtKind::Expr(e) => e.as_expr().is_some_and(|e| expr_has_side_effects(body, e)),
             StmtKind::Let { value, .. } => operand_has_side_effects(body, *value),
-            StmtKind::Return { value } => {
-                value.is_some_and(|v| operand_has_side_effects(body, v))
-            }
+            StmtKind::Return { value } => value.is_some_and(|v| operand_has_side_effects(body, v)),
             StmtKind::If {
                 condition,
                 then_block,

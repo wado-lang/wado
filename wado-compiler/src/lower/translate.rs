@@ -898,7 +898,11 @@ impl FunctionTranslator<'_, '_> {
         };
         match vk {
             Some(vk) => {
-                let vid = self.arena.borrow_mut().values.alloc_unshared(vk, expr.type_id);
+                let vid = self
+                    .arena
+                    .borrow_mut()
+                    .values
+                    .alloc_unshared(vk, expr.type_id);
                 Operand::Value(vid)
             }
             None => Operand::Expr(self.convert_expr(expr)),
