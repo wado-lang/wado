@@ -475,6 +475,62 @@ Done this round (prerequisites): scalars / `Null` / `String` / `Unit` promoted;
 `ExprKind::Dead` tombstone split; the extraction machinery + `OpaqueSource` +
 `value_fully_reemittable_locally` + the freeze, all full-e2e green.
 
+### Per-pass attribution, and an incremental route under fix-while-advancing
+
+Fresh `WADO_MEASURE_VG` on `benchmark/zlib/zlib_bench.wado -O2` (a stable
+mid-size workload; absolute counts differ from package-gale but the structure is
+invariant):
+
+```
+builds=1077 (first_builds=216, rebuilds=861)
+  by pass cse:  builds=546 (first=216, rebuilds=330)
+  by pass licm: builds=531 (first=0,   rebuilds=531)
+total build node-walks = 573503
+maintenance bound: new nodes 7389 + in-place edits 24012 = 31401 (5.5% of 573503)
+```
+
+So the graph is rebuilt once per _(pass × function × fixpoint-iteration)_: every
+pass opens a fresh `Engine` per function and builds lazily on first query, and
+the outer optimize fixpoint re-enters ~2.5×. `first_builds` (216) is one per
+function; the 861 rebuilds are the redundant re-derivations. Pointwise
+maintenance would touch ~5.5% of that node-walk cost — the ~18× prize behind
+criterion 2.
+
+The "all-or-nothing" claim above is precise only under a **zero code-quality
+regression** bar. The maintenance primitives needed for an _incremental_ route
+already exist and are proven: `Engine::maintain_value_after_edit` /
+`maintain_pure_value` (re-derive a node's pure value, drop what they can't), and
+the `partition_refines` oracle (`WADO_VERIFY_VG`) that certifies the maintained
+graph never over-merges — coarsening (a dropped flow value) is sound, only a
+missed optimization. Under the project's fix-while-advancing rule (interim
+regressions tolerated, then recovered), criterion 1 is reachable by a sequence of
+green-correctness steps rather than one atomic change:
+
+1. **Body-persistent graph.** Move `ValueGraphBuild` (`value_of` +
+   `loop_entry_values`) onto `Body` next to `values: ValuePool`. Build once;
+   never auto-drop. The build runs with a single **fixed conservative config**
+   (alias/`mut_escaped` sets over-approximated up front), so there is no config
+   to re-check on reuse — sidestepping the rejected "config-keyed reuse = cache."
+   A coarser fixed config costs some forwarding precision (a recoverable
+   regression), not soundness.
+2. **Remove the rebuild triggers.** Drop the `value_graph = None` in
+   `set_param_locals` / `set_alias_sets` / `set_value_graph_type_table` (config is
+   fixed at build) and replace `invalidate_value_graph` at structural sites
+   (`licm::hoist_invariant_arith`, `inline`, `sroa`) with **coarsening**: remove
+   the edited subtree's `value_of` entries (and stale `loop_entry_values`) rather
+   than re-deriving — `partition_refines` guards every step.
+3. **Recover the regressions.** Tighten maintenance where the coarsening lost a
+   real optimization (the field-forwarding `licm` relies on, the loop-entry
+   snapshot a hoist staled), measuring byte size back toward parity. This is
+   where loop recurrence eventually wants the `LoopPhi` operand model — but as an
+   optimization-recovery step, not a soundness gate.
+
+This is distinct from both rejected shortcuts: not a cache (no config/revision
+check, no stored build to look up) and not an incremental _rebuild_ (no re-walk
+of a disturbed suffix — maintenance is pointwise). It is the WEP's "live
+maintenance to every pass," sequenced so each step is independently e2e-green and
+moves `rebuilds` down monotonically.
+
 ## Operand-promotion migration order
 
 The representation change is wide and lands red across the pipeline. The order
