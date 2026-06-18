@@ -725,6 +725,23 @@ under promotion). These pass fixes are permanent and reused by the real
 `lower`-emits-operands design; the next step is to keep bisecting the 347 for the
 real-miscompile subset (vs `wir_expect` churn) and migrate those passes.
 
+Next culprit bisected (`array_index_1`, `result: 0` vs `5` — a real miscompile,
+not `wir_expect`): `WADO_SKIP_PASS` shows **`peephole`** is the pass; it runs every
+iteration, so it likely accounts for a large share of the 347. Root cause is the
+same class as the `dae` fix: `elide_local` decides a local is write-only via
+`Engine::is_local_read`, which counts only **skeleton** `Local` mentions (the use
+index) and misses a local read **only through a promoted `Opaque(Local)`** value —
+so a still-read accumulator is elided and its value is lost. The fix needs care:
+`ValuePool::opaque_local_sources` over-approximates (the builder seeds
+`Opaque(Local)` for many locals that are never promoted into a live operand slot),
+so consulting it unconditionally would keep nearly every local and **disable
+`elide_local`**. The precise signal is the `Opaque(Local)` sources of values
+referenced by a **live `Operand::Value` in the skeleton** — a skeleton walk, empty
+in the late-freeze flow (so behavior-neutral there). That precise
+live-promoted-reads query is the next brick (and the general primitive every
+liveness-based pass needs under promotion); deferred rather than rushed because
+the over-approximation trap makes a naive fix a silent quality regression.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
