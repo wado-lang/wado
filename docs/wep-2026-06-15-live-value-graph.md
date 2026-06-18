@@ -867,6 +867,20 @@ final 10:
   correct; the gap needs focused keystone-time work to make the precise walk
   complete. Reverted the speculative raw-`kind` change rather than ship an
   un-understood edit.
+
+  Concrete next lead (derived, not yet validated against the fixture): a real
+  asymmetry between extraction and the liveness walk. `extract_value`'s
+  `Opaque` arm emits `OpaqueSource::Local(idx)` as `local.get idx` **and**
+  `OpaqueSource::Expr(e)` as `translate_expr_inner(e)` — the scheduled skeleton
+  expr, which reads whatever locals `e` reads. But `collect_opaque_locals` only
+  handles `OpaqueSource::Local`; for `OpaqueSource::Expr(e)` it does nothing, so
+  every local read by the scheduled expr behind an `Opaque(Expr)` is invisible to
+  `locals_read_via_promotion`. Fix direction: `collect_opaque_locals` must, for an
+  `OpaqueSource::Expr(e)`, also walk `e`'s skeleton subtree (and its nested
+  operands) for `Local` reads. (Note `opaque_local_sources` also ignores `Expr`
+  sources, so this specific gap is _not_ what the `ELIDE_OVERCONS` probe masked —
+  meaning `select_extended_arms` has at least one _additional_ `Local`-source path
+  the live-slot walk misses; both need closing.)
 - 1 ICE (fixed) and `assert_fail_call_arg` (power-assert diagnostic formatting,
   uncharacterized).
 
