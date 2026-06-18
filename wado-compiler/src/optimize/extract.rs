@@ -157,6 +157,7 @@ pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) ->
             .filter(|(_, l)| l.is_mut)
             .map(|(i, _)| i as u32)
             .collect();
+        let param_set: crate::hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
@@ -190,18 +191,74 @@ pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) ->
                 }
             }
         }
-        // Phase 2: apply. No further graph queries. Stamp `rep`'s tree from the
-        // frozen node's type; skip the freeze on a width conflict (a value
-        // shared with a differently-typed use), which would extract at the
-        // wrong width.
+        // Phase 2: apply. No further graph queries. Group by representative so a
+        // value used by several slots can be **materialised once** (availability
+        // extraction, WEP P2) — a single pre-header `let _av = <value>` whose uses
+        // read `local.get _av` — instead of re-emitting the computation at each
+        // use. Materialisation is gated by `WADO_PROMOTE_EARLY` (keeping the
+        // default byte-identical) and limited to values whose leaves are all
+        // non-`mut` parameters: those are available and unchanged at function
+        // entry, where the `let` is inserted, so it dominates every use soundly.
+        // Other values redirect inline as before. `record_value_tree_types` stamps
+        // the tree's width and skips a width-conflicting value.
+        let promote_early = promote_early_enabled();
+        let mut by_rep: crate::hashmap::IndexMap<ValueId, Vec<ExprId>> =
+            crate::hashmap::IndexMap::default();
         for (id, rep) in to_freeze {
-            let id_ty = engine.body.exprs[id].type_id;
-            if record_value_tree_types(&mut engine, rep, id_ty) {
-                changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(rep));
+            by_rep.entry(rep).or_default().push(id);
+        }
+        for (rep, ids) in by_rep {
+            let id_ty = engine.body.exprs[ids[0]].type_id;
+            if !record_value_tree_types(&mut engine, rep, id_ty) {
+                continue;
+            }
+            let mut leaves = crate::hashmap::IndexSet::default();
+            engine.body.values.collect_opaque_locals(rep, &mut leaves);
+            let materialize = promote_early
+                && ids.len() > 1
+                && !leaves.is_empty()
+                && leaves.iter().all(|l| param_set.contains(l));
+            if materialize {
+                let name = format!("_av_{}", engine.locals().len());
+                let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+                let read = engine
+                    .body
+                    .values
+                    .fresh_opaque_with_source(crate::nir_value_graph::OpaqueSource::Local(av));
+                engine.body.values.set_type(read, id_ty);
+                let let_stmt = engine.alloc_stmt(
+                    crate::nir_arena::StmtKind::Let {
+                        name,
+                        local_index: av,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: id_ty,
+                        value: crate::nir_arena::Operand::Value(rep),
+                        skip_value_copy: true,
+                    },
+                    crate::token::Span::default(),
+                );
+                let root = engine.body.root;
+                let mut stmts = engine.body.blocks[root].stmts.clone();
+                stmts.insert(0, let_stmt);
+                engine.set_block_stmts(root, stmts);
+                for id in ids {
+                    changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
+                }
+            } else {
+                for id in ids {
+                    changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(rep));
+                }
             }
         }
     }
     changed
+}
+
+/// Whether the operand-promotion keystone runs early (mirrors `optimize.rs`); the
+/// freeze's materialisation (WEP P2) is gated on it so the default stays inline.
+fn promote_early_enabled() -> bool {
+    std::env::var_os("WADO_PROMOTE_EARLY").is_some()
 }
 
 /// The constant [`Value`] for `rep` if its representative kind is a scalar
