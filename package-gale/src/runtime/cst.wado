@@ -7,10 +7,9 @@
 
 use { Span, TokenStream } from "./lex.wado";
 
-/// A parse result: the typed root node plus the `TokenStream` its terminal
-/// `i32` indices point into. A token is a bare index, so the tree is only
-/// meaningful alongside its stream; bundling them keeps every consumer
-/// self-contained without per-terminal allocation.
+/// A parse result: the typed root node plus the `TokenStream` its `i32`
+/// terminal indices point into. A token is a bare index, so the tree is
+/// meaningful only with its stream — hence they travel bundled.
 pub struct ParseResult<T> {
     pub root: T,
     pub tokens: TokenStream,
@@ -68,9 +67,8 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
 /// String compares while visitors that care about the name (TreeRecorder)
 /// can still use it.
 ///
-/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index
-/// (tokens are bare indices), so a visitor reads kind/text/span/trivia from
-/// the stream on demand.
+/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index,
+/// so a visitor reads kind/text/span/trivia from the stream on demand.
 pub trait Visitor {
     fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
