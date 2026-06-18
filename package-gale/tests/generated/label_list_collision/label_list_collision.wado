@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -971,13 +971,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -994,29 +997,29 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_stream(input: &String) -> Result<StreamNode, ParseError> {
+pub fn parse_stream(input: &String) -> Result<ParseResult<StreamNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_stream(p));
 }
 
-pub fn parse(input: &String) -> Result<StreamNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<StreamNode>, ParseError> {
     return parse_stream(input);
 }
 
-pub fn walk_stream<V: Visitor>(v: &mut V, node: &StreamNode) {
+pub fn walk_stream<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StreamNode) {
     v.enter_rule(0, &"stream", &node.span);
     for let item of &node.tag {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     for let item of &node.tag_2 {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.eof);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"stream", &node.span);
 }
 
-pub fn to_tree(node: &StreamNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_stream(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<StreamNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_stream(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -1227,33 +1227,33 @@ pub fn parse(input: &String) -> Result<ParseResult<RNode>, ParseError> {
 
 pub fn walk_r<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RNode) {
     v.enter_rule(0, &"r", &node.span);
-    walk_a(v, &node.a);
-    walk_c(v, &node.c);
-    v.visit_token(&node.eof);
+    walk_a(v, toks, &node.a);
+    walk_c(v, toks, &node.c);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"r", &node.span);
 }
 
 pub fn walk_a<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ANode) {
     v.enter_rule(1, &"a", &node.span);
-    v.visit_token(&node.n);
+    v.visit_token(toks, node.n);
     for let item of &node.x_y_list {
-        v.visit_token(&item.x);
-        v.visit_token(&item.y);
+        v.visit_token(toks, item.x);
+        v.visit_token(toks, item.y);
     }
     v.exit_rule(1, &"a", &node.span);
 }
 
 pub fn walk_c<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CNode) {
     v.enter_rule(2, &"c", &node.span);
-    v.visit_token(&node.x);
-    v.visit_token(&node.y);
-    v.visit_token(&node.z);
+    v.visit_token(toks, node.x);
+    v.visit_token(toks, node.y);
+    v.visit_token(toks, node.z);
     v.exit_rule(2, &"c", &node.span);
 }
 
-pub fn to_tree(node: &RNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_r(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<RNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_r(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

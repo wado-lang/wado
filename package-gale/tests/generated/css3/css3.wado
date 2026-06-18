@@ -460,7 +460,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -821,22 +821,22 @@ pub enum TokenKind {
 
 pub struct CharsetItemListItem {
     pub charset: CharsetNode,
-    pub comment_or_space_or_cdo_or_cdc_list: List<Tok>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<i32>,
 }
 
 pub struct ImportsItemListItem {
     pub imports: ImportsNode,
-    pub comment_or_space_or_cdo_or_cdc_list: List<Tok>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<i32>,
 }
 
 pub struct NamespaceItemListItem {
     pub namespace_: NamespaceNode,
-    pub comment_or_space_or_cdo_or_cdc_list: List<Tok>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<i32>,
 }
 
 pub struct NestedStatementItemListItem {
     pub nested_statement: NestedStatementNode,
-    pub comment_or_space_or_cdo_or_cdc_list: List<Tok>,
+    pub comment_or_space_or_cdo_or_cdc_list: List<i32>,
 }
 
 pub struct StylesheetNode {
@@ -846,7 +846,7 @@ pub struct StylesheetNode {
     pub imports_item_list: List<ImportsItemListItem>,
     pub namespace__item_list: List<NamespaceItemListItem>,
     pub nested_statement_item_list: List<NestedStatementItemListItem>,
-    pub eof: Tok,
+    pub eof: i32,
 }
 
 pub variant CharsetNode {
@@ -856,19 +856,19 @@ pub variant CharsetNode {
 
 pub struct CharsetgoodCharset {
     pub span: Span,
-    pub charset: Tok,
+    pub charset: i32,
     pub ws: WsNode,
-    pub string_: Tok,
+    pub string_: i32,
     pub ws_2: WsNode,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws_3: WsNode,
 }
 
 pub struct CharsetbadCharset {
     pub span: Span,
-    pub charset: Tok,
+    pub charset: i32,
     pub ws: WsNode,
-    pub string_: Tok,
+    pub string_: i32,
     pub ws_2: WsNode,
 }
 
@@ -885,7 +885,7 @@ pub variant ImportsGroup0 {
 }
 
 pub struct ImportsGroup0Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ImportsGroup0Alt1 {
@@ -894,12 +894,12 @@ pub struct ImportsGroup0Alt1 {
 
 pub struct ImportsgoodImport0 {
     pub span: Span,
-    pub import_: Tok,
+    pub import_: i32,
     pub ws: WsNode,
     pub group_0: Option<ImportsGroup0>,
     pub ws_2: WsNode,
     pub media_query_list: MediaQueryListNode,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws_3: WsNode,
 }
 
@@ -909,7 +909,7 @@ pub variant ImportsGroup1 {
 }
 
 pub struct ImportsGroup1Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ImportsGroup1Alt1 {
@@ -918,11 +918,11 @@ pub struct ImportsGroup1Alt1 {
 
 pub struct ImportsgoodImport1 {
     pub span: Span,
-    pub import_: Tok,
+    pub import_: i32,
     pub ws: WsNode,
     pub group_1: Option<ImportsGroup1>,
     pub ws_2: WsNode,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws_3: WsNode,
 }
 
@@ -932,7 +932,7 @@ pub variant ImportsGroup2 {
 }
 
 pub struct ImportsGroup2Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ImportsGroup2Alt1 {
@@ -941,7 +941,7 @@ pub struct ImportsGroup2Alt1 {
 
 pub struct ImportsbadImport0 {
     pub span: Span,
-    pub import_: Tok,
+    pub import_: i32,
     pub ws: WsNode,
     pub group_2: Option<ImportsGroup2>,
     pub ws_2: WsNode,
@@ -954,7 +954,7 @@ pub variant ImportsGroup3 {
 }
 
 pub struct ImportsGroup3Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ImportsGroup3Alt1 {
@@ -963,7 +963,7 @@ pub struct ImportsGroup3Alt1 {
 
 pub struct ImportsbadImport1 {
     pub span: Span,
-    pub import_: Tok,
+    pub import_: i32,
     pub ws: WsNode,
     pub group_3: Option<ImportsGroup3>,
     pub ws_2: WsNode,
@@ -985,7 +985,7 @@ pub variant NamespaceGroup0 {
 }
 
 pub struct NamespaceGroup0Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct NamespaceGroup0Alt1 {
@@ -994,12 +994,12 @@ pub struct NamespaceGroup0Alt1 {
 
 pub struct NamespacegoodNamespace {
     pub span: Span,
-    pub namespace: Tok,
+    pub namespace: i32,
     pub ws: WsNode,
     pub namespace_prefix_ws: Option<NamespacePrefixWsItem>,
     pub group_0: Option<NamespaceGroup0>,
     pub ws_2: WsNode,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws_3: WsNode,
 }
 
@@ -1009,7 +1009,7 @@ pub variant NamespaceGroup1 {
 }
 
 pub struct NamespaceGroup1Alt0 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct NamespaceGroup1Alt1 {
@@ -1018,7 +1018,7 @@ pub struct NamespaceGroup1Alt1 {
 
 pub struct NamespacebadNamespace {
     pub span: Span,
-    pub namespace: Tok,
+    pub namespace: i32,
     pub ws: WsNode,
     pub namespace_prefix_ws: Option<NamespacePrefixWsItem>,
     pub group_1: Option<NamespaceGroup1>,
@@ -1032,7 +1032,7 @@ pub struct NamespacePrefixNode {
 
 pub struct MediaNode {
     pub span: Span,
-    pub media: Tok,
+    pub media: i32,
     pub ws: WsNode,
     pub media_query_list: MediaQueryListNode,
     pub group_rule_body: GroupRuleBodyNode,
@@ -1040,7 +1040,7 @@ pub struct MediaNode {
 }
 
 pub struct CommaWsMediaQueryItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub ws: WsNode,
     pub media_query: MediaQueryNode,
 }
@@ -1062,14 +1062,14 @@ pub variant MediaQueryNode {
 }
 
 pub struct AndWsMediaExpressionItem {
-    pub and: Tok,
+    pub and: i32,
     pub ws: WsNode,
     pub media_expression: MediaExpressionNode,
 }
 
 pub struct MediaQueryAlt0 {
     pub span: Span,
-    pub mediaonly_or_not: Option<Tok>,
+    pub mediaonly_or_not: Option<i32>,
     pub ws: WsNode,
     pub media_type: MediaTypeNode,
     pub ws_2: WsNode,
@@ -1088,18 +1088,18 @@ pub struct MediaTypeNode {
 }
 
 pub struct ColonWsExprItem {
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
     pub expr: ExprNode,
 }
 
 pub struct MediaExpressionNode {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub ws: WsNode,
     pub media_feature: MediaFeatureNode,
     pub colon_ws_expr: Option<ColonWsExprItem>,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
@@ -1110,33 +1110,33 @@ pub struct MediaFeatureNode {
 }
 
 pub struct SemicolonWsDeclarationOptItem {
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
     pub declaration: Option<DeclarationNode>,
 }
 
 pub struct PageNode {
     pub span: Span,
-    pub page: Tok,
+    pub page: i32,
     pub ws: WsNode,
     pub pseudo_page: Option<PseudoPageNode>,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_2: WsNode,
     pub declaration: Option<DeclarationNode>,
     pub semicolon_ws_declaration_list: List<SemicolonWsDeclarationOptItem>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_3: WsNode,
 }
 
 pub struct PseudoPageNode {
     pub span: Span,
-    pub colon: Tok,
+    pub colon: i32,
     pub ident: IdentNode,
     pub ws: WsNode,
 }
 
 pub struct CommaWsSelectorItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub ws: WsNode,
     pub selector: SelectorNode,
 }
@@ -1169,25 +1169,25 @@ pub variant CombinatorNode {
 
 pub struct CombinatorAlt0 {
     pub span: Span,
-    pub plus: Tok,
+    pub plus: i32,
     pub ws: WsNode,
 }
 
 pub struct CombinatorAlt1 {
     pub span: Span,
-    pub greater: Tok,
+    pub greater: i32,
     pub ws: WsNode,
 }
 
 pub struct CombinatorAlt2 {
     pub span: Span,
-    pub tilde: Tok,
+    pub tilde: i32,
     pub ws: WsNode,
 }
 
 pub struct CombinatorAlt3 {
     pub span: Span,
-    pub space: Tok,
+    pub space: i32,
     pub ws: WsNode,
 }
 
@@ -1210,7 +1210,7 @@ pub variant SimpleSelectorSequenceGroup0 {
 }
 
 pub struct SimpleSelectorSequenceGroup0Alt0 {
-    pub hash: Tok,
+    pub hash: i32,
 }
 
 pub struct SimpleSelectorSequenceGroup0Alt1 {
@@ -1244,7 +1244,7 @@ pub variant SimpleSelectorSequenceGroup1 {
 }
 
 pub struct SimpleSelectorSequenceGroup1Alt0 {
-    pub hash: Tok,
+    pub hash: i32,
 }
 
 pub struct SimpleSelectorSequenceGroup1Alt1 {
@@ -1284,13 +1284,13 @@ pub struct TypeNamespacePrefixGroup0Alt0 {
 }
 
 pub struct TypeNamespacePrefixGroup0Alt1 {
-    pub star: Tok,
+    pub star: i32,
 }
 
 pub struct TypeNamespacePrefixNode {
     pub span: Span,
     pub group_0: Option<TypeNamespacePrefixGroup0>,
-    pub pipe: Tok,
+    pub pipe: i32,
 }
 
 pub struct ElementNameNode {
@@ -1301,12 +1301,12 @@ pub struct ElementNameNode {
 pub struct UniversalNode {
     pub span: Span,
     pub type_namespace_prefix: Option<TypeNamespacePrefixNode>,
-    pub star: Tok,
+    pub star: i32,
 }
 
 pub struct ClassNameNode {
     pub span: Span,
-    pub dot: Tok,
+    pub dot: i32,
     pub ident: IdentNode,
 }
 
@@ -1320,11 +1320,11 @@ pub struct AttribGroup0Alt0 {
 }
 
 pub struct AttribGroup0Alt1 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ItemWsItemWsItem {
-    pub prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch: Tok,
+    pub prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch: i32,
     pub ws: WsNode,
     pub group_0: Option<AttribGroup0>,
     pub ws_2: WsNode,
@@ -1332,13 +1332,13 @@ pub struct ItemWsItemWsItem {
 
 pub struct AttribNode {
     pub span: Span,
-    pub lbracket: Tok,
+    pub lbracket: i32,
     pub ws: WsNode,
     pub type_namespace_prefix: Option<TypeNamespacePrefixNode>,
     pub ident: IdentNode,
     pub ws_2: WsNode,
     pub item_ws_item_ws: Option<ItemWsItemWsItem>,
-    pub rbracket: Tok,
+    pub rbracket: i32,
 }
 
 pub variant IdentOrFunctionalPseudoGroup {
@@ -1348,17 +1348,17 @@ pub variant IdentOrFunctionalPseudoGroup {
 
 pub struct PseudoNode {
     pub span: Span,
-    pub colon: Tok,
-    pub colon_2: Option<Tok>,
+    pub colon: i32,
+    pub colon_2: Option<i32>,
     pub ident_or_functional_pseudo: Option<IdentOrFunctionalPseudoGroup>,
 }
 
 pub struct FunctionalPseudoNode {
     pub span: Span,
-    pub function_: Tok,
+    pub function_: i32,
     pub ws: WsNode,
     pub expression: ExpressionNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub variant ExpressionGroup0 {
@@ -1372,27 +1372,27 @@ pub variant ExpressionGroup0 {
 }
 
 pub struct ExpressionGroup0Alt0 {
-    pub plus: Tok,
+    pub plus: i32,
 }
 
 pub struct ExpressionGroup0Alt1 {
-    pub minus: Tok,
+    pub minus: i32,
 }
 
 pub struct ExpressionGroup0Alt2 {
-    pub dimension: Tok,
+    pub dimension: i32,
 }
 
 pub struct ExpressionGroup0Alt3 {
-    pub unknowndimension: Tok,
+    pub unknowndimension: i32,
 }
 
 pub struct ExpressionGroup0Alt4 {
-    pub number: Tok,
+    pub number: i32,
 }
 
 pub struct ExpressionGroup0Alt5 {
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct ExpressionGroup0Alt6 {
@@ -1411,11 +1411,11 @@ pub struct ExpressionNode {
 
 pub struct NegationNode {
     pub span: Span,
-    pub pseudonot: Tok,
+    pub pseudonot: i32,
     pub ws: WsNode,
     pub negation_arg: NegationArgNode,
     pub ws_2: WsNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub variant NegationArgNode {
@@ -1439,7 +1439,7 @@ pub struct NegationArgAlt1 {
 
 pub struct NegationArgAlt2 {
     pub span: Span,
-    pub hash: Tok,
+    pub hash: i32,
 }
 
 pub struct NegationArgAlt3 {
@@ -1466,25 +1466,25 @@ pub variant OperatorNode {
 
 pub struct OperatorgoodOperator0 {
     pub span: Span,
-    pub slash: Tok,
+    pub slash: i32,
     pub ws: WsNode,
 }
 
 pub struct OperatorgoodOperator1 {
     pub span: Span,
-    pub comma: Tok,
+    pub comma: i32,
     pub ws: WsNode,
 }
 
 pub struct OperatorgoodOperator2 {
     pub span: Span,
-    pub space: Tok,
+    pub space: i32,
     pub ws: WsNode,
 }
 
 pub struct OperatorbadOperator {
     pub span: Span,
-    pub eq: Tok,
+    pub eq: i32,
     pub ws: WsNode,
 }
 
@@ -1503,19 +1503,19 @@ pub struct PropertygoodProperty0 {
 
 pub struct PropertygoodProperty1 {
     pub span: Span,
-    pub variable: Tok,
+    pub variable: i32,
     pub ws: WsNode,
 }
 
 pub struct PropertybadProperty0 {
     pub span: Span,
-    pub star: Tok,
+    pub star: i32,
     pub ident: IdentNode,
 }
 
 pub struct PropertybadProperty1 {
     pub span: Span,
-    pub lit_u5f: Tok,
+    pub lit_u5f: i32,
     pub ident: IdentNode,
 }
 
@@ -1527,25 +1527,25 @@ pub variant RulesetNode {
 pub struct RulesetknownRuleset {
     pub span: Span,
     pub selector_group: SelectorGroupNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_2: WsNode,
 }
 
 pub struct RulesetunknownRuleset {
     pub span: Span,
     pub any__list: List<AnyNode>,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_2: WsNode,
 }
 
 pub struct SemicolonWsItem {
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
 }
 
@@ -1565,7 +1565,7 @@ pub variant DeclarationNode {
 pub struct DeclarationknownDeclaration {
     pub span: Span,
     pub property_: PropertyNode,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
     pub expr: ExprNode,
     pub prio: Option<PrioNode>,
@@ -1574,14 +1574,14 @@ pub struct DeclarationknownDeclaration {
 pub struct DeclarationunknownDeclaration {
     pub span: Span,
     pub property_: PropertyNode,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
     pub value: ValueNode,
 }
 
 pub struct PrioNode {
     pub span: Span,
-    pub important: Tok,
+    pub important: i32,
     pub ws: WsNode,
 }
 
@@ -1600,7 +1600,7 @@ pub struct ValueGroup0Alt1 {
 }
 
 pub struct ValueGroup0Alt2 {
-    pub atkeyword: Tok,
+    pub atkeyword: i32,
     pub ws: WsNode,
 }
 
@@ -1656,13 +1656,13 @@ pub struct TermknownTerm2 {
 
 pub struct TermknownTerm3 {
     pub span: Span,
-    pub string_: Tok,
+    pub string_: i32,
     pub ws: WsNode,
 }
 
 pub struct TermknownTerm4 {
     pub span: Span,
-    pub unicoderange: Tok,
+    pub unicoderange: i32,
     pub ws: WsNode,
 }
 
@@ -1711,50 +1711,50 @@ pub struct TermbadTerm {
 
 pub struct FunctionNode {
     pub span: Span,
-    pub function_: Tok,
+    pub function_: i32,
     pub ws: WsNode,
     pub expr: ExprNode,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct DxImageTransformNode {
     pub span: Span,
-    pub dximagetransform: Tok,
+    pub dximagetransform: i32,
     pub ws: WsNode,
     pub expr: ExprNode,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct HexcolorNode {
     pub span: Span,
-    pub hash: Tok,
+    pub hash: i32,
     pub ws: WsNode,
 }
 
 pub struct NumberNode {
     pub span: Span,
-    pub plus_or_minus: Option<Tok>,
-    pub number: Tok,
+    pub plus_or_minus: Option<i32>,
+    pub number: i32,
 }
 
 pub struct PercentageNode {
     pub span: Span,
-    pub plus_or_minus: Option<Tok>,
-    pub percentage: Tok,
+    pub plus_or_minus: Option<i32>,
+    pub percentage: i32,
 }
 
 pub struct DimensionNode {
     pub span: Span,
-    pub plus_or_minus: Option<Tok>,
-    pub dimension: Tok,
+    pub plus_or_minus: Option<i32>,
+    pub dimension: i32,
 }
 
 pub struct UnknownDimensionNode {
     pub span: Span,
-    pub plus_or_minus: Option<Tok>,
-    pub unknowndimension: Tok,
+    pub plus_or_minus: Option<i32>,
+    pub unknowndimension: i32,
 }
 
 pub variant AnyNode {
@@ -1807,7 +1807,7 @@ pub struct AnyAlt4 {
 
 pub struct AnyAlt5 {
     pub span: Span,
-    pub string_: Tok,
+    pub string_: i32,
     pub ws: WsNode,
 }
 
@@ -1819,31 +1819,31 @@ pub struct AnyAlt6 {
 
 pub struct AnyAlt7 {
     pub span: Span,
-    pub hash: Tok,
+    pub hash: i32,
     pub ws: WsNode,
 }
 
 pub struct AnyAlt8 {
     pub span: Span,
-    pub unicoderange: Tok,
+    pub unicoderange: i32,
     pub ws: WsNode,
 }
 
 pub struct AnyAlt9 {
     pub span: Span,
-    pub includes: Tok,
+    pub includes: i32,
     pub ws: WsNode,
 }
 
 pub struct AnyAlt10 {
     pub span: Span,
-    pub dashmatch: Tok,
+    pub dashmatch: i32,
     pub ws: WsNode,
 }
 
 pub struct AnyAlt11 {
     pub span: Span,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
 }
 
@@ -1854,28 +1854,28 @@ pub variant AnyOrUnusedGroup {
 
 pub struct AnyAlt12 {
     pub span: Span,
-    pub function_: Tok,
+    pub function_: i32,
     pub ws: WsNode,
     pub any__or_unused_list: List<AnyOrUnusedGroup>,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct AnyAlt13 {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub ws: WsNode,
     pub any__or_unused_list: List<AnyOrUnusedGroup>,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct AnyAlt14 {
     pub span: Span,
-    pub lbracket: Tok,
+    pub lbracket: i32,
     pub ws: WsNode,
     pub any__or_unused_list: List<AnyOrUnusedGroup>,
-    pub rbracket: Tok,
+    pub rbracket: i32,
     pub ws_2: WsNode,
 }
 
@@ -1889,13 +1889,13 @@ pub struct AtRuleGroup0Alt0 {
 }
 
 pub struct AtRuleGroup0Alt1 {
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
 }
 
 pub struct AtRuleNode {
     pub span: Span,
-    pub atkeyword: Tok,
+    pub atkeyword: i32,
     pub ws: WsNode,
     pub any__list: List<AnyNode>,
     pub group_0: Option<AtRuleGroup0>,
@@ -1916,25 +1916,25 @@ pub struct UnusedAlt0 {
 
 pub struct UnusedAlt1 {
     pub span: Span,
-    pub atkeyword: Tok,
+    pub atkeyword: i32,
     pub ws: WsNode,
 }
 
 pub struct UnusedAlt2 {
     pub span: Span,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
 }
 
 pub struct UnusedAlt3 {
     pub span: Span,
-    pub cdo: Tok,
+    pub cdo: i32,
     pub ws: WsNode,
 }
 
 pub struct UnusedAlt4 {
     pub span: Span,
-    pub cdc: Tok,
+    pub cdc: i32,
     pub ws: WsNode,
 }
 
@@ -1964,21 +1964,21 @@ pub struct BlockGroup0Alt3 {
 }
 
 pub struct BlockGroup0Alt4 {
-    pub atkeyword: Tok,
+    pub atkeyword: i32,
     pub ws: WsNode,
 }
 
 pub struct BlockGroup0Alt5 {
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
 }
 
 pub struct BlockNode {
     pub span: Span,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws: WsNode,
     pub group_0_list: List<BlockGroup0>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_2: WsNode,
 }
 
@@ -2047,16 +2047,16 @@ pub struct NestedStatementAlt9 {
 
 pub struct GroupRuleBodyNode {
     pub span: Span,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws: WsNode,
     pub nested_statement_list: List<NestedStatementNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_2: WsNode,
 }
 
 pub struct SupportsRuleNode {
     pub span: Span,
-    pub supports: Tok,
+    pub supports: i32,
     pub ws: WsNode,
     pub supports_condition: SupportsConditionNode,
     pub ws_2: WsNode,
@@ -2098,11 +2098,11 @@ pub variant SupportsConditionInParensNode {
 
 pub struct SupportsConditionInParensAlt0 {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub ws: WsNode,
     pub supports_condition: SupportsConditionNode,
     pub ws_2: WsNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct SupportsConditionInParensAlt1 {
@@ -2117,20 +2117,20 @@ pub struct SupportsConditionInParensAlt2 {
 
 pub struct SupportsNegationNode {
     pub span: Span,
-    pub not: Tok,
+    pub not: i32,
     pub ws: WsNode,
-    pub space: Tok,
+    pub space: i32,
     pub ws_2: WsNode,
     pub supports_condition_in_parens: SupportsConditionInParensNode,
 }
 
 pub struct WsSpaceWsAndWsSpaceWsSupportsConditionInParensItem {
     pub ws: WsNode,
-    pub space: Tok,
+    pub space: i32,
     pub ws_2: WsNode,
-    pub and: Tok,
+    pub and: i32,
     pub ws_3: WsNode,
-    pub space_2: Tok,
+    pub space_2: i32,
     pub ws_4: WsNode,
     pub supports_condition_in_parens: SupportsConditionInParensNode,
 }
@@ -2143,11 +2143,11 @@ pub struct SupportsConjunctionNode {
 
 pub struct WsSpaceWsOrWsSpaceWsSupportsConditionInParensItem {
     pub ws: WsNode,
-    pub space: Tok,
+    pub space: i32,
     pub ws_2: WsNode,
-    pub or: Tok,
+    pub or: i32,
     pub ws_3: WsNode,
-    pub space_2: Tok,
+    pub space_2: i32,
     pub ws_4: WsNode,
     pub supports_condition_in_parens: SupportsConditionInParensNode,
 }
@@ -2160,17 +2160,17 @@ pub struct SupportsDisjunctionNode {
 
 pub struct SupportsDeclarationConditionNode {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub ws: WsNode,
     pub declaration: DeclarationNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct GeneralEnclosedNode {
     pub span: Span,
-    pub function__or_lparen: Tok,
+    pub function__or_lparen: i32,
     pub any__or_unused_list: List<AnyOrUnusedGroup>,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub variant UrlNode {
@@ -2180,43 +2180,43 @@ pub variant UrlNode {
 
 pub struct UrlAlt0 {
     pub span: Span,
-    pub url_: Tok,
+    pub url_: i32,
     pub ws: WsNode,
-    pub string_: Tok,
+    pub string_: i32,
     pub ws_2: WsNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct UrlAlt1 {
     pub span: Span,
-    pub url: Tok,
+    pub url: i32,
 }
 
 pub struct VarNode {
     pub span: Span,
-    pub var: Tok,
+    pub var: i32,
     pub ws: WsNode,
-    pub variable: Tok,
+    pub variable: i32,
     pub ws_2: WsNode,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_3: WsNode,
 }
 
 pub struct CalcNode {
     pub span: Span,
-    pub calc: Tok,
+    pub calc: i32,
     pub ws: WsNode,
     pub calc_sum: CalcSumNode,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct SpaceWsItemWsSpaceWsCalcProductItem {
-    pub space: Tok,
+    pub space: i32,
     pub ws: WsNode,
-    pub plus_or_minus: Tok,
+    pub plus_or_minus: i32,
     pub ws_2: WsNode,
-    pub space_2: Tok,
+    pub space_2: i32,
     pub ws_3: WsNode,
     pub calc_product: CalcProductNode,
 }
@@ -2233,13 +2233,13 @@ pub variant CalcProductGroup0 {
 }
 
 pub struct CalcProductGroup0Alt0 {
-    pub star: Tok,
+    pub star: i32,
     pub ws: WsNode,
     pub calc_value: CalcValueNode,
 }
 
 pub struct CalcProductGroup0Alt1 {
-    pub slash: Tok,
+    pub slash: i32,
     pub ws: WsNode,
     pub number: NumberNode,
     pub ws_2: WsNode,
@@ -2285,28 +2285,28 @@ pub struct CalcValueAlt3 {
 
 pub struct CalcValueAlt4 {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub ws: WsNode,
     pub calc_sum: CalcSumNode,
-    pub rparen: Tok,
+    pub rparen: i32,
     pub ws_2: WsNode,
 }
 
 pub struct SemicolonWsFontFaceDeclarationOptItem {
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws: WsNode,
     pub font_face_declaration: Option<FontFaceDeclarationNode>,
 }
 
 pub struct FontFaceRuleNode {
     pub span: Span,
-    pub fontface: Tok,
+    pub fontface: i32,
     pub ws: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_2: WsNode,
     pub font_face_declaration: Option<FontFaceDeclarationNode>,
     pub semicolon_ws_font_face_declaration_list: List<SemicolonWsFontFaceDeclarationOptItem>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_3: WsNode,
 }
 
@@ -2318,7 +2318,7 @@ pub variant FontFaceDeclarationNode {
 pub struct FontFaceDeclarationknownFontFaceDeclaration {
     pub span: Span,
     pub property_: PropertyNode,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
     pub expr: ExprNode,
 }
@@ -2326,32 +2326,32 @@ pub struct FontFaceDeclarationknownFontFaceDeclaration {
 pub struct FontFaceDeclarationunknownFontFaceDeclaration {
     pub span: Span,
     pub property_: PropertyNode,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws: WsNode,
     pub value: ValueNode,
 }
 
 pub struct KeyframesRuleNode {
     pub span: Span,
-    pub keyframes: Tok,
+    pub keyframes: i32,
     pub ws: WsNode,
-    pub space: Tok,
+    pub space: i32,
     pub ws_2: WsNode,
     pub ident: IdentNode,
     pub ws_3: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_4: WsNode,
     pub keyframe_block_list: List<KeyframeBlockNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_5: WsNode,
 }
 
 pub struct KeyframeSelectorLbraceWsDeclarationListOptRbraceWsItem {
     pub keyframe_selector: KeyframeSelectorNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_2: WsNode,
 }
 
@@ -2361,59 +2361,59 @@ pub struct KeyframeBlockNode {
 }
 
 pub struct CommaWsItemWsItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub ws: WsNode,
-    pub from__or_to_or_percentage: Tok,
+    pub from__or_to_or_percentage: i32,
     pub ws_2: WsNode,
 }
 
 pub struct KeyframeSelectorNode {
     pub span: Span,
-    pub from__or_to_or_percentage: Tok,
+    pub from__or_to_or_percentage: i32,
     pub ws: WsNode,
     pub comma_ws_item_ws_list: List<CommaWsItemWsItem>,
 }
 
 pub struct ViewportNode {
     pub span: Span,
-    pub viewport: Tok,
+    pub viewport: i32,
     pub ws: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_2: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_3: WsNode,
 }
 
 pub struct CounterStyleNode {
     pub span: Span,
-    pub counterstyle: Tok,
+    pub counterstyle: i32,
     pub ws: WsNode,
     pub ident: IdentNode,
     pub ws_2: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_3: WsNode,
     pub declaration_list: Option<DeclarationListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_4: WsNode,
 }
 
 pub struct FontFeatureValuesRuleNode {
     pub span: Span,
-    pub fontfeaturevalues: Tok,
+    pub fontfeaturevalues: i32,
     pub ws: WsNode,
     pub font_family_name_list: FontFamilyNameListNode,
     pub ws_2: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_3: WsNode,
     pub feature_value_block_list: List<FeatureValueBlockNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_4: WsNode,
 }
 
 pub struct WsCommaWsFontFamilyNameItem {
     pub ws: WsNode,
-    pub comma: Tok,
+    pub comma: i32,
     pub ws_2: WsNode,
     pub font_family_name: FontFamilyNameNode,
 }
@@ -2431,7 +2431,7 @@ pub variant FontFamilyNameNode {
 
 pub struct FontFamilyNameAlt0 {
     pub span: Span,
-    pub string_: Tok,
+    pub string_: i32,
 }
 
 pub struct WsIdentItem {
@@ -2447,7 +2447,7 @@ pub struct FontFamilyNameAlt1 {
 
 pub struct WsSemicolonWsFeatureValueDefinitionOptItem {
     pub ws: WsNode,
-    pub semicolon: Tok,
+    pub semicolon: i32,
     pub ws_2: WsNode,
     pub feature_value_definition: Option<FeatureValueDefinitionNode>,
 }
@@ -2456,17 +2456,17 @@ pub struct FeatureValueBlockNode {
     pub span: Span,
     pub feature_type: FeatureTypeNode,
     pub ws: WsNode,
-    pub lbrace: Tok,
+    pub lbrace: i32,
     pub ws_2: WsNode,
     pub feature_value_definition: Option<FeatureValueDefinitionNode>,
     pub ws_semicolon_ws_feature_value_definition_list: List<WsSemicolonWsFeatureValueDefinitionOptItem>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
     pub ws_3: WsNode,
 }
 
 pub struct FeatureTypeNode {
     pub span: Span,
-    pub atkeyword: Tok,
+    pub atkeyword: i32,
 }
 
 pub struct WsNumberItem {
@@ -2478,7 +2478,7 @@ pub struct FeatureValueDefinitionNode {
     pub span: Span,
     pub ident: IdentNode,
     pub ws: WsNode,
-    pub colon: Tok,
+    pub colon: i32,
     pub ws_2: WsNode,
     pub number: NumberNode,
     pub ws_number_list: List<WsNumberItem>,
@@ -2486,12 +2486,12 @@ pub struct FeatureValueDefinitionNode {
 
 pub struct IdentNode {
     pub span: Span,
-    pub token: Tok,
+    pub token: i32,
 }
 
 pub struct WsNode {
     pub span: Span,
-    pub comment_or_space_list: List<Tok>,
+    pub comment_or_space_list: List<i32>,
 }
 
 global TK_OpenBracket: i32 = 0;
@@ -29467,10 +29467,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -29478,10 +29478,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -29493,7 +29493,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -29501,7 +29501,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -29512,7 +29512,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -29533,12 +29533,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -33270,7 +33270,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         if rep_scan_pos < 0 { break; }
         let charset = _parse_charset(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
-        let mut comment_or_space_or_cdo_or_cdc_list: List<Tok> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<i32> = [];
         loop {
             if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33370,7 +33370,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         if rep_scan_pos_2 < 0 { break; }
         let imports = _parse_imports(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
-        let mut comment_or_space_or_cdo_or_cdc_list: List<Tok> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<i32> = [];
         loop {
             if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33470,7 +33470,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         if rep_scan_pos_3 < 0 { break; }
         let namespace_ = _parse_namespace_(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
-        let mut comment_or_space_or_cdo_or_cdc_list: List<Tok> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<i32> = [];
         loop {
             if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33570,7 +33570,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         if rep_scan_pos_4 < 0 { break; }
         let nested_statement = _parse_nested_statement(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
-        let mut comment_or_space_or_cdo_or_cdc_list: List<Tok> = [];
+        let mut comment_or_space_or_cdo_or_cdc_list: List<i32> = [];
         loop {
             if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -34416,7 +34416,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             }
             opt_scan_pos = pos;
         }
-        let mediaonly_or_not: Option<Tok> = if opt_scan_pos >= 0 {
+        let mediaonly_or_not: Option<i32> = if opt_scan_pos >= 0 {
             let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not])?;
             Option::Some(mediaonly_or_not)
         } else {
@@ -35280,7 +35280,7 @@ fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Re
 fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<PseudoNode, ParseError> {
     let start = p.peek_start();
     let colon = p.expect(TK_LIT_COLON)?;
-    let colon_2: Option<Tok> = if p.peek_kind() == TK_LIT_COLON {
+    let colon_2: Option<i32> = if p.peek_kind() == TK_LIT_COLON {
         let colon = p.expect(TK_LIT_COLON)?;
         Option::Some(colon)
     } else {
@@ -36477,7 +36477,7 @@ fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         opt_scan_pos = pos;
     }
-    let plus_or_minus: Option<Tok> = if opt_scan_pos >= 0 {
+    let plus_or_minus: Option<i32> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::Some(plus_or_minus)
     } else {
@@ -36519,7 +36519,7 @@ fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         opt_scan_pos = pos;
     }
-    let plus_or_minus: Option<Tok> = if opt_scan_pos >= 0 {
+    let plus_or_minus: Option<i32> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::Some(plus_or_minus)
     } else {
@@ -36561,7 +36561,7 @@ fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         opt_scan_pos = pos;
     }
-    let plus_or_minus: Option<Tok> = if opt_scan_pos >= 0 {
+    let plus_or_minus: Option<i32> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::Some(plus_or_minus)
     } else {
@@ -36603,7 +36603,7 @@ fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
         opt_scan_pos = pos;
     }
-    let plus_or_minus: Option<Tok> = if opt_scan_pos >= 0 {
+    let plus_or_minus: Option<i32> = if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
         Option::Some(plus_or_minus)
     } else {
@@ -38940,7 +38940,7 @@ fn _parse_ident(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
 
 fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<WsNode, ParseError> {
     let start = p.peek_start();
-    let mut comment_or_space_list: List<Tok> = [];
+    let mut comment_or_space_list: List<i32> = [];
     loop {
         if follow_yields(&p.tokens, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -38988,13 +38988,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -39011,710 +39014,710 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_stylesheet(input: &String) -> Result<StylesheetNode, ParseError> {
+pub fn parse_stylesheet(input: &String) -> Result<ParseResult<StylesheetNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_stylesheet(p));
 }
 
-pub fn parse_charset(input: &String) -> Result<CharsetNode, ParseError> {
+pub fn parse_charset(input: &String) -> Result<ParseResult<CharsetNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_charset(p));
 }
 
-pub fn parse_imports(input: &String) -> Result<ImportsNode, ParseError> {
+pub fn parse_imports(input: &String) -> Result<ParseResult<ImportsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_imports(p));
 }
 
-pub fn parse_namespace_(input: &String) -> Result<NamespaceNode, ParseError> {
+pub fn parse_namespace_(input: &String) -> Result<ParseResult<NamespaceNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_namespace_(p));
 }
 
-pub fn parse_namespace_prefix(input: &String) -> Result<NamespacePrefixNode, ParseError> {
+pub fn parse_namespace_prefix(input: &String) -> Result<ParseResult<NamespacePrefixNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_namespace_prefix(p));
 }
 
-pub fn parse_media(input: &String) -> Result<MediaNode, ParseError> {
+pub fn parse_media(input: &String) -> Result<ParseResult<MediaNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media(p));
 }
 
-pub fn parse_media_query_list(input: &String) -> Result<MediaQueryListNode, ParseError> {
+pub fn parse_media_query_list(input: &String) -> Result<ParseResult<MediaQueryListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media_query_list(p));
 }
 
-pub fn parse_media_query(input: &String) -> Result<MediaQueryNode, ParseError> {
+pub fn parse_media_query(input: &String) -> Result<ParseResult<MediaQueryNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media_query(p));
 }
 
-pub fn parse_media_type(input: &String) -> Result<MediaTypeNode, ParseError> {
+pub fn parse_media_type(input: &String) -> Result<ParseResult<MediaTypeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media_type(p));
 }
 
-pub fn parse_media_expression(input: &String) -> Result<MediaExpressionNode, ParseError> {
+pub fn parse_media_expression(input: &String) -> Result<ParseResult<MediaExpressionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media_expression(p));
 }
 
-pub fn parse_media_feature(input: &String) -> Result<MediaFeatureNode, ParseError> {
+pub fn parse_media_feature(input: &String) -> Result<ParseResult<MediaFeatureNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_media_feature(p));
 }
 
-pub fn parse_page(input: &String) -> Result<PageNode, ParseError> {
+pub fn parse_page(input: &String) -> Result<ParseResult<PageNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_page(p));
 }
 
-pub fn parse_pseudo_page(input: &String) -> Result<PseudoPageNode, ParseError> {
+pub fn parse_pseudo_page(input: &String) -> Result<ParseResult<PseudoPageNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_pseudo_page(p));
 }
 
-pub fn parse_selector_group(input: &String) -> Result<SelectorGroupNode, ParseError> {
+pub fn parse_selector_group(input: &String) -> Result<ParseResult<SelectorGroupNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_selector_group(p));
 }
 
-pub fn parse_selector(input: &String) -> Result<SelectorNode, ParseError> {
+pub fn parse_selector(input: &String) -> Result<ParseResult<SelectorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_selector(p));
 }
 
-pub fn parse_combinator(input: &String) -> Result<CombinatorNode, ParseError> {
+pub fn parse_combinator(input: &String) -> Result<ParseResult<CombinatorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_combinator(p));
 }
 
-pub fn parse_simple_selector_sequence(input: &String) -> Result<SimpleSelectorSequenceNode, ParseError> {
+pub fn parse_simple_selector_sequence(input: &String) -> Result<ParseResult<SimpleSelectorSequenceNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_simple_selector_sequence(p));
 }
 
-pub fn parse_type_selector(input: &String) -> Result<TypeSelectorNode, ParseError> {
+pub fn parse_type_selector(input: &String) -> Result<ParseResult<TypeSelectorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_type_selector(p));
 }
 
-pub fn parse_type_namespace_prefix(input: &String) -> Result<TypeNamespacePrefixNode, ParseError> {
+pub fn parse_type_namespace_prefix(input: &String) -> Result<ParseResult<TypeNamespacePrefixNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_type_namespace_prefix(p));
 }
 
-pub fn parse_element_name(input: &String) -> Result<ElementNameNode, ParseError> {
+pub fn parse_element_name(input: &String) -> Result<ParseResult<ElementNameNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_element_name(p));
 }
 
-pub fn parse_universal(input: &String) -> Result<UniversalNode, ParseError> {
+pub fn parse_universal(input: &String) -> Result<ParseResult<UniversalNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_universal(p));
 }
 
-pub fn parse_class_name(input: &String) -> Result<ClassNameNode, ParseError> {
+pub fn parse_class_name(input: &String) -> Result<ParseResult<ClassNameNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_class_name(p));
 }
 
-pub fn parse_attrib(input: &String) -> Result<AttribNode, ParseError> {
+pub fn parse_attrib(input: &String) -> Result<ParseResult<AttribNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_attrib(p));
 }
 
-pub fn parse_pseudo(input: &String) -> Result<PseudoNode, ParseError> {
+pub fn parse_pseudo(input: &String) -> Result<ParseResult<PseudoNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_pseudo(p));
 }
 
-pub fn parse_functional_pseudo(input: &String) -> Result<FunctionalPseudoNode, ParseError> {
+pub fn parse_functional_pseudo(input: &String) -> Result<ParseResult<FunctionalPseudoNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_functional_pseudo(p));
 }
 
-pub fn parse_expression(input: &String) -> Result<ExpressionNode, ParseError> {
+pub fn parse_expression(input: &String) -> Result<ParseResult<ExpressionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_expression(p));
 }
 
-pub fn parse_negation(input: &String) -> Result<NegationNode, ParseError> {
+pub fn parse_negation(input: &String) -> Result<ParseResult<NegationNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_negation(p));
 }
 
-pub fn parse_negation_arg(input: &String) -> Result<NegationArgNode, ParseError> {
+pub fn parse_negation_arg(input: &String) -> Result<ParseResult<NegationArgNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_negation_arg(p));
 }
 
-pub fn parse_operator_(input: &String) -> Result<OperatorNode, ParseError> {
+pub fn parse_operator_(input: &String) -> Result<ParseResult<OperatorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_operator_(p));
 }
 
-pub fn parse_property_(input: &String) -> Result<PropertyNode, ParseError> {
+pub fn parse_property_(input: &String) -> Result<ParseResult<PropertyNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_property_(p));
 }
 
-pub fn parse_ruleset(input: &String) -> Result<RulesetNode, ParseError> {
+pub fn parse_ruleset(input: &String) -> Result<ParseResult<RulesetNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ruleset(p));
 }
 
-pub fn parse_declaration_list(input: &String) -> Result<DeclarationListNode, ParseError> {
+pub fn parse_declaration_list(input: &String) -> Result<ParseResult<DeclarationListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_declaration_list(p));
 }
 
-pub fn parse_declaration(input: &String) -> Result<DeclarationNode, ParseError> {
+pub fn parse_declaration(input: &String) -> Result<ParseResult<DeclarationNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_declaration(p));
 }
 
-pub fn parse_prio(input: &String) -> Result<PrioNode, ParseError> {
+pub fn parse_prio(input: &String) -> Result<ParseResult<PrioNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_prio(p));
 }
 
-pub fn parse_value(input: &String) -> Result<ValueNode, ParseError> {
+pub fn parse_value(input: &String) -> Result<ParseResult<ValueNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_value(p));
 }
 
-pub fn parse_expr(input: &String) -> Result<ExprNode, ParseError> {
+pub fn parse_expr(input: &String) -> Result<ParseResult<ExprNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_expr(p));
 }
 
-pub fn parse_term(input: &String) -> Result<TermNode, ParseError> {
+pub fn parse_term(input: &String) -> Result<ParseResult<TermNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_term(p));
 }
 
-pub fn parse_function_(input: &String) -> Result<FunctionNode, ParseError> {
+pub fn parse_function_(input: &String) -> Result<ParseResult<FunctionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_function_(p));
 }
 
-pub fn parse_dx_image_transform(input: &String) -> Result<DxImageTransformNode, ParseError> {
+pub fn parse_dx_image_transform(input: &String) -> Result<ParseResult<DxImageTransformNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_dx_image_transform(p));
 }
 
-pub fn parse_hexcolor(input: &String) -> Result<HexcolorNode, ParseError> {
+pub fn parse_hexcolor(input: &String) -> Result<ParseResult<HexcolorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_hexcolor(p));
 }
 
-pub fn parse_number(input: &String) -> Result<NumberNode, ParseError> {
+pub fn parse_number(input: &String) -> Result<ParseResult<NumberNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_number(p));
 }
 
-pub fn parse_percentage(input: &String) -> Result<PercentageNode, ParseError> {
+pub fn parse_percentage(input: &String) -> Result<ParseResult<PercentageNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_percentage(p));
 }
 
-pub fn parse_dimension(input: &String) -> Result<DimensionNode, ParseError> {
+pub fn parse_dimension(input: &String) -> Result<ParseResult<DimensionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_dimension(p));
 }
 
-pub fn parse_unknown_dimension(input: &String) -> Result<UnknownDimensionNode, ParseError> {
+pub fn parse_unknown_dimension(input: &String) -> Result<ParseResult<UnknownDimensionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_unknown_dimension(p));
 }
 
-pub fn parse_any_(input: &String) -> Result<AnyNode, ParseError> {
+pub fn parse_any_(input: &String) -> Result<ParseResult<AnyNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_any_(p));
 }
 
-pub fn parse_at_rule(input: &String) -> Result<AtRuleNode, ParseError> {
+pub fn parse_at_rule(input: &String) -> Result<ParseResult<AtRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_at_rule(p));
 }
 
-pub fn parse_unused(input: &String) -> Result<UnusedNode, ParseError> {
+pub fn parse_unused(input: &String) -> Result<ParseResult<UnusedNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_unused(p));
 }
 
-pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
+pub fn parse_block(input: &String) -> Result<ParseResult<BlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_block(p));
 }
 
-pub fn parse_nested_statement(input: &String) -> Result<NestedStatementNode, ParseError> {
+pub fn parse_nested_statement(input: &String) -> Result<ParseResult<NestedStatementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_nested_statement(p));
 }
 
-pub fn parse_group_rule_body(input: &String) -> Result<GroupRuleBodyNode, ParseError> {
+pub fn parse_group_rule_body(input: &String) -> Result<ParseResult<GroupRuleBodyNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_group_rule_body(p));
 }
 
-pub fn parse_supports_rule(input: &String) -> Result<SupportsRuleNode, ParseError> {
+pub fn parse_supports_rule(input: &String) -> Result<ParseResult<SupportsRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_rule(p));
 }
 
-pub fn parse_supports_condition(input: &String) -> Result<SupportsConditionNode, ParseError> {
+pub fn parse_supports_condition(input: &String) -> Result<ParseResult<SupportsConditionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_condition(p));
 }
 
-pub fn parse_supports_condition_in_parens(input: &String) -> Result<SupportsConditionInParensNode, ParseError> {
+pub fn parse_supports_condition_in_parens(input: &String) -> Result<ParseResult<SupportsConditionInParensNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_condition_in_parens(p));
 }
 
-pub fn parse_supports_negation(input: &String) -> Result<SupportsNegationNode, ParseError> {
+pub fn parse_supports_negation(input: &String) -> Result<ParseResult<SupportsNegationNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_negation(p));
 }
 
-pub fn parse_supports_conjunction(input: &String) -> Result<SupportsConjunctionNode, ParseError> {
+pub fn parse_supports_conjunction(input: &String) -> Result<ParseResult<SupportsConjunctionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_conjunction(p));
 }
 
-pub fn parse_supports_disjunction(input: &String) -> Result<SupportsDisjunctionNode, ParseError> {
+pub fn parse_supports_disjunction(input: &String) -> Result<ParseResult<SupportsDisjunctionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_disjunction(p));
 }
 
-pub fn parse_supports_declaration_condition(input: &String) -> Result<SupportsDeclarationConditionNode, ParseError> {
+pub fn parse_supports_declaration_condition(input: &String) -> Result<ParseResult<SupportsDeclarationConditionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_supports_declaration_condition(p));
 }
 
-pub fn parse_general_enclosed(input: &String) -> Result<GeneralEnclosedNode, ParseError> {
+pub fn parse_general_enclosed(input: &String) -> Result<ParseResult<GeneralEnclosedNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_general_enclosed(p));
 }
 
-pub fn parse_url(input: &String) -> Result<UrlNode, ParseError> {
+pub fn parse_url(input: &String) -> Result<ParseResult<UrlNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_url(p));
 }
 
-pub fn parse_var_(input: &String) -> Result<VarNode, ParseError> {
+pub fn parse_var_(input: &String) -> Result<ParseResult<VarNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_var_(p));
 }
 
-pub fn parse_calc(input: &String) -> Result<CalcNode, ParseError> {
+pub fn parse_calc(input: &String) -> Result<ParseResult<CalcNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_calc(p));
 }
 
-pub fn parse_calc_sum(input: &String) -> Result<CalcSumNode, ParseError> {
+pub fn parse_calc_sum(input: &String) -> Result<ParseResult<CalcSumNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_calc_sum(p));
 }
 
-pub fn parse_calc_product(input: &String) -> Result<CalcProductNode, ParseError> {
+pub fn parse_calc_product(input: &String) -> Result<ParseResult<CalcProductNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_calc_product(p));
 }
 
-pub fn parse_calc_value(input: &String) -> Result<CalcValueNode, ParseError> {
+pub fn parse_calc_value(input: &String) -> Result<ParseResult<CalcValueNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_calc_value(p));
 }
 
-pub fn parse_font_face_rule(input: &String) -> Result<FontFaceRuleNode, ParseError> {
+pub fn parse_font_face_rule(input: &String) -> Result<ParseResult<FontFaceRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_font_face_rule(p));
 }
 
-pub fn parse_font_face_declaration(input: &String) -> Result<FontFaceDeclarationNode, ParseError> {
+pub fn parse_font_face_declaration(input: &String) -> Result<ParseResult<FontFaceDeclarationNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_font_face_declaration(p));
 }
 
-pub fn parse_keyframes_rule(input: &String) -> Result<KeyframesRuleNode, ParseError> {
+pub fn parse_keyframes_rule(input: &String) -> Result<ParseResult<KeyframesRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_keyframes_rule(p));
 }
 
-pub fn parse_keyframe_block(input: &String) -> Result<KeyframeBlockNode, ParseError> {
+pub fn parse_keyframe_block(input: &String) -> Result<ParseResult<KeyframeBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_keyframe_block(p));
 }
 
-pub fn parse_keyframe_selector(input: &String) -> Result<KeyframeSelectorNode, ParseError> {
+pub fn parse_keyframe_selector(input: &String) -> Result<ParseResult<KeyframeSelectorNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_keyframe_selector(p));
 }
 
-pub fn parse_viewport(input: &String) -> Result<ViewportNode, ParseError> {
+pub fn parse_viewport(input: &String) -> Result<ParseResult<ViewportNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_viewport(p));
 }
 
-pub fn parse_counter_style(input: &String) -> Result<CounterStyleNode, ParseError> {
+pub fn parse_counter_style(input: &String) -> Result<ParseResult<CounterStyleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_counter_style(p));
 }
 
-pub fn parse_font_feature_values_rule(input: &String) -> Result<FontFeatureValuesRuleNode, ParseError> {
+pub fn parse_font_feature_values_rule(input: &String) -> Result<ParseResult<FontFeatureValuesRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_font_feature_values_rule(p));
 }
 
-pub fn parse_font_family_name_list(input: &String) -> Result<FontFamilyNameListNode, ParseError> {
+pub fn parse_font_family_name_list(input: &String) -> Result<ParseResult<FontFamilyNameListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_font_family_name_list(p));
 }
 
-pub fn parse_font_family_name(input: &String) -> Result<FontFamilyNameNode, ParseError> {
+pub fn parse_font_family_name(input: &String) -> Result<ParseResult<FontFamilyNameNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_font_family_name(p));
 }
 
-pub fn parse_feature_value_block(input: &String) -> Result<FeatureValueBlockNode, ParseError> {
+pub fn parse_feature_value_block(input: &String) -> Result<ParseResult<FeatureValueBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_feature_value_block(p));
 }
 
-pub fn parse_feature_type(input: &String) -> Result<FeatureTypeNode, ParseError> {
+pub fn parse_feature_type(input: &String) -> Result<ParseResult<FeatureTypeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_feature_type(p));
 }
 
-pub fn parse_feature_value_definition(input: &String) -> Result<FeatureValueDefinitionNode, ParseError> {
+pub fn parse_feature_value_definition(input: &String) -> Result<ParseResult<FeatureValueDefinitionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_feature_value_definition(p));
 }
 
-pub fn parse_ident(input: &String) -> Result<IdentNode, ParseError> {
+pub fn parse_ident(input: &String) -> Result<ParseResult<IdentNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ident(p));
 }
 
-pub fn parse_ws(input: &String) -> Result<WsNode, ParseError> {
+pub fn parse_ws(input: &String) -> Result<ParseResult<WsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ws(p));
 }
 
-pub fn parse(input: &String) -> Result<StylesheetNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<StylesheetNode>, ParseError> {
     return parse_stylesheet(input);
 }
 
-pub fn walk_stylesheet<V: Visitor>(v: &mut V, node: &StylesheetNode) {
+pub fn walk_stylesheet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StylesheetNode) {
     v.enter_rule(0, &"stylesheet", &node.span);
-    walk_ws(v, &node.ws);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.charset_item_list {
-        walk_charset(v, &item.charset);
+        walk_charset(v, toks, &item.charset);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(item);
+            v.visit_token(toks, *item);
         }
     }
     for let item of &node.imports_item_list {
-        walk_imports(v, &item.imports);
+        walk_imports(v, toks, &item.imports);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(item);
+            v.visit_token(toks, *item);
         }
     }
     for let item of &node.namespace__item_list {
-        walk_namespace_(v, &item.namespace_);
+        walk_namespace_(v, toks, &item.namespace_);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(item);
+            v.visit_token(toks, *item);
         }
     }
     for let item of &node.nested_statement_item_list {
-        walk_nestedStatement(v, &item.nested_statement);
+        walk_nestedStatement(v, toks, &item.nested_statement);
         for let item of &item.comment_or_space_or_cdo_or_cdc_list {
-            v.visit_token(item);
+            v.visit_token(toks, *item);
         }
     }
-    v.visit_token(&node.eof);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"stylesheet", &node.span);
 }
 
-pub fn walk_charset<V: Visitor>(v: &mut V, node: &CharsetNode) {
+pub fn walk_charset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CharsetNode) {
     match node {
         goodCharset(n) => {
             v.enter_rule(1, &"charset", &n.span);
-            v.visit_token(&n.charset);
-            walk_ws(v, &n.ws);
-            v.visit_token(&n.string_);
-            walk_ws(v, &n.ws_2);
-            v.visit_token(&n.semicolon);
-            walk_ws(v, &n.ws_3);
+            v.visit_token(toks, n.charset);
+            walk_ws(v, toks, &n.ws);
+            v.visit_token(toks, n.string_);
+            walk_ws(v, toks, &n.ws_2);
+            v.visit_token(toks, n.semicolon);
+            walk_ws(v, toks, &n.ws_3);
             v.exit_rule(1, &"charset", &n.span);
         }
         badCharset(n) => {
             v.enter_rule(1, &"charset", &n.span);
-            v.visit_token(&n.charset);
-            walk_ws(v, &n.ws);
-            v.visit_token(&n.string_);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.charset);
+            walk_ws(v, toks, &n.ws);
+            v.visit_token(toks, n.string_);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(1, &"charset", &n.span);
         }
     }
 }
 
-pub fn walk_imports<V: Visitor>(v: &mut V, node: &ImportsNode) {
+pub fn walk_imports<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ImportsNode) {
     match node {
         goodImport0(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(&n.import_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.import_);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
-            walk_mediaQueryList(v, &n.media_query_list);
-            v.visit_token(&n.semicolon);
-            walk_ws(v, &n.ws_3);
+            walk_ws(v, toks, &n.ws_2);
+            walk_mediaQueryList(v, toks, &n.media_query_list);
+            v.visit_token(toks, n.semicolon);
+            walk_ws(v, toks, &n.ws_3);
             v.exit_rule(2, &"imports", &n.span);
         }
         goodImport1(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(&n.import_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.import_);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_1 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
-            v.visit_token(&n.semicolon);
-            walk_ws(v, &n.ws_3);
+            walk_ws(v, toks, &n.ws_2);
+            v.visit_token(toks, n.semicolon);
+            walk_ws(v, toks, &n.ws_3);
             v.exit_rule(2, &"imports", &n.span);
         }
         badImport0(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(&n.import_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.import_);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_2 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
-            walk_mediaQueryList(v, &n.media_query_list);
+            walk_ws(v, toks, &n.ws_2);
+            walk_mediaQueryList(v, toks, &n.media_query_list);
             v.exit_rule(2, &"imports", &n.span);
         }
         badImport1(n) => {
             v.enter_rule(2, &"imports", &n.span);
-            v.visit_token(&n.import_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.import_);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.group_3 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(2, &"imports", &n.span);
         }
     }
 }
 
-pub fn walk_namespace_<V: Visitor>(v: &mut V, node: &NamespaceNode) {
+pub fn walk_namespace_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NamespaceNode) {
     match node {
         goodNamespace(n) => {
             v.enter_rule(3, &"namespace_", &n.span);
-            v.visit_token(&n.namespace);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.namespace);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.namespace_prefix_ws {
-                walk_namespacePrefix(v, &item.namespace_prefix);
-                walk_ws(v, &item.ws);
+                walk_namespacePrefix(v, toks, &item.namespace_prefix);
+                walk_ws(v, toks, &item.ws);
             }
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
-            v.visit_token(&n.semicolon);
-            walk_ws(v, &n.ws_3);
+            walk_ws(v, toks, &n.ws_2);
+            v.visit_token(toks, n.semicolon);
+            walk_ws(v, toks, &n.ws_3);
             v.exit_rule(3, &"namespace_", &n.span);
         }
         badNamespace(n) => {
             v.enter_rule(3, &"namespace_", &n.span);
-            v.visit_token(&n.namespace);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.namespace);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.namespace_prefix_ws {
-                walk_namespacePrefix(v, &item.namespace_prefix);
-                walk_ws(v, &item.ws);
+                walk_namespacePrefix(v, toks, &item.namespace_prefix);
+                walk_ws(v, toks, &item.ws);
             }
             if let Some(item) = &n.group_1 {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.string_);
+                        v.visit_token(toks, inner.string_);
                     }
                     Alt1(inner) => {
-                        walk_url(v, &inner.url);
+                        walk_url(v, toks, &inner.url);
                     }
                 }
             }
-            walk_ws(v, &n.ws_2);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(3, &"namespace_", &n.span);
         }
     }
 }
 
-pub fn walk_namespacePrefix<V: Visitor>(v: &mut V, node: &NamespacePrefixNode) {
+pub fn walk_namespacePrefix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NamespacePrefixNode) {
     v.enter_rule(4, &"namespacePrefix", &node.span);
-    walk_ident(v, &node.ident);
+    walk_ident(v, toks, &node.ident);
     v.exit_rule(4, &"namespacePrefix", &node.span);
 }
 
-pub fn walk_media<V: Visitor>(v: &mut V, node: &MediaNode) {
+pub fn walk_media<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaNode) {
     v.enter_rule(5, &"media", &node.span);
-    v.visit_token(&node.media);
-    walk_ws(v, &node.ws);
-    walk_mediaQueryList(v, &node.media_query_list);
-    walk_groupRuleBody(v, &node.group_rule_body);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.media);
+    walk_ws(v, toks, &node.ws);
+    walk_mediaQueryList(v, toks, &node.media_query_list);
+    walk_groupRuleBody(v, toks, &node.group_rule_body);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(5, &"media", &node.span);
 }
 
-pub fn walk_mediaQueryList<V: Visitor>(v: &mut V, node: &MediaQueryListNode) {
+pub fn walk_mediaQueryList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaQueryListNode) {
     v.enter_rule(6, &"mediaQueryList", &node.span);
     if let Some(item) = &node.media_query_item {
-        walk_mediaQuery(v, &item.media_query);
+        walk_mediaQuery(v, toks, &item.media_query);
         for let item of &item.comma_ws_media_query_list {
-            v.visit_token(&item.comma);
-            walk_ws(v, &item.ws);
-            walk_mediaQuery(v, &item.media_query);
+            v.visit_token(toks, item.comma);
+            walk_ws(v, toks, &item.ws);
+            walk_mediaQuery(v, toks, &item.media_query);
         }
     }
-    walk_ws(v, &node.ws);
+    walk_ws(v, toks, &node.ws);
     v.exit_rule(6, &"mediaQueryList", &node.span);
 }
 
-pub fn walk_mediaQuery<V: Visitor>(v: &mut V, node: &MediaQueryNode) {
+pub fn walk_mediaQuery<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaQueryNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(7, &"mediaQuery", &n.span);
             if let Some(item) = &n.mediaonly_or_not {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
-            walk_ws(v, &n.ws);
-            walk_mediaType(v, &n.media_type);
-            walk_ws(v, &n.ws_2);
+            walk_ws(v, toks, &n.ws);
+            walk_mediaType(v, toks, &n.media_type);
+            walk_ws(v, toks, &n.ws_2);
             for let item of &n.and_ws_media_expression_list {
-                v.visit_token(&item.and);
-                walk_ws(v, &item.ws);
-                walk_mediaExpression(v, &item.media_expression);
+                v.visit_token(toks, item.and);
+                walk_ws(v, toks, &item.ws);
+                walk_mediaExpression(v, toks, &item.media_expression);
             }
             v.exit_rule(7, &"mediaQuery", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(7, &"mediaQuery", &n.span);
-            walk_mediaExpression(v, &n.media_expression);
+            walk_mediaExpression(v, toks, &n.media_expression);
             for let item of &n.and_ws_media_expression_list {
-                v.visit_token(&item.and);
-                walk_ws(v, &item.ws);
-                walk_mediaExpression(v, &item.media_expression);
+                v.visit_token(toks, item.and);
+                walk_ws(v, toks, &item.ws);
+                walk_mediaExpression(v, toks, &item.media_expression);
             }
             v.exit_rule(7, &"mediaQuery", &n.span);
         }
     }
 }
 
-pub fn walk_mediaType<V: Visitor>(v: &mut V, node: &MediaTypeNode) {
+pub fn walk_mediaType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaTypeNode) {
     v.enter_rule(8, &"mediaType", &node.span);
-    walk_ident(v, &node.ident);
+    walk_ident(v, toks, &node.ident);
     v.exit_rule(8, &"mediaType", &node.span);
 }
 
-pub fn walk_mediaExpression<V: Visitor>(v: &mut V, node: &MediaExpressionNode) {
+pub fn walk_mediaExpression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaExpressionNode) {
     v.enter_rule(9, &"mediaExpression", &node.span);
-    v.visit_token(&node.lparen);
-    walk_ws(v, &node.ws);
-    walk_mediaFeature(v, &node.media_feature);
+    v.visit_token(toks, node.lparen);
+    walk_ws(v, toks, &node.ws);
+    walk_mediaFeature(v, toks, &node.media_feature);
     if let Some(item) = &node.colon_ws_expr {
-        v.visit_token(&item.colon);
-        walk_ws(v, &item.ws);
-        walk_expr(v, &item.expr);
+        v.visit_token(toks, item.colon);
+        walk_ws(v, toks, &item.ws);
+        walk_expr(v, toks, &item.expr);
     }
-    v.visit_token(&node.rparen);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.rparen);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(9, &"mediaExpression", &node.span);
 }
 
-pub fn walk_mediaFeature<V: Visitor>(v: &mut V, node: &MediaFeatureNode) {
+pub fn walk_mediaFeature<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MediaFeatureNode) {
     v.enter_rule(10, &"mediaFeature", &node.span);
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws);
     v.exit_rule(10, &"mediaFeature", &node.span);
 }
 
-pub fn walk_page<V: Visitor>(v: &mut V, node: &PageNode) {
+pub fn walk_page<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PageNode) {
     v.enter_rule(11, &"page", &node.span);
-    v.visit_token(&node.page);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.page);
+    walk_ws(v, toks, &node.ws);
     if let Some(item) = &node.pseudo_page {
-        walk_pseudoPage(v, item);
+        walk_pseudoPage(v, toks, item);
     }
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.declaration {
-        walk_declaration(v, item);
+        walk_declaration(v, toks, item);
     }
     for let item of &node.semicolon_ws_declaration_list {
-        v.visit_token(&item.semicolon);
-        walk_ws(v, &item.ws);
+        v.visit_token(toks, item.semicolon);
+        walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.declaration {
-            walk_declaration(v, item);
+            walk_declaration(v, toks, item);
         }
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_3);
     v.exit_rule(11, &"page", &node.span);
 }
 
-pub fn walk_pseudoPage<V: Visitor>(v: &mut V, node: &PseudoPageNode) {
+pub fn walk_pseudoPage<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PseudoPageNode) {
     v.enter_rule(12, &"pseudoPage", &node.span);
-    v.visit_token(&node.colon);
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.colon);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws);
     v.exit_rule(12, &"pseudoPage", &node.span);
 }
 
-pub fn walk_selectorGroup<V: Visitor>(v: &mut V, node: &SelectorGroupNode) {
+pub fn walk_selectorGroup<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SelectorGroupNode) {
     v.enter_rule(13, &"selectorGroup", &node.span);
-    walk_selector(v, &node.selector);
+    walk_selector(v, toks, &node.selector);
     for let item of &node.comma_ws_selector_list {
-        v.visit_token(&item.comma);
-        walk_ws(v, &item.ws);
-        walk_selector(v, &item.selector);
+        v.visit_token(toks, item.comma);
+        walk_ws(v, toks, &item.ws);
+        walk_selector(v, toks, &item.selector);
     }
     v.exit_rule(13, &"selectorGroup", &node.span);
 }
 
-pub fn walk_selector<V: Visitor>(v: &mut V, node: &SelectorNode) {
+pub fn walk_selector<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SelectorNode) {
     v.enter_rule(14, &"selector", &node.span);
-    walk_simpleSelectorSequence(v, &node.simple_selector_sequence);
-    walk_ws(v, &node.ws);
+    walk_simpleSelectorSequence(v, toks, &node.simple_selector_sequence);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.combinator_simple_selector_sequence_ws_list {
-        walk_combinator(v, &item.combinator);
-        walk_simpleSelectorSequence(v, &item.simple_selector_sequence);
-        walk_ws(v, &item.ws);
+        walk_combinator(v, toks, &item.combinator);
+        walk_simpleSelectorSequence(v, toks, &item.simple_selector_sequence);
+        walk_ws(v, toks, &item.ws);
     }
     v.exit_rule(14, &"selector", &node.span);
 }
 
-pub fn walk_combinator<V: Visitor>(v: &mut V, node: &CombinatorNode) {
+pub fn walk_combinator<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CombinatorNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(&n.plus);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.plus);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(&n.greater);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.greater);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(&n.tilde);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.tilde);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(15, &"combinator", &n.span);
-            v.visit_token(&n.space);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.space);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(15, &"combinator", &n.span);
         }
     }
 }
 
-pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, node: &SimpleSelectorSequenceNode) {
+pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SimpleSelectorSequenceNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(16, &"simpleSelectorSequence", &n.span);
             if let Some(item) = &n.type_selector_or_universal {
                 match item {
                     TypeSelector(inner) => {
-                        walk_typeSelector(v, inner);
+                        walk_typeSelector(v, toks, inner);
                     }
                     Universal(inner) => {
-                        walk_universal(v, inner);
+                        walk_universal(v, toks, inner);
                     }
                 }
             }
             for let item of &n.group_0_list {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.hash);
+                        v.visit_token(toks, inner.hash);
                     }
                     Alt1(inner) => {
-                        walk_className(v, &inner.class_name);
+                        walk_className(v, toks, &inner.class_name);
                     }
                     Alt2(inner) => {
-                        walk_attrib(v, &inner.attrib);
+                        walk_attrib(v, toks, &inner.attrib);
                     }
                     Alt3(inner) => {
-                        walk_pseudo(v, &inner.pseudo);
+                        walk_pseudo(v, toks, &inner.pseudo);
                     }
                     Alt4(inner) => {
-                        walk_negation(v, &inner.negation);
+                        walk_negation(v, toks, &inner.negation);
                     }
                 }
             }
@@ -39725,19 +39728,19 @@ pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, node: &SimpleSelectorS
             for let item of &n.group_1_list {
                 match item {
                     Alt0(inner) => {
-                        v.visit_token(&inner.hash);
+                        v.visit_token(toks, inner.hash);
                     }
                     Alt1(inner) => {
-                        walk_className(v, &inner.class_name);
+                        walk_className(v, toks, &inner.class_name);
                     }
                     Alt2(inner) => {
-                        walk_attrib(v, &inner.attrib);
+                        walk_attrib(v, toks, &inner.attrib);
                     }
                     Alt3(inner) => {
-                        walk_pseudo(v, &inner.pseudo);
+                        walk_pseudo(v, toks, &inner.pseudo);
                     }
                     Alt4(inner) => {
-                        walk_negation(v, &inner.negation);
+                        walk_negation(v, toks, &inner.negation);
                     }
                 }
             }
@@ -39746,1246 +39749,1246 @@ pub fn walk_simpleSelectorSequence<V: Visitor>(v: &mut V, node: &SimpleSelectorS
     }
 }
 
-pub fn walk_typeSelector<V: Visitor>(v: &mut V, node: &TypeSelectorNode) {
+pub fn walk_typeSelector<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TypeSelectorNode) {
     v.enter_rule(17, &"typeSelector", &node.span);
     if let Some(item) = &node.type_namespace_prefix {
-        walk_typeNamespacePrefix(v, item);
+        walk_typeNamespacePrefix(v, toks, item);
     }
-    walk_elementName(v, &node.element_name);
+    walk_elementName(v, toks, &node.element_name);
     v.exit_rule(17, &"typeSelector", &node.span);
 }
 
-pub fn walk_typeNamespacePrefix<V: Visitor>(v: &mut V, node: &TypeNamespacePrefixNode) {
+pub fn walk_typeNamespacePrefix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TypeNamespacePrefixNode) {
     v.enter_rule(18, &"typeNamespacePrefix", &node.span);
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                walk_ident(v, &inner.ident);
+                walk_ident(v, toks, &inner.ident);
             }
             Alt1(inner) => {
-                v.visit_token(&inner.star);
+                v.visit_token(toks, inner.star);
             }
         }
     }
-    v.visit_token(&node.pipe);
+    v.visit_token(toks, node.pipe);
     v.exit_rule(18, &"typeNamespacePrefix", &node.span);
 }
 
-pub fn walk_elementName<V: Visitor>(v: &mut V, node: &ElementNameNode) {
+pub fn walk_elementName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementNameNode) {
     v.enter_rule(19, &"elementName", &node.span);
-    walk_ident(v, &node.ident);
+    walk_ident(v, toks, &node.ident);
     v.exit_rule(19, &"elementName", &node.span);
 }
 
-pub fn walk_universal<V: Visitor>(v: &mut V, node: &UniversalNode) {
+pub fn walk_universal<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UniversalNode) {
     v.enter_rule(20, &"universal", &node.span);
     if let Some(item) = &node.type_namespace_prefix {
-        walk_typeNamespacePrefix(v, item);
+        walk_typeNamespacePrefix(v, toks, item);
     }
-    v.visit_token(&node.star);
+    v.visit_token(toks, node.star);
     v.exit_rule(20, &"universal", &node.span);
 }
 
-pub fn walk_className<V: Visitor>(v: &mut V, node: &ClassNameNode) {
+pub fn walk_className<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ClassNameNode) {
     v.enter_rule(21, &"className", &node.span);
-    v.visit_token(&node.dot);
-    walk_ident(v, &node.ident);
+    v.visit_token(toks, node.dot);
+    walk_ident(v, toks, &node.ident);
     v.exit_rule(21, &"className", &node.span);
 }
 
-pub fn walk_attrib<V: Visitor>(v: &mut V, node: &AttribNode) {
+pub fn walk_attrib<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AttribNode) {
     v.enter_rule(22, &"attrib", &node.span);
-    v.visit_token(&node.lbracket);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.lbracket);
+    walk_ws(v, toks, &node.ws);
     if let Some(item) = &node.type_namespace_prefix {
-        walk_typeNamespacePrefix(v, item);
+        walk_typeNamespacePrefix(v, toks, item);
     }
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws_2);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.item_ws_item_ws {
-        v.visit_token(&item.prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch);
-        walk_ws(v, &item.ws);
+        v.visit_token(toks, item.prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch);
+        walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    walk_ident(v, &inner.ident);
+                    walk_ident(v, toks, &inner.ident);
                 }
                 Alt1(inner) => {
-                    v.visit_token(&inner.string_);
+                    v.visit_token(toks, inner.string_);
                 }
             }
         }
-        walk_ws(v, &item.ws_2);
+        walk_ws(v, toks, &item.ws_2);
     }
-    v.visit_token(&node.rbracket);
+    v.visit_token(toks, node.rbracket);
     v.exit_rule(22, &"attrib", &node.span);
 }
 
-pub fn walk_pseudo<V: Visitor>(v: &mut V, node: &PseudoNode) {
+pub fn walk_pseudo<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PseudoNode) {
     v.enter_rule(23, &"pseudo", &node.span);
-    v.visit_token(&node.colon);
+    v.visit_token(toks, node.colon);
     if let Some(item) = &node.colon_2 {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     if let Some(item) = &node.ident_or_functional_pseudo {
         match item {
             Ident(inner) => {
-                walk_ident(v, inner);
+                walk_ident(v, toks, inner);
             }
             FunctionalPseudo(inner) => {
-                walk_functionalPseudo(v, inner);
+                walk_functionalPseudo(v, toks, inner);
             }
         }
     }
     v.exit_rule(23, &"pseudo", &node.span);
 }
 
-pub fn walk_functionalPseudo<V: Visitor>(v: &mut V, node: &FunctionalPseudoNode) {
+pub fn walk_functionalPseudo<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FunctionalPseudoNode) {
     v.enter_rule(24, &"functionalPseudo", &node.span);
-    v.visit_token(&node.function_);
-    walk_ws(v, &node.ws);
-    walk_expression(v, &node.expression);
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.function_);
+    walk_ws(v, toks, &node.ws);
+    walk_expression(v, toks, &node.expression);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(24, &"functionalPseudo", &node.span);
 }
 
-pub fn walk_expression<V: Visitor>(v: &mut V, node: &ExpressionNode) {
+pub fn walk_expression<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExpressionNode) {
     v.enter_rule(25, &"expression", &node.span);
     for let item of &node.item_ws_list {
         if let Some(item) = &item.group_0 {
             match item {
                 Alt0(inner) => {
-                    v.visit_token(&inner.plus);
+                    v.visit_token(toks, inner.plus);
                 }
                 Alt1(inner) => {
-                    v.visit_token(&inner.minus);
+                    v.visit_token(toks, inner.minus);
                 }
                 Alt2(inner) => {
-                    v.visit_token(&inner.dimension);
+                    v.visit_token(toks, inner.dimension);
                 }
                 Alt3(inner) => {
-                    v.visit_token(&inner.unknowndimension);
+                    v.visit_token(toks, inner.unknowndimension);
                 }
                 Alt4(inner) => {
-                    v.visit_token(&inner.number);
+                    v.visit_token(toks, inner.number);
                 }
                 Alt5(inner) => {
-                    v.visit_token(&inner.string_);
+                    v.visit_token(toks, inner.string_);
                 }
                 Alt6(inner) => {
-                    walk_ident(v, &inner.ident);
+                    walk_ident(v, toks, &inner.ident);
                 }
             }
         }
-        walk_ws(v, &item.ws);
+        walk_ws(v, toks, &item.ws);
     }
     v.exit_rule(25, &"expression", &node.span);
 }
 
-pub fn walk_negation<V: Visitor>(v: &mut V, node: &NegationNode) {
+pub fn walk_negation<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NegationNode) {
     v.enter_rule(26, &"negation", &node.span);
-    v.visit_token(&node.pseudonot);
-    walk_ws(v, &node.ws);
-    walk_negationArg(v, &node.negation_arg);
-    walk_ws(v, &node.ws_2);
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.pseudonot);
+    walk_ws(v, toks, &node.ws);
+    walk_negationArg(v, toks, &node.negation_arg);
+    walk_ws(v, toks, &node.ws_2);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(26, &"negation", &node.span);
 }
 
-pub fn walk_negationArg<V: Visitor>(v: &mut V, node: &NegationArgNode) {
+pub fn walk_negationArg<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NegationArgNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            walk_typeSelector(v, &n.type_selector);
+            walk_typeSelector(v, toks, &n.type_selector);
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            walk_universal(v, &n.universal);
+            walk_universal(v, toks, &n.universal);
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            v.visit_token(&n.hash);
+            v.visit_token(toks, n.hash);
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            walk_className(v, &n.class_name);
+            walk_className(v, toks, &n.class_name);
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            walk_attrib(v, &n.attrib);
+            walk_attrib(v, toks, &n.attrib);
             v.exit_rule(27, &"negationArg", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(27, &"negationArg", &n.span);
-            walk_pseudo(v, &n.pseudo);
+            walk_pseudo(v, toks, &n.pseudo);
             v.exit_rule(27, &"negationArg", &n.span);
         }
     }
 }
 
-pub fn walk_operator_<V: Visitor>(v: &mut V, node: &OperatorNode) {
+pub fn walk_operator_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OperatorNode) {
     match node {
         goodOperator0(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(&n.slash);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.slash);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         goodOperator1(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(&n.comma);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.comma);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         goodOperator2(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(&n.space);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.space);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
         badOperator(n) => {
             v.enter_rule(28, &"operator_", &n.span);
-            v.visit_token(&n.eq);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.eq);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(28, &"operator_", &n.span);
         }
     }
 }
 
-pub fn walk_property_<V: Visitor>(v: &mut V, node: &PropertyNode) {
+pub fn walk_property_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PropertyNode) {
     match node {
         goodProperty0(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            walk_ident(v, &n.ident);
-            walk_ws(v, &n.ws);
+            walk_ident(v, toks, &n.ident);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(29, &"property_", &n.span);
         }
         goodProperty1(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(&n.variable);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.variable);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(29, &"property_", &n.span);
         }
         badProperty0(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(&n.star);
-            walk_ident(v, &n.ident);
+            v.visit_token(toks, n.star);
+            walk_ident(v, toks, &n.ident);
             v.exit_rule(29, &"property_", &n.span);
         }
         badProperty1(n) => {
             v.enter_rule(29, &"property_", &n.span);
-            v.visit_token(&n.lit_u5f);
-            walk_ident(v, &n.ident);
+            v.visit_token(toks, n.lit_u5f);
+            walk_ident(v, toks, &n.ident);
             v.exit_rule(29, &"property_", &n.span);
         }
     }
 }
 
-pub fn walk_ruleset<V: Visitor>(v: &mut V, node: &RulesetNode) {
+pub fn walk_ruleset<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulesetNode) {
     match node {
         knownRuleset(n) => {
             v.enter_rule(30, &"ruleset", &n.span);
-            walk_selectorGroup(v, &n.selector_group);
-            v.visit_token(&n.lbrace);
-            walk_ws(v, &n.ws);
+            walk_selectorGroup(v, toks, &n.selector_group);
+            v.visit_token(toks, n.lbrace);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.declaration_list {
-                walk_declarationList(v, item);
+                walk_declarationList(v, toks, item);
             }
-            v.visit_token(&n.rbrace);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.rbrace);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(30, &"ruleset", &n.span);
         }
         unknownRuleset(n) => {
             v.enter_rule(30, &"ruleset", &n.span);
             for let item of &n.any__list {
-                walk_any_(v, item);
+                walk_any_(v, toks, item);
             }
-            v.visit_token(&n.lbrace);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.lbrace);
+            walk_ws(v, toks, &n.ws);
             if let Some(item) = &n.declaration_list {
-                walk_declarationList(v, item);
+                walk_declarationList(v, toks, item);
             }
-            v.visit_token(&n.rbrace);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.rbrace);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(30, &"ruleset", &n.span);
         }
     }
 }
 
-pub fn walk_declarationList<V: Visitor>(v: &mut V, node: &DeclarationListNode) {
+pub fn walk_declarationList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DeclarationListNode) {
     v.enter_rule(31, &"declarationList", &node.span);
     for let item of &node.semicolon_ws_list {
-        v.visit_token(&item.semicolon);
-        walk_ws(v, &item.ws);
+        v.visit_token(toks, item.semicolon);
+        walk_ws(v, toks, &item.ws);
     }
-    walk_declaration(v, &node.declaration);
-    walk_ws(v, &node.ws);
+    walk_declaration(v, toks, &node.declaration);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.semicolon_ws_declaration_list {
-        v.visit_token(&item.semicolon);
-        walk_ws(v, &item.ws);
+        v.visit_token(toks, item.semicolon);
+        walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.declaration {
-            walk_declaration(v, item);
+            walk_declaration(v, toks, item);
         }
     }
     v.exit_rule(31, &"declarationList", &node.span);
 }
 
-pub fn walk_declaration<V: Visitor>(v: &mut V, node: &DeclarationNode) {
+pub fn walk_declaration<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DeclarationNode) {
     match node {
         knownDeclaration(n) => {
             v.enter_rule(32, &"declaration", &n.span);
-            walk_property_(v, &n.property_);
-            v.visit_token(&n.colon);
-            walk_ws(v, &n.ws);
-            walk_expr(v, &n.expr);
+            walk_property_(v, toks, &n.property_);
+            v.visit_token(toks, n.colon);
+            walk_ws(v, toks, &n.ws);
+            walk_expr(v, toks, &n.expr);
             if let Some(item) = &n.prio {
-                walk_prio(v, item);
+                walk_prio(v, toks, item);
             }
             v.exit_rule(32, &"declaration", &n.span);
         }
         unknownDeclaration(n) => {
             v.enter_rule(32, &"declaration", &n.span);
-            walk_property_(v, &n.property_);
-            v.visit_token(&n.colon);
-            walk_ws(v, &n.ws);
-            walk_value(v, &n.value);
+            walk_property_(v, toks, &n.property_);
+            v.visit_token(toks, n.colon);
+            walk_ws(v, toks, &n.ws);
+            walk_value(v, toks, &n.value);
             v.exit_rule(32, &"declaration", &n.span);
         }
     }
 }
 
-pub fn walk_prio<V: Visitor>(v: &mut V, node: &PrioNode) {
+pub fn walk_prio<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PrioNode) {
     v.enter_rule(33, &"prio", &node.span);
-    v.visit_token(&node.important);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.important);
+    walk_ws(v, toks, &node.ws);
     v.exit_rule(33, &"prio", &node.span);
 }
 
-pub fn walk_value<V: Visitor>(v: &mut V, node: &ValueNode) {
+pub fn walk_value<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ValueNode) {
     v.enter_rule(34, &"value", &node.span);
     for let item of &node.group_0_list {
         match item {
             Alt0(inner) => {
-                walk_any_(v, &inner.any_);
+                walk_any_(v, toks, &inner.any_);
             }
             Alt1(inner) => {
-                walk_block(v, &inner.block);
+                walk_block(v, toks, &inner.block);
             }
             Alt2(inner) => {
-                v.visit_token(&inner.atkeyword);
-                walk_ws(v, &inner.ws);
+                v.visit_token(toks, inner.atkeyword);
+                walk_ws(v, toks, &inner.ws);
             }
         }
     }
     v.exit_rule(34, &"value", &node.span);
 }
 
-pub fn walk_expr<V: Visitor>(v: &mut V, node: &ExprNode) {
+pub fn walk_expr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExprNode) {
     v.enter_rule(35, &"expr", &node.span);
-    walk_term(v, &node.term);
+    walk_term(v, toks, &node.term);
     for let item of &node.operator__term_list {
         if let Some(item) = &item.operator_ {
-            walk_operator_(v, item);
+            walk_operator_(v, toks, item);
         }
-        walk_term(v, &item.term);
+        walk_term(v, toks, &item.term);
     }
     v.exit_rule(35, &"expr", &node.span);
 }
 
-pub fn walk_term<V: Visitor>(v: &mut V, node: &TermNode) {
+pub fn walk_term<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TermNode) {
     match node {
         knownTerm0(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_number(v, &n.number);
-            walk_ws(v, &n.ws);
+            walk_number(v, toks, &n.number);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm1(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_percentage(v, &n.percentage);
-            walk_ws(v, &n.ws);
+            walk_percentage(v, toks, &n.percentage);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm2(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_dimension(v, &n.dimension);
-            walk_ws(v, &n.ws);
+            walk_dimension(v, toks, &n.dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm3(n) => {
             v.enter_rule(36, &"term", &n.span);
-            v.visit_token(&n.string_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.string_);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm4(n) => {
             v.enter_rule(36, &"term", &n.span);
-            v.visit_token(&n.unicoderange);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.unicoderange);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm5(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_ident(v, &n.ident);
-            walk_ws(v, &n.ws);
+            walk_ident(v, toks, &n.ident);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm6(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_var_(v, &n.var_);
+            walk_var_(v, toks, &n.var_);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm7(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_url(v, &n.url);
-            walk_ws(v, &n.ws);
+            walk_url(v, toks, &n.url);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm8(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_hexcolor(v, &n.hexcolor);
+            walk_hexcolor(v, toks, &n.hexcolor);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm9(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_calc(v, &n.calc);
+            walk_calc(v, toks, &n.calc);
             v.exit_rule(36, &"term", &n.span);
         }
         knownTerm10(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_function_(v, &n.function_);
+            walk_function_(v, toks, &n.function_);
             v.exit_rule(36, &"term", &n.span);
         }
         unknownTerm(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_unknownDimension(v, &n.unknown_dimension);
-            walk_ws(v, &n.ws);
+            walk_unknownDimension(v, toks, &n.unknown_dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(36, &"term", &n.span);
         }
         badTerm(n) => {
             v.enter_rule(36, &"term", &n.span);
-            walk_dxImageTransform(v, &n.dx_image_transform);
+            walk_dxImageTransform(v, toks, &n.dx_image_transform);
             v.exit_rule(36, &"term", &n.span);
         }
     }
 }
 
-pub fn walk_function_<V: Visitor>(v: &mut V, node: &FunctionNode) {
+pub fn walk_function_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FunctionNode) {
     v.enter_rule(37, &"function_", &node.span);
-    v.visit_token(&node.function_);
-    walk_ws(v, &node.ws);
-    walk_expr(v, &node.expr);
-    v.visit_token(&node.rparen);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.function_);
+    walk_ws(v, toks, &node.ws);
+    walk_expr(v, toks, &node.expr);
+    v.visit_token(toks, node.rparen);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(37, &"function_", &node.span);
 }
 
-pub fn walk_dxImageTransform<V: Visitor>(v: &mut V, node: &DxImageTransformNode) {
+pub fn walk_dxImageTransform<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DxImageTransformNode) {
     v.enter_rule(38, &"dxImageTransform", &node.span);
-    v.visit_token(&node.dximagetransform);
-    walk_ws(v, &node.ws);
-    walk_expr(v, &node.expr);
-    v.visit_token(&node.rparen);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.dximagetransform);
+    walk_ws(v, toks, &node.ws);
+    walk_expr(v, toks, &node.expr);
+    v.visit_token(toks, node.rparen);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(38, &"dxImageTransform", &node.span);
 }
 
-pub fn walk_hexcolor<V: Visitor>(v: &mut V, node: &HexcolorNode) {
+pub fn walk_hexcolor<V: Visitor>(v: &mut V, toks: &TokenStream, node: &HexcolorNode) {
     v.enter_rule(39, &"hexcolor", &node.span);
-    v.visit_token(&node.hash);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.hash);
+    walk_ws(v, toks, &node.ws);
     v.exit_rule(39, &"hexcolor", &node.span);
 }
 
-pub fn walk_number<V: Visitor>(v: &mut V, node: &NumberNode) {
+pub fn walk_number<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NumberNode) {
     v.enter_rule(40, &"number", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.number);
+    v.visit_token(toks, node.number);
     v.exit_rule(40, &"number", &node.span);
 }
 
-pub fn walk_percentage<V: Visitor>(v: &mut V, node: &PercentageNode) {
+pub fn walk_percentage<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PercentageNode) {
     v.enter_rule(41, &"percentage", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.percentage);
+    v.visit_token(toks, node.percentage);
     v.exit_rule(41, &"percentage", &node.span);
 }
 
-pub fn walk_dimension<V: Visitor>(v: &mut V, node: &DimensionNode) {
+pub fn walk_dimension<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DimensionNode) {
     v.enter_rule(42, &"dimension", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.dimension);
+    v.visit_token(toks, node.dimension);
     v.exit_rule(42, &"dimension", &node.span);
 }
 
-pub fn walk_unknownDimension<V: Visitor>(v: &mut V, node: &UnknownDimensionNode) {
+pub fn walk_unknownDimension<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UnknownDimensionNode) {
     v.enter_rule(43, &"unknownDimension", &node.span);
     if let Some(item) = &node.plus_or_minus {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.unknowndimension);
+    v.visit_token(toks, node.unknowndimension);
     v.exit_rule(43, &"unknownDimension", &node.span);
 }
 
-pub fn walk_any_<V: Visitor>(v: &mut V, node: &AnyNode) {
+pub fn walk_any_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AnyNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_ident(v, &n.ident);
-            walk_ws(v, &n.ws);
+            walk_ident(v, toks, &n.ident);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_number(v, &n.number);
-            walk_ws(v, &n.ws);
+            walk_number(v, toks, &n.number);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_percentage(v, &n.percentage);
-            walk_ws(v, &n.ws);
+            walk_percentage(v, toks, &n.percentage);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_dimension(v, &n.dimension);
-            walk_ws(v, &n.ws);
+            walk_dimension(v, toks, &n.dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_unknownDimension(v, &n.unknown_dimension);
-            walk_ws(v, &n.ws);
+            walk_unknownDimension(v, toks, &n.unknown_dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.string_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.string_);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt6(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            walk_url(v, &n.url);
-            walk_ws(v, &n.ws);
+            walk_url(v, toks, &n.url);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt7(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.hash);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.hash);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt8(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.unicoderange);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.unicoderange);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt9(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.includes);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.includes);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt10(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.dashmatch);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.dashmatch);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt11(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.colon);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.colon);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt12(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.function_);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.function_);
+            walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
                     Any(inner) => {
-                        walk_any_(v, inner);
+                        walk_any_(v, toks, inner);
                     }
                     Unused(inner) => {
-                        walk_unused(v, inner);
+                        walk_unused(v, toks, inner);
                     }
                 }
             }
-            v.visit_token(&n.rparen);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.rparen);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt13(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.lparen);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.lparen);
+            walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
                     Any(inner) => {
-                        walk_any_(v, inner);
+                        walk_any_(v, toks, inner);
                     }
                     Unused(inner) => {
-                        walk_unused(v, inner);
+                        walk_unused(v, toks, inner);
                     }
                 }
             }
-            v.visit_token(&n.rparen);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.rparen);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
         Alt14(n) => {
             v.enter_rule(44, &"any_", &n.span);
-            v.visit_token(&n.lbracket);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.lbracket);
+            walk_ws(v, toks, &n.ws);
             for let item of &n.any__or_unused_list {
                 match item {
                     Any(inner) => {
-                        walk_any_(v, inner);
+                        walk_any_(v, toks, inner);
                     }
                     Unused(inner) => {
-                        walk_unused(v, inner);
+                        walk_unused(v, toks, inner);
                     }
                 }
             }
-            v.visit_token(&n.rbracket);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.rbracket);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(44, &"any_", &n.span);
         }
     }
 }
 
-pub fn walk_atRule<V: Visitor>(v: &mut V, node: &AtRuleNode) {
+pub fn walk_atRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtRuleNode) {
     v.enter_rule(45, &"atRule", &node.span);
-    v.visit_token(&node.atkeyword);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.atkeyword);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.any__list {
-        walk_any_(v, item);
+        walk_any_(v, toks, item);
     }
     if let Some(item) = &node.group_0 {
         match item {
             Alt0(inner) => {
-                walk_block(v, &inner.block);
+                walk_block(v, toks, &inner.block);
             }
             Alt1(inner) => {
-                v.visit_token(&inner.semicolon);
-                walk_ws(v, &inner.ws);
+                v.visit_token(toks, inner.semicolon);
+                walk_ws(v, toks, &inner.ws);
             }
         }
     }
     v.exit_rule(45, &"atRule", &node.span);
 }
 
-pub fn walk_unused<V: Visitor>(v: &mut V, node: &UnusedNode) {
+pub fn walk_unused<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UnusedNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            walk_block(v, &n.block);
+            walk_block(v, toks, &n.block);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(&n.atkeyword);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.atkeyword);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(&n.semicolon);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.semicolon);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(&n.cdo);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.cdo);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(46, &"unused", &n.span);
-            v.visit_token(&n.cdc);
-            walk_ws(v, &n.ws);
+            v.visit_token(toks, n.cdc);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(46, &"unused", &n.span);
         }
     }
 }
 
-pub fn walk_block<V: Visitor>(v: &mut V, node: &BlockNode) {
+pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
     v.enter_rule(47, &"block", &node.span);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.group_0_list {
         match item {
             Alt0(inner) => {
-                walk_declarationList(v, &inner.declaration_list);
+                walk_declarationList(v, toks, &inner.declaration_list);
             }
             Alt1(inner) => {
-                walk_nestedStatement(v, &inner.nested_statement);
+                walk_nestedStatement(v, toks, &inner.nested_statement);
             }
             Alt2(inner) => {
-                walk_any_(v, &inner.any_);
+                walk_any_(v, toks, &inner.any_);
             }
             Alt3(inner) => {
-                walk_block(v, &inner.block);
+                walk_block(v, toks, &inner.block);
             }
             Alt4(inner) => {
-                v.visit_token(&inner.atkeyword);
-                walk_ws(v, &inner.ws);
+                v.visit_token(toks, inner.atkeyword);
+                walk_ws(v, toks, &inner.ws);
             }
             Alt5(inner) => {
-                v.visit_token(&inner.semicolon);
-                walk_ws(v, &inner.ws);
+                v.visit_token(toks, inner.semicolon);
+                walk_ws(v, toks, &inner.ws);
             }
         }
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(47, &"block", &node.span);
 }
 
-pub fn walk_nestedStatement<V: Visitor>(v: &mut V, node: &NestedStatementNode) {
+pub fn walk_nestedStatement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NestedStatementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_ruleset(v, &n.ruleset);
+            walk_ruleset(v, toks, &n.ruleset);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_media(v, &n.media);
+            walk_media(v, toks, &n.media);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_page(v, &n.page);
+            walk_page(v, toks, &n.page);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_fontFaceRule(v, &n.font_face_rule);
+            walk_fontFaceRule(v, toks, &n.font_face_rule);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_keyframesRule(v, &n.keyframes_rule);
+            walk_keyframesRule(v, toks, &n.keyframes_rule);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt5(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_supportsRule(v, &n.supports_rule);
+            walk_supportsRule(v, toks, &n.supports_rule);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt6(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_viewport(v, &n.viewport);
+            walk_viewport(v, toks, &n.viewport);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt7(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_counterStyle(v, &n.counter_style);
+            walk_counterStyle(v, toks, &n.counter_style);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt8(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_fontFeatureValuesRule(v, &n.font_feature_values_rule);
+            walk_fontFeatureValuesRule(v, toks, &n.font_feature_values_rule);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
         Alt9(n) => {
             v.enter_rule(48, &"nestedStatement", &n.span);
-            walk_atRule(v, &n.at_rule);
+            walk_atRule(v, toks, &n.at_rule);
             v.exit_rule(48, &"nestedStatement", &n.span);
         }
     }
 }
 
-pub fn walk_groupRuleBody<V: Visitor>(v: &mut V, node: &GroupRuleBodyNode) {
+pub fn walk_groupRuleBody<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GroupRuleBodyNode) {
     v.enter_rule(49, &"groupRuleBody", &node.span);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.nested_statement_list {
-        walk_nestedStatement(v, item);
+        walk_nestedStatement(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(49, &"groupRuleBody", &node.span);
 }
 
-pub fn walk_supportsRule<V: Visitor>(v: &mut V, node: &SupportsRuleNode) {
+pub fn walk_supportsRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsRuleNode) {
     v.enter_rule(50, &"supportsRule", &node.span);
-    v.visit_token(&node.supports);
-    walk_ws(v, &node.ws);
-    walk_supportsCondition(v, &node.supports_condition);
-    walk_ws(v, &node.ws_2);
-    walk_groupRuleBody(v, &node.group_rule_body);
+    v.visit_token(toks, node.supports);
+    walk_ws(v, toks, &node.ws);
+    walk_supportsCondition(v, toks, &node.supports_condition);
+    walk_ws(v, toks, &node.ws_2);
+    walk_groupRuleBody(v, toks, &node.group_rule_body);
     v.exit_rule(50, &"supportsRule", &node.span);
 }
 
-pub fn walk_supportsCondition<V: Visitor>(v: &mut V, node: &SupportsConditionNode) {
+pub fn walk_supportsCondition<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsConditionNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(51, &"supportsCondition", &n.span);
-            walk_supportsNegation(v, &n.supports_negation);
+            walk_supportsNegation(v, toks, &n.supports_negation);
             v.exit_rule(51, &"supportsCondition", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(51, &"supportsCondition", &n.span);
-            walk_supportsConjunction(v, &n.supports_conjunction);
+            walk_supportsConjunction(v, toks, &n.supports_conjunction);
             v.exit_rule(51, &"supportsCondition", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(51, &"supportsCondition", &n.span);
-            walk_supportsDisjunction(v, &n.supports_disjunction);
+            walk_supportsDisjunction(v, toks, &n.supports_disjunction);
             v.exit_rule(51, &"supportsCondition", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(51, &"supportsCondition", &n.span);
-            walk_supportsConditionInParens(v, &n.supports_condition_in_parens);
+            walk_supportsConditionInParens(v, toks, &n.supports_condition_in_parens);
             v.exit_rule(51, &"supportsCondition", &n.span);
         }
     }
 }
 
-pub fn walk_supportsConditionInParens<V: Visitor>(v: &mut V, node: &SupportsConditionInParensNode) {
+pub fn walk_supportsConditionInParens<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsConditionInParensNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(52, &"supportsConditionInParens", &n.span);
-            v.visit_token(&n.lparen);
-            walk_ws(v, &n.ws);
-            walk_supportsCondition(v, &n.supports_condition);
-            walk_ws(v, &n.ws_2);
-            v.visit_token(&n.rparen);
+            v.visit_token(toks, n.lparen);
+            walk_ws(v, toks, &n.ws);
+            walk_supportsCondition(v, toks, &n.supports_condition);
+            walk_ws(v, toks, &n.ws_2);
+            v.visit_token(toks, n.rparen);
             v.exit_rule(52, &"supportsConditionInParens", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(52, &"supportsConditionInParens", &n.span);
-            walk_supportsDeclarationCondition(v, &n.supports_declaration_condition);
+            walk_supportsDeclarationCondition(v, toks, &n.supports_declaration_condition);
             v.exit_rule(52, &"supportsConditionInParens", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(52, &"supportsConditionInParens", &n.span);
-            walk_generalEnclosed(v, &n.general_enclosed);
+            walk_generalEnclosed(v, toks, &n.general_enclosed);
             v.exit_rule(52, &"supportsConditionInParens", &n.span);
         }
     }
 }
 
-pub fn walk_supportsNegation<V: Visitor>(v: &mut V, node: &SupportsNegationNode) {
+pub fn walk_supportsNegation<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsNegationNode) {
     v.enter_rule(53, &"supportsNegation", &node.span);
-    v.visit_token(&node.not);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.space);
-    walk_ws(v, &node.ws_2);
-    walk_supportsConditionInParens(v, &node.supports_condition_in_parens);
+    v.visit_token(toks, node.not);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.space);
+    walk_ws(v, toks, &node.ws_2);
+    walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     v.exit_rule(53, &"supportsNegation", &node.span);
 }
 
-pub fn walk_supportsConjunction<V: Visitor>(v: &mut V, node: &SupportsConjunctionNode) {
+pub fn walk_supportsConjunction<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsConjunctionNode) {
     v.enter_rule(54, &"supportsConjunction", &node.span);
-    walk_supportsConditionInParens(v, &node.supports_condition_in_parens);
+    walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     for let item of &node.ws_space_ws_and_ws_space_ws_supports_condition_in_parens_list {
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.space);
-        walk_ws(v, &item.ws_2);
-        v.visit_token(&item.and);
-        walk_ws(v, &item.ws_3);
-        v.visit_token(&item.space_2);
-        walk_ws(v, &item.ws_4);
-        walk_supportsConditionInParens(v, &item.supports_condition_in_parens);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.space);
+        walk_ws(v, toks, &item.ws_2);
+        v.visit_token(toks, item.and);
+        walk_ws(v, toks, &item.ws_3);
+        v.visit_token(toks, item.space_2);
+        walk_ws(v, toks, &item.ws_4);
+        walk_supportsConditionInParens(v, toks, &item.supports_condition_in_parens);
     }
     v.exit_rule(54, &"supportsConjunction", &node.span);
 }
 
-pub fn walk_supportsDisjunction<V: Visitor>(v: &mut V, node: &SupportsDisjunctionNode) {
+pub fn walk_supportsDisjunction<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsDisjunctionNode) {
     v.enter_rule(55, &"supportsDisjunction", &node.span);
-    walk_supportsConditionInParens(v, &node.supports_condition_in_parens);
+    walk_supportsConditionInParens(v, toks, &node.supports_condition_in_parens);
     for let item of &node.ws_space_ws_or_ws_space_ws_supports_condition_in_parens_list {
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.space);
-        walk_ws(v, &item.ws_2);
-        v.visit_token(&item.or);
-        walk_ws(v, &item.ws_3);
-        v.visit_token(&item.space_2);
-        walk_ws(v, &item.ws_4);
-        walk_supportsConditionInParens(v, &item.supports_condition_in_parens);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.space);
+        walk_ws(v, toks, &item.ws_2);
+        v.visit_token(toks, item.or);
+        walk_ws(v, toks, &item.ws_3);
+        v.visit_token(toks, item.space_2);
+        walk_ws(v, toks, &item.ws_4);
+        walk_supportsConditionInParens(v, toks, &item.supports_condition_in_parens);
     }
     v.exit_rule(55, &"supportsDisjunction", &node.span);
 }
 
-pub fn walk_supportsDeclarationCondition<V: Visitor>(v: &mut V, node: &SupportsDeclarationConditionNode) {
+pub fn walk_supportsDeclarationCondition<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SupportsDeclarationConditionNode) {
     v.enter_rule(56, &"supportsDeclarationCondition", &node.span);
-    v.visit_token(&node.lparen);
-    walk_ws(v, &node.ws);
-    walk_declaration(v, &node.declaration);
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.lparen);
+    walk_ws(v, toks, &node.ws);
+    walk_declaration(v, toks, &node.declaration);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(56, &"supportsDeclarationCondition", &node.span);
 }
 
-pub fn walk_generalEnclosed<V: Visitor>(v: &mut V, node: &GeneralEnclosedNode) {
+pub fn walk_generalEnclosed<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GeneralEnclosedNode) {
     v.enter_rule(57, &"generalEnclosed", &node.span);
-    v.visit_token(&node.function__or_lparen);
+    v.visit_token(toks, node.function__or_lparen);
     for let item of &node.any__or_unused_list {
         match item {
             Any(inner) => {
-                walk_any_(v, inner);
+                walk_any_(v, toks, inner);
             }
             Unused(inner) => {
-                walk_unused(v, inner);
+                walk_unused(v, toks, inner);
             }
         }
     }
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(57, &"generalEnclosed", &node.span);
 }
 
-pub fn walk_url<V: Visitor>(v: &mut V, node: &UrlNode) {
+pub fn walk_url<V: Visitor>(v: &mut V, toks: &TokenStream, node: &UrlNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(58, &"url", &n.span);
-            v.visit_token(&n.url_);
-            walk_ws(v, &n.ws);
-            v.visit_token(&n.string_);
-            walk_ws(v, &n.ws_2);
-            v.visit_token(&n.rparen);
+            v.visit_token(toks, n.url_);
+            walk_ws(v, toks, &n.ws);
+            v.visit_token(toks, n.string_);
+            walk_ws(v, toks, &n.ws_2);
+            v.visit_token(toks, n.rparen);
             v.exit_rule(58, &"url", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(58, &"url", &n.span);
-            v.visit_token(&n.url);
+            v.visit_token(toks, n.url);
             v.exit_rule(58, &"url", &n.span);
         }
     }
 }
 
-pub fn walk_var_<V: Visitor>(v: &mut V, node: &VarNode) {
+pub fn walk_var_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &VarNode) {
     v.enter_rule(59, &"var_", &node.span);
-    v.visit_token(&node.var);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.variable);
-    walk_ws(v, &node.ws_2);
-    v.visit_token(&node.rparen);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.var);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.variable);
+    walk_ws(v, toks, &node.ws_2);
+    v.visit_token(toks, node.rparen);
+    walk_ws(v, toks, &node.ws_3);
     v.exit_rule(59, &"var_", &node.span);
 }
 
-pub fn walk_calc<V: Visitor>(v: &mut V, node: &CalcNode) {
+pub fn walk_calc<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcNode) {
     v.enter_rule(60, &"calc", &node.span);
-    v.visit_token(&node.calc);
-    walk_ws(v, &node.ws);
-    walk_calcSum(v, &node.calc_sum);
-    v.visit_token(&node.rparen);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.calc);
+    walk_ws(v, toks, &node.ws);
+    walk_calcSum(v, toks, &node.calc_sum);
+    v.visit_token(toks, node.rparen);
+    walk_ws(v, toks, &node.ws_2);
     v.exit_rule(60, &"calc", &node.span);
 }
 
-pub fn walk_calcSum<V: Visitor>(v: &mut V, node: &CalcSumNode) {
+pub fn walk_calcSum<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcSumNode) {
     v.enter_rule(61, &"calcSum", &node.span);
-    walk_calcProduct(v, &node.calc_product);
+    walk_calcProduct(v, toks, &node.calc_product);
     for let item of &node.space_ws_item_ws_space_ws_calc_product_list {
-        v.visit_token(&item.space);
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.plus_or_minus);
-        walk_ws(v, &item.ws_2);
-        v.visit_token(&item.space_2);
-        walk_ws(v, &item.ws_3);
-        walk_calcProduct(v, &item.calc_product);
+        v.visit_token(toks, item.space);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.plus_or_minus);
+        walk_ws(v, toks, &item.ws_2);
+        v.visit_token(toks, item.space_2);
+        walk_ws(v, toks, &item.ws_3);
+        walk_calcProduct(v, toks, &item.calc_product);
     }
     v.exit_rule(61, &"calcSum", &node.span);
 }
 
-pub fn walk_calcProduct<V: Visitor>(v: &mut V, node: &CalcProductNode) {
+pub fn walk_calcProduct<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcProductNode) {
     v.enter_rule(62, &"calcProduct", &node.span);
-    walk_calcValue(v, &node.calc_value);
+    walk_calcValue(v, toks, &node.calc_value);
     for let item of &node.group_0_list {
         match item {
             Alt0(inner) => {
-                v.visit_token(&inner.star);
-                walk_ws(v, &inner.ws);
-                walk_calcValue(v, &inner.calc_value);
+                v.visit_token(toks, inner.star);
+                walk_ws(v, toks, &inner.ws);
+                walk_calcValue(v, toks, &inner.calc_value);
             }
             Alt1(inner) => {
-                v.visit_token(&inner.slash);
-                walk_ws(v, &inner.ws);
-                walk_number(v, &inner.number);
-                walk_ws(v, &inner.ws_2);
+                v.visit_token(toks, inner.slash);
+                walk_ws(v, toks, &inner.ws);
+                walk_number(v, toks, &inner.number);
+                walk_ws(v, toks, &inner.ws_2);
             }
         }
     }
     v.exit_rule(62, &"calcProduct", &node.span);
 }
 
-pub fn walk_calcValue<V: Visitor>(v: &mut V, node: &CalcValueNode) {
+pub fn walk_calcValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CalcValueNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            walk_number(v, &n.number);
-            walk_ws(v, &n.ws);
+            walk_number(v, toks, &n.number);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(63, &"calcValue", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            walk_dimension(v, &n.dimension);
-            walk_ws(v, &n.ws);
+            walk_dimension(v, toks, &n.dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(63, &"calcValue", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            walk_unknownDimension(v, &n.unknown_dimension);
-            walk_ws(v, &n.ws);
+            walk_unknownDimension(v, toks, &n.unknown_dimension);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(63, &"calcValue", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            walk_percentage(v, &n.percentage);
-            walk_ws(v, &n.ws);
+            walk_percentage(v, toks, &n.percentage);
+            walk_ws(v, toks, &n.ws);
             v.exit_rule(63, &"calcValue", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(63, &"calcValue", &n.span);
-            v.visit_token(&n.lparen);
-            walk_ws(v, &n.ws);
-            walk_calcSum(v, &n.calc_sum);
-            v.visit_token(&n.rparen);
-            walk_ws(v, &n.ws_2);
+            v.visit_token(toks, n.lparen);
+            walk_ws(v, toks, &n.ws);
+            walk_calcSum(v, toks, &n.calc_sum);
+            v.visit_token(toks, n.rparen);
+            walk_ws(v, toks, &n.ws_2);
             v.exit_rule(63, &"calcValue", &n.span);
         }
     }
 }
 
-pub fn walk_fontFaceRule<V: Visitor>(v: &mut V, node: &FontFaceRuleNode) {
+pub fn walk_fontFaceRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFaceRuleNode) {
     v.enter_rule(64, &"fontFaceRule", &node.span);
-    v.visit_token(&node.fontface);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.fontface);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.font_face_declaration {
-        walk_fontFaceDeclaration(v, item);
+        walk_fontFaceDeclaration(v, toks, item);
     }
     for let item of &node.semicolon_ws_font_face_declaration_list {
-        v.visit_token(&item.semicolon);
-        walk_ws(v, &item.ws);
+        v.visit_token(toks, item.semicolon);
+        walk_ws(v, toks, &item.ws);
         if let Some(item) = &item.font_face_declaration {
-            walk_fontFaceDeclaration(v, item);
+            walk_fontFaceDeclaration(v, toks, item);
         }
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_3);
     v.exit_rule(64, &"fontFaceRule", &node.span);
 }
 
-pub fn walk_fontFaceDeclaration<V: Visitor>(v: &mut V, node: &FontFaceDeclarationNode) {
+pub fn walk_fontFaceDeclaration<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFaceDeclarationNode) {
     match node {
         knownFontFaceDeclaration(n) => {
             v.enter_rule(65, &"fontFaceDeclaration", &n.span);
-            walk_property_(v, &n.property_);
-            v.visit_token(&n.colon);
-            walk_ws(v, &n.ws);
-            walk_expr(v, &n.expr);
+            walk_property_(v, toks, &n.property_);
+            v.visit_token(toks, n.colon);
+            walk_ws(v, toks, &n.ws);
+            walk_expr(v, toks, &n.expr);
             v.exit_rule(65, &"fontFaceDeclaration", &n.span);
         }
         unknownFontFaceDeclaration(n) => {
             v.enter_rule(65, &"fontFaceDeclaration", &n.span);
-            walk_property_(v, &n.property_);
-            v.visit_token(&n.colon);
-            walk_ws(v, &n.ws);
-            walk_value(v, &n.value);
+            walk_property_(v, toks, &n.property_);
+            v.visit_token(toks, n.colon);
+            walk_ws(v, toks, &n.ws);
+            walk_value(v, toks, &n.value);
             v.exit_rule(65, &"fontFaceDeclaration", &n.span);
         }
     }
 }
 
-pub fn walk_keyframesRule<V: Visitor>(v: &mut V, node: &KeyframesRuleNode) {
+pub fn walk_keyframesRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframesRuleNode) {
     v.enter_rule(66, &"keyframesRule", &node.span);
-    v.visit_token(&node.keyframes);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.space);
-    walk_ws(v, &node.ws_2);
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws_3);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_4);
+    v.visit_token(toks, node.keyframes);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.space);
+    walk_ws(v, toks, &node.ws_2);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws_3);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_4);
     for let item of &node.keyframe_block_list {
-        walk_keyframeBlock(v, item);
+        walk_keyframeBlock(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_5);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_5);
     v.exit_rule(66, &"keyframesRule", &node.span);
 }
 
-pub fn walk_keyframeBlock<V: Visitor>(v: &mut V, node: &KeyframeBlockNode) {
+pub fn walk_keyframeBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframeBlockNode) {
     v.enter_rule(67, &"keyframeBlock", &node.span);
-    walk_keyframeSelector(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.keyframe_selector);
-    v.visit_token(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.lbrace);
-    walk_ws(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws);
+    walk_keyframeSelector(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.keyframe_selector);
+    v.visit_token(toks, node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.lbrace);
+    walk_ws(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws);
     if let Some(item) = &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.declaration_list {
-        walk_declarationList(v, item);
+        walk_declarationList(v, toks, item);
     }
-    v.visit_token(&node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.rbrace);
-    walk_ws(v, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws_2);
+    v.visit_token(toks, node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.rbrace);
+    walk_ws(v, toks, &node.keyframe_selector_lbrace_ws_declaration_list_rbrace_ws.ws_2);
     v.exit_rule(67, &"keyframeBlock", &node.span);
 }
 
-pub fn walk_keyframeSelector<V: Visitor>(v: &mut V, node: &KeyframeSelectorNode) {
+pub fn walk_keyframeSelector<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyframeSelectorNode) {
     v.enter_rule(68, &"keyframeSelector", &node.span);
-    v.visit_token(&node.from__or_to_or_percentage);
-    walk_ws(v, &node.ws);
+    v.visit_token(toks, node.from__or_to_or_percentage);
+    walk_ws(v, toks, &node.ws);
     for let item of &node.comma_ws_item_ws_list {
-        v.visit_token(&item.comma);
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.from__or_to_or_percentage);
-        walk_ws(v, &item.ws_2);
+        v.visit_token(toks, item.comma);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.from__or_to_or_percentage);
+        walk_ws(v, toks, &item.ws_2);
     }
     v.exit_rule(68, &"keyframeSelector", &node.span);
 }
 
-pub fn walk_viewport<V: Visitor>(v: &mut V, node: &ViewportNode) {
+pub fn walk_viewport<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ViewportNode) {
     v.enter_rule(69, &"viewport", &node.span);
-    v.visit_token(&node.viewport);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_2);
+    v.visit_token(toks, node.viewport);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.declaration_list {
-        walk_declarationList(v, item);
+        walk_declarationList(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_3);
     v.exit_rule(69, &"viewport", &node.span);
 }
 
-pub fn walk_counterStyle<V: Visitor>(v: &mut V, node: &CounterStyleNode) {
+pub fn walk_counterStyle<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CounterStyleNode) {
     v.enter_rule(70, &"counterStyle", &node.span);
-    v.visit_token(&node.counterstyle);
-    walk_ws(v, &node.ws);
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws_2);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.counterstyle);
+    walk_ws(v, toks, &node.ws);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws_2);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_3);
     if let Some(item) = &node.declaration_list {
-        walk_declarationList(v, item);
+        walk_declarationList(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_4);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_4);
     v.exit_rule(70, &"counterStyle", &node.span);
 }
 
-pub fn walk_fontFeatureValuesRule<V: Visitor>(v: &mut V, node: &FontFeatureValuesRuleNode) {
+pub fn walk_fontFeatureValuesRule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFeatureValuesRuleNode) {
     v.enter_rule(71, &"fontFeatureValuesRule", &node.span);
-    v.visit_token(&node.fontfeaturevalues);
-    walk_ws(v, &node.ws);
-    walk_fontFamilyNameList(v, &node.font_family_name_list);
-    walk_ws(v, &node.ws_2);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.fontfeaturevalues);
+    walk_ws(v, toks, &node.ws);
+    walk_fontFamilyNameList(v, toks, &node.font_family_name_list);
+    walk_ws(v, toks, &node.ws_2);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_3);
     for let item of &node.feature_value_block_list {
-        walk_featureValueBlock(v, item);
+        walk_featureValueBlock(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_4);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_4);
     v.exit_rule(71, &"fontFeatureValuesRule", &node.span);
 }
 
-pub fn walk_fontFamilyNameList<V: Visitor>(v: &mut V, node: &FontFamilyNameListNode) {
+pub fn walk_fontFamilyNameList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFamilyNameListNode) {
     v.enter_rule(72, &"fontFamilyNameList", &node.span);
-    walk_fontFamilyName(v, &node.font_family_name);
+    walk_fontFamilyName(v, toks, &node.font_family_name);
     for let item of &node.ws_comma_ws_font_family_name_list {
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.comma);
-        walk_ws(v, &item.ws_2);
-        walk_fontFamilyName(v, &item.font_family_name);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.comma);
+        walk_ws(v, toks, &item.ws_2);
+        walk_fontFamilyName(v, toks, &item.font_family_name);
     }
     v.exit_rule(72, &"fontFamilyNameList", &node.span);
 }
 
-pub fn walk_fontFamilyName<V: Visitor>(v: &mut V, node: &FontFamilyNameNode) {
+pub fn walk_fontFamilyName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FontFamilyNameNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(73, &"fontFamilyName", &n.span);
-            v.visit_token(&n.string_);
+            v.visit_token(toks, n.string_);
             v.exit_rule(73, &"fontFamilyName", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(73, &"fontFamilyName", &n.span);
-            walk_ident(v, &n.ident);
+            walk_ident(v, toks, &n.ident);
             for let item of &n.ws_ident_list {
-                walk_ws(v, &item.ws);
-                walk_ident(v, &item.ident);
+                walk_ws(v, toks, &item.ws);
+                walk_ident(v, toks, &item.ident);
             }
             v.exit_rule(73, &"fontFamilyName", &n.span);
         }
     }
 }
 
-pub fn walk_featureValueBlock<V: Visitor>(v: &mut V, node: &FeatureValueBlockNode) {
+pub fn walk_featureValueBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FeatureValueBlockNode) {
     v.enter_rule(74, &"featureValueBlock", &node.span);
-    walk_featureType(v, &node.feature_type);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.lbrace);
-    walk_ws(v, &node.ws_2);
+    walk_featureType(v, toks, &node.feature_type);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.lbrace);
+    walk_ws(v, toks, &node.ws_2);
     if let Some(item) = &node.feature_value_definition {
-        walk_featureValueDefinition(v, item);
+        walk_featureValueDefinition(v, toks, item);
     }
     for let item of &node.ws_semicolon_ws_feature_value_definition_list {
-        walk_ws(v, &item.ws);
-        v.visit_token(&item.semicolon);
-        walk_ws(v, &item.ws_2);
+        walk_ws(v, toks, &item.ws);
+        v.visit_token(toks, item.semicolon);
+        walk_ws(v, toks, &item.ws_2);
         if let Some(item) = &item.feature_value_definition {
-            walk_featureValueDefinition(v, item);
+            walk_featureValueDefinition(v, toks, item);
         }
     }
-    v.visit_token(&node.rbrace);
-    walk_ws(v, &node.ws_3);
+    v.visit_token(toks, node.rbrace);
+    walk_ws(v, toks, &node.ws_3);
     v.exit_rule(74, &"featureValueBlock", &node.span);
 }
 
-pub fn walk_featureType<V: Visitor>(v: &mut V, node: &FeatureTypeNode) {
+pub fn walk_featureType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FeatureTypeNode) {
     v.enter_rule(75, &"featureType", &node.span);
-    v.visit_token(&node.atkeyword);
+    v.visit_token(toks, node.atkeyword);
     v.exit_rule(75, &"featureType", &node.span);
 }
 
-pub fn walk_featureValueDefinition<V: Visitor>(v: &mut V, node: &FeatureValueDefinitionNode) {
+pub fn walk_featureValueDefinition<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FeatureValueDefinitionNode) {
     v.enter_rule(76, &"featureValueDefinition", &node.span);
-    walk_ident(v, &node.ident);
-    walk_ws(v, &node.ws);
-    v.visit_token(&node.colon);
-    walk_ws(v, &node.ws_2);
-    walk_number(v, &node.number);
+    walk_ident(v, toks, &node.ident);
+    walk_ws(v, toks, &node.ws);
+    v.visit_token(toks, node.colon);
+    walk_ws(v, toks, &node.ws_2);
+    walk_number(v, toks, &node.number);
     for let item of &node.ws_number_list {
-        walk_ws(v, &item.ws);
-        walk_number(v, &item.number);
+        walk_ws(v, toks, &item.ws);
+        walk_number(v, toks, &item.number);
     }
     v.exit_rule(76, &"featureValueDefinition", &node.span);
 }
 
-pub fn walk_ident<V: Visitor>(v: &mut V, node: &IdentNode) {
+pub fn walk_ident<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IdentNode) {
     v.enter_rule(77, &"ident", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(77, &"ident", &node.span);
 }
 
-pub fn walk_ws<V: Visitor>(v: &mut V, node: &WsNode) {
+pub fn walk_ws<V: Visitor>(v: &mut V, toks: &TokenStream, node: &WsNode) {
     v.enter_rule(78, &"ws", &node.span);
     for let item of &node.comment_or_space_list {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     v.exit_rule(78, &"ws", &node.span);
 }
 
-pub fn to_tree(node: &StylesheetNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_stylesheet(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<StylesheetNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_stylesheet(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

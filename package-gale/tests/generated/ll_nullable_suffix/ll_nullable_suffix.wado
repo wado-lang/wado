@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -1246,9 +1246,9 @@ pub fn walk_b<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BNode) {
     v.exit_rule(2, &"b", &node.span);
 }
 
-pub fn to_tree(node: &RNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_r(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<RNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_r(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

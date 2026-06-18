@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -1874,7 +1874,7 @@ pub variant StatementNode {
 
 pub struct StatementAlt0 {
     pub span: Span,
-    pub lit_x: Tok,
+    pub lit_x: i32,
 }
 
 pub struct StatementAlt1 {
@@ -1883,14 +1883,14 @@ pub struct StatementAlt1 {
 }
 
 pub struct LitElseStatementItem {
-    pub lit_else: Tok,
+    pub lit_else: i32,
     pub statement: StatementNode,
 }
 
 pub struct IfStatementNode {
     pub span: Span,
-    pub lit_if: Tok,
-    pub lit_y: Tok,
+    pub lit_if: i32,
+    pub lit_y: i32,
     pub statement: StatementNode,
     pub lit_else_statement: Option<LitElseStatementItem>,
 }
@@ -2110,10 +2110,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -2121,10 +2121,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -2136,7 +2136,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -2144,7 +2144,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -2155,7 +2155,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -2176,12 +2176,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -2384,13 +2384,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -2407,60 +2410,60 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_start(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse_start(input: &String) -> Result<ParseResult<StartNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_start(p));
 }
 
-pub fn parse_statement(input: &String) -> Result<StatementNode, ParseError> {
+pub fn parse_statement(input: &String) -> Result<ParseResult<StatementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_statement(p));
 }
 
-pub fn parse_if_statement(input: &String) -> Result<IfStatementNode, ParseError> {
+pub fn parse_if_statement(input: &String) -> Result<ParseResult<IfStatementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_if_statement(p));
 }
 
-pub fn parse(input: &String) -> Result<StartNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<StartNode>, ParseError> {
     return parse_start(input);
 }
 
-pub fn walk_start<V: Visitor>(v: &mut V, node: &StartNode) {
+pub fn walk_start<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StartNode) {
     v.enter_rule(0, &"start", &node.span);
     for let item of &node.statement_list {
-        walk_statement(v, item);
+        walk_statement(v, toks, item);
     }
     v.exit_rule(0, &"start", &node.span);
 }
 
-pub fn walk_statement<V: Visitor>(v: &mut V, node: &StatementNode) {
+pub fn walk_statement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StatementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(1, &"statement", &n.span);
-            v.visit_token(&n.lit_x);
+            v.visit_token(toks, n.lit_x);
             v.exit_rule(1, &"statement", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(1, &"statement", &n.span);
-            walk_ifStatement(v, &n.if_statement);
+            walk_ifStatement(v, toks, &n.if_statement);
             v.exit_rule(1, &"statement", &n.span);
         }
     }
 }
 
-pub fn walk_ifStatement<V: Visitor>(v: &mut V, node: &IfStatementNode) {
+pub fn walk_ifStatement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IfStatementNode) {
     v.enter_rule(2, &"ifStatement", &node.span);
-    v.visit_token(&node.lit_if);
-    v.visit_token(&node.lit_y);
-    walk_statement(v, &node.statement);
+    v.visit_token(toks, node.lit_if);
+    v.visit_token(toks, node.lit_y);
+    walk_statement(v, toks, &node.statement);
     if let Some(item) = &node.lit_else_statement {
-        v.visit_token(&item.lit_else);
-        walk_statement(v, &item.statement);
+        v.visit_token(toks, item.lit_else);
+        walk_statement(v, toks, &item.statement);
     }
     v.exit_rule(2, &"ifStatement", &node.span);
 }
 
-pub fn to_tree(node: &StartNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_start(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<StartNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_start(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

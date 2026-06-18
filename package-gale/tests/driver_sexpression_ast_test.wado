@@ -7,70 +7,41 @@ use sexpression from "./grammars/sexpression.g4"
         },
     };
 use {
-    LexerSlice,
-    Span,
-    Token,
     SexprNode,
     ItemNode,
-    ItemAlt0,
     AtomNode,
     TK_NUMBER,
     TK_SYMBOL,
     TK_EOF,
 } from "./grammars/sexpression.g4";
 
-fn tok(kind: i32, text: String, start: i32, end: i32) -> Token {
-    return Token {
-        kind,
-        text: LexerSlice::from_string(text),
-        span: Span { start, end },
-        leading_trivia: [],
-        channel: 0,
-    };
-}
-
-fn s(start: i32, end: i32) -> Span {
-    return Span { start, end };
-}
-
+// Terminals in the typed AST are `i32` indices into `ParseResult.tokens`;
+// assert each atom's kind/text through the stream rather than comparing a
+// hand-built Token-valued tree.
 test "parse single symbol atom" {
-    // "hello"
-    let result = sexpression::parse(&"hello");
-    let tree = result.unwrap();
-    let expected = SexprNode {
-        span: s(0, 5),
-        item_list: [
-            ItemNode::Alt0(ItemAlt0 {
-                span: s(0, 5),
-                atom: AtomNode {
-                    span: s(0, 5),
-                    token: tok(TK_SYMBOL, "hello", 0, 5),
-                },
-            }),
-        ] as List<ItemNode>,
-        eof: tok(TK_EOF, "", 5, 5),
-    };
-    assert tree == expected, `AST mismatch for "hello"`;
+    let r = sexpression::parse(&"hello").unwrap();
+    let root = &r.root;
+    assert root.item_list.len() == 1;
+    if let Alt0(item) = &root.item_list[0] {
+        assert r.tokens.kinds[item.atom.token] == TK_SYMBOL;
+        assert r.tokens.token_text(item.atom.token) == "hello";
+    } else {
+        panic("expected a single atom item");
+    }
+    assert r.tokens.kinds[root.eof] == TK_EOF;
 }
 
 test "parse number atom" {
-    // "42"
-    let result = sexpression::parse(&"42");
-    let tree = result.unwrap();
-    let expected = SexprNode {
-        span: s(0, 2),
-        item_list: [
-            ItemNode::Alt0(ItemAlt0 {
-                span: s(0, 2),
-                atom: AtomNode {
-                    span: s(0, 2),
-                    token: tok(TK_NUMBER, "42", 0, 2),
-                },
-            }),
-        ] as List<ItemNode>,
-        eof: tok(TK_EOF, "", 2, 2),
-    };
-    assert tree == expected, `AST mismatch for "42"`;
+    let r = sexpression::parse(&"42").unwrap();
+    let root = &r.root;
+    assert root.item_list.len() == 1;
+    if let Alt0(item) = &root.item_list[0] {
+        assert r.tokens.kinds[item.atom.token] == TK_NUMBER;
+        assert r.tokens.token_text(item.atom.token) == "42";
+    } else {
+        panic("expected a single atom item");
+    }
+    assert r.tokens.kinds[root.eof] == TK_EOF;
 }
 
 test "parse nested list" {

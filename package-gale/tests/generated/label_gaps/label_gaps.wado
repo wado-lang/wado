@@ -457,7 +457,7 @@ impl Visitor for TreeRecorder {
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -1414,13 +1414,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -1437,105 +1440,105 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_program(input: &String) -> Result<ProgramNode, ParseError> {
+pub fn parse_program(input: &String) -> Result<ParseResult<ProgramNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_program(p));
 }
 
-pub fn parse_stmt(input: &String) -> Result<StmtNode, ParseError> {
+pub fn parse_stmt(input: &String) -> Result<ParseResult<StmtNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_stmt(p));
 }
 
-pub fn parse_assign_stmt(input: &String) -> Result<AssignStmtNode, ParseError> {
+pub fn parse_assign_stmt(input: &String) -> Result<ParseResult<AssignStmtNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_assign_stmt(p));
 }
 
-pub fn parse_pair_stmt(input: &String) -> Result<PairStmtNode, ParseError> {
+pub fn parse_pair_stmt(input: &String) -> Result<ParseResult<PairStmtNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_pair_stmt(p));
 }
 
-pub fn parse_key_rule(input: &String) -> Result<KeyRuleNode, ParseError> {
+pub fn parse_key_rule(input: &String) -> Result<ParseResult<KeyRuleNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_key_rule(p));
 }
 
-pub fn parse_mix_stmt(input: &String) -> Result<MixStmtNode, ParseError> {
+pub fn parse_mix_stmt(input: &String) -> Result<ParseResult<MixStmtNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_mix_stmt(p));
 }
 
-pub fn parse(input: &String) -> Result<ProgramNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<ProgramNode>, ParseError> {
     return parse_program(input);
 }
 
-pub fn walk_program<V: Visitor>(v: &mut V, node: &ProgramNode) {
+pub fn walk_program<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ProgramNode) {
     v.enter_rule(0, &"program", &node.span);
     for let item of &node.stmt_list {
-        walk_stmt(v, item);
+        walk_stmt(v, toks, item);
     }
-    v.visit_token(&node.eof);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"program", &node.span);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode) {
+pub fn walk_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &StmtNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(1, &"stmt", &n.span);
-            walk_assign_stmt(v, &n.assign_stmt);
+            walk_assign_stmt(v, toks, &n.assign_stmt);
             v.exit_rule(1, &"stmt", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(1, &"stmt", &n.span);
-            walk_pair_stmt(v, &n.pair_stmt);
+            walk_pair_stmt(v, toks, &n.pair_stmt);
             v.exit_rule(1, &"stmt", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(1, &"stmt", &n.span);
-            walk_mix_stmt(v, &n.mix_stmt);
+            walk_mix_stmt(v, toks, &n.mix_stmt);
             v.exit_rule(1, &"stmt", &n.span);
         }
     }
 }
 
-pub fn walk_assign_stmt<V: Visitor>(v: &mut V, node: &AssignStmtNode) {
+pub fn walk_assign_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AssignStmtNode) {
     v.enter_rule(2, &"assign_stmt", &node.span);
-    v.visit_token(&node.key);
-    v.visit_token(&node.eq);
-    v.visit_token(&node.value);
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.key);
+    v.visit_token(toks, node.eq);
+    v.visit_token(toks, node.value);
+    v.visit_token(toks, node.semi);
     v.exit_rule(2, &"assign_stmt", &node.span);
 }
 
-pub fn walk_pair_stmt<V: Visitor>(v: &mut V, node: &PairStmtNode) {
+pub fn walk_pair_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PairStmtNode) {
     v.enter_rule(3, &"pair_stmt", &node.span);
-    v.visit_token(&node.pair);
-    walk_key_rule(v, &node.k);
-    v.visit_token(&node.colon);
-    v.visit_token(&node.id);
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.pair);
+    walk_key_rule(v, toks, &node.k);
+    v.visit_token(toks, node.colon);
+    v.visit_token(toks, node.id);
+    v.visit_token(toks, node.semi);
     v.exit_rule(3, &"pair_stmt", &node.span);
 }
 
-pub fn walk_key_rule<V: Visitor>(v: &mut V, node: &KeyRuleNode) {
+pub fn walk_key_rule<V: Visitor>(v: &mut V, toks: &TokenStream, node: &KeyRuleNode) {
     v.enter_rule(4, &"key_rule", &node.span);
-    v.visit_token(&node.id);
+    v.visit_token(toks, node.id);
     v.exit_rule(4, &"key_rule", &node.span);
 }
 
-pub fn walk_mix_stmt<V: Visitor>(v: &mut V, node: &MixStmtNode) {
+pub fn walk_mix_stmt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &MixStmtNode) {
     v.enter_rule(5, &"mix_stmt", &node.span);
-    v.visit_token(&node.list);
-    v.visit_token(&node.head);
+    v.visit_token(toks, node.list);
+    v.visit_token(toks, node.head);
     for let item of &node.comma_rest_list {
-        v.visit_token(&item.comma);
+        v.visit_token(toks, item.comma);
         for let item of &item.rest {
-            v.visit_token(item);
+            v.visit_token(toks, *item);
         }
     }
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.semi);
     v.exit_rule(5, &"mix_stmt", &node.span);
 }
 
-pub fn to_tree(node: &ProgramNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_program(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<ProgramNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_program(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 

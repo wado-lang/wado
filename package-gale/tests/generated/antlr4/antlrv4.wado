@@ -345,18 +345,29 @@ impl Display for ParseError {
 //! where `lex.wado` is concatenated first.
 
 
-/// CstChild is either a terminal token (a `Tok` handle into the stream) or a
-/// non-terminal sub-tree.
+/// A parse result: the typed root node plus the `TokenStream` its terminal
+/// `i32` indices point into. A token is a bare index, so the tree is only
+/// meaningful alongside its stream; bundling them keeps every consumer
+/// self-contained without per-terminal allocation.
+pub struct ParseResult<T> {
+    pub root: T,
+    pub tokens: TokenStream,
+}
+
+/// CstChild is either a terminal token (its `i32` index into the stream) or
+/// a non-terminal sub-tree.
 pub variant CstChild {
-    Token(Tok),
+    Token(i32),
     Node(CstNode),
 }
 
-/// CstNode is a generic (untyped) concrete syntax tree node.
+/// CstNode is a generic (untyped) concrete syntax tree node. It borrows the
+/// `TokenStream` so terminal text/span render from the stored `i32` indices.
 pub struct CstNode {
     pub name: String,
     pub span: Span,
     pub children: List<CstChild>,
+    pub toks: &TokenStream,
 }
 
 impl CstNode {
@@ -373,9 +384,10 @@ impl CstNode {
 fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     out.push_str(&`({node.name}`);
     for let child of &node.children {
-        if let Token(t) = *child {
-            if !t.is_empty_text() {
-                out.push_str(&` {t.text()}`);
+        if let Token(i) = *child {
+            if !node.toks.is_empty_text(i) {
+                out.push_str(&" ");
+                node.toks.push_token_text(out, i);
             }
         } else if let Node(n) = *child {
             out.push_str(&" ");
@@ -393,24 +405,30 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
 /// that want cheap dispatch (HighlightVisitor's rule stack) can avoid
 /// String compares while visitors that care about the name (TreeRecorder)
 /// can still use it.
+///
+/// `visit_token` receives the `TokenStream` plus the terminal's `i32` index
+/// (tokens are bare indices), so a visitor reads kind/text/span/trivia from
+/// the stream on demand.
 pub trait Visitor {
     fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
     fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn visit_token(&mut self, token: &Tok) {
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
     }
 }
 
 /// TreeRecorder is a Visitor that records events for building a CstNode tree.
+/// It holds the `TokenStream` so the built `CstNode`s can carry it.
 pub struct TreeRecorder {
     events: List<TreeEvent>,
+    toks: &TokenStream,
 }
 
 variant TreeEvent {
     Enter(TreeEnterInfo),
     Exit,
-    VisitToken(Tok),
+    VisitToken(i32),
 }
 
 struct TreeEnterInfo {
@@ -419,13 +437,13 @@ struct TreeEnterInfo {
 }
 
 impl TreeRecorder {
-    pub fn new() -> TreeRecorder {
-        return TreeRecorder { events: [] };
+    pub fn new(toks: &TokenStream) -> TreeRecorder with stores[toks] {
+        return TreeRecorder { events: [], toks };
     }
 
     pub fn build(&self) -> CstNode {
         let mut pos = 0;
-        return tree_build_node(&self.events, &mut pos);
+        return tree_build_node(&self.events, self.toks, &mut pos);
     }
 }
 
@@ -438,12 +456,12 @@ impl Visitor for TreeRecorder {
         self.events.push(TreeEvent::Exit);
     }
 
-    fn visit_token(&mut self, token: &Tok) {
-        self.events.push(TreeEvent::VisitToken(*token));
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        self.events.push(TreeEvent::VisitToken(idx));
     }
 }
 
-fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
+fn tree_build_node(events: &List<TreeEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
     if let Enter(info) = events[*pos] {
         *pos += 1;
         let mut children: List<CstChild> = [];
@@ -457,13 +475,13 @@ fn tree_build_node(events: &List<TreeEvent>, pos: &mut i32) -> CstNode {
                 break;
             }
             if let Enter(_) = ev {
-                children.push(CstChild::Node(tree_build_node(events, pos)));
-            } else if let VisitToken(t) = ev {
-                children.push(CstChild::Token(t));
+                children.push(CstChild::Node(tree_build_node(events, toks, pos)));
+            } else if let VisitToken(i) = ev {
+                children.push(CstChild::Token(i));
                 *pos += 1;
             }
         }
-        return CstNode { name: info.name, span: info.span, children };
+        return CstNode { name: info.name, span: info.span, children, toks };
     }
     panic("TreeRecorder: expected Enter event");
 }
@@ -824,14 +842,14 @@ pub struct GrammarSpecNode {
     pub prequel_construct_list: List<PrequelConstructNode>,
     pub rules: RulesNode,
     pub mode_spec_list: List<ModeSpecNode>,
-    pub eof: Tok,
+    pub eof: i32,
 }
 
 pub struct GrammarDeclNode {
     pub span: Span,
     pub grammar_type: GrammarTypeNode,
     pub identifier: IdentifierNode,
-    pub semi: Tok,
+    pub semi: i32,
 }
 
 pub variant GrammarTypeNode {
@@ -842,19 +860,19 @@ pub variant GrammarTypeNode {
 
 pub struct GrammarTypeAlt0 {
     pub span: Span,
-    pub lexer: Tok,
-    pub grammar: Tok,
+    pub lexer: i32,
+    pub grammar: i32,
 }
 
 pub struct GrammarTypeAlt1 {
     pub span: Span,
-    pub parser: Tok,
-    pub grammar: Tok,
+    pub parser: i32,
+    pub grammar: i32,
 }
 
 pub struct GrammarTypeAlt2 {
     pub span: Span,
-    pub grammar: Tok,
+    pub grammar: i32,
 }
 
 pub variant PrequelConstructNode {
@@ -892,20 +910,20 @@ pub struct PrequelConstructAlt4 {
 
 pub struct OptionSemiItem {
     pub option: OptionNode,
-    pub semi: Tok,
+    pub semi: i32,
 }
 
 pub struct OptionsSpecNode {
     pub span: Span,
-    pub options: Tok,
+    pub options: i32,
     pub option_semi_list: List<OptionSemiItem>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
 }
 
 pub struct OptionNode {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub assign: Tok,
+    pub assign: i32,
     pub option_value: OptionValueNode,
 }
 
@@ -917,7 +935,7 @@ pub variant OptionValueNode {
 }
 
 pub struct DotIdentifierItem {
-    pub dot: Tok,
+    pub dot: i32,
     pub identifier: IdentifierNode,
 }
 
@@ -929,7 +947,7 @@ pub struct OptionValueAlt0 {
 
 pub struct OptionValueAlt1 {
     pub span: Span,
-    pub string_literal: Tok,
+    pub string_literal: i32,
 }
 
 pub struct OptionValueAlt2 {
@@ -939,20 +957,20 @@ pub struct OptionValueAlt2 {
 
 pub struct OptionValueAlt3 {
     pub span: Span,
-    pub int: Tok,
+    pub int: i32,
 }
 
 pub struct CommaDelegateGrammarItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub delegate_grammar: DelegateGrammarNode,
 }
 
 pub struct DelegateGrammarsNode {
     pub span: Span,
-    pub import_: Tok,
+    pub import_: i32,
     pub delegate_grammar: DelegateGrammarNode,
     pub comma_delegate_grammar_list: List<CommaDelegateGrammarItem>,
-    pub semi: Tok,
+    pub semi: i32,
 }
 
 pub variant DelegateGrammarNode {
@@ -963,7 +981,7 @@ pub variant DelegateGrammarNode {
 pub struct DelegateGrammarAlt0 {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub assign: Tok,
+    pub assign: i32,
     pub identifier_2: IdentifierNode,
 }
 
@@ -974,20 +992,20 @@ pub struct DelegateGrammarAlt1 {
 
 pub struct TokensSpecNode {
     pub span: Span,
-    pub tokens: Tok,
+    pub tokens: i32,
     pub id_list: Option<IdListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
 }
 
 pub struct ChannelsSpecNode {
     pub span: Span,
-    pub channels: Tok,
+    pub channels: i32,
     pub id_list: Option<IdListNode>,
-    pub rbrace: Tok,
+    pub rbrace: i32,
 }
 
 pub struct CommaIdentifierItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub identifier: IdentifierNode,
 }
 
@@ -995,17 +1013,17 @@ pub struct IdListNode {
     pub span: Span,
     pub identifier: IdentifierNode,
     pub comma_identifier_list: List<CommaIdentifierItem>,
-    pub comma: Option<Tok>,
+    pub comma: Option<i32>,
 }
 
 pub struct ActionScopeNameColoncolonItem {
     pub action_scope_name: ActionScopeNameNode,
-    pub coloncolon: Tok,
+    pub coloncolon: i32,
 }
 
 pub struct ActionNode {
     pub span: Span,
-    pub at: Tok,
+    pub at: i32,
     pub action_scope_name_coloncolon: Option<ActionScopeNameColoncolonItem>,
     pub identifier: IdentifierNode,
     pub action_block: ActionBlockNode,
@@ -1024,31 +1042,31 @@ pub struct ActionScopeNameAlt0 {
 
 pub struct ActionScopeNameAlt1 {
     pub span: Span,
-    pub lexer: Tok,
+    pub lexer: i32,
 }
 
 pub struct ActionScopeNameAlt2 {
     pub span: Span,
-    pub parser: Tok,
+    pub parser: i32,
 }
 
 pub struct ActionBlockNode {
     pub span: Span,
-    pub action: Tok,
+    pub action: i32,
 }
 
 pub struct ArgActionBlockNode {
     pub span: Span,
-    pub begin_argument: Tok,
-    pub argument_content_list: List<Tok>,
-    pub end_argument: Tok,
+    pub begin_argument: i32,
+    pub argument_content_list: List<i32>,
+    pub end_argument: i32,
 }
 
 pub struct ModeSpecNode {
     pub span: Span,
-    pub mode: Tok,
+    pub mode: i32,
     pub identifier: IdentifierNode,
-    pub semi: Tok,
+    pub semi: i32,
     pub lexer_rule_spec_list: List<LexerRuleSpecNode>,
 }
 
@@ -1075,15 +1093,15 @@ pub struct RuleSpecAlt1 {
 pub struct ParserRuleSpecNode {
     pub span: Span,
     pub rule_modifiers: Option<RuleModifiersNode>,
-    pub rule_ref: Tok,
+    pub rule_ref: i32,
     pub arg_action_block: Option<ArgActionBlockNode>,
     pub rule_returns: Option<RuleReturnsNode>,
     pub throws_spec: Option<ThrowsSpecNode>,
     pub locals_spec: Option<LocalsSpecNode>,
     pub rule_prequel_list: List<RulePrequelNode>,
-    pub colon: Tok,
+    pub colon: i32,
     pub rule_block: RuleBlockNode,
-    pub semi: Tok,
+    pub semi: i32,
     pub exception_group: ExceptionGroupNode,
 }
 
@@ -1095,14 +1113,14 @@ pub struct ExceptionGroupNode {
 
 pub struct ExceptionHandlerNode {
     pub span: Span,
-    pub catch: Tok,
+    pub catch: i32,
     pub arg_action_block: ArgActionBlockNode,
     pub action_block: ActionBlockNode,
 }
 
 pub struct FinallyClauseNode {
     pub span: Span,
-    pub finally: Tok,
+    pub finally: i32,
     pub action_block: ActionBlockNode,
 }
 
@@ -1123,31 +1141,31 @@ pub struct RulePrequelAlt1 {
 
 pub struct RuleReturnsNode {
     pub span: Span,
-    pub returns: Tok,
+    pub returns: i32,
     pub arg_action_block: ArgActionBlockNode,
 }
 
 pub struct CommaQualifiedIdentifierItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub qualified_identifier: QualifiedIdentifierNode,
 }
 
 pub struct ThrowsSpecNode {
     pub span: Span,
-    pub throws: Tok,
+    pub throws: i32,
     pub qualified_identifier: QualifiedIdentifierNode,
     pub comma_qualified_identifier_list: List<CommaQualifiedIdentifierItem>,
 }
 
 pub struct LocalsSpecNode {
     pub span: Span,
-    pub locals: Tok,
+    pub locals: i32,
     pub arg_action_block: ArgActionBlockNode,
 }
 
 pub struct RuleActionNode {
     pub span: Span,
-    pub at: Tok,
+    pub at: i32,
     pub identifier: IdentifierNode,
     pub action_block: ActionBlockNode,
 }
@@ -1159,7 +1177,7 @@ pub struct RuleModifiersNode {
 
 pub struct RuleModifierNode {
     pub span: Span,
-    pub token: Tok,
+    pub token: i32,
 }
 
 pub struct RuleBlockNode {
@@ -1168,7 +1186,7 @@ pub struct RuleBlockNode {
 }
 
 pub struct OrLabeledAltItem {
-    pub or: Tok,
+    pub or: i32,
     pub labeled_alt: LabeledAltNode,
 }
 
@@ -1179,7 +1197,7 @@ pub struct RuleAltListNode {
 }
 
 pub struct PoundIdentifierItem {
-    pub pound: Tok,
+    pub pound: i32,
     pub identifier: IdentifierNode,
 }
 
@@ -1191,12 +1209,12 @@ pub struct LabeledAltNode {
 
 pub struct LexerRuleSpecNode {
     pub span: Span,
-    pub fragment: Option<Tok>,
-    pub token_ref: Tok,
+    pub fragment: Option<i32>,
+    pub token_ref: i32,
     pub options_spec: Option<OptionsSpecNode>,
-    pub colon: Tok,
+    pub colon: i32,
     pub lexer_rule_block: LexerRuleBlockNode,
-    pub semi: Tok,
+    pub semi: i32,
 }
 
 pub struct LexerRuleBlockNode {
@@ -1205,7 +1223,7 @@ pub struct LexerRuleBlockNode {
 }
 
 pub struct OrLexerAltItem {
-    pub or: Tok,
+    pub or: i32,
     pub lexer_alt: LexerAltNode,
 }
 
@@ -1265,24 +1283,24 @@ pub struct LexerElementAlt1 {
 pub struct LexerElementAlt2 {
     pub span: Span,
     pub action_block: ActionBlockNode,
-    pub question: Option<Tok>,
+    pub question: Option<i32>,
 }
 
 pub struct LexerBlockNode {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub lexer_alt_list: LexerAltListNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct CommaLexerCommandItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub lexer_command: LexerCommandNode,
 }
 
 pub struct LexerCommandsNode {
     pub span: Span,
-    pub rarrow: Tok,
+    pub rarrow: i32,
     pub lexer_command: LexerCommandNode,
     pub comma_lexer_command_list: List<CommaLexerCommandItem>,
 }
@@ -1295,9 +1313,9 @@ pub variant LexerCommandNode {
 pub struct LexerCommandAlt0 {
     pub span: Span,
     pub lexer_command_name: LexerCommandNameNode,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub lexer_command_expr: LexerCommandExprNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct LexerCommandAlt1 {
@@ -1317,7 +1335,7 @@ pub struct LexerCommandNameAlt0 {
 
 pub struct LexerCommandNameAlt1 {
     pub span: Span,
-    pub mode: Tok,
+    pub mode: i32,
 }
 
 pub variant LexerCommandExprNode {
@@ -1332,11 +1350,11 @@ pub struct LexerCommandExprAlt0 {
 
 pub struct LexerCommandExprAlt1 {
     pub span: Span,
-    pub int: Tok,
+    pub int: i32,
 }
 
 pub struct OrAlternativeItem {
-    pub or: Tok,
+    pub or: i32,
     pub alternative: AlternativeNode,
 }
 
@@ -1386,21 +1404,21 @@ pub struct ElementAlt2 {
 pub struct ElementAlt3 {
     pub span: Span,
     pub action_block: ActionBlockNode,
-    pub question: Option<Tok>,
+    pub question: Option<i32>,
     pub predicate_options: Option<PredicateOptionsNode>,
 }
 
 pub struct CommaPredicateOptionItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub predicate_option: PredicateOptionNode,
 }
 
 pub struct PredicateOptionsNode {
     pub span: Span,
-    pub lt: Tok,
+    pub lt: i32,
     pub predicate_option: PredicateOptionNode,
     pub comma_predicate_option_list: List<CommaPredicateOptionItem>,
-    pub gt: Tok,
+    pub gt: i32,
 }
 
 pub variant PredicateOptionNode {
@@ -1424,17 +1442,17 @@ pub struct PredicateOptionGroup0Alt0 {
 }
 
 pub struct PredicateOptionGroup0Alt1 {
-    pub int: Tok,
+    pub int: i32,
 }
 
 pub struct PredicateOptionGroup0Alt2 {
-    pub string_literal: Tok,
+    pub string_literal: i32,
 }
 
 pub struct PredicateOptionAlt1 {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub assign: Tok,
+    pub assign: i32,
     pub group_0: Option<PredicateOptionGroup0>,
 }
 
@@ -1446,7 +1464,7 @@ pub variant AtomOrBlockGroup {
 pub struct LabeledElementNode {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub assign_or_plus_assign: Tok,
+    pub assign_or_plus_assign: i32,
     pub atom_or_block: Option<AtomOrBlockGroup>,
 }
 
@@ -1469,20 +1487,20 @@ pub variant EbnfSuffixNode {
 
 pub struct EbnfSuffixAlt0 {
     pub span: Span,
-    pub question: Tok,
-    pub question_2: Option<Tok>,
+    pub question: i32,
+    pub question_2: Option<i32>,
 }
 
 pub struct EbnfSuffixAlt1 {
     pub span: Span,
-    pub star: Tok,
-    pub question: Option<Tok>,
+    pub star: i32,
+    pub question: Option<i32>,
 }
 
 pub struct EbnfSuffixAlt2 {
     pub span: Span,
-    pub plus: Tok,
-    pub question: Option<Tok>,
+    pub plus: i32,
+    pub question: Option<i32>,
 }
 
 pub variant LexerAtomNode {
@@ -1510,7 +1528,7 @@ pub struct LexerAtomAlt2 {
 
 pub struct LexerAtomAlt3 {
     pub span: Span,
-    pub lexer_char_set: Tok,
+    pub lexer_char_set: i32,
 }
 
 pub struct LexerAtomAlt4 {
@@ -1547,7 +1565,7 @@ pub struct AtomAlt3 {
 
 pub struct WildcardNode {
     pub span: Span,
-    pub dot: Tok,
+    pub dot: i32,
     pub element_options: Option<ElementOptionsNode>,
 }
 
@@ -1558,27 +1576,27 @@ pub variant NotSetNode {
 
 pub struct NotSetAlt0 {
     pub span: Span,
-    pub not: Tok,
+    pub not: i32,
     pub set_element: SetElementNode,
 }
 
 pub struct NotSetAlt1 {
     pub span: Span,
-    pub not: Tok,
+    pub not: i32,
     pub block_set: BlockSetNode,
 }
 
 pub struct OrSetElementItem {
-    pub or: Tok,
+    pub or: i32,
     pub set_element: SetElementNode,
 }
 
 pub struct BlockSetNode {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub set_element: SetElementNode,
     pub or_set_element_list: List<OrSetElementItem>,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub variant SetElementNode {
@@ -1590,13 +1608,13 @@ pub variant SetElementNode {
 
 pub struct SetElementAlt0 {
     pub span: Span,
-    pub token_ref: Tok,
+    pub token_ref: i32,
     pub element_options: Option<ElementOptionsNode>,
 }
 
 pub struct SetElementAlt1 {
     pub span: Span,
-    pub string_literal: Tok,
+    pub string_literal: i32,
     pub element_options: Option<ElementOptionsNode>,
 }
 
@@ -1607,35 +1625,35 @@ pub struct SetElementAlt2 {
 
 pub struct SetElementAlt3 {
     pub span: Span,
-    pub lexer_char_set: Tok,
+    pub lexer_char_set: i32,
 }
 
 pub struct OptionsSpecOptRuleActionListColonItem {
     pub options_spec: Option<OptionsSpecNode>,
     pub rule_action_list: List<RuleActionNode>,
-    pub colon: Tok,
+    pub colon: i32,
 }
 
 pub struct BlockNode {
     pub span: Span,
-    pub lparen: Tok,
+    pub lparen: i32,
     pub options_spec_rule_action_colon: Option<OptionsSpecOptRuleActionListColonItem>,
     pub alt_list: AltListNode,
-    pub rparen: Tok,
+    pub rparen: i32,
 }
 
 pub struct RulerefNode {
     pub span: Span,
-    pub rule_ref: Tok,
+    pub rule_ref: i32,
     pub arg_action_block: Option<ArgActionBlockNode>,
     pub element_options: Option<ElementOptionsNode>,
 }
 
 pub struct CharacterRangeNode {
     pub span: Span,
-    pub string_literal: Tok,
-    pub range: Tok,
-    pub string_literal_2: Tok,
+    pub string_literal: i32,
+    pub range: i32,
+    pub string_literal_2: i32,
 }
 
 pub variant TerminalDefNode {
@@ -1645,27 +1663,27 @@ pub variant TerminalDefNode {
 
 pub struct TerminalDefAlt0 {
     pub span: Span,
-    pub token_ref: Tok,
+    pub token_ref: i32,
     pub element_options: Option<ElementOptionsNode>,
 }
 
 pub struct TerminalDefAlt1 {
     pub span: Span,
-    pub string_literal: Tok,
+    pub string_literal: i32,
     pub element_options: Option<ElementOptionsNode>,
 }
 
 pub struct CommaElementOptionItem {
-    pub comma: Tok,
+    pub comma: i32,
     pub element_option: ElementOptionNode,
 }
 
 pub struct ElementOptionsNode {
     pub span: Span,
-    pub lt: Tok,
+    pub lt: i32,
     pub element_option: ElementOptionNode,
     pub comma_element_option_list: List<CommaElementOptionItem>,
-    pub gt: Tok,
+    pub gt: i32,
 }
 
 pub variant ElementOptionNode {
@@ -1689,23 +1707,23 @@ pub struct ElementOptionGroup0Alt0 {
 }
 
 pub struct ElementOptionGroup0Alt1 {
-    pub string_literal: Tok,
+    pub string_literal: i32,
 }
 
 pub struct ElementOptionGroup0Alt2 {
-    pub int: Tok,
+    pub int: i32,
 }
 
 pub struct ElementOptionAlt1 {
     pub span: Span,
     pub identifier: IdentifierNode,
-    pub assign: Tok,
+    pub assign: i32,
     pub group_0: Option<ElementOptionGroup0>,
 }
 
 pub struct IdentifierNode {
     pub span: Span,
-    pub token: Tok,
+    pub token: i32,
 }
 
 pub struct QualifiedIdentifierNode {
@@ -3971,10 +3989,10 @@ impl Parser {
         return self.tokens.kinds[idx];
     }
 
-    fn advance(&mut self) -> Tok {
+    fn advance(&mut self) -> i32 {
         let i = self.pos;
         self.pos += 1;
-        return Tok::new(&self.tokens, i);
+        return i;
     }
 
     fn last_end(&self) -> i32 {
@@ -3982,10 +4000,10 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] == kind {
             if kind == TK_EOF {
-                return Result::Ok(Tok::new(&self.tokens, self.pos));
+                return Result::Ok(self.pos);
             }
             return Result::Ok(self.advance());
         }
@@ -3997,7 +4015,7 @@ impl Parser {
         ));
     }
 
-    fn fail(&self, name: String) -> Result<Tok, ParseError> {
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
         return Result::Err(self.error(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
@@ -4005,7 +4023,7 @@ impl Parser {
         ));
     }
 
-    fn match_any(&mut self) -> Result<Tok, ParseError> {
+    fn match_any(&mut self) -> Result<i32, ParseError> {
         if self.tokens.kinds[self.pos] != TK_EOF {
             return Result::Ok(self.advance());
         }
@@ -4016,7 +4034,7 @@ impl Parser {
         ));
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<Tok, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -4037,12 +4055,12 @@ impl Parser {
         ));
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<Tok, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
         let k = self.tokens.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
-                    return Result::Ok(Tok::new(&self.tokens, self.pos));
+                    return Result::Ok(self.pos);
                 }
                 return Result::Ok(self.advance());
             }
@@ -6339,7 +6357,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         };
         comma_identifier_list.push(comma_identifier);
     }
-    let comma: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+    let comma: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
         null
     } else if p.peek_kind() == TK_COMMA {
         let comma = p.expect(TK_COMMA)?;
@@ -6449,7 +6467,7 @@ fn _parse_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_arg_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<ArgActionBlockNode, ParseError> {
     let start = p.peek_start();
     let begin_argument = p.expect(TK_BEGIN_ARGUMENT)?;
-    let mut argument_content_list: List<Tok> = [];
+    let mut argument_content_list: List<i32> = [];
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
         let argument_content = p.expect(TK_ARGUMENT_CONTENT)?;
         argument_content_list.push(argument_content);
@@ -7019,7 +7037,7 @@ fn _parse_labeled_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<LexerRuleSpecNode, ParseError> {
     let start = p.peek_start();
-    let fragment: Option<Tok> = if p.peek_kind() == TK_FRAGMENT {
+    let fragment: Option<i32> = if p.peek_kind() == TK_FRAGMENT {
         let fragment = p.expect(TK_FRAGMENT)?;
         Option::Some(fragment)
     } else {
@@ -7230,7 +7248,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_8, follow))?;
-        let question: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7660,7 +7678,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     }
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, follow)?;
-        let question: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7925,7 +7943,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
         let question = p.expect(TK_QUESTION)?;
-        let question_2: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question_2: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7941,7 +7959,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if kind == TK_STAR {
         let star = p.expect(TK_STAR)?;
-        let question: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -7957,7 +7975,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if kind == TK_PLUS {
         let plus = p.expect(TK_PLUS)?;
-        let question: Option<Tok> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
+        let question: Option<i32> = if follow_yields(&p.tokens, p.pos, follow, TK_EOF) {
             null
         } else if p.peek_kind() == TK_QUESTION {
             let question = p.expect(TK_QUESTION)?;
@@ -8748,13 +8766,16 @@ fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError
     return r;
 }
 
-fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<T, ParseError> {
+fn _gale_run<T>(input: &String, run: fn(&mut Parser) -> Result<T, ParseError>) -> Result<ParseResult<T>, ParseError> {
     let mut parser = _gale_new_parser(input);
     let _result = run(&mut parser);
     if let Err(_e) = _result {
         return Result::Err(_gale_pick_error(&parser, _e));
     }
-    return _result;
+    if let Ok(_root) = _result {
+        return Result::Ok(ParseResult { root: _root, tokens: parser.tokens });
+    }
+    unreachable();
 }
 
 fn _gale_new_parser(input: &String) -> Parser {
@@ -8771,724 +8792,724 @@ fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError {
     return e;
 }
 
-pub fn parse_grammar_spec(input: &String) -> Result<GrammarSpecNode, ParseError> {
+pub fn parse_grammar_spec(input: &String) -> Result<ParseResult<GrammarSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_grammar_spec(p));
 }
 
-pub fn parse_grammar_decl(input: &String) -> Result<GrammarDeclNode, ParseError> {
+pub fn parse_grammar_decl(input: &String) -> Result<ParseResult<GrammarDeclNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_grammar_decl(p));
 }
 
-pub fn parse_grammar_type(input: &String) -> Result<GrammarTypeNode, ParseError> {
+pub fn parse_grammar_type(input: &String) -> Result<ParseResult<GrammarTypeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_grammar_type(p));
 }
 
-pub fn parse_prequel_construct(input: &String) -> Result<PrequelConstructNode, ParseError> {
+pub fn parse_prequel_construct(input: &String) -> Result<ParseResult<PrequelConstructNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_prequel_construct(p));
 }
 
-pub fn parse_options_spec(input: &String) -> Result<OptionsSpecNode, ParseError> {
+pub fn parse_options_spec(input: &String) -> Result<ParseResult<OptionsSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_options_spec(p));
 }
 
-pub fn parse_option(input: &String) -> Result<OptionNode, ParseError> {
+pub fn parse_option(input: &String) -> Result<ParseResult<OptionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_option(p));
 }
 
-pub fn parse_option_value(input: &String) -> Result<OptionValueNode, ParseError> {
+pub fn parse_option_value(input: &String) -> Result<ParseResult<OptionValueNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_option_value(p));
 }
 
-pub fn parse_delegate_grammars(input: &String) -> Result<DelegateGrammarsNode, ParseError> {
+pub fn parse_delegate_grammars(input: &String) -> Result<ParseResult<DelegateGrammarsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_delegate_grammars(p));
 }
 
-pub fn parse_delegate_grammar(input: &String) -> Result<DelegateGrammarNode, ParseError> {
+pub fn parse_delegate_grammar(input: &String) -> Result<ParseResult<DelegateGrammarNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_delegate_grammar(p));
 }
 
-pub fn parse_tokens_spec(input: &String) -> Result<TokensSpecNode, ParseError> {
+pub fn parse_tokens_spec(input: &String) -> Result<ParseResult<TokensSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_tokens_spec(p));
 }
 
-pub fn parse_channels_spec(input: &String) -> Result<ChannelsSpecNode, ParseError> {
+pub fn parse_channels_spec(input: &String) -> Result<ParseResult<ChannelsSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_channels_spec(p));
 }
 
-pub fn parse_id_list(input: &String) -> Result<IdListNode, ParseError> {
+pub fn parse_id_list(input: &String) -> Result<ParseResult<IdListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_id_list(p));
 }
 
-pub fn parse_action_(input: &String) -> Result<ActionNode, ParseError> {
+pub fn parse_action_(input: &String) -> Result<ParseResult<ActionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_action_(p));
 }
 
-pub fn parse_action_scope_name(input: &String) -> Result<ActionScopeNameNode, ParseError> {
+pub fn parse_action_scope_name(input: &String) -> Result<ParseResult<ActionScopeNameNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_action_scope_name(p));
 }
 
-pub fn parse_action_block(input: &String) -> Result<ActionBlockNode, ParseError> {
+pub fn parse_action_block(input: &String) -> Result<ParseResult<ActionBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_action_block(p));
 }
 
-pub fn parse_arg_action_block(input: &String) -> Result<ArgActionBlockNode, ParseError> {
+pub fn parse_arg_action_block(input: &String) -> Result<ParseResult<ArgActionBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_arg_action_block(p));
 }
 
-pub fn parse_mode_spec(input: &String) -> Result<ModeSpecNode, ParseError> {
+pub fn parse_mode_spec(input: &String) -> Result<ParseResult<ModeSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_mode_spec(p));
 }
 
-pub fn parse_rules(input: &String) -> Result<RulesNode, ParseError> {
+pub fn parse_rules(input: &String) -> Result<ParseResult<RulesNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rules(p));
 }
 
-pub fn parse_rule_spec(input: &String) -> Result<RuleSpecNode, ParseError> {
+pub fn parse_rule_spec(input: &String) -> Result<ParseResult<RuleSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_spec(p));
 }
 
-pub fn parse_parser_rule_spec(input: &String) -> Result<ParserRuleSpecNode, ParseError> {
+pub fn parse_parser_rule_spec(input: &String) -> Result<ParseResult<ParserRuleSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_parser_rule_spec(p));
 }
 
-pub fn parse_exception_group(input: &String) -> Result<ExceptionGroupNode, ParseError> {
+pub fn parse_exception_group(input: &String) -> Result<ParseResult<ExceptionGroupNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_exception_group(p));
 }
 
-pub fn parse_exception_handler(input: &String) -> Result<ExceptionHandlerNode, ParseError> {
+pub fn parse_exception_handler(input: &String) -> Result<ParseResult<ExceptionHandlerNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_exception_handler(p));
 }
 
-pub fn parse_finally_clause(input: &String) -> Result<FinallyClauseNode, ParseError> {
+pub fn parse_finally_clause(input: &String) -> Result<ParseResult<FinallyClauseNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_finally_clause(p));
 }
 
-pub fn parse_rule_prequel(input: &String) -> Result<RulePrequelNode, ParseError> {
+pub fn parse_rule_prequel(input: &String) -> Result<ParseResult<RulePrequelNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_prequel(p));
 }
 
-pub fn parse_rule_returns(input: &String) -> Result<RuleReturnsNode, ParseError> {
+pub fn parse_rule_returns(input: &String) -> Result<ParseResult<RuleReturnsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_returns(p));
 }
 
-pub fn parse_throws_spec(input: &String) -> Result<ThrowsSpecNode, ParseError> {
+pub fn parse_throws_spec(input: &String) -> Result<ParseResult<ThrowsSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_throws_spec(p));
 }
 
-pub fn parse_locals_spec(input: &String) -> Result<LocalsSpecNode, ParseError> {
+pub fn parse_locals_spec(input: &String) -> Result<ParseResult<LocalsSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_locals_spec(p));
 }
 
-pub fn parse_rule_action(input: &String) -> Result<RuleActionNode, ParseError> {
+pub fn parse_rule_action(input: &String) -> Result<ParseResult<RuleActionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_action(p));
 }
 
-pub fn parse_rule_modifiers(input: &String) -> Result<RuleModifiersNode, ParseError> {
+pub fn parse_rule_modifiers(input: &String) -> Result<ParseResult<RuleModifiersNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_modifiers(p));
 }
 
-pub fn parse_rule_modifier(input: &String) -> Result<RuleModifierNode, ParseError> {
+pub fn parse_rule_modifier(input: &String) -> Result<ParseResult<RuleModifierNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_modifier(p));
 }
 
-pub fn parse_rule_block(input: &String) -> Result<RuleBlockNode, ParseError> {
+pub fn parse_rule_block(input: &String) -> Result<ParseResult<RuleBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_block(p));
 }
 
-pub fn parse_rule_alt_list(input: &String) -> Result<RuleAltListNode, ParseError> {
+pub fn parse_rule_alt_list(input: &String) -> Result<ParseResult<RuleAltListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_rule_alt_list(p));
 }
 
-pub fn parse_labeled_alt(input: &String) -> Result<LabeledAltNode, ParseError> {
+pub fn parse_labeled_alt(input: &String) -> Result<ParseResult<LabeledAltNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_labeled_alt(p));
 }
 
-pub fn parse_lexer_rule_spec(input: &String) -> Result<LexerRuleSpecNode, ParseError> {
+pub fn parse_lexer_rule_spec(input: &String) -> Result<ParseResult<LexerRuleSpecNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_rule_spec(p));
 }
 
-pub fn parse_lexer_rule_block(input: &String) -> Result<LexerRuleBlockNode, ParseError> {
+pub fn parse_lexer_rule_block(input: &String) -> Result<ParseResult<LexerRuleBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_rule_block(p));
 }
 
-pub fn parse_lexer_alt_list(input: &String) -> Result<LexerAltListNode, ParseError> {
+pub fn parse_lexer_alt_list(input: &String) -> Result<ParseResult<LexerAltListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_alt_list(p));
 }
 
-pub fn parse_lexer_alt(input: &String) -> Result<LexerAltNode, ParseError> {
+pub fn parse_lexer_alt(input: &String) -> Result<ParseResult<LexerAltNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_alt(p));
 }
 
-pub fn parse_lexer_elements(input: &String) -> Result<LexerElementsNode, ParseError> {
+pub fn parse_lexer_elements(input: &String) -> Result<ParseResult<LexerElementsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_elements(p));
 }
 
-pub fn parse_lexer_element(input: &String) -> Result<LexerElementNode, ParseError> {
+pub fn parse_lexer_element(input: &String) -> Result<ParseResult<LexerElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_element(p));
 }
 
-pub fn parse_lexer_block(input: &String) -> Result<LexerBlockNode, ParseError> {
+pub fn parse_lexer_block(input: &String) -> Result<ParseResult<LexerBlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_block(p));
 }
 
-pub fn parse_lexer_commands(input: &String) -> Result<LexerCommandsNode, ParseError> {
+pub fn parse_lexer_commands(input: &String) -> Result<ParseResult<LexerCommandsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_commands(p));
 }
 
-pub fn parse_lexer_command(input: &String) -> Result<LexerCommandNode, ParseError> {
+pub fn parse_lexer_command(input: &String) -> Result<ParseResult<LexerCommandNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_command(p));
 }
 
-pub fn parse_lexer_command_name(input: &String) -> Result<LexerCommandNameNode, ParseError> {
+pub fn parse_lexer_command_name(input: &String) -> Result<ParseResult<LexerCommandNameNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_command_name(p));
 }
 
-pub fn parse_lexer_command_expr(input: &String) -> Result<LexerCommandExprNode, ParseError> {
+pub fn parse_lexer_command_expr(input: &String) -> Result<ParseResult<LexerCommandExprNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_command_expr(p));
 }
 
-pub fn parse_alt_list(input: &String) -> Result<AltListNode, ParseError> {
+pub fn parse_alt_list(input: &String) -> Result<ParseResult<AltListNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_alt_list(p));
 }
 
-pub fn parse_alternative(input: &String) -> Result<AlternativeNode, ParseError> {
+pub fn parse_alternative(input: &String) -> Result<ParseResult<AlternativeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_alternative(p));
 }
 
-pub fn parse_element(input: &String) -> Result<ElementNode, ParseError> {
+pub fn parse_element(input: &String) -> Result<ParseResult<ElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_element(p));
 }
 
-pub fn parse_predicate_options(input: &String) -> Result<PredicateOptionsNode, ParseError> {
+pub fn parse_predicate_options(input: &String) -> Result<ParseResult<PredicateOptionsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_predicate_options(p));
 }
 
-pub fn parse_predicate_option(input: &String) -> Result<PredicateOptionNode, ParseError> {
+pub fn parse_predicate_option(input: &String) -> Result<ParseResult<PredicateOptionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_predicate_option(p));
 }
 
-pub fn parse_labeled_element(input: &String) -> Result<LabeledElementNode, ParseError> {
+pub fn parse_labeled_element(input: &String) -> Result<ParseResult<LabeledElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_labeled_element(p));
 }
 
-pub fn parse_ebnf(input: &String) -> Result<EbnfNode, ParseError> {
+pub fn parse_ebnf(input: &String) -> Result<ParseResult<EbnfNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ebnf(p));
 }
 
-pub fn parse_block_suffix(input: &String) -> Result<BlockSuffixNode, ParseError> {
+pub fn parse_block_suffix(input: &String) -> Result<ParseResult<BlockSuffixNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_block_suffix(p));
 }
 
-pub fn parse_ebnf_suffix(input: &String) -> Result<EbnfSuffixNode, ParseError> {
+pub fn parse_ebnf_suffix(input: &String) -> Result<ParseResult<EbnfSuffixNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ebnf_suffix(p));
 }
 
-pub fn parse_lexer_atom(input: &String) -> Result<LexerAtomNode, ParseError> {
+pub fn parse_lexer_atom(input: &String) -> Result<ParseResult<LexerAtomNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_lexer_atom(p));
 }
 
-pub fn parse_atom(input: &String) -> Result<AtomNode, ParseError> {
+pub fn parse_atom(input: &String) -> Result<ParseResult<AtomNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_atom(p));
 }
 
-pub fn parse_wildcard(input: &String) -> Result<WildcardNode, ParseError> {
+pub fn parse_wildcard(input: &String) -> Result<ParseResult<WildcardNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_wildcard(p));
 }
 
-pub fn parse_not_set(input: &String) -> Result<NotSetNode, ParseError> {
+pub fn parse_not_set(input: &String) -> Result<ParseResult<NotSetNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_not_set(p));
 }
 
-pub fn parse_block_set(input: &String) -> Result<BlockSetNode, ParseError> {
+pub fn parse_block_set(input: &String) -> Result<ParseResult<BlockSetNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_block_set(p));
 }
 
-pub fn parse_set_element(input: &String) -> Result<SetElementNode, ParseError> {
+pub fn parse_set_element(input: &String) -> Result<ParseResult<SetElementNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_set_element(p));
 }
 
-pub fn parse_block(input: &String) -> Result<BlockNode, ParseError> {
+pub fn parse_block(input: &String) -> Result<ParseResult<BlockNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_block(p));
 }
 
-pub fn parse_ruleref(input: &String) -> Result<RulerefNode, ParseError> {
+pub fn parse_ruleref(input: &String) -> Result<ParseResult<RulerefNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_ruleref(p));
 }
 
-pub fn parse_character_range(input: &String) -> Result<CharacterRangeNode, ParseError> {
+pub fn parse_character_range(input: &String) -> Result<ParseResult<CharacterRangeNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_character_range(p));
 }
 
-pub fn parse_terminal_def(input: &String) -> Result<TerminalDefNode, ParseError> {
+pub fn parse_terminal_def(input: &String) -> Result<ParseResult<TerminalDefNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_terminal_def(p));
 }
 
-pub fn parse_element_options(input: &String) -> Result<ElementOptionsNode, ParseError> {
+pub fn parse_element_options(input: &String) -> Result<ParseResult<ElementOptionsNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_element_options(p));
 }
 
-pub fn parse_element_option(input: &String) -> Result<ElementOptionNode, ParseError> {
+pub fn parse_element_option(input: &String) -> Result<ParseResult<ElementOptionNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_element_option(p));
 }
 
-pub fn parse_identifier(input: &String) -> Result<IdentifierNode, ParseError> {
+pub fn parse_identifier(input: &String) -> Result<ParseResult<IdentifierNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_identifier(p));
 }
 
-pub fn parse_qualified_identifier(input: &String) -> Result<QualifiedIdentifierNode, ParseError> {
+pub fn parse_qualified_identifier(input: &String) -> Result<ParseResult<QualifiedIdentifierNode>, ParseError> {
     return _gale_run(input, |p: &mut Parser| _parse_qualified_identifier(p));
 }
 
-pub fn parse(input: &String) -> Result<GrammarSpecNode, ParseError> {
+pub fn parse(input: &String) -> Result<ParseResult<GrammarSpecNode>, ParseError> {
     return parse_grammar_spec(input);
 }
 
-pub fn walk_grammarSpec<V: Visitor>(v: &mut V, node: &GrammarSpecNode) {
+pub fn walk_grammarSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GrammarSpecNode) {
     v.enter_rule(0, &"grammarSpec", &node.span);
-    walk_grammarDecl(v, &node.grammar_decl);
+    walk_grammarDecl(v, toks, &node.grammar_decl);
     for let item of &node.prequel_construct_list {
-        walk_prequelConstruct(v, item);
+        walk_prequelConstruct(v, toks, item);
     }
-    walk_rules(v, &node.rules);
+    walk_rules(v, toks, &node.rules);
     for let item of &node.mode_spec_list {
-        walk_modeSpec(v, item);
+        walk_modeSpec(v, toks, item);
     }
-    v.visit_token(&node.eof);
+    v.visit_token(toks, node.eof);
     v.exit_rule(0, &"grammarSpec", &node.span);
 }
 
-pub fn walk_grammarDecl<V: Visitor>(v: &mut V, node: &GrammarDeclNode) {
+pub fn walk_grammarDecl<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GrammarDeclNode) {
     v.enter_rule(1, &"grammarDecl", &node.span);
-    walk_grammarType(v, &node.grammar_type);
-    walk_identifier(v, &node.identifier);
-    v.visit_token(&node.semi);
+    walk_grammarType(v, toks, &node.grammar_type);
+    walk_identifier(v, toks, &node.identifier);
+    v.visit_token(toks, node.semi);
     v.exit_rule(1, &"grammarDecl", &node.span);
 }
 
-pub fn walk_grammarType<V: Visitor>(v: &mut V, node: &GrammarTypeNode) {
+pub fn walk_grammarType<V: Visitor>(v: &mut V, toks: &TokenStream, node: &GrammarTypeNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(&n.lexer);
-            v.visit_token(&n.grammar);
+            v.visit_token(toks, n.lexer);
+            v.visit_token(toks, n.grammar);
             v.exit_rule(2, &"grammarType", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(&n.parser);
-            v.visit_token(&n.grammar);
+            v.visit_token(toks, n.parser);
+            v.visit_token(toks, n.grammar);
             v.exit_rule(2, &"grammarType", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(2, &"grammarType", &n.span);
-            v.visit_token(&n.grammar);
+            v.visit_token(toks, n.grammar);
             v.exit_rule(2, &"grammarType", &n.span);
         }
     }
 }
 
-pub fn walk_prequelConstruct<V: Visitor>(v: &mut V, node: &PrequelConstructNode) {
+pub fn walk_prequelConstruct<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PrequelConstructNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(3, &"prequelConstruct", &n.span);
-            walk_optionsSpec(v, &n.options_spec);
+            walk_optionsSpec(v, toks, &n.options_spec);
             v.exit_rule(3, &"prequelConstruct", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(3, &"prequelConstruct", &n.span);
-            walk_delegateGrammars(v, &n.delegate_grammars);
+            walk_delegateGrammars(v, toks, &n.delegate_grammars);
             v.exit_rule(3, &"prequelConstruct", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(3, &"prequelConstruct", &n.span);
-            walk_tokensSpec(v, &n.tokens_spec);
+            walk_tokensSpec(v, toks, &n.tokens_spec);
             v.exit_rule(3, &"prequelConstruct", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(3, &"prequelConstruct", &n.span);
-            walk_channelsSpec(v, &n.channels_spec);
+            walk_channelsSpec(v, toks, &n.channels_spec);
             v.exit_rule(3, &"prequelConstruct", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(3, &"prequelConstruct", &n.span);
-            walk_action_(v, &n.action_);
+            walk_action_(v, toks, &n.action_);
             v.exit_rule(3, &"prequelConstruct", &n.span);
         }
     }
 }
 
-pub fn walk_optionsSpec<V: Visitor>(v: &mut V, node: &OptionsSpecNode) {
+pub fn walk_optionsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OptionsSpecNode) {
     v.enter_rule(4, &"optionsSpec", &node.span);
-    v.visit_token(&node.options);
+    v.visit_token(toks, node.options);
     for let item of &node.option_semi_list {
-        walk_option(v, &item.option);
-        v.visit_token(&item.semi);
+        walk_option(v, toks, &item.option);
+        v.visit_token(toks, item.semi);
     }
-    v.visit_token(&node.rbrace);
+    v.visit_token(toks, node.rbrace);
     v.exit_rule(4, &"optionsSpec", &node.span);
 }
 
-pub fn walk_option<V: Visitor>(v: &mut V, node: &OptionNode) {
+pub fn walk_option<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OptionNode) {
     v.enter_rule(5, &"option", &node.span);
-    walk_identifier(v, &node.identifier);
-    v.visit_token(&node.assign);
-    walk_optionValue(v, &node.option_value);
+    walk_identifier(v, toks, &node.identifier);
+    v.visit_token(toks, node.assign);
+    walk_optionValue(v, toks, &node.option_value);
     v.exit_rule(5, &"option", &node.span);
 }
 
-pub fn walk_optionValue<V: Visitor>(v: &mut V, node: &OptionValueNode) {
+pub fn walk_optionValue<V: Visitor>(v: &mut V, toks: &TokenStream, node: &OptionValueNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            walk_identifier(v, &n.identifier);
+            walk_identifier(v, toks, &n.identifier);
             for let item of &n.dot_identifier_list {
-                v.visit_token(&item.dot);
-                walk_identifier(v, &item.identifier);
+                v.visit_token(toks, item.dot);
+                walk_identifier(v, toks, &item.identifier);
             }
             v.exit_rule(6, &"optionValue", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            v.visit_token(&n.string_literal);
+            v.visit_token(toks, n.string_literal);
             v.exit_rule(6, &"optionValue", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            walk_actionBlock(v, &n.action_block);
+            walk_actionBlock(v, toks, &n.action_block);
             v.exit_rule(6, &"optionValue", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(6, &"optionValue", &n.span);
-            v.visit_token(&n.int);
+            v.visit_token(toks, n.int);
             v.exit_rule(6, &"optionValue", &n.span);
         }
     }
 }
 
-pub fn walk_delegateGrammars<V: Visitor>(v: &mut V, node: &DelegateGrammarsNode) {
+pub fn walk_delegateGrammars<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DelegateGrammarsNode) {
     v.enter_rule(7, &"delegateGrammars", &node.span);
-    v.visit_token(&node.import_);
-    walk_delegateGrammar(v, &node.delegate_grammar);
+    v.visit_token(toks, node.import_);
+    walk_delegateGrammar(v, toks, &node.delegate_grammar);
     for let item of &node.comma_delegate_grammar_list {
-        v.visit_token(&item.comma);
-        walk_delegateGrammar(v, &item.delegate_grammar);
+        v.visit_token(toks, item.comma);
+        walk_delegateGrammar(v, toks, &item.delegate_grammar);
     }
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.semi);
     v.exit_rule(7, &"delegateGrammars", &node.span);
 }
 
-pub fn walk_delegateGrammar<V: Visitor>(v: &mut V, node: &DelegateGrammarNode) {
+pub fn walk_delegateGrammar<V: Visitor>(v: &mut V, toks: &TokenStream, node: &DelegateGrammarNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(8, &"delegateGrammar", &n.span);
-            walk_identifier(v, &n.identifier);
-            v.visit_token(&n.assign);
-            walk_identifier(v, &n.identifier_2);
+            walk_identifier(v, toks, &n.identifier);
+            v.visit_token(toks, n.assign);
+            walk_identifier(v, toks, &n.identifier_2);
             v.exit_rule(8, &"delegateGrammar", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(8, &"delegateGrammar", &n.span);
-            walk_identifier(v, &n.identifier);
+            walk_identifier(v, toks, &n.identifier);
             v.exit_rule(8, &"delegateGrammar", &n.span);
         }
     }
 }
 
-pub fn walk_tokensSpec<V: Visitor>(v: &mut V, node: &TokensSpecNode) {
+pub fn walk_tokensSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TokensSpecNode) {
     v.enter_rule(9, &"tokensSpec", &node.span);
-    v.visit_token(&node.tokens);
+    v.visit_token(toks, node.tokens);
     if let Some(item) = &node.id_list {
-        walk_idList(v, item);
+        walk_idList(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
+    v.visit_token(toks, node.rbrace);
     v.exit_rule(9, &"tokensSpec", &node.span);
 }
 
-pub fn walk_channelsSpec<V: Visitor>(v: &mut V, node: &ChannelsSpecNode) {
+pub fn walk_channelsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ChannelsSpecNode) {
     v.enter_rule(10, &"channelsSpec", &node.span);
-    v.visit_token(&node.channels);
+    v.visit_token(toks, node.channels);
     if let Some(item) = &node.id_list {
-        walk_idList(v, item);
+        walk_idList(v, toks, item);
     }
-    v.visit_token(&node.rbrace);
+    v.visit_token(toks, node.rbrace);
     v.exit_rule(10, &"channelsSpec", &node.span);
 }
 
-pub fn walk_idList<V: Visitor>(v: &mut V, node: &IdListNode) {
+pub fn walk_idList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IdListNode) {
     v.enter_rule(11, &"idList", &node.span);
-    walk_identifier(v, &node.identifier);
+    walk_identifier(v, toks, &node.identifier);
     for let item of &node.comma_identifier_list {
-        v.visit_token(&item.comma);
-        walk_identifier(v, &item.identifier);
+        v.visit_token(toks, item.comma);
+        walk_identifier(v, toks, &item.identifier);
     }
     if let Some(item) = &node.comma {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
     v.exit_rule(11, &"idList", &node.span);
 }
 
-pub fn walk_action_<V: Visitor>(v: &mut V, node: &ActionNode) {
+pub fn walk_action_<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ActionNode) {
     v.enter_rule(12, &"action_", &node.span);
-    v.visit_token(&node.at);
+    v.visit_token(toks, node.at);
     if let Some(item) = &node.action_scope_name_coloncolon {
-        walk_actionScopeName(v, &item.action_scope_name);
-        v.visit_token(&item.coloncolon);
+        walk_actionScopeName(v, toks, &item.action_scope_name);
+        v.visit_token(toks, item.coloncolon);
     }
-    walk_identifier(v, &node.identifier);
-    walk_actionBlock(v, &node.action_block);
+    walk_identifier(v, toks, &node.identifier);
+    walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(12, &"action_", &node.span);
 }
 
-pub fn walk_actionScopeName<V: Visitor>(v: &mut V, node: &ActionScopeNameNode) {
+pub fn walk_actionScopeName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ActionScopeNameNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(13, &"actionScopeName", &n.span);
-            walk_identifier(v, &n.identifier);
+            walk_identifier(v, toks, &n.identifier);
             v.exit_rule(13, &"actionScopeName", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(13, &"actionScopeName", &n.span);
-            v.visit_token(&n.lexer);
+            v.visit_token(toks, n.lexer);
             v.exit_rule(13, &"actionScopeName", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(13, &"actionScopeName", &n.span);
-            v.visit_token(&n.parser);
+            v.visit_token(toks, n.parser);
             v.exit_rule(13, &"actionScopeName", &n.span);
         }
     }
 }
 
-pub fn walk_actionBlock<V: Visitor>(v: &mut V, node: &ActionBlockNode) {
+pub fn walk_actionBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ActionBlockNode) {
     v.enter_rule(14, &"actionBlock", &node.span);
-    v.visit_token(&node.action);
+    v.visit_token(toks, node.action);
     v.exit_rule(14, &"actionBlock", &node.span);
 }
 
-pub fn walk_argActionBlock<V: Visitor>(v: &mut V, node: &ArgActionBlockNode) {
+pub fn walk_argActionBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ArgActionBlockNode) {
     v.enter_rule(15, &"argActionBlock", &node.span);
-    v.visit_token(&node.begin_argument);
+    v.visit_token(toks, node.begin_argument);
     for let item of &node.argument_content_list {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.end_argument);
+    v.visit_token(toks, node.end_argument);
     v.exit_rule(15, &"argActionBlock", &node.span);
 }
 
-pub fn walk_modeSpec<V: Visitor>(v: &mut V, node: &ModeSpecNode) {
+pub fn walk_modeSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ModeSpecNode) {
     v.enter_rule(16, &"modeSpec", &node.span);
-    v.visit_token(&node.mode);
-    walk_identifier(v, &node.identifier);
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.mode);
+    walk_identifier(v, toks, &node.identifier);
+    v.visit_token(toks, node.semi);
     for let item of &node.lexer_rule_spec_list {
-        walk_lexerRuleSpec(v, item);
+        walk_lexerRuleSpec(v, toks, item);
     }
     v.exit_rule(16, &"modeSpec", &node.span);
 }
 
-pub fn walk_rules<V: Visitor>(v: &mut V, node: &RulesNode) {
+pub fn walk_rules<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulesNode) {
     v.enter_rule(17, &"rules", &node.span);
     for let item of &node.rule_spec_list {
-        walk_ruleSpec(v, item);
+        walk_ruleSpec(v, toks, item);
     }
     v.exit_rule(17, &"rules", &node.span);
 }
 
-pub fn walk_ruleSpec<V: Visitor>(v: &mut V, node: &RuleSpecNode) {
+pub fn walk_ruleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleSpecNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(18, &"ruleSpec", &n.span);
-            walk_parserRuleSpec(v, &n.parser_rule_spec);
+            walk_parserRuleSpec(v, toks, &n.parser_rule_spec);
             v.exit_rule(18, &"ruleSpec", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(18, &"ruleSpec", &n.span);
-            walk_lexerRuleSpec(v, &n.lexer_rule_spec);
+            walk_lexerRuleSpec(v, toks, &n.lexer_rule_spec);
             v.exit_rule(18, &"ruleSpec", &n.span);
         }
     }
 }
 
-pub fn walk_parserRuleSpec<V: Visitor>(v: &mut V, node: &ParserRuleSpecNode) {
+pub fn walk_parserRuleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ParserRuleSpecNode) {
     v.enter_rule(19, &"parserRuleSpec", &node.span);
     if let Some(item) = &node.rule_modifiers {
-        walk_ruleModifiers(v, item);
+        walk_ruleModifiers(v, toks, item);
     }
-    v.visit_token(&node.rule_ref);
+    v.visit_token(toks, node.rule_ref);
     if let Some(item) = &node.arg_action_block {
-        walk_argActionBlock(v, item);
+        walk_argActionBlock(v, toks, item);
     }
     if let Some(item) = &node.rule_returns {
-        walk_ruleReturns(v, item);
+        walk_ruleReturns(v, toks, item);
     }
     if let Some(item) = &node.throws_spec {
-        walk_throwsSpec(v, item);
+        walk_throwsSpec(v, toks, item);
     }
     if let Some(item) = &node.locals_spec {
-        walk_localsSpec(v, item);
+        walk_localsSpec(v, toks, item);
     }
     for let item of &node.rule_prequel_list {
-        walk_rulePrequel(v, item);
+        walk_rulePrequel(v, toks, item);
     }
-    v.visit_token(&node.colon);
-    walk_ruleBlock(v, &node.rule_block);
-    v.visit_token(&node.semi);
-    walk_exceptionGroup(v, &node.exception_group);
+    v.visit_token(toks, node.colon);
+    walk_ruleBlock(v, toks, &node.rule_block);
+    v.visit_token(toks, node.semi);
+    walk_exceptionGroup(v, toks, &node.exception_group);
     v.exit_rule(19, &"parserRuleSpec", &node.span);
 }
 
-pub fn walk_exceptionGroup<V: Visitor>(v: &mut V, node: &ExceptionGroupNode) {
+pub fn walk_exceptionGroup<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExceptionGroupNode) {
     v.enter_rule(20, &"exceptionGroup", &node.span);
     for let item of &node.exception_handler_list {
-        walk_exceptionHandler(v, item);
+        walk_exceptionHandler(v, toks, item);
     }
     if let Some(item) = &node.finally_clause {
-        walk_finallyClause(v, item);
+        walk_finallyClause(v, toks, item);
     }
     v.exit_rule(20, &"exceptionGroup", &node.span);
 }
 
-pub fn walk_exceptionHandler<V: Visitor>(v: &mut V, node: &ExceptionHandlerNode) {
+pub fn walk_exceptionHandler<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ExceptionHandlerNode) {
     v.enter_rule(21, &"exceptionHandler", &node.span);
-    v.visit_token(&node.catch);
-    walk_argActionBlock(v, &node.arg_action_block);
-    walk_actionBlock(v, &node.action_block);
+    v.visit_token(toks, node.catch);
+    walk_argActionBlock(v, toks, &node.arg_action_block);
+    walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(21, &"exceptionHandler", &node.span);
 }
 
-pub fn walk_finallyClause<V: Visitor>(v: &mut V, node: &FinallyClauseNode) {
+pub fn walk_finallyClause<V: Visitor>(v: &mut V, toks: &TokenStream, node: &FinallyClauseNode) {
     v.enter_rule(22, &"finallyClause", &node.span);
-    v.visit_token(&node.finally);
-    walk_actionBlock(v, &node.action_block);
+    v.visit_token(toks, node.finally);
+    walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(22, &"finallyClause", &node.span);
 }
 
-pub fn walk_rulePrequel<V: Visitor>(v: &mut V, node: &RulePrequelNode) {
+pub fn walk_rulePrequel<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulePrequelNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(23, &"rulePrequel", &n.span);
-            walk_optionsSpec(v, &n.options_spec);
+            walk_optionsSpec(v, toks, &n.options_spec);
             v.exit_rule(23, &"rulePrequel", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(23, &"rulePrequel", &n.span);
-            walk_ruleAction(v, &n.rule_action);
+            walk_ruleAction(v, toks, &n.rule_action);
             v.exit_rule(23, &"rulePrequel", &n.span);
         }
     }
 }
 
-pub fn walk_ruleReturns<V: Visitor>(v: &mut V, node: &RuleReturnsNode) {
+pub fn walk_ruleReturns<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleReturnsNode) {
     v.enter_rule(24, &"ruleReturns", &node.span);
-    v.visit_token(&node.returns);
-    walk_argActionBlock(v, &node.arg_action_block);
+    v.visit_token(toks, node.returns);
+    walk_argActionBlock(v, toks, &node.arg_action_block);
     v.exit_rule(24, &"ruleReturns", &node.span);
 }
 
-pub fn walk_throwsSpec<V: Visitor>(v: &mut V, node: &ThrowsSpecNode) {
+pub fn walk_throwsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ThrowsSpecNode) {
     v.enter_rule(25, &"throwsSpec", &node.span);
-    v.visit_token(&node.throws);
-    walk_qualifiedIdentifier(v, &node.qualified_identifier);
+    v.visit_token(toks, node.throws);
+    walk_qualifiedIdentifier(v, toks, &node.qualified_identifier);
     for let item of &node.comma_qualified_identifier_list {
-        v.visit_token(&item.comma);
-        walk_qualifiedIdentifier(v, &item.qualified_identifier);
+        v.visit_token(toks, item.comma);
+        walk_qualifiedIdentifier(v, toks, &item.qualified_identifier);
     }
     v.exit_rule(25, &"throwsSpec", &node.span);
 }
 
-pub fn walk_localsSpec<V: Visitor>(v: &mut V, node: &LocalsSpecNode) {
+pub fn walk_localsSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LocalsSpecNode) {
     v.enter_rule(26, &"localsSpec", &node.span);
-    v.visit_token(&node.locals);
-    walk_argActionBlock(v, &node.arg_action_block);
+    v.visit_token(toks, node.locals);
+    walk_argActionBlock(v, toks, &node.arg_action_block);
     v.exit_rule(26, &"localsSpec", &node.span);
 }
 
-pub fn walk_ruleAction<V: Visitor>(v: &mut V, node: &RuleActionNode) {
+pub fn walk_ruleAction<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleActionNode) {
     v.enter_rule(27, &"ruleAction", &node.span);
-    v.visit_token(&node.at);
-    walk_identifier(v, &node.identifier);
-    walk_actionBlock(v, &node.action_block);
+    v.visit_token(toks, node.at);
+    walk_identifier(v, toks, &node.identifier);
+    walk_actionBlock(v, toks, &node.action_block);
     v.exit_rule(27, &"ruleAction", &node.span);
 }
 
-pub fn walk_ruleModifiers<V: Visitor>(v: &mut V, node: &RuleModifiersNode) {
+pub fn walk_ruleModifiers<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleModifiersNode) {
     v.enter_rule(28, &"ruleModifiers", &node.span);
     for let item of &node.rule_modifier_list {
-        walk_ruleModifier(v, item);
+        walk_ruleModifier(v, toks, item);
     }
     v.exit_rule(28, &"ruleModifiers", &node.span);
 }
 
-pub fn walk_ruleModifier<V: Visitor>(v: &mut V, node: &RuleModifierNode) {
+pub fn walk_ruleModifier<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleModifierNode) {
     v.enter_rule(29, &"ruleModifier", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(29, &"ruleModifier", &node.span);
 }
 
-pub fn walk_ruleBlock<V: Visitor>(v: &mut V, node: &RuleBlockNode) {
+pub fn walk_ruleBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleBlockNode) {
     v.enter_rule(30, &"ruleBlock", &node.span);
-    walk_ruleAltList(v, &node.rule_alt_list);
+    walk_ruleAltList(v, toks, &node.rule_alt_list);
     v.exit_rule(30, &"ruleBlock", &node.span);
 }
 
-pub fn walk_ruleAltList<V: Visitor>(v: &mut V, node: &RuleAltListNode) {
+pub fn walk_ruleAltList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RuleAltListNode) {
     v.enter_rule(31, &"ruleAltList", &node.span);
-    walk_labeledAlt(v, &node.labeled_alt);
+    walk_labeledAlt(v, toks, &node.labeled_alt);
     for let item of &node.or_labeled_alt_list {
-        v.visit_token(&item.or);
-        walk_labeledAlt(v, &item.labeled_alt);
+        v.visit_token(toks, item.or);
+        walk_labeledAlt(v, toks, &item.labeled_alt);
     }
     v.exit_rule(31, &"ruleAltList", &node.span);
 }
 
-pub fn walk_labeledAlt<V: Visitor>(v: &mut V, node: &LabeledAltNode) {
+pub fn walk_labeledAlt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LabeledAltNode) {
     v.enter_rule(32, &"labeledAlt", &node.span);
-    walk_alternative(v, &node.alternative);
+    walk_alternative(v, toks, &node.alternative);
     if let Some(item) = &node.pound_identifier {
-        v.visit_token(&item.pound);
-        walk_identifier(v, &item.identifier);
+        v.visit_token(toks, item.pound);
+        walk_identifier(v, toks, &item.identifier);
     }
     v.exit_rule(32, &"labeledAlt", &node.span);
 }
 
-pub fn walk_lexerRuleSpec<V: Visitor>(v: &mut V, node: &LexerRuleSpecNode) {
+pub fn walk_lexerRuleSpec<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerRuleSpecNode) {
     v.enter_rule(33, &"lexerRuleSpec", &node.span);
     if let Some(item) = &node.fragment {
-        v.visit_token(item);
+        v.visit_token(toks, *item);
     }
-    v.visit_token(&node.token_ref);
+    v.visit_token(toks, node.token_ref);
     if let Some(item) = &node.options_spec {
-        walk_optionsSpec(v, item);
+        walk_optionsSpec(v, toks, item);
     }
-    v.visit_token(&node.colon);
-    walk_lexerRuleBlock(v, &node.lexer_rule_block);
-    v.visit_token(&node.semi);
+    v.visit_token(toks, node.colon);
+    walk_lexerRuleBlock(v, toks, &node.lexer_rule_block);
+    v.visit_token(toks, node.semi);
     v.exit_rule(33, &"lexerRuleSpec", &node.span);
 }
 
-pub fn walk_lexerRuleBlock<V: Visitor>(v: &mut V, node: &LexerRuleBlockNode) {
+pub fn walk_lexerRuleBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerRuleBlockNode) {
     v.enter_rule(34, &"lexerRuleBlock", &node.span);
-    walk_lexerAltList(v, &node.lexer_alt_list);
+    walk_lexerAltList(v, toks, &node.lexer_alt_list);
     v.exit_rule(34, &"lexerRuleBlock", &node.span);
 }
 
-pub fn walk_lexerAltList<V: Visitor>(v: &mut V, node: &LexerAltListNode) {
+pub fn walk_lexerAltList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerAltListNode) {
     v.enter_rule(35, &"lexerAltList", &node.span);
-    walk_lexerAlt(v, &node.lexer_alt);
+    walk_lexerAlt(v, toks, &node.lexer_alt);
     for let item of &node.or_lexer_alt_list {
-        v.visit_token(&item.or);
-        walk_lexerAlt(v, &item.lexer_alt);
+        v.visit_token(toks, item.or);
+        walk_lexerAlt(v, toks, &item.lexer_alt);
     }
     v.exit_rule(35, &"lexerAltList", &node.span);
 }
 
-pub fn walk_lexerAlt<V: Visitor>(v: &mut V, node: &LexerAltNode) {
+pub fn walk_lexerAlt<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerAltNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(36, &"lexerAlt", &n.span);
-            walk_lexerElements(v, &n.lexer_elements);
+            walk_lexerElements(v, toks, &n.lexer_elements);
             if let Some(item) = &n.lexer_commands {
-                walk_lexerCommands(v, item);
+                walk_lexerCommands(v, toks, item);
             }
             v.exit_rule(36, &"lexerAlt", &n.span);
         }
@@ -9499,12 +9520,12 @@ pub fn walk_lexerAlt<V: Visitor>(v: &mut V, node: &LexerAltNode) {
     }
 }
 
-pub fn walk_lexerElements<V: Visitor>(v: &mut V, node: &LexerElementsNode) {
+pub fn walk_lexerElements<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerElementsNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(37, &"lexerElements", &n.span);
             for let item of &n.lexer_element_list {
-                walk_lexerElement(v, item);
+                walk_lexerElement(v, toks, item);
             }
             v.exit_rule(37, &"lexerElements", &n.span);
         }
@@ -9515,121 +9536,121 @@ pub fn walk_lexerElements<V: Visitor>(v: &mut V, node: &LexerElementsNode) {
     }
 }
 
-pub fn walk_lexerElement<V: Visitor>(v: &mut V, node: &LexerElementNode) {
+pub fn walk_lexerElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerElementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(38, &"lexerElement", &n.span);
-            walk_lexerAtom(v, &n.lexer_atom);
+            walk_lexerAtom(v, toks, &n.lexer_atom);
             if let Some(item) = &n.ebnf_suffix {
-                walk_ebnfSuffix(v, item);
+                walk_ebnfSuffix(v, toks, item);
             }
             v.exit_rule(38, &"lexerElement", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(38, &"lexerElement", &n.span);
-            walk_lexerBlock(v, &n.lexer_block);
+            walk_lexerBlock(v, toks, &n.lexer_block);
             if let Some(item) = &n.ebnf_suffix {
-                walk_ebnfSuffix(v, item);
+                walk_ebnfSuffix(v, toks, item);
             }
             v.exit_rule(38, &"lexerElement", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(38, &"lexerElement", &n.span);
-            walk_actionBlock(v, &n.action_block);
+            walk_actionBlock(v, toks, &n.action_block);
             if let Some(item) = &n.question {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
             v.exit_rule(38, &"lexerElement", &n.span);
         }
     }
 }
 
-pub fn walk_lexerBlock<V: Visitor>(v: &mut V, node: &LexerBlockNode) {
+pub fn walk_lexerBlock<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerBlockNode) {
     v.enter_rule(39, &"lexerBlock", &node.span);
-    v.visit_token(&node.lparen);
-    walk_lexerAltList(v, &node.lexer_alt_list);
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.lparen);
+    walk_lexerAltList(v, toks, &node.lexer_alt_list);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(39, &"lexerBlock", &node.span);
 }
 
-pub fn walk_lexerCommands<V: Visitor>(v: &mut V, node: &LexerCommandsNode) {
+pub fn walk_lexerCommands<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerCommandsNode) {
     v.enter_rule(40, &"lexerCommands", &node.span);
-    v.visit_token(&node.rarrow);
-    walk_lexerCommand(v, &node.lexer_command);
+    v.visit_token(toks, node.rarrow);
+    walk_lexerCommand(v, toks, &node.lexer_command);
     for let item of &node.comma_lexer_command_list {
-        v.visit_token(&item.comma);
-        walk_lexerCommand(v, &item.lexer_command);
+        v.visit_token(toks, item.comma);
+        walk_lexerCommand(v, toks, &item.lexer_command);
     }
     v.exit_rule(40, &"lexerCommands", &node.span);
 }
 
-pub fn walk_lexerCommand<V: Visitor>(v: &mut V, node: &LexerCommandNode) {
+pub fn walk_lexerCommand<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerCommandNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(41, &"lexerCommand", &n.span);
-            walk_lexerCommandName(v, &n.lexer_command_name);
-            v.visit_token(&n.lparen);
-            walk_lexerCommandExpr(v, &n.lexer_command_expr);
-            v.visit_token(&n.rparen);
+            walk_lexerCommandName(v, toks, &n.lexer_command_name);
+            v.visit_token(toks, n.lparen);
+            walk_lexerCommandExpr(v, toks, &n.lexer_command_expr);
+            v.visit_token(toks, n.rparen);
             v.exit_rule(41, &"lexerCommand", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(41, &"lexerCommand", &n.span);
-            walk_lexerCommandName(v, &n.lexer_command_name);
+            walk_lexerCommandName(v, toks, &n.lexer_command_name);
             v.exit_rule(41, &"lexerCommand", &n.span);
         }
     }
 }
 
-pub fn walk_lexerCommandName<V: Visitor>(v: &mut V, node: &LexerCommandNameNode) {
+pub fn walk_lexerCommandName<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerCommandNameNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(42, &"lexerCommandName", &n.span);
-            walk_identifier(v, &n.identifier);
+            walk_identifier(v, toks, &n.identifier);
             v.exit_rule(42, &"lexerCommandName", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(42, &"lexerCommandName", &n.span);
-            v.visit_token(&n.mode);
+            v.visit_token(toks, n.mode);
             v.exit_rule(42, &"lexerCommandName", &n.span);
         }
     }
 }
 
-pub fn walk_lexerCommandExpr<V: Visitor>(v: &mut V, node: &LexerCommandExprNode) {
+pub fn walk_lexerCommandExpr<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerCommandExprNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(43, &"lexerCommandExpr", &n.span);
-            walk_identifier(v, &n.identifier);
+            walk_identifier(v, toks, &n.identifier);
             v.exit_rule(43, &"lexerCommandExpr", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(43, &"lexerCommandExpr", &n.span);
-            v.visit_token(&n.int);
+            v.visit_token(toks, n.int);
             v.exit_rule(43, &"lexerCommandExpr", &n.span);
         }
     }
 }
 
-pub fn walk_altList<V: Visitor>(v: &mut V, node: &AltListNode) {
+pub fn walk_altList<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AltListNode) {
     v.enter_rule(44, &"altList", &node.span);
-    walk_alternative(v, &node.alternative);
+    walk_alternative(v, toks, &node.alternative);
     for let item of &node.or_alternative_list {
-        v.visit_token(&item.or);
-        walk_alternative(v, &item.alternative);
+        v.visit_token(toks, item.or);
+        walk_alternative(v, toks, &item.alternative);
     }
     v.exit_rule(44, &"altList", &node.span);
 }
 
-pub fn walk_alternative<V: Visitor>(v: &mut V, node: &AlternativeNode) {
+pub fn walk_alternative<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AlternativeNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(45, &"alternative", &n.span);
             if let Some(item) = &n.element_options {
-                walk_elementOptions(v, item);
+                walk_elementOptions(v, toks, item);
             }
             for let item of &n.element_list {
-                walk_element(v, item);
+                walk_element(v, toks, item);
             }
             v.exit_rule(45, &"alternative", &n.span);
         }
@@ -9640,70 +9661,70 @@ pub fn walk_alternative<V: Visitor>(v: &mut V, node: &AlternativeNode) {
     }
 }
 
-pub fn walk_element<V: Visitor>(v: &mut V, node: &ElementNode) {
+pub fn walk_element<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(46, &"element", &n.span);
-            walk_labeledElement(v, &n.labeled_element);
+            walk_labeledElement(v, toks, &n.labeled_element);
             v.exit_rule(46, &"element", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(46, &"element", &n.span);
-            walk_atom(v, &n.atom);
+            walk_atom(v, toks, &n.atom);
             v.exit_rule(46, &"element", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(46, &"element", &n.span);
-            walk_ebnf(v, &n.ebnf);
+            walk_ebnf(v, toks, &n.ebnf);
             v.exit_rule(46, &"element", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(46, &"element", &n.span);
-            walk_actionBlock(v, &n.action_block);
+            walk_actionBlock(v, toks, &n.action_block);
             if let Some(item) = &n.question {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
             if let Some(item) = &n.predicate_options {
-                walk_predicateOptions(v, item);
+                walk_predicateOptions(v, toks, item);
             }
             v.exit_rule(46, &"element", &n.span);
         }
     }
 }
 
-pub fn walk_predicateOptions<V: Visitor>(v: &mut V, node: &PredicateOptionsNode) {
+pub fn walk_predicateOptions<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PredicateOptionsNode) {
     v.enter_rule(47, &"predicateOptions", &node.span);
-    v.visit_token(&node.lt);
-    walk_predicateOption(v, &node.predicate_option);
+    v.visit_token(toks, node.lt);
+    walk_predicateOption(v, toks, &node.predicate_option);
     for let item of &node.comma_predicate_option_list {
-        v.visit_token(&item.comma);
-        walk_predicateOption(v, &item.predicate_option);
+        v.visit_token(toks, item.comma);
+        walk_predicateOption(v, toks, &item.predicate_option);
     }
-    v.visit_token(&node.gt);
+    v.visit_token(toks, node.gt);
     v.exit_rule(47, &"predicateOptions", &node.span);
 }
 
-pub fn walk_predicateOption<V: Visitor>(v: &mut V, node: &PredicateOptionNode) {
+pub fn walk_predicateOption<V: Visitor>(v: &mut V, toks: &TokenStream, node: &PredicateOptionNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(48, &"predicateOption", &n.span);
-            walk_elementOption(v, &n.element_option);
+            walk_elementOption(v, toks, &n.element_option);
             v.exit_rule(48, &"predicateOption", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(48, &"predicateOption", &n.span);
-            walk_identifier(v, &n.identifier);
-            v.visit_token(&n.assign);
+            walk_identifier(v, toks, &n.identifier);
+            v.visit_token(toks, n.assign);
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        walk_actionBlock(v, &inner.action_block);
+                        walk_actionBlock(v, toks, &inner.action_block);
                     }
                     Alt1(inner) => {
-                        v.visit_token(&inner.int);
+                        v.visit_token(toks, inner.int);
                     }
                     Alt2(inner) => {
-                        v.visit_token(&inner.string_literal);
+                        v.visit_token(toks, inner.string_literal);
                     }
                 }
             }
@@ -9712,282 +9733,282 @@ pub fn walk_predicateOption<V: Visitor>(v: &mut V, node: &PredicateOptionNode) {
     }
 }
 
-pub fn walk_labeledElement<V: Visitor>(v: &mut V, node: &LabeledElementNode) {
+pub fn walk_labeledElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LabeledElementNode) {
     v.enter_rule(49, &"labeledElement", &node.span);
-    walk_identifier(v, &node.identifier);
-    v.visit_token(&node.assign_or_plus_assign);
+    walk_identifier(v, toks, &node.identifier);
+    v.visit_token(toks, node.assign_or_plus_assign);
     if let Some(item) = &node.atom_or_block {
         match item {
             Atom(inner) => {
-                walk_atom(v, inner);
+                walk_atom(v, toks, inner);
             }
             Block(inner) => {
-                walk_block(v, inner);
+                walk_block(v, toks, inner);
             }
         }
     }
     v.exit_rule(49, &"labeledElement", &node.span);
 }
 
-pub fn walk_ebnf<V: Visitor>(v: &mut V, node: &EbnfNode) {
+pub fn walk_ebnf<V: Visitor>(v: &mut V, toks: &TokenStream, node: &EbnfNode) {
     v.enter_rule(50, &"ebnf", &node.span);
-    walk_block(v, &node.block);
+    walk_block(v, toks, &node.block);
     if let Some(item) = &node.block_suffix {
-        walk_blockSuffix(v, item);
+        walk_blockSuffix(v, toks, item);
     }
     v.exit_rule(50, &"ebnf", &node.span);
 }
 
-pub fn walk_blockSuffix<V: Visitor>(v: &mut V, node: &BlockSuffixNode) {
+pub fn walk_blockSuffix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockSuffixNode) {
     v.enter_rule(51, &"blockSuffix", &node.span);
-    walk_ebnfSuffix(v, &node.ebnf_suffix);
+    walk_ebnfSuffix(v, toks, &node.ebnf_suffix);
     v.exit_rule(51, &"blockSuffix", &node.span);
 }
 
-pub fn walk_ebnfSuffix<V: Visitor>(v: &mut V, node: &EbnfSuffixNode) {
+pub fn walk_ebnfSuffix<V: Visitor>(v: &mut V, toks: &TokenStream, node: &EbnfSuffixNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(&n.question);
+            v.visit_token(toks, n.question);
             if let Some(item) = &n.question_2 {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(&n.star);
+            v.visit_token(toks, n.star);
             if let Some(item) = &n.question {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(52, &"ebnfSuffix", &n.span);
-            v.visit_token(&n.plus);
+            v.visit_token(toks, n.plus);
             if let Some(item) = &n.question {
-                v.visit_token(item);
+                v.visit_token(toks, *item);
             }
             v.exit_rule(52, &"ebnfSuffix", &n.span);
         }
     }
 }
 
-pub fn walk_lexerAtom<V: Visitor>(v: &mut V, node: &LexerAtomNode) {
+pub fn walk_lexerAtom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &LexerAtomNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            walk_characterRange(v, &n.character_range);
+            walk_characterRange(v, toks, &n.character_range);
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            walk_terminalDef(v, &n.terminal_def);
+            walk_terminalDef(v, toks, &n.terminal_def);
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            walk_notSet(v, &n.not_set);
+            walk_notSet(v, toks, &n.not_set);
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            v.visit_token(&n.lexer_char_set);
+            v.visit_token(toks, n.lexer_char_set);
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
         Alt4(n) => {
             v.enter_rule(53, &"lexerAtom", &n.span);
-            walk_wildcard(v, &n.wildcard);
+            walk_wildcard(v, toks, &n.wildcard);
             v.exit_rule(53, &"lexerAtom", &n.span);
         }
     }
 }
 
-pub fn walk_atom<V: Visitor>(v: &mut V, node: &AtomNode) {
+pub fn walk_atom<V: Visitor>(v: &mut V, toks: &TokenStream, node: &AtomNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(54, &"atom", &n.span);
-            walk_terminalDef(v, &n.terminal_def);
+            walk_terminalDef(v, toks, &n.terminal_def);
             v.exit_rule(54, &"atom", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(54, &"atom", &n.span);
-            walk_ruleref(v, &n.ruleref);
+            walk_ruleref(v, toks, &n.ruleref);
             v.exit_rule(54, &"atom", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(54, &"atom", &n.span);
-            walk_notSet(v, &n.not_set);
+            walk_notSet(v, toks, &n.not_set);
             v.exit_rule(54, &"atom", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(54, &"atom", &n.span);
-            walk_wildcard(v, &n.wildcard);
+            walk_wildcard(v, toks, &n.wildcard);
             v.exit_rule(54, &"atom", &n.span);
         }
     }
 }
 
-pub fn walk_wildcard<V: Visitor>(v: &mut V, node: &WildcardNode) {
+pub fn walk_wildcard<V: Visitor>(v: &mut V, toks: &TokenStream, node: &WildcardNode) {
     v.enter_rule(55, &"wildcard", &node.span);
-    v.visit_token(&node.dot);
+    v.visit_token(toks, node.dot);
     if let Some(item) = &node.element_options {
-        walk_elementOptions(v, item);
+        walk_elementOptions(v, toks, item);
     }
     v.exit_rule(55, &"wildcard", &node.span);
 }
 
-pub fn walk_notSet<V: Visitor>(v: &mut V, node: &NotSetNode) {
+pub fn walk_notSet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &NotSetNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(56, &"notSet", &n.span);
-            v.visit_token(&n.not);
-            walk_setElement(v, &n.set_element);
+            v.visit_token(toks, n.not);
+            walk_setElement(v, toks, &n.set_element);
             v.exit_rule(56, &"notSet", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(56, &"notSet", &n.span);
-            v.visit_token(&n.not);
-            walk_blockSet(v, &n.block_set);
+            v.visit_token(toks, n.not);
+            walk_blockSet(v, toks, &n.block_set);
             v.exit_rule(56, &"notSet", &n.span);
         }
     }
 }
 
-pub fn walk_blockSet<V: Visitor>(v: &mut V, node: &BlockSetNode) {
+pub fn walk_blockSet<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockSetNode) {
     v.enter_rule(57, &"blockSet", &node.span);
-    v.visit_token(&node.lparen);
-    walk_setElement(v, &node.set_element);
+    v.visit_token(toks, node.lparen);
+    walk_setElement(v, toks, &node.set_element);
     for let item of &node.or_set_element_list {
-        v.visit_token(&item.or);
-        walk_setElement(v, &item.set_element);
+        v.visit_token(toks, item.or);
+        walk_setElement(v, toks, &item.set_element);
     }
-    v.visit_token(&node.rparen);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(57, &"blockSet", &node.span);
 }
 
-pub fn walk_setElement<V: Visitor>(v: &mut V, node: &SetElementNode) {
+pub fn walk_setElement<V: Visitor>(v: &mut V, toks: &TokenStream, node: &SetElementNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(&n.token_ref);
+            v.visit_token(toks, n.token_ref);
             if let Some(item) = &n.element_options {
-                walk_elementOptions(v, item);
+                walk_elementOptions(v, toks, item);
             }
             v.exit_rule(58, &"setElement", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(&n.string_literal);
+            v.visit_token(toks, n.string_literal);
             if let Some(item) = &n.element_options {
-                walk_elementOptions(v, item);
+                walk_elementOptions(v, toks, item);
             }
             v.exit_rule(58, &"setElement", &n.span);
         }
         Alt2(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            walk_characterRange(v, &n.character_range);
+            walk_characterRange(v, toks, &n.character_range);
             v.exit_rule(58, &"setElement", &n.span);
         }
         Alt3(n) => {
             v.enter_rule(58, &"setElement", &n.span);
-            v.visit_token(&n.lexer_char_set);
+            v.visit_token(toks, n.lexer_char_set);
             v.exit_rule(58, &"setElement", &n.span);
         }
     }
 }
 
-pub fn walk_block<V: Visitor>(v: &mut V, node: &BlockNode) {
+pub fn walk_block<V: Visitor>(v: &mut V, toks: &TokenStream, node: &BlockNode) {
     v.enter_rule(59, &"block", &node.span);
-    v.visit_token(&node.lparen);
+    v.visit_token(toks, node.lparen);
     if let Some(item) = &node.options_spec_rule_action_colon {
         if let Some(item) = &item.options_spec {
-            walk_optionsSpec(v, item);
+            walk_optionsSpec(v, toks, item);
         }
         for let item of &item.rule_action_list {
-            walk_ruleAction(v, item);
+            walk_ruleAction(v, toks, item);
         }
-        v.visit_token(&item.colon);
+        v.visit_token(toks, item.colon);
     }
-    walk_altList(v, &node.alt_list);
-    v.visit_token(&node.rparen);
+    walk_altList(v, toks, &node.alt_list);
+    v.visit_token(toks, node.rparen);
     v.exit_rule(59, &"block", &node.span);
 }
 
-pub fn walk_ruleref<V: Visitor>(v: &mut V, node: &RulerefNode) {
+pub fn walk_ruleref<V: Visitor>(v: &mut V, toks: &TokenStream, node: &RulerefNode) {
     v.enter_rule(60, &"ruleref", &node.span);
-    v.visit_token(&node.rule_ref);
+    v.visit_token(toks, node.rule_ref);
     if let Some(item) = &node.arg_action_block {
-        walk_argActionBlock(v, item);
+        walk_argActionBlock(v, toks, item);
     }
     if let Some(item) = &node.element_options {
-        walk_elementOptions(v, item);
+        walk_elementOptions(v, toks, item);
     }
     v.exit_rule(60, &"ruleref", &node.span);
 }
 
-pub fn walk_characterRange<V: Visitor>(v: &mut V, node: &CharacterRangeNode) {
+pub fn walk_characterRange<V: Visitor>(v: &mut V, toks: &TokenStream, node: &CharacterRangeNode) {
     v.enter_rule(61, &"characterRange", &node.span);
-    v.visit_token(&node.string_literal);
-    v.visit_token(&node.range);
-    v.visit_token(&node.string_literal_2);
+    v.visit_token(toks, node.string_literal);
+    v.visit_token(toks, node.range);
+    v.visit_token(toks, node.string_literal_2);
     v.exit_rule(61, &"characterRange", &node.span);
 }
 
-pub fn walk_terminalDef<V: Visitor>(v: &mut V, node: &TerminalDefNode) {
+pub fn walk_terminalDef<V: Visitor>(v: &mut V, toks: &TokenStream, node: &TerminalDefNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(62, &"terminalDef", &n.span);
-            v.visit_token(&n.token_ref);
+            v.visit_token(toks, n.token_ref);
             if let Some(item) = &n.element_options {
-                walk_elementOptions(v, item);
+                walk_elementOptions(v, toks, item);
             }
             v.exit_rule(62, &"terminalDef", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(62, &"terminalDef", &n.span);
-            v.visit_token(&n.string_literal);
+            v.visit_token(toks, n.string_literal);
             if let Some(item) = &n.element_options {
-                walk_elementOptions(v, item);
+                walk_elementOptions(v, toks, item);
             }
             v.exit_rule(62, &"terminalDef", &n.span);
         }
     }
 }
 
-pub fn walk_elementOptions<V: Visitor>(v: &mut V, node: &ElementOptionsNode) {
+pub fn walk_elementOptions<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementOptionsNode) {
     v.enter_rule(63, &"elementOptions", &node.span);
-    v.visit_token(&node.lt);
-    walk_elementOption(v, &node.element_option);
+    v.visit_token(toks, node.lt);
+    walk_elementOption(v, toks, &node.element_option);
     for let item of &node.comma_element_option_list {
-        v.visit_token(&item.comma);
-        walk_elementOption(v, &item.element_option);
+        v.visit_token(toks, item.comma);
+        walk_elementOption(v, toks, &item.element_option);
     }
-    v.visit_token(&node.gt);
+    v.visit_token(toks, node.gt);
     v.exit_rule(63, &"elementOptions", &node.span);
 }
 
-pub fn walk_elementOption<V: Visitor>(v: &mut V, node: &ElementOptionNode) {
+pub fn walk_elementOption<V: Visitor>(v: &mut V, toks: &TokenStream, node: &ElementOptionNode) {
     match node {
         Alt0(n) => {
             v.enter_rule(64, &"elementOption", &n.span);
-            walk_qualifiedIdentifier(v, &n.qualified_identifier);
+            walk_qualifiedIdentifier(v, toks, &n.qualified_identifier);
             v.exit_rule(64, &"elementOption", &n.span);
         }
         Alt1(n) => {
             v.enter_rule(64, &"elementOption", &n.span);
-            walk_identifier(v, &n.identifier);
-            v.visit_token(&n.assign);
+            walk_identifier(v, toks, &n.identifier);
+            v.visit_token(toks, n.assign);
             if let Some(item) = &n.group_0 {
                 match item {
                     Alt0(inner) => {
-                        walk_qualifiedIdentifier(v, &inner.qualified_identifier);
+                        walk_qualifiedIdentifier(v, toks, &inner.qualified_identifier);
                     }
                     Alt1(inner) => {
-                        v.visit_token(&inner.string_literal);
+                        v.visit_token(toks, inner.string_literal);
                     }
                     Alt2(inner) => {
-                        v.visit_token(&inner.int);
+                        v.visit_token(toks, inner.int);
                     }
                 }
             }
@@ -9996,25 +10017,25 @@ pub fn walk_elementOption<V: Visitor>(v: &mut V, node: &ElementOptionNode) {
     }
 }
 
-pub fn walk_identifier<V: Visitor>(v: &mut V, node: &IdentifierNode) {
+pub fn walk_identifier<V: Visitor>(v: &mut V, toks: &TokenStream, node: &IdentifierNode) {
     v.enter_rule(65, &"identifier", &node.span);
-    v.visit_token(&node.token);
+    v.visit_token(toks, node.token);
     v.exit_rule(65, &"identifier", &node.span);
 }
 
-pub fn walk_qualifiedIdentifier<V: Visitor>(v: &mut V, node: &QualifiedIdentifierNode) {
+pub fn walk_qualifiedIdentifier<V: Visitor>(v: &mut V, toks: &TokenStream, node: &QualifiedIdentifierNode) {
     v.enter_rule(66, &"qualifiedIdentifier", &node.span);
-    walk_identifier(v, &node.identifier);
+    walk_identifier(v, toks, &node.identifier);
     for let item of &node.dot_identifier_list {
-        v.visit_token(&item.dot);
-        walk_identifier(v, &item.identifier);
+        v.visit_token(toks, item.dot);
+        walk_identifier(v, toks, &item.identifier);
     }
     v.exit_rule(66, &"qualifiedIdentifier", &node.span);
 }
 
-pub fn to_tree(node: &GrammarSpecNode) -> CstNode {
-    let mut recorder = TreeRecorder::new();
-    walk_grammarSpec(&mut recorder, node);
+pub fn to_tree(result: &ParseResult<GrammarSpecNode>) -> CstNode {
+    let mut recorder = TreeRecorder::new(&result.tokens);
+    walk_grammarSpec(&mut recorder, &result.tokens, &result.root);
     return recorder.build();
 }
 
