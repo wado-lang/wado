@@ -53,7 +53,19 @@ impl Rule for ElideRule<'_> {
         // Locals read only through a promoted `Operand::Value` are live but
         // invisible to the use index; treat them as kept. Empty (so this is
         // behavior-neutral) until operand promotion runs.
-        let promoted_reads = engine.body.locals_read_via_promotion();
+        //
+        // Under early promotion (`WADO_PROMOTE_EARLY`) use the **over-conservative**
+        // pool-wide `opaque_local_sources` instead of the precise live-slot walk:
+        // the precise walk has a known gap (a still-read local whose `Opaque(Local)`
+        // source the walk does not reach from a live slot — see WEP), and
+        // over-conserving is sound (it only keeps more locals, never drops a read
+        // one) at the cost of some missed elisions. Flag-off keeps the precise walk,
+        // so the committed default is unchanged.
+        let promoted_reads: IndexSet<u32> = if crate::optimize::promote_early_enabled() {
+            engine.body.values.opaque_local_sources().collect()
+        } else {
+            engine.body.locals_read_via_promotion()
+        };
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
         for stmt in stmts {

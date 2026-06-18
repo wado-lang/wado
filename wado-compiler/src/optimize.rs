@@ -120,7 +120,7 @@ use crate::nir_package::NirPackage;
 /// Whether the operand-promotion keystone runs early (before the value passes),
 /// gated by `WADO_PROMOTE_EARLY`. Under construction; default off keeps the
 /// committed late-freeze behavior. See `docs/wep-2026-06-15-live-value-graph.md`.
-fn promote_early_enabled() -> bool {
+pub(crate) fn promote_early_enabled() -> bool {
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("WADO_PROMOTE_EARLY").is_some())
