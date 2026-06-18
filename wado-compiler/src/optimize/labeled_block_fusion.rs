@@ -242,14 +242,14 @@ fn check_fusion_preconditions_if_variant_test(
         expr: vt_expr,
         case_index,
         ..
-    } = &body.exprs[condition.as_expr().expect("skeleton operand")].kind
+    } = &body.exprs[condition.as_expr()?].kind
     else {
         return None;
     };
     let case_index = *case_index;
     let ExprKind::Local {
         index: tested_idx, ..
-    } = &body.exprs[vt_expr.as_expr().expect("skeleton operand")].kind
+    } = &body.exprs[vt_expr.as_expr()?].kind
     else {
         return None;
     };
