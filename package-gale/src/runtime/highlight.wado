@@ -3,7 +3,7 @@
 //! parser only when the `highlight` generator option is on. The
 //! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
 
-use { Span, Token } from "./lex.wado";
+use { Span, Tok } from "./lex.wado";
 use { Visitor } from "./cst.wado";
 
 /// Highlight override: when inside a specific rule, override the capture for a token kind.
@@ -104,19 +104,23 @@ impl Visitor for HighlightVisitor {
         self.rule_stack.pop();
     }
 
-    fn visit_token(&mut self, token: &Token) {
-        for let trivia of &token.leading_trivia {
-            let cap = self.classify(trivia.kind);
+    fn visit_token(&mut self, token: &Tok) {
+        let stream = token.stream;
+        let lo = token.triv_lo();
+        let hi = token.triv_hi();
+        for let mut t = lo; t < hi; t += 1 {
+            let cap = self.classify(stream.triv_kinds[t]);
             if !cap.is_empty() {
-                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+                self.captures.push(HighlightCapture { capture: cap, start: stream.triv_starts[t], end: stream.triv_ends[t] });
             }
         }
-        if token.text.is_empty() {
+        if token.is_empty_text() {
             return;
         }
-        let cap = self.classify(token.kind);
+        let cap = self.classify(token.kind());
         if !cap.is_empty() {
-            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+            let sp = token.span();
+            self.captures.push(HighlightCapture { capture: cap, start: sp.start, end: sp.end });
         }
     }
 }

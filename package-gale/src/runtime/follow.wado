@@ -3,7 +3,7 @@
 //! (`GenContext::emit_follow`); gate-free grammars carry none of this. The
 //! `./lex.wado` import is stripped at `#include_str` time.
 
-use { Token } from "./lex.wado";
+use { TokenStream } from "./lex.wado";
 
 /// `follow` is the caller's deterministic K-prefix continuation:
 /// `follow[d]` is the set of token kinds that may appear at input depth
@@ -46,7 +46,7 @@ pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> Lis
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &TokenStream, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -57,7 +57,7 @@ pub fn follow_yields(tokens: &Array<Token>, pos: i32, follow: &List<List<i32>>, 
             continue;
         }
         let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx].kind } else { eof_kind };
+        let kind = if idx < tokens.len() { tokens.kinds[idx] } else { eof_kind };
         let mut hit = false;
         for let t of set {
             if kind == *t {

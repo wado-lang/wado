@@ -56,7 +56,7 @@ test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
     // Source "ab c": tokens 'a'(0..1), 'b'(1..2), 'c'(3..4); a single space
     // (1 char) is leading trivia of 'c'.
     let chars: List<char> = "ab c".chars().collect();
-    let mut ts = TokenStream::new(chars);
+    let mut ts = TokenStream::new(&chars);
 
     let lo0 = ts.trivia_mark();
     ts.push_token(10, 0, 1, lo0, ts.trivia_mark());
@@ -84,7 +84,7 @@ test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
 
 test "TokenStream empty-text token reports empty (EOF sentinel)" {
     let chars: List<char> = "x".chars().collect();
-    let mut ts = TokenStream::new(chars);
+    let mut ts = TokenStream::new(&chars);
     let lo = ts.trivia_mark();
     ts.push_token(0, 1, 1, lo, ts.trivia_mark());
     assert ts.is_empty_text(0);

@@ -5,11 +5,12 @@
 //! stripped at `#include_str` time (see `gen_runtime` in `codegen.wado`),
 //! where `lex.wado` is concatenated first.
 
-use { Span, Token } from "./lex.wado";
+use { Span, Tok } from "./lex.wado";
 
-/// CstChild is either a terminal token or a non-terminal sub-tree.
+/// CstChild is either a terminal token (a `Tok` handle into the stream) or a
+/// non-terminal sub-tree.
 pub variant CstChild {
-    Token(Token),
+    Token(Tok),
     Node(CstNode),
 }
 
@@ -35,8 +36,8 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
     out.push_str(&`({node.name}`);
     for let child of &node.children {
         if let Token(t) = *child {
-            if !t.text.is_empty() {
-                out.push_str(&` {t.text}`);
+            if !t.is_empty_text() {
+                out.push_str(&` {t.text()}`);
             }
         } else if let Node(n) = *child {
             out.push_str(&" ");
@@ -59,7 +60,7 @@ pub trait Visitor {
     }
     fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
     }
-    fn visit_token(&mut self, token: &Token) {
+    fn visit_token(&mut self, token: &Tok) {
     }
 }
 
@@ -71,7 +72,7 @@ pub struct TreeRecorder {
 variant TreeEvent {
     Enter(TreeEnterInfo),
     Exit,
-    VisitToken(Token),
+    VisitToken(Tok),
 }
 
 struct TreeEnterInfo {
@@ -99,7 +100,7 @@ impl Visitor for TreeRecorder {
         self.events.push(TreeEvent::Exit);
     }
 
-    fn visit_token(&mut self, token: &Token) {
+    fn visit_token(&mut self, token: &Tok) {
         self.events.push(TreeEvent::VisitToken(*token));
     }
 }
