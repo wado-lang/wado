@@ -994,7 +994,7 @@ fn emit_stage_a_tokens_test_file(
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
     w.line(&"let tokens = t::tokenize(&input);");
-    w.line(&"let actual = t::to_lexer_string(&tokens, &input, TK_EOF);");
+    w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
     w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
     w.end();
     return w.to_string();
