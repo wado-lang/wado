@@ -282,8 +282,12 @@ The standing risk of parallel-array SoA is array desync and
 field-addition friction. Contained by discipline, not by the type system:
 
 - **One writer**: `push_token` / `push_trivia` are the only mutators;
-  never push to an individual array. A post-`tokenize` debug assertion
-  checks all parser arrays share a length.
+  never push to an individual array. With every parallel array advanced
+  in lockstep by a single method, the arrays cannot desync by
+  construction — no length invariant needs runtime enforcement. (Wado has
+  only always-on `assert`, not a debug-only tier, so a per-`tokenize`
+  length check would be permanent cost for an invariant the writer already
+  guarantees; cover it once in a unit test instead.)
 - **One reader surface**: `kind_at` / `start_at` / `end_at` / `span_at` /
   `push_text` / trivia iteration are the only access points; the
   generator emits these, so the physical layout lives in `TokenStream`
