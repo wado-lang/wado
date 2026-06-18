@@ -247,6 +247,7 @@ impl<'a> Engine<'a> {
     pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
+        let result_ty = self.body.exprs[expr].type_id;
         // The pool lives on the body, `value_of` on the cached graph — disjoint
         // fields, borrowed separately so interning and operand lookups coexist.
         let v = {
@@ -262,7 +263,7 @@ impl<'a> Engine<'a> {
                 ExprKind::Binary { left, op, right } => {
                     let lhs = operand_value(left)?;
                     let rhs = operand_value(right)?;
-                    pool.binary(op, lhs, rhs)
+                    pool.binary(op, lhs, rhs, result_ty)
                 }
                 ExprKind::Unary { op, expr: inner } => {
                     use crate::nir::NirUnaryOp;
@@ -270,7 +271,7 @@ impl<'a> Engine<'a> {
                         return None;
                     }
                     let operand = operand_value(inner)?;
-                    pool.unary(op, operand)
+                    pool.unary(op, operand, result_ty)
                 }
                 ExprKind::Cast {
                     expr: inner,
@@ -1564,13 +1565,18 @@ mod tests {
             ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected Binary, got {other:?}"),
         };
+        // The spliced `1 + 2` must carry the same result type as the original —
+        // the result type is part of the value's hash-cons key (width-intrinsic
+        // `Binary`), so an I32 sum and a same-operand sum of another type are
+        // distinct values.
+        let add_ty = eng.body.exprs[add_e].type_id;
         let sum = eng.alloc_expr(
             ExprKind::Binary {
                 left: one,
                 op: NirBinaryOp::Add,
                 right: two,
             },
-            TypeTable::I32,
+            add_ty,
             Span::default(),
         );
         let v_sum = eng.maintain_pure_value(sum).unwrap();

@@ -142,14 +142,21 @@ pub enum ValueKind {
     Opaque(OpaqueId),
 
     // ---- Pure arithmetic ----
+    /// `lhs op rhs` with its result `TypeId`. The result type is part of the
+    /// hash-cons key (like `Int` / `Float`) so the value carries its own width:
+    /// extraction reads the op width from `ty` rather than a last-write
+    /// `set_type`, and two structurally-equal ops at different widths never share
+    /// an id. Operand widths come from each operand value's own `ty` recursively.
     Binary {
         op: NirBinaryOp,
         lhs: ValueId,
         rhs: ValueId,
+        ty: TypeId,
     },
     Unary {
         op: NirUnaryOp,
         operand: ValueId,
+        ty: TypeId,
     },
     Cast {
         operand: ValueId,
@@ -273,7 +280,11 @@ impl ValuePool {
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
         let carried_type = match kind {
-            ValueKind::Int(_, t) | ValueKind::Float(_, t) => Some(t),
+            ValueKind::Int(_, t)
+            | ValueKind::Float(_, t)
+            | ValueKind::Binary { ty: t, .. }
+            | ValueKind::Unary { ty: t, .. }
+            | ValueKind::Cast { target: t, .. } => Some(t),
             _ => None,
         };
         self.values.push(kind.clone());
@@ -415,14 +426,16 @@ impl ValuePool {
     /// Replace each child of `kind` with its class representative.
     fn canonicalize(&mut self, kind: ValueKind) -> ValueKind {
         match kind {
-            ValueKind::Binary { op, lhs, rhs } => ValueKind::Binary {
+            ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {
                 op,
                 lhs: self.find(lhs),
                 rhs: self.find(rhs),
+                ty,
             },
-            ValueKind::Unary { op, operand } => ValueKind::Unary {
+            ValueKind::Unary { op, operand, ty } => ValueKind::Unary {
                 op,
                 operand: self.find(operand),
+                ty,
             },
             ValueKind::Cast { operand, target } => ValueKind::Cast {
                 operand: self.find(operand),
@@ -644,13 +657,13 @@ impl ValuePool {
     }
 
     #[inline]
-    pub fn binary(&mut self, op: NirBinaryOp, lhs: ValueId, rhs: ValueId) -> ValueId {
-        self.intern(ValueKind::Binary { op, lhs, rhs })
+    pub fn binary(&mut self, op: NirBinaryOp, lhs: ValueId, rhs: ValueId, ty: TypeId) -> ValueId {
+        self.intern(ValueKind::Binary { op, lhs, rhs, ty })
     }
 
     #[inline]
-    pub fn unary(&mut self, op: NirUnaryOp, operand: ValueId) -> ValueId {
-        self.intern(ValueKind::Unary { op, operand })
+    pub fn unary(&mut self, op: NirUnaryOp, operand: ValueId, ty: TypeId) -> ValueId {
+        self.intern(ValueKind::Unary { op, operand, ty })
     }
 
     #[inline]
@@ -836,8 +849,8 @@ mod tests {
         let mut pool = ValuePool::new();
         let l = pool.int_typed(1, crate::tir::TypeTable::I32);
         let r = pool.int_typed(2, crate::tir::TypeTable::I32);
-        let a = pool.binary(NirBinaryOp::Add, l, r);
-        let b = pool.binary(NirBinaryOp::Add, l, r);
+        let a = pool.binary(NirBinaryOp::Add, l, r, crate::tir::TypeTable::I32);
+        let b = pool.binary(NirBinaryOp::Add, l, r, crate::tir::TypeTable::I32);
         assert_eq!(a, b);
     }
 
@@ -846,8 +859,8 @@ mod tests {
         let mut pool = ValuePool::new();
         let l = pool.int_typed(1, crate::tir::TypeTable::I32);
         let r = pool.int_typed(2, crate::tir::TypeTable::I32);
-        let lr = pool.binary(NirBinaryOp::Sub, l, r);
-        let rl = pool.binary(NirBinaryOp::Sub, r, l);
+        let lr = pool.binary(NirBinaryOp::Sub, l, r, crate::tir::TypeTable::I32);
+        let rl = pool.binary(NirBinaryOp::Sub, r, l, crate::tir::TypeTable::I32);
         assert_ne!(lr, rl); // Sub is non-commutative; hash-cons just checks structure.
     }
 
@@ -856,8 +869,8 @@ mod tests {
         let mut pool = ValuePool::new();
         let l = pool.int_typed(1, crate::tir::TypeTable::I32);
         let r = pool.int_typed(2, crate::tir::TypeTable::I32);
-        let add = pool.binary(NirBinaryOp::Add, l, r);
-        let mul = pool.binary(NirBinaryOp::Mul, l, r);
+        let add = pool.binary(NirBinaryOp::Add, l, r, crate::tir::TypeTable::I32);
+        let mul = pool.binary(NirBinaryOp::Mul, l, r, crate::tir::TypeTable::I32);
         assert_ne!(add, mul);
     }
 
@@ -865,8 +878,8 @@ mod tests {
     fn unary_dedupes() {
         let mut pool = ValuePool::new();
         let inner = pool.int_typed(5, crate::tir::TypeTable::I32);
-        let a = pool.unary(NirUnaryOp::Neg, inner);
-        let b = pool.unary(NirUnaryOp::Neg, inner);
+        let a = pool.unary(NirUnaryOp::Neg, inner, crate::tir::TypeTable::I32);
+        let b = pool.unary(NirUnaryOp::Neg, inner, crate::tir::TypeTable::I32);
         assert_eq!(a, b);
     }
 
@@ -874,8 +887,8 @@ mod tests {
     fn unary_different_op_distinguishes() {
         let mut pool = ValuePool::new();
         let inner = pool.int_typed(5, crate::tir::TypeTable::I32);
-        let neg = pool.unary(NirUnaryOp::Neg, inner);
-        let not = pool.unary(NirUnaryOp::Not, inner);
+        let neg = pool.unary(NirUnaryOp::Neg, inner, crate::tir::TypeTable::I32);
+        let not = pool.unary(NirUnaryOp::Not, inner, crate::tir::TypeTable::I32);
         assert_ne!(neg, not);
     }
 
@@ -992,10 +1005,10 @@ mod tests {
         let b = pool.int_typed(2, crate::tir::TypeTable::I32);
         let c = pool.int_typed(3, crate::tir::TypeTable::I32);
         // (a + b) * c, twice.
-        let lhs1 = pool.binary(NirBinaryOp::Add, a, b);
-        let outer1 = pool.binary(NirBinaryOp::Mul, lhs1, c);
-        let lhs2 = pool.binary(NirBinaryOp::Add, a, b);
-        let outer2 = pool.binary(NirBinaryOp::Mul, lhs2, c);
+        let lhs1 = pool.binary(NirBinaryOp::Add, a, b, crate::tir::TypeTable::I32);
+        let outer1 = pool.binary(NirBinaryOp::Mul, lhs1, c, crate::tir::TypeTable::I32);
+        let lhs2 = pool.binary(NirBinaryOp::Add, a, b, crate::tir::TypeTable::I32);
+        let outer2 = pool.binary(NirBinaryOp::Mul, lhs2, c, crate::tir::TypeTable::I32);
         assert_eq!(lhs1, lhs2);
         assert_eq!(outer1, outer2);
     }
@@ -1063,8 +1076,8 @@ mod tests {
         let a = pool.fresh_opaque();
         let b = pool.fresh_opaque();
         let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c);
-        let g = pool.binary(NirBinaryOp::Add, b, c);
+        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
+        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
         assert_ne!(pool.find(f), pool.find(g));
         pool.union(a, b);
         pool.rebuild();
@@ -1078,10 +1091,10 @@ mod tests {
         let a = pool.fresh_opaque();
         let b = pool.fresh_opaque();
         let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c);
-        let g = pool.binary(NirBinaryOp::Add, b, c);
-        let nf = pool.unary(NirUnaryOp::Neg, f);
-        let ng = pool.unary(NirUnaryOp::Neg, g);
+        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
+        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
+        let nf = pool.unary(NirUnaryOp::Neg, f, crate::tir::TypeTable::I32);
+        let ng = pool.unary(NirUnaryOp::Neg, g, crate::tir::TypeTable::I32);
         pool.union(a, b);
         pool.rebuild();
         assert_eq!(pool.find(nf), pool.find(ng));
@@ -1094,10 +1107,10 @@ mod tests {
         let a = pool.fresh_opaque();
         let b = pool.fresh_opaque();
         let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c);
+        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
         pool.union(a, b);
         pool.rebuild();
-        let g = pool.binary(NirBinaryOp::Add, b, c);
+        let g = pool.binary(NirBinaryOp::Add, b, c, crate::tir::TypeTable::I32);
         assert_eq!(pool.find(f), pool.find(g));
     }
 
@@ -1108,8 +1121,8 @@ mod tests {
         let b = pool.fresh_opaque();
         let c = pool.fresh_opaque();
         let d = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c);
-        let h = pool.binary(NirBinaryOp::Add, c, d);
+        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
+        let h = pool.binary(NirBinaryOp::Add, c, d, crate::tir::TypeTable::I32);
         pool.union(a, b);
         pool.rebuild();
         // `h` shares no unioned operand with `f`, so it stays its own class.
@@ -1121,7 +1134,7 @@ mod tests {
         let mut pool = ValuePool::new();
         let a = pool.fresh_opaque();
         let c = pool.fresh_opaque();
-        let f = pool.binary(NirBinaryOp::Add, a, c);
+        let f = pool.binary(NirBinaryOp::Add, a, c, crate::tir::TypeTable::I32);
         pool.rebuild();
         assert_eq!(pool.find(f), f);
         assert_eq!(pool.find(a), a);

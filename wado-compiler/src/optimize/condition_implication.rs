@@ -167,15 +167,18 @@ fn ge_operands_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId,
             op: NirBinaryOp::GtEq,
             lhs,
             rhs,
+            ..
         } => Shape::Ge(*lhs, *rhs),
         ValueKind::Unary {
             op: NirUnaryOp::Not,
             operand,
+            ..
         } => Shape::Not(*operand),
         ValueKind::Binary {
             op: NirBinaryOp::Eq,
             lhs,
             rhs,
+            ..
         } => Shape::Eq(*lhs, *rhs),
         _ => Shape::Other,
     };
@@ -214,11 +217,13 @@ fn lt_of_value(engine: &mut Engine, value: ValueId) -> Option<(ValueId, ValueId,
             op: NirBinaryOp::Lt,
             lhs,
             rhs,
+            ..
         } => Some((*lhs, *rhs, true)),
         ValueKind::Binary {
             op: NirBinaryOp::LtEq,
             lhs,
             rhs,
+            ..
         } => Some((*lhs, *rhs, false)),
         _ => None,
     }
@@ -249,6 +254,7 @@ fn decompose_add_const(engine: &mut Engine, v: ValueId) -> (ValueId, i64) {
             op: NirBinaryOp::Add,
             lhs,
             rhs,
+            ..
         } = engine.value_kind(base)
         else {
             return (base, total);
@@ -284,6 +290,7 @@ fn is_plus_one_of(engine: &mut Engine, v: ValueId, base: ValueId) -> bool {
         op: NirBinaryOp::Add,
         lhs,
         rhs,
+        ..
     } = engine.value_kind(v)
     {
         let (lhs, rhs) = (*lhs, *rhs);
@@ -304,6 +311,7 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
         op: NirBinaryOp::BitAnd,
         lhs,
         rhs,
+        ..
     } = engine.value_kind(lhs_vn)
     else {
         return false;

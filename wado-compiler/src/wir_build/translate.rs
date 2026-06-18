@@ -1875,7 +1875,7 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             ValueKind::Unit => WirInstr::Nop,
-            ValueKind::Binary { op, lhs, rhs } => {
+            ValueKind::Binary { op, lhs, rhs, .. } => {
                 let left_ty = self
                     .body
                     .values
@@ -1885,7 +1885,7 @@ impl FunctionTranslator<'_, '_> {
                 let r = self.extract_value(rhs);
                 self.emit_binary_wir(op, l, r, left_ty)
             }
-            ValueKind::Unary { op, operand } => {
+            ValueKind::Unary { op, operand, .. } => {
                 let inner_ty = self
                     .body
                     .values

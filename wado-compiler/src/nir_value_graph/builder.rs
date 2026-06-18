@@ -788,7 +788,7 @@ impl<'a> Builder<'a> {
                 {
                     return Some(folded);
                 }
-                Some(self.pool.binary(op, lhs, rhs))
+                Some(self.pool.binary(op, lhs, rhs, result_type))
             }
             ExprKind::Unary { op, expr: inner } => {
                 // `Ref` / `MutRef` / `Deref` are address-taking / heap-bearing
@@ -804,7 +804,7 @@ impl<'a> Builder<'a> {
                     if let Some(folded) = self.fold_unary_const(op, operand, inner, result_type) {
                         return Some(folded);
                     }
-                    Some(self.pool.unary(op, operand))
+                    Some(self.pool.unary(op, operand, result_type))
                 }
             }
             ExprKind::Cast {
