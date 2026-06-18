@@ -776,6 +776,30 @@ that copy_prop/inline interaction (likely a promoted value spliced/propagated to
 wrong slot), which should clear the formatting-heavy fixtures (assert / inspect /
 serde / coerce).
 
+Pass-migration audit — two gap classes, mapped systematically:
+
+- Local-elimination read-undercount (a pass counts skeleton `Local` reads, misses
+  a local read only through a promoted `Opaque(Local)`, and eliminates/propagates
+  it): found and fixed in `dae`, `elide_local`, `copy_prop` (the latter two via
+  `Body::locals_read_via_promotion`). A sweep of every `optimize/*` pass for
+  `is_local_read` / `read_count` / use-counting shows this class is now **closed**
+  for locals: `dce` / `drve` / `sroa` do not count local reads; `ref_elim`'s
+  `use_count` is over _reference_ bindings (`Ref` / `MutRef` / `Deref` are not
+  promoted); `field_scalarize`'s `read_count` is over _fields_ (FieldAccess not
+  promoted yet). Local renumbering that stales `Opaque(Local)` sources is handled
+  in `dae` (`remap_opaque_locals`) and `inline` (`splice_value` via `ctx.local`);
+  `licm` / `field_scalarize` / `container_sroa` append locals rather than
+  renumber, so existing sources stay valid.
+- Analysis-completeness (a per-expression read/write analysis misses a promoted
+  read): `mod_ref`'s `local_reads` walks the skeleton subtree, so a local read via
+  a promoted operand in that subtree is missed — currently unexercised (late
+  freeze runs after `const_folding`, mod_ref's consumer), but a real gap once
+  promotion precedes it. Deferred; flagged.
+
+Future-gap (not yet exercised, will open when their kinds are promoted):
+`field_scalarize` (FieldAccess promotion) and `mod_ref` (any promotion before
+const_folding). Tracked so the keystone migration re-checks them.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
