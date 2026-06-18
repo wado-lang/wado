@@ -881,6 +881,27 @@ final 10:
   sources, so this specific gap is _not_ what the `ELIDE_OVERCONS` probe masked —
   meaning `select_extended_arms` has at least one _additional_ `Local`-source path
   the live-slot walk misses; both need closing.)
+
+  Update (implemented + tested, reverted): the `OpaqueSource::Expr` walk was
+  built (`collect_opaque_reads` collecting `Expr` sources, `locals_read_via_
+  promotion` walking those skeleton exprs) and **did not** fix the three —
+  because `value_fully_reemittable_locally` rejects `Opaque(Expr)`, so the freeze
+  never promotes an `Expr`-source value in the first place; the walk is dead code
+  for the current freeze. An `ELIDE_DIFF` probe showed the locals the precise walk
+  misses (`[1,2]`, `[3,5]`, `[3]`, `[7,8]` across the fixture's functions) are in
+  `opaque_local_sources` (so they have a _build-time_ `Opaque(Local)` seed from
+  `seed_params` / `read_local`) but are **not reachable from any live operand
+  slot** — i.e. they are not actually read through a promoted operand. So
+  `ELIDE_OVERCONS` fixes the fixtures by _over-conserving_ (keeping locals with a
+  build-time opaque seed), masking a root that is **not** a promoted-read gap.
+  The true cause is therefore elsewhere — `elide_local` (in `peephole`, before
+  `select_lowering`) dropping a local that some later step still needs, plausibly
+  via the engine value-graph / `select_lowering` interaction rather than a missed
+  promoted read. Three targeted fixes (`find_imm`→raw, `Opaque(Expr)` walk, and
+  the over-conservative set) each disproved a hypothesis; the bug is dormant in
+  the committed path (e2e 2960/0) and needs keystone-time investigation with the
+  actual promote-at-lower machinery, not the late-freeze experiment, where the
+  `Select` values arise in their real form.
 - 1 ICE (fixed) and `assert_fail_call_arg` (power-assert diagnostic formatting,
   uncharacterized).
 
