@@ -598,7 +598,9 @@ impl FunctionTranslator<'_, '_> {
         let val_idx = self.alloc_local(inner_type_id, "__deref_val".to_string());
 
         let ref_nir = self.convert_expr(ref_expr);
-        let val_nir = self.convert_expr(value);
+        // The RHS is an operand position: a literal (e.g. `*s = "goodbye"`)
+        // is interned as `Operand::Value`, never a skeleton `ExprId`.
+        let val_nir = self.convert_operand(value);
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(

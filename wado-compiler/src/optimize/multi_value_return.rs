@@ -362,12 +362,13 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape) -> bo
                         && block_tail_returns_match(body, b, expected)
                 })
         }
-        ExprKind::Match { arms, .. } => {
-            let bodies: Vec<ExprId> = arms.iter().map(|a| a.body.as_expr().expect("skeleton operand")).collect();
-            bodies
-                .iter()
-                .all(|&b| expr_returns_match(body, b, expected))
-        }
+        ExprKind::Match { arms, .. } => arms.iter().all(|a| {
+            // A promoted-value arm body (e.g. a `String` literal) is a leaf, not
+            // a nested match-return, so it never satisfies the shape.
+            a.body
+                .as_expr()
+                .is_some_and(|b| expr_returns_match(body, b, expected))
+        }),
         ExprKind::Switch { arms, default, .. } => {
             let arms = arms.clone();
             let default = *default;
