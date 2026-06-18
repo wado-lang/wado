@@ -729,12 +729,76 @@ impl<'a> Engine<'a> {
                 .value_of
                 .get(&cur)
                 .copied();
-            if new == old {
+            let changed = new != old;
+            let parent = self.parent_of(NodeRef::Expr(cur));
+            // If `cur` is the value feeding a local binding (`let L = cur` or
+            // `L = cur`) and that value changed, every later read of `L` — and
+            // every value derived from one — may now be stale. The ancestor walk
+            // here never reaches those readers (a `Let`/`Assign` boundary breaks
+            // the chain), so drop them explicitly. This is the fix for the
+            // downstream-stale over-merge the `WADO_VERIFY_VG` harness caught.
+            if changed && let Some(local) = self.local_bound_by(cur, parent) {
+                self.drop_local_readers(local);
+            }
+            if !changed {
                 break;
             }
-            match self.parent_of(NodeRef::Expr(cur)) {
+            match parent {
                 Some(NodeRef::Expr(p)) => cur = p,
                 _ => break,
+            }
+        }
+    }
+
+    /// The local index bound by `cur` when `cur` is the value expression of a
+    /// `let L = cur` statement or an `L = cur` assignment; `None` otherwise.
+    fn local_bound_by(&self, cur: ExprId, parent: Option<NodeRef>) -> Option<u32> {
+        match parent {
+            Some(NodeRef::Stmt(s)) => match &self.body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index,
+                    value: Operand::Expr(v),
+                    ..
+                } if *v == cur => Some(*local_index),
+                _ => None,
+            },
+            Some(NodeRef::Expr(p)) => match &self.body.exprs[p].kind {
+                ExprKind::Assign {
+                    target,
+                    value: Operand::Expr(v),
+                } if *v == cur => match &self.body.exprs[*target].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Drop the value-graph entry of every read of `local` and of every value
+    /// derived from such a read (each reader walked up to the root). Called when
+    /// `local`'s bound value changed: those entries were derived from the old
+    /// value and a fresh build would split them, so leaving them is an over-merge.
+    /// Conservatively over-drops (a read's pure ancestors that don't transitively
+    /// depend on it), which only costs a missed optimization — never a wrong merge.
+    fn drop_local_readers(&mut self, local: u32) {
+        let Some(readers) = self.buf.uses.get(&local).map(|u| u.reads.clone()) else {
+            return;
+        };
+        for r in readers {
+            let mut c = r;
+            loop {
+                self.body
+                    .value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .swap_remove(&c);
+                match self.parent_of(NodeRef::Expr(c)) {
+                    Some(NodeRef::Expr(p)) => c = p,
+                    _ => break,
+                }
             }
         }
     }
