@@ -570,14 +570,28 @@ findings are the deliverable.
   `(value, type)` — which is the precondition for moving promotion ahead of the
   passes.
 
-  Fixed (commit `1f133e71a`): `ValueKind::Int` / `Float` now carry their source
-  `TypeId` in the hash-cons key, so `7: i32` and `7: i64` are distinct values
-  each recording its own width; `intern` stamps `type_of` at construction. All
-  ~40 construction / match sites were converted atomically (the split-hash-cons
+  Partially fixed (commit `1f133e71a`): `ValueKind::Int` / `Float` now carry their
+  source `TypeId` in the hash-cons key, so `7: i32` and `7: i64` are distinct
+  values each recording its own width; `intern` stamps `type_of` at construction.
+  All ~40 construction / match sites were converted atomically (the split-hash-cons
   hazard demands it), behavior-neutral (zlib -O2 byte-identical; 2960/0 e2e; a new
-  width-distinctness unit test). This removes Probe B's width blocker — early
-  promotion is now sound on the width axis. The `licm.rs:559` guard remains for
-  the early-promotion change itself.
+  width-distinctness unit test). The `licm.rs:559` guard (commit `6f158eba8`) lets
+  `stmt_child_nodes` tolerate a promoted condition.
+
+  Re-probed early promotion with both fixes in (freeze run once before the
+  fixpoint loop): **still invalid Wasm** (`i64`/`i32` mismatch) on
+  count_prime / mandelbrot / sieve / zlib. So the literal un-sharing was necessary
+  but **not sufficient** — a second width path remains. `extract_value` derives a
+  `Binary` / `Unary` / `Cast` operand's width from the single recorded
+  `type_of(value)` (`translate.rs:1878-1903`), but `set_type` is last-write during
+  the build, so a hash-consed value (a `Binary`, or an `Opaque` local read)
+  reachable from two differently-typed uses keeps only one width — extraction then
+  emits the wrong one. The late freeze dodges this by timing (nothing after it adds
+  a divergent-width use). Real fix: width must be intrinsic to **every** value
+  reached by extraction (carry the result type in `Binary` / `Unary` / `Cast` /
+  `Opaque` hash-cons keys, or `alloc_unshared` per `(value, type)`), not a
+  last-write side table. This is the precise next blocker for moving promotion
+  ahead of the passes; the experiment was discarded (uncommitted, never landed).
 
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
