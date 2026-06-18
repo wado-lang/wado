@@ -125,7 +125,9 @@ The lever is **SoA decomposition of `List<Token>`**: parallel primitive
 arrays (`kinds` / `starts` / `ends` as `List<i32>`) so `peek_kind` becomes
 a single `array.get i32` (not `array.get (ref Token)` + `struct.get`),
 per-token allocation disappears in the lex loop, and the ref-array store
-becomes a barrier-free `array.set i32`. Two ways to get there:
+becomes a barrier-free `array.set i32`. The Gale-side path is designed in
+detail in [`token-stream-soa-design.md`](./token-stream-soa-design.md).
+Two ways to get there:
 
 - **Gale-side:** redesign `Token` so hot fields are flat primitives,
   with an opaque sidecar (or removal) for `text` / `leading_trivia`;
