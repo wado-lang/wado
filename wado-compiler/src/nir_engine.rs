@@ -789,8 +789,8 @@ impl<'a> Engine<'a> {
         }
         let type_id = self.body.exprs[src].type_id;
         let span = self.body.exprs[src].span;
-        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Unit);
-        // `src` is now `Unit`; if it named a local, that mention belongs at
+        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Dead);
+        // `src` is now `Dead`; if it named a local, that mention belongs at
         // `dst` after the move, so drop it here — `replace_expr_kind` re-adds it
         // for `dst` when `src_kind` is itself a `Local`.
         if let ExprKind::Local { index, .. } = &src_kind {
@@ -1806,7 +1806,7 @@ mod tests {
                 eng.body.exprs[add].kind,
                 ExprKind::Local { index: 0, .. }
             ));
-            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Unit));
+            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Dead));
             assert_eq!(eng.local_reads(0), &[add]);
         }
     }

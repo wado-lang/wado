@@ -443,7 +443,7 @@ fn rewrite_call(body: &mut Body, id: ExprId, confirmed: &IndexMap<FnKey, Vec<boo
                     type_args,
                     args,
                     ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Unit)
+                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
                 else {
                     unreachable!();
                 };

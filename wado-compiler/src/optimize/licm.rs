@@ -518,6 +518,7 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         // Leaves.
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => vec![],
@@ -1023,6 +1024,7 @@ fn collect_modified_vars_in_expr(
         }
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}

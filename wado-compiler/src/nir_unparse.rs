@@ -585,6 +585,9 @@ impl<'a> NirUnparser<'a> {
             ExprKind::Unit => {
                 self.output.push_str("()");
             }
+            ExprKind::Dead => {
+                self.output.push_str("<dead>");
+            }
             ExprKind::Local { name, .. } => {
                 self.output.push_str(name);
             }

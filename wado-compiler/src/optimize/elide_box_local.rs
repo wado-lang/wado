@@ -110,7 +110,7 @@ impl Rule for ElideBoxLocalRule {
             match inner_op {
                 Operand::Expr(e) => {
                     let inner_kind =
-                        std::mem::replace(&mut engine.body.exprs[e].kind, ExprKind::Unit);
+                        std::mem::replace(&mut engine.body.exprs[e].kind, ExprKind::Dead);
                     engine.replace_expr_kind(use_site, inner_kind);
                 }
                 Operand::Value(_) => {
@@ -623,6 +623,7 @@ fn walk_expr_for_leftmost(
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => LeftmostWalk::Pure,
     }
 }

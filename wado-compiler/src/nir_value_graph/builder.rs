@@ -695,6 +695,8 @@ impl<'a> Builder<'a> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
             ExprKind::Unit => Some(self.pool.unit()),
+            // Orphaned tombstone: no value.
+            ExprKind::Dead => None,
 
             // ---- Local read ----
             ExprKind::Local { index, .. } => Some(self.read_local(index)),

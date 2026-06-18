@@ -141,7 +141,7 @@ impl Rule for RefElimRule {
                 };
                 // Single-use: move the source literal into this `*r` site,
                 // keeping the deref expr's type_id / span.
-                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Unit);
+                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Dead);
                 engine.replace_expr_kind(id, kind);
                 true
             }

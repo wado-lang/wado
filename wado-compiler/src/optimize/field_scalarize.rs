@@ -1033,6 +1033,7 @@ fn visit_expr_for_alias(
         }
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -1407,6 +1408,7 @@ fn count_field_accesses_in_expr(
         }
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
         ExprKind::Local { index, .. } => {
@@ -2775,6 +2777,7 @@ fn walk_other_expr_kinds(
         }
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -3002,7 +3005,7 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_span = body.exprs[e].span;
     // Move the original expression into a fresh node, leaving `e` to be
     // rewritten as the wrapping Block.
-    let original_kind = std::mem::replace(&mut body.exprs[e].kind, ExprKind::Unit);
+    let original_kind = std::mem::replace(&mut body.exprs[e].kind, ExprKind::Dead);
     let original = push_expr(body, original_kind, expr_type, expr_span);
     let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), expr_span);
     let mut stmts = prefix;
@@ -3051,7 +3054,7 @@ fn emit_convergence_at_arm_body_end(
     let body_span = body.exprs[arm_e].span;
     if body_type == TypeTable::UNIT {
         // Unit body: Block { Expr(body); sync... }
-        let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Unit);
+        let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
         let original = push_expr(body, original_kind, body_type, body_span);
         let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), body_span);
         let mut stmts = Vec::with_capacity(1 + sync_stmts.len());

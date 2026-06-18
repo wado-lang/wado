@@ -157,6 +157,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         // Leaf expressions (no children)
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. } => 0,
         // Closure and effect-related expressions
@@ -605,6 +606,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         // Leaf nodes
         | ExprKind::BytesLiteral(_)
         | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -1977,6 +1979,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         }
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
         ExprKind::Unit => ExprKind::Unit,
+        ExprKind::Dead => ExprKind::Dead,
         ExprKind::GlobalVarGet {
             module_source,
             name,

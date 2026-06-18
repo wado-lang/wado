@@ -524,7 +524,8 @@ impl ModRef {
             }
 
             // === Pure value-producing leaves ===
-            | ExprKind::Unit => {}
+            | ExprKind::Unit
+            | ExprKind::Dead => {}
         }
     }
 

@@ -1823,6 +1823,8 @@ impl FunctionTranslator<'_, '_> {
                 // Unit has no value; use nop
                 WirInstr::Nop
             }
+            // Orphaned tombstone: never materialised (DCE drops it first).
+            ExprKind::Dead => WirInstr::Nop,
 
             ExprKind::Local { index, .. } => {
                 // Unit and Never locals have no Wasm representation. For Unit

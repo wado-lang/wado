@@ -155,6 +155,12 @@ pub struct ArenaStructPatternField {
 /// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
+    /// Tombstone for an orphaned node: `become_expr` and the various
+    /// move-out rewrites leave the vacated `ExprId` slot here. A `Dead` node
+    /// has no parent and no children, so no analysis walk reaches it; it is
+    /// reclaimed by DCE. (Distinct from the unit value, which is a pooled
+    /// `ValueKind::Unit` operand.)
+    Dead,
     BytesLiteral(Vec<u8>),
     Unit,
     Local {
@@ -1215,6 +1221,7 @@ impl Body {
             NodeRef::Expr(e) => match &self.exprs[e].kind {
                 | ExprKind::BytesLiteral(_)
                 | ExprKind::Unit
+                | ExprKind::Dead
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }
                 | ExprKind::EnumConstruct { .. } => {}

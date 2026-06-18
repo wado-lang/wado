@@ -83,7 +83,7 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     let node = std::mem::replace(
         &mut body.exprs[src],
         ExprNode {
-            kind: ExprKind::Unit,
+            kind: ExprKind::Dead,
             type_id: ty,
             span,
         },
@@ -551,7 +551,7 @@ fn rewrite_call_expr(
                     type_args,
                     args,
                     ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Unit)
+                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
                 else {
                     unreachable!();
                 };
