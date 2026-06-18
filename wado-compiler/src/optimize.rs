@@ -307,6 +307,15 @@ pub fn optimize(
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("nir/multi_value_return");
 
+    // Freeze re-emittable pure arithmetic (constants / local reads composed by
+    // Binary/Unary/Cast) into operand values, materialised by the WIR
+    // extractor. Runs last so no binary-walking pass sees the promoted form;
+    // orphaned arith / local-read nodes become unreachable from the skeleton
+    // root and are simply not emitted.
+    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(p)
+    });
+
     project
 }
 

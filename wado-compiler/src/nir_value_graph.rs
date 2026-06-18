@@ -12,7 +12,7 @@
 
 pub mod builder;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::{PrimitiveType, TypeId};
 
@@ -485,24 +485,73 @@ impl ValuePool {
     /// graph + side-effect-free, position-independent leaves: literal constants
     /// and `Local`-sourced opaques (a `local.get`), composed by `Binary` /
     /// `Unary` / `Cast`. Excludes `Opaque(Expr)` (effectful / unscheduled),
-    /// `Select` / `LoopPhi` (flow merges — extraction-unsupported and, for
-    /// `LoopPhi`, loop-variant so not safe to float), `FieldAccess`, etc. Used
-    /// to decide whether a pure-arith node is safe to freeze into an operand
-    /// value. Resolves children through `find`.
-    pub fn value_fully_reemittable_locally(&mut self, id: ValueId) -> bool {
+    /// `Select` / `LoopPhi` (flow merges — extraction-unsupported), `FieldAccess`,
+    /// etc.
+    ///
+    /// A `Local` opaque is only sound when the local is **single-assignment**: a
+    /// `local.get idx` at the frozen node's position must read the same value
+    /// the opaque denotes. A reassigned (`is_mut`) local fails this — its value
+    /// at an extraction point can differ from the opaque's version (e.g. a
+    /// `mut` param read after `x = x*2`, or a loop counter), so `mut_locals`
+    /// (the reassignable indices) are rejected. This also excludes loop-variant
+    /// locals, since loop counters are `mut`.
+    pub fn value_fully_reemittable_locally(
+        &mut self,
+        id: ValueId,
+        mut_locals: &IndexSet<u32>,
+    ) -> bool {
         let rep = self.find(id);
         match self.kind(rep).clone() {
             ValueKind::Int(_)
             | ValueKind::Float(_)
             | ValueKind::Bool(_)
             | ValueKind::Char(_) => true,
-            ValueKind::Opaque(op) => matches!(self.opaque_source(op), Some(OpaqueSource::Local(_))),
+            ValueKind::Opaque(op) => match self.opaque_source(op) {
+                Some(OpaqueSource::Local(idx)) => !mut_locals.contains(&idx),
+                _ => false,
+            },
+            // Arithmetic is width-uniform: a `Binary`/`Unary` and its operands
+            // share the result type, so types stamp consistently from the
+            // frozen node. `Cast` is excluded — its operand carries the *source*
+            // type, unrecoverable from the type-erased value tree.
             ValueKind::Binary { lhs, rhs, .. } => {
-                self.value_fully_reemittable_locally(lhs)
-                    && self.value_fully_reemittable_locally(rhs)
+                self.value_fully_reemittable_locally(lhs, mut_locals)
+                    && self.value_fully_reemittable_locally(rhs, mut_locals)
             }
-            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                self.value_fully_reemittable_locally(operand)
+            ValueKind::Unary { operand, .. } => {
+                self.value_fully_reemittable_locally(operand, mut_locals)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether re-emitting `v` would **duplicate a non-trivial computation**: a
+    /// `Binary` / `Unary` sub-value reachable more than once. The extractor
+    /// re-emits a value at each use, so freezing such a value recomputes it at
+    /// every occurrence — worse than the `local.set` / `local.get` (and
+    /// `local.tee`) the skeleton already shares. The freeze skips these (a
+    /// conservative stand-in for the WEP's share-vs-duplicate cost model). Leaf
+    /// duplication — `Opaque` (a `local.get`) or a constant — is cheap and
+    /// allowed.
+    pub fn extraction_duplicates_work(&mut self, v: ValueId) -> bool {
+        let mut seen: IndexSet<ValueId> = IndexSet::default();
+        self.dup_work_walk(v, &mut seen)
+    }
+
+    fn dup_work_walk(&mut self, v: ValueId, seen: &mut IndexSet<ValueId>) -> bool {
+        let rep = self.find(v);
+        match self.kind(rep).clone() {
+            ValueKind::Binary { lhs, rhs, .. } => {
+                if !seen.insert(rep) {
+                    return true;
+                }
+                self.dup_work_walk(lhs, seen) || self.dup_work_walk(rhs, seen)
+            }
+            ValueKind::Unary { operand, .. } => {
+                if !seen.insert(rep) {
+                    return true;
+                }
+                self.dup_work_walk(operand, seen)
             }
             _ => false,
         }

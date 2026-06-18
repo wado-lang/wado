@@ -429,12 +429,15 @@ impl<'a> Engine<'a> {
             self.vg_type_table,
         );
         let maintained = self.value_graph.as_ref().unwrap();
-        let mut exprs: Vec<ExprId> = maintained.value_of.keys().copied().collect();
-        for &e in fresh.value_of.keys() {
-            if !maintained.value_of.contains_key(&e) {
-                exprs.push(e);
-            }
-        }
+        // Compare over the *live* exprs — exactly those a fresh build walks from
+        // the root. An expr present only in `maintained.value_of` is orphaned
+        // (a rewrite swapped its parent slot to a promoted value and dropped it
+        // from the skeleton); its stale entry can collide with a live expr that
+        // shares the same value and read as a spurious over-merge, but a dead
+        // node is never emitted and so cannot be miscompiled. Every live pure
+        // expr is in the fresh build, so this still checks every value the
+        // optimizer could miscompile through.
+        let exprs: Vec<ExprId> = fresh.value_of.keys().copied().collect();
         if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
             &mut self.body.values,
             maintained,
@@ -757,7 +760,9 @@ impl<'a> Engine<'a> {
         self.set_parent(NodeRef::Expr(id), None);
         self.enqueue(parent);
         // A promoted value feeds the parent's value derivation directly through
-        // the swapped operand; re-derive up the ancestor chain.
+        // the swapped operand; re-derive up the ancestor chain. `id` is now
+        // orphaned; its (dead) `value_of` entry is excluded from the verify
+        // oracle by the live-expr filter in `verify_maintained_graph`.
         if self.value_graph.is_some() {
             if let Some(vid) = new.as_value() {
                 self.value_graph.as_mut().unwrap().value_of.insert(id, vid);
