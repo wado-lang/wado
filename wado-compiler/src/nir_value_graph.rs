@@ -514,9 +514,10 @@ impl ValuePool {
     ) -> bool {
         let rep = self.find(id);
         match self.kind(rep).clone() {
-            ValueKind::Int(_, _) | ValueKind::Float(_, _) | ValueKind::Bool(_) | ValueKind::Char(_) => {
-                true
-            }
+            ValueKind::Int(_, _)
+            | ValueKind::Float(_, _)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_) => true,
             ValueKind::Opaque(op) => match self.opaque_source(op) {
                 Some(OpaqueSource::Local(idx)) => !mut_locals.contains(&idx),
                 _ => false,
@@ -768,7 +769,10 @@ mod tests {
     fn kind_lookup_round_trips() {
         let mut pool = ValuePool::new();
         let id = pool.int_typed(7, crate::tir::TypeTable::I32);
-        assert_eq!(pool.kind(id), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            pool.kind(id),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     // ---- Float bit-pattern semantics ----

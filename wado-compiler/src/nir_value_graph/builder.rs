@@ -504,9 +504,7 @@ impl<'a> Builder<'a> {
     ) -> ValueId {
         match v {
             crate::const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
-            crate::const_eval::Value::Float { value, .. } => {
-                self.pool.float(value, result_type)
-            }
+            crate::const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
             crate::const_eval::Value::Bool(b) => self.pool.bool(b),
             crate::const_eval::Value::Char(c) => self.pool.char(c),
         }
@@ -759,7 +757,8 @@ impl<'a> Builder<'a> {
                 let lhs = lhs?;
                 let rhs = rhs?;
                 let result_type = self.body.exprs[expr].type_id;
-                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right, result_type) {
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right, result_type)
+                {
                     return Some(folded);
                 }
                 Some(self.pool.binary(op, lhs, rhs))
@@ -2103,7 +2102,10 @@ mod tests {
         let mut body = empty_body();
         let lit = int_lit(&mut body, 42);
         let v = lit.as_value().unwrap();
-        assert_eq!(body.values.kind(v), &ValueKind::Int(42, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(v),
+            &ValueKind::Int(42, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2119,7 +2121,10 @@ mod tests {
         let r = build_t(&mut body, &[]);
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
-        assert_eq!(body.values.kind(read_v), &ValueKind::Int(1, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(read_v),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2152,7 +2157,10 @@ mod tests {
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, assign, s_read]);
         let r = build_t(&mut body, &[]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2184,8 +2192,14 @@ mod tests {
         match body.values.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
                 assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(body.values.kind(*then), &ValueKind::Int(2, crate::tir::TypeTable::I32));
-                assert_eq!(body.values.kind(*else_), &ValueKind::Int(3, crate::tir::TypeTable::I32));
+                assert_eq!(
+                    body.values.kind(*then),
+                    &ValueKind::Int(2, crate::tir::TypeTable::I32)
+                );
+                assert_eq!(
+                    body.values.kind(*else_),
+                    &ValueKind::Int(3, crate::tir::TypeTable::I32)
+                );
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2216,8 +2230,14 @@ mod tests {
         match body.values.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
                 assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(body.values.kind(*then), &ValueKind::Int(2, crate::tir::TypeTable::I32));
-                assert_eq!(body.values.kind(*else_), &ValueKind::Int(1, crate::tir::TypeTable::I32));
+                assert_eq!(
+                    body.values.kind(*then),
+                    &ValueKind::Int(2, crate::tir::TypeTable::I32)
+                );
+                assert_eq!(
+                    body.values.kind(*else_),
+                    &ValueKind::Int(1, crate::tir::TypeTable::I32)
+                );
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2250,7 +2270,10 @@ mod tests {
         root_with(&mut body, vec![let_s, if_s, s_read]);
         let r = build_t(&mut body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2294,7 +2317,10 @@ mod tests {
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
         let r = build_t(&mut body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2775,7 +2801,10 @@ mod tests {
         root_with(&mut body, vec![write, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
         let read_v = r.value_of[&read];
-        assert_eq!(body.values.kind(read_v), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(read_v),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
         // The forwarded read resolves to the stored literal's pool value.
         assert_eq!(read_v, seven.as_value().unwrap());
     }
@@ -2795,7 +2824,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write1, write2, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(9, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(9, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2838,7 +2870,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2872,7 +2907,10 @@ mod tests {
         let let_n = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![let_x, let_n]);
         let r = build_t(&mut body, &[]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(5, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(5, crate::tir::TypeTable::I32)
+        );
     }
 
     /// `let v = S { f0: 7 }` then a one-field struct literal helper.
@@ -2917,7 +2955,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, let_y]);
         let r = build_t(&mut body, &[]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3039,7 +3080,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, if_s, let_y]);
         let r = build_t(&mut body, &[]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3077,7 +3121,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v, let_w, let_r, if_s, let_y]);
         let r = build_t(&mut body, &[]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(2, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3187,7 +3234,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     // ----- Loop-entry value snapshots -----
@@ -3222,7 +3272,10 @@ mod tests {
         let r = build_t(&mut body, &[n]);
         let entries = &r.loop_entry_values[&lb];
         assert_eq!(entries.get(&0).copied(), Some(r.value_of[&n_read]));
-        assert_eq!(body.values.kind(entries[&1]), &ValueKind::Int(0, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(entries[&1]),
+            &ValueKind::Int(0, crate::tir::TypeTable::I32)
+        );
         assert_ne!(entries[&1], r.value_of[&i_read]);
     }
 
@@ -3242,7 +3295,10 @@ mod tests {
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         root_with(&mut body, vec![loop_s]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3264,7 +3320,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, loop_s, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(7, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3335,7 +3394,10 @@ mod tests {
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![write_a, write_b, let_y]);
         let r = build_t(&mut body, &[param_seed()]);
-        assert_eq!(body.values.kind(r.value_of[&read]), &ValueKind::Int(1, crate::tir::TypeTable::I32));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]

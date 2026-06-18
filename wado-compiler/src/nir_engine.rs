@@ -1333,10 +1333,10 @@ mod tests {
         })
     }
     fn lit(body: &mut Body, n: u64) -> Operand {
-        Operand::Value(
-            body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32), TypeTable::I32),
-        )
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32),
+            TypeTable::I32,
+        ))
     }
     fn bin(
         body: &mut Body,
