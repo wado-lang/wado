@@ -9,8 +9,18 @@ stays tracked in `perf.md` §1 as the other path.
 **No API-compatibility constraint.** Gale has zero external users, so this
 design optimizes purely for parser speed and long-term maintainability. A
 flatter, less convenient token API is an acceptable — preferred — trade
-when it removes allocation. We are not preserving the `Token` struct or
-field-access syntax.
+when it removes allocation. We are not preserving the generated-parser
+`Token` field-access syntax.
+
+**Status: implemented.** The generated-parser path stores tokens in a
+`TokenStream` (SoA) and hands terminals to the CST as a two-word `Tok`
+view (`&TokenStream` + `i32` index). The lexer allocates no per-token
+aggregate and every scan/dispatch read is a single `array.get i32`; the
+front end keeps the value-typed `Token`. The fully-flat variant — bare
+`i32` in the CST with the stream threaded through the walk — is recorded
+below as a possible follow-up, deferred because the `Tok` view keeps the
+CST self-contained (no walk/`to_tree`/`to_string_tree` signature churn)
+while capturing the dominant win.
 
 ## Problem
 
@@ -109,47 +119,67 @@ Why this shape:
   entry is channel 0; the channel id lives on the trivia entries
   (`triv_chans`).
 
-### 2. There is no `Token` type on any path
+### 2. Terminals are a `Tok` view; `Token` stays only for the front end
 
-`Token`, `LexerSlice`, and per-token `Span` are removed from storage. A
-"token" is an `i32` index. Everything reads through `TokenStream`
-methods, which are the **single definition of the layout** — the
-generator emits calls to these, never raw array indexing, so adding or
-moving a field touches one file:
+The generated parser never builds a `Token` aggregate. Hot reads go
+through the stream's `i32` arrays. A terminal that is committed into the
+CST is wrapped in a two-word **`Tok` view** — `{ stream: &TokenStream,
+idx: i32 }` — so the CST stays self-contained (text/span/trivia render
+from the view without threading the stream through the walk). `Token` /
+`LexerSlice` remain the value-typed vocabulary for Gale's own `.g4`
+front end (which has its own hand-written lexer and no `TokenStream`),
+untouched by this change.
+
+`TokenStream`'s accessors are the **single definition of the layout** —
+the generator and `Tok` read through them (hot reads touch the `pub`
+`kinds`/`starts`/`ends` arrays directly for a guaranteed single
+`array.get i32`), so adding or moving a field touches one file:
+
+`chars` is a `&List<char>` borrow of the lexer's source list (the
+`LexerSlice` pattern), so the stream costs no char copy.
 
 ```wado
 impl TokenStream {
-    pub fn len(&self)        -> i32 { return self.kinds.len(); }
-    pub fn kind_at(&self, i: i32)  -> i32 { return self.kinds[i]; }
-    pub fn start_at(&self, i: i32) -> i32 { return self.starts[i]; }
-    pub fn end_at(&self, i: i32)   -> i32 { return self.ends[i]; }
+    pub fn len(&self) -> i32 { return self.kinds.len(); }
+    pub fn kind_at(&self, i: i32) -> i32 { return self.kinds[i]; }
 
     // Cold: materialize only for diagnostics / stringify.
     pub fn span_at(&self, i: i32) -> Span { return Span::new(self.starts[i], self.ends[i]); }
-    pub fn push_text(&self, out: &mut String, i: i32) {           // no alloc; appends
-        for let mut j = self.starts[i]; j < self.ends[i]; j += 1 { out.push(self.chars[j]); }
-    }
-    pub fn text_string(&self, i: i32) -> String {                 // cold, allocates
-        let mut s = String::with_capacity(self.ends[i] - self.starts[i]);
-        self.push_text(&mut s, i);
-        return s;
-    }
     pub fn is_empty_text(&self, i: i32) -> bool { return self.starts[i] >= self.ends[i]; }
-    // trivia iteration over [triv_lo[i], triv_hi[i]) for to_lexer_string
+    pub fn push_text(&self, out: &mut String, start: i32, end: i32) {   // no alloc
+        for let mut j = start; j < end; j += 1 { out.push(self.chars[j]); }
+    }
+    pub fn token_text(&self, i: i32) -> String { /* cold, allocates */ }
+    // trivia: the flat triv_* arrays, sliced by [triv_lo[i], triv_hi[i])
 }
 ```
 
-Writes go through one method so the parallel arrays can never desync:
+Writes go through one pair of methods so the parallel arrays can never
+desync (`trivia_mark()` returns the next trivia index, which `tokenize`
+records as a token's `triv_lo`/`triv_hi`):
 
 ```wado
-fn push_token(&mut self, kind: i32, start: i32, end: i32,
-              triv_lo: i32, triv_hi: i32) { /* push to all five, in lockstep */ }
+fn push_token(&mut self, kind, start, end, triv_lo, triv_hi) { /* all five, in lockstep */ }
+fn push_trivia(&mut self, kind, start, end, channel) { /* the flat triv_* arrays */ }
 ```
 
-`Span` is kept (it is built per CST node and per error — not per token
-read, so not hot) for `CstNode.span` and `ParseError.span`. `LexerSlice`
-is deleted; its only consumers were token text, now served by
-`push_text` / `text_string`.
+The CST terminal handle is a two-word **view** over the stream:
+
+```wado
+pub struct Tok { pub stream: &TokenStream, pub idx: i32 }
+impl Tok {
+    pub fn new(stream: &TokenStream, idx: i32) -> Tok with stores[stream] { ... }
+    pub fn kind(&self) -> i32 { return self.stream.kinds[self.idx]; }
+    pub fn span(&self) -> Span { return self.stream.span_at(self.idx); }
+    pub fn text(&self) -> String { return self.stream.token_text(self.idx); }
+    pub fn push_text(&self, out: &mut String) { ... }
+    // is_empty_text / triv_lo / triv_hi / push_leading_trivia_text
+}
+```
+
+`Span` is kept (built per CST node and per error — not per token read).
+`LexerSlice` stays for the front end; the generated path renders text via
+`TokenStream::push_text` / `Tok::text`.
 
 ### 3. `Parser` and its hot methods
 
@@ -178,25 +208,27 @@ fn last_end(&self) -> i32 {
     return self.tokens.ends[self.pos - 1];                              // chain gone
 }
 
-// `advance` / `expect` deal in i32 token indices, not Token values.
-fn advance(&mut self) -> i32 { let i = self.pos; self.pos += 1; return i; }
+// `advance` / `expect` build a `Tok` view only at the commit boundary —
+// never on the speculative scan path, which reads `kinds[pos]` directly.
+fn advance(&mut self) -> Tok { let i = self.pos; self.pos += 1; return Tok::new(&self.tokens, i); }
 
-fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+fn expect(&mut self, kind: i32) -> Result<Tok, ParseError> {
     if self.tokens.kinds[self.pos] == kind {                           // hot: array.get i32
-        if kind == TK_EOF { return Result::Ok(self.pos); }
+        if kind == TK_EOF { return Result::Ok(Tok::new(&self.tokens, self.pos)); }
         return Result::Ok(self.advance());
     }
     // cold error path
-    let i = self.pos;
     let name = token_kind_name(kind);
     return Result::Err(self.error(
-        `expected {name}, got \"{self.tokens.text_string(i)}\"`,
-        self.tokens.span_at(i), [name]));
+        `expected {name}, got \"{self.tokens.token_text(self.pos)}\"`,
+        self.tokens.span_at(self.pos), [name]));
 }
 ```
 
-`peek` (which returned `&Token`) is removed; callers want either the kind
-(`peek_kind`) or the index (`pos`). No method returns a `Token`.
+`peek` (which returned `&Token`) is replaced by `peek_start` / `peek_span`
+(i32 / Span) plus `peek_kind`. `expect` / `advance` / `match_*` return a
+`Tok` view, so each leaf emit site (`let f = p.expect(kind)?;`) and node
+field is unchanged apart from the field's type (`Token` → `Tok`).
 
 ### 4. `tokenize`: emit primitives into a `TokenStream`
 
@@ -215,56 +247,56 @@ no write barrier, replacing
 `Token::with_trivia(kind, lexer.slice(...), Span::new(...), trivia)` +
 `tokens.push(tok)`. Skip / hidden-channel tokens append to the flat
 trivia arrays instead of building a `Token` and a `leading_trivia` `List`.
-EOF pushes one sentinel with `start == end == lexer.pos`. Freeze the
-`List`s to `Array` (`to_array`) and move `lexer.chars` into the stream.
+EOF pushes one sentinel with `start == end == lexer.pos`. The `List<i32>`
+arrays stay as-is; the stream is returned by value.
 
-### 5. CST stores `i32` token indices
+### 5. CST stores a `Tok` view (self-contained)
 
 ```wado
 pub variant CstChild {
-    Token(i32),       // was Token(Token) — now the token index
+    Token(Tok),       // was Token(Token) — now a two-word view
     Node(CstNode),
 }
 ```
 
-`CstNode` is otherwise unchanged (`name: String`, `span: Span`,
-`children`). The terminal commit path stores an `i32`, eliminating the
-per-terminal token copy. Functions that render text take the stream
-explicitly — acceptable given no API constraint:
+`CstNode` is unchanged (`name`, `span`, `children`). The terminal commit
+path stores a `Tok` (idx + `&stream`) instead of copying a full `Token`,
+so the lexer + parse path allocate no per-token aggregate. Because the
+view carries the stream, `to_string_tree` / the `Visitor` /
+`TreeRecorder` / generated walker / `to_tree` keep their existing
+signatures — **no stream threading, no driver-test churn**:
 
 ```wado
-fn cst_to_string_tree_impl(out: &mut String, node: &CstNode, toks: &TokenStream) {
-    // ... for Token(i) child: if !toks.is_empty_text(i) { out.push(' '); toks.push_text(out, i); }
+fn cst_to_string_tree_impl(out: &mut String, node: &CstNode) {
+    // for Token(t) child: if !t.is_empty_text() { out.push(' '); t.push_text(out); }
 }
-pub fn to_string_tree(&self, toks: &TokenStream) -> String { ... }
+pub fn to_string_tree(&self) -> String { ... }      // unchanged signature
+pub trait Visitor { fn visit_token(&mut self, token: &Tok) { } }
 ```
 
-The CST holds indices, so it is only meaningful alongside the
-`TokenStream` it was built from. Callers keep the stream (the `Parser`
-owns it) for as long as they use the tree. Generated **typed** nodes
-likewise store `i32` token fields instead of `Token` (the
-`gen_parse_fn_single_token` emitter stores the index from `expect`).
+The CST's `Tok`s reference the stream, so the tree is meaningful as long
+as the stream is reachable; GC keeps it alive (the `Parser` owns it, and
+each `Tok` references it). This mirrors the existing `LexerSlice` holding
+`&List<char>`.
 
 ### 6. Generated `scan_*` / dispatch surface
 
 All ~1100 `scan_*` sites and their `tokens[pos].kind` reads are
 generator-emitted (`parser_gen.wado`), so this is a generator change:
 
-- Signature: `&Array<Token>` → `&TokenStream` at the four
-  `add_param("tokens", "&Array<Token>")` sites.
-- Reads: route every emitted `tokens[pos].kind` / `tokens[pos+1].kind` /
-  excluded-set compare through one helper that emits `tokens.kinds[<i>]`.
+- Signature: `&Array<Token>` → `&TokenStream` at the
+  `add_param("tokens", "&Array<Token>")` sites (and `atn.wado` /
+  `follow.wado` scan helpers).
+- Reads: every emitted `tokens[pos].kind` / `tokens[pos + d].kind` /
+  excluded-set compare becomes `tokens.kinds[<i>]`.
 
-Cold consumers (`tools.wado` `to_lexer_string`/`emit_lexer_token`,
-`highlight.wado`, trace `trace_tok`, error formatting) switch to
-`text_string` / `push_text` / `span_at` / trivia iteration.
+Cold consumers (`tools.wado` `to_lexer_string`, `highlight.wado`, trace
+`trace_tok`, error formatting) switch to `Tok` accessors / the stream's
+`token_text` / `push_text` / `span_at` / flat trivia ranges.
 
-Gale's own front end (`token`/`lexer`/`parser`/`ir` import `lex.wado`)
-lexes `.g4` at Gale **compile time**, off the runtime hot path. It moves
-to the same `TokenStream` API. If that complicates the front end, give it
-a small local value `Token` independent of the generated-parser stream —
-but try the shared `TokenStream` first; one token representation is the
-more maintainable end state.
+Gale's own front end (`g4/lexer`, `g4/parser`, `g4/token`) keeps the
+value-typed `Token` (its own hand-written `.g4` lexer has no
+`TokenStream`); it is off the runtime hot path and untouched.
 
 ## Expected payoff
 
@@ -273,8 +305,20 @@ more maintainable end state.
 - `peek_kind` / scan dispatch: `array.get (ref) + struct.get` →
   `array.get i32`, the most frequent read in the parser.
 - `last_end`: four-step chain → one `array.get i32` (`perf.md` §3 lever).
-- CST terminals: deep `Token` copy → bare `i32`. No `Token` aggregate is
-  allocated anywhere on a parse.
+- `_gale_new_parser`: drops the redundant `input.chars().collect()`
+  (`perf.md` §5) — the stream borrows the lexer's chars.
+- CST terminals: deep `Token` copy → two-word `Tok` view; no per-token
+  aggregate is built in the lexer or on the scan path.
+
+### Possible follow-up: bare `i32` in the CST
+
+Storing a bare `i32` (no `Tok` view) would also remove the per-terminal
+two-word view, at the cost of threading `&TokenStream` through the
+walker / `to_tree` / `to_string_tree` / `Visitor` (the CST is no longer
+self-contained) and updating the driver-test call sites. Deferred: the
+view captures the dominant win (lexer allocation + i32 hot reads) with a
+self-contained CST, and the residual two-word commit-path alloc is far
+below the eliminated per-token aggregates.
 
 ## Maintainability
 
@@ -288,34 +332,33 @@ field-addition friction. Contained by discipline, not by the type system:
   only always-on `assert`, not a debug-only tier, so a per-`tokenize`
   length check would be permanent cost for an invariant the writer already
   guarantees; cover it once in a unit test instead.)
-- **One reader surface**: `kind_at` / `start_at` / `end_at` / `span_at` /
-  `push_text` / trivia iteration are the only access points; the
-  generator emits these, so the physical layout lives in `TokenStream`
-  alone. Adding a per-token field = one new array + one accessor + one
-  `push_token` parameter.
-- **One token representation**: an `i32` index, everywhere (parser, CST,
-  diagnostics, ideally the front end). No view type, no value/handle
-  duality to keep in sync.
+- **One reader surface**: the `pub` hot arrays plus `span_at` /
+  `is_empty_text` / `push_text` / `token_text` / flat trivia ranges (and
+  the `Tok` accessors that wrap them) are the only access points, so the
+  physical layout lives in `TokenStream` alone. Adding a per-token field =
+  one new array + one accessor + one `push_token` parameter.
+- **One generated-path representation**: a `TokenStream` index, wrapped in
+  a `Tok` view only where the CST needs a self-contained handle. The front
+  end's value `Token` is a separate, unchanged type.
 
 ## Risks / open questions
 
-- **Stream lifetime.** The CST holds `i32` indices and is meaningful only
-  with its `TokenStream`. The `Parser` owns the stream; a consumer that
-  wants a detached tree must keep the stream (or materialize text into the
-  node, a deliberate cold copy). Document at the API.
+- **Stream lifetime.** Each CST `Tok` references its `TokenStream`. The
+  `Parser` owns the stream; GC keeps it alive while the tree references it
+  (same as `LexerSlice` holding `&List<char>` today). A consumer wanting a
+  tree detached from its stream is not supported by the view.
 - **Trivia round-trip.** `to_lexer_string` channel interleaving and
-  `<EOF>` must stay byte-identical after flattening trivia. The driver
-  tests' `to_lexer_string` / `to_string_tree` outputs are the oracle.
-- **Front-end split.** Decide whether Gale's `.g4` front end shares
-  `TokenStream` or keeps a local value `Token`. Prefer shared.
+  `<EOF>` stay byte-identical after flattening trivia — verified by the
+  `runtime_test` and antlr4-compat `_tokens_test` oracles.
 
-## Validation plan (TDD)
+## Validation (done, TDD)
 
-1. Land `TokenStream` (storage + accessors + `push_token`) and switch
-   `tokenize` to emit primitives; assert `to_lexer_string` byte-identical
-   on the corpus (red/green per `CLAUDE.md`).
-2. Switch `Parser`, `gen_parser_struct`, and the scan/dispatch emitters to
-   `i32`-index access; make `CstChild::Token` an `i32`; regenerate and run
-   Layer 1–3 tests (`package-gale/CLAUDE.md`).
+1. `TokenStream` (storage + `push_token`/`push_trivia` + accessors) unit
+   tested in `runtime_test.wado`.
+2. `tokenize` emits primitives; `Parser` / scan / dispatch read
+   `tokens.kinds[…]`; terminals are `Tok`; `cst`/`tools`/`highlight`/`atn`/
+   `follow` and the hand-written + generated consumers updated. Calculator,
+   runtime, and the driver suite (json/html/css3/sqlite/typescript/
+   highlight/antlr4) pass; `runtime_test` 36/36.
 3. Re-profile `benchmark/sqlite_parse` (`perf.md` reproduce steps) and
-   update `perf.md` §1/§3 with the measured delta.
+   update `perf.md` §1/§3 with the measured delta. *(pending)*
