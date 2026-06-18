@@ -91,9 +91,8 @@ fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
     w.blank();
 }
 
-/// Emit the tokenize-only highlight fallback: tokenize and visit each token
-/// index directly (no parse tree). Shared by the parse-failure path and the
-/// lexer-only-grammar path.
+/// Emit the tokenize-only highlight fallback (no parse tree), shared by the
+/// parse-failure and lexer-only-grammar paths.
 fn emit_tokenize_only_highlight(w: &mut CodeWriter) {
     w.line(&"let tokens = tokenize(input);");
     w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
