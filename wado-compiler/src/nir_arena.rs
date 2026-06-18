@@ -383,6 +383,13 @@ pub struct Body {
     /// `value_of` side-table retire. Empty on a body built before the operand-
     /// promotion migration populates it.
     pub values: ValuePool,
+    /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
+    /// here so it can survive across optimizer passes instead of living as a
+    /// per-`Engine`-session cache (WEP: The Live ValueGraph, build-once). `None`
+    /// until the first value query builds it. This is the storage foundation for
+    /// build-once; behavior is unchanged until the per-pass rebuild triggers are
+    /// removed (a later, soundness-coupled step).
+    pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
 impl Body {
@@ -427,6 +434,7 @@ impl Body {
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
             values: ValuePool::new(),
+            value_graph: None,
         }
     }
 
@@ -445,6 +453,9 @@ impl Body {
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
             values: self.values.clone(),
+            // Scratch clone (niri CTFE): the value graph is a per-function
+            // optimizer artifact and is not carried into a node-only working copy.
+            value_graph: None,
         }
     }
 

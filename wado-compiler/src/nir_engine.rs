@@ -92,11 +92,6 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
-    /// Lazy per-session `ValueGraph` cache. `None` until the first
-    /// [`Engine::value`] / [`Engine::value_kind`] call; cleared by
-    /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
-    /// for the data model.
-    value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
     /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
     /// cleared with [`Engine::invalidate_value_graph`] so a rebuild after
@@ -144,7 +139,6 @@ impl<'a> Engine<'a> {
             body,
             buf,
             locals,
-            value_graph: None,
             body_address_taken: None,
             aliased_locals: IndexSet::default(),
             untrackable_locals: IndexSet::default(),
@@ -152,6 +146,13 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             vg_type_table: None,
         };
+        // The value graph now lives on `Body` so it *can* persist across passes
+        // (build-once foundation), but a session's config (alias sets, param
+        // seeding) is set per `Engine`. Until per-pass maintenance makes a
+        // persisted graph sound to reuse, drop any prior build at session start so
+        // behavior matches the former per-session cache exactly — a stale reuse
+        // under a different config would over-merge.
+        engine.body.value_graph = None;
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
@@ -172,7 +173,7 @@ impl<'a> Engine<'a> {
     /// `optimize/cse.rs` and `optimize/store_load_forward.rs`.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        self.value_graph.as_ref()?.value_of.get(&expr).copied()
+        self.body.value_graph.as_ref()?.value_of.get(&expr).copied()
     }
 
     /// The [`ValueId`] of an operand: the promoted value directly, or the
@@ -208,7 +209,8 @@ impl<'a> Engine<'a> {
         local: u32,
     ) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        self.value_graph
+        self.body
+            .value_graph
             .as_ref()
             .unwrap()
             .loop_entry_values
@@ -223,7 +225,7 @@ impl<'a> Engine<'a> {
     /// graph query then resolves `expr` without a rebuild. No-op when the graph
     /// is not built yet — the lazy build derives the value from the body.
     pub fn set_value(&mut self, expr: ExprId, vid: crate::nir_value_graph::ValueId) {
-        if let Some(vg) = self.value_graph.as_mut() {
+        if let Some(vg) = self.body.value_graph.as_mut() {
             vg.value_of.insert(expr, vid);
         }
     }
@@ -243,13 +245,13 @@ impl<'a> Engine<'a> {
     /// never wrong. This is the primitive structural passes will call at a splice
     /// point to grow the graph instead of forcing a rebuild.
     pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
-        self.value_graph.as_ref()?;
+        self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         // The pool lives on the body, `value_of` on the cached graph — disjoint
         // fields, borrowed separately so interning and operand lookups coexist.
         let v = {
             let pool = &mut self.body.values;
-            let value_of = &self.value_graph.as_ref().unwrap().value_of;
+            let value_of = &self.body.value_graph.as_ref().unwrap().value_of;
             // A pure operand resolves to its promoted `ValueId` directly, or
             // through `value_of` for a skeleton subtree.
             let operand_value = |op: Operand| match op {
@@ -280,7 +282,12 @@ impl<'a> Engine<'a> {
                 _ => return None,
             }
         };
-        self.value_graph.as_mut().unwrap().value_of.insert(expr, v);
+        self.body
+            .value_graph
+            .as_mut()
+            .unwrap()
+            .value_of
+            .insert(expr, v);
         Some(v)
     }
 
@@ -324,7 +331,7 @@ impl<'a> Engine<'a> {
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.
     pub fn invalidate_value_graph(&mut self) {
-        self.value_graph = None;
+        self.body.value_graph = None;
         self.body_address_taken = None;
     }
 
@@ -347,7 +354,7 @@ impl<'a> Engine<'a> {
     pub fn set_param_locals(&mut self, locals: Vec<u32>) {
         if self.param_locals != locals {
             self.param_locals = locals;
-            self.value_graph = None;
+            self.body.value_graph = None;
         }
     }
 
@@ -370,7 +377,7 @@ impl<'a> Engine<'a> {
             self.aliased_locals = aliased;
             self.untrackable_locals = untrackable;
             self.mut_escaped_locals = mut_escaped;
-            self.value_graph = None;
+            self.body.value_graph = None;
         }
     }
 
@@ -380,7 +387,7 @@ impl<'a> Engine<'a> {
     pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
         if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
             self.vg_type_table = Some(type_table);
-            self.value_graph = None;
+            self.body.value_graph = None;
         }
     }
 
@@ -392,7 +399,7 @@ impl<'a> Engine<'a> {
     }
 
     fn ensure_value_graph(&mut self) {
-        if self.value_graph.is_some() {
+        if self.body.value_graph.is_some() {
             self.verify_maintained_graph();
             return;
         }
@@ -404,7 +411,7 @@ impl<'a> Engine<'a> {
             &self.mut_escaped_locals,
             self.vg_type_table,
         );
-        self.value_graph = Some(build);
+        self.body.value_graph = Some(build);
     }
 
     /// Soundness net for per-edit maintenance (`WADO_VERIFY_VG`): rebuild a fresh
@@ -417,7 +424,7 @@ impl<'a> Engine<'a> {
     /// (and free) unless `WADO_VERIFY_VG` is set; the fresh build makes it slow,
     /// so it is a small-input debugging mode, not a production path.
     fn verify_maintained_graph(&mut self) {
-        if !crate::optimize::vg_measure::verify_enabled() || self.value_graph.is_none() {
+        if !crate::optimize::vg_measure::verify_enabled() || self.body.value_graph.is_none() {
             return;
         }
         let fresh = crate::nir_value_graph::builder::build(
@@ -428,7 +435,7 @@ impl<'a> Engine<'a> {
             &self.mut_escaped_locals,
             self.vg_type_table,
         );
-        let maintained = self.value_graph.as_ref().unwrap();
+        let maintained = self.body.value_graph.as_ref().unwrap();
         // Compare over the *live* exprs — exactly those a fresh build walks from
         // the root. An expr present only in `maintained.value_of` is orphaned
         // (a rewrite swapped its parent slot to a promoted value and dropped it
@@ -679,7 +686,7 @@ impl<'a> Engine<'a> {
         }
         // Keep the value graph current through this edit (WEP: maintenance, not
         // rebuild). Re-derive `id`'s value and propagate up its ancestors.
-        if self.value_graph.is_some() {
+        if self.body.value_graph.is_some() {
             self.maintain_value_after_edit(id);
         }
     }
@@ -696,6 +703,7 @@ impl<'a> Engine<'a> {
         let mut cur = id;
         loop {
             let old = self
+                .body
                 .value_graph
                 .as_ref()
                 .unwrap()
@@ -706,13 +714,15 @@ impl<'a> Engine<'a> {
             // for a kind it cannot derive it returns `None` and leaves the (now
             // stale) entry, which we drop.
             if self.maintain_pure_value(cur).is_none() {
-                self.value_graph
+                self.body
+                    .value_graph
                     .as_mut()
                     .unwrap()
                     .value_of
                     .swap_remove(&cur);
             }
             let new = self
+                .body
                 .value_graph
                 .as_ref()
                 .unwrap()
@@ -783,9 +793,14 @@ impl<'a> Engine<'a> {
         // the swapped operand; re-derive up the ancestor chain. `id` is now
         // orphaned; its (dead) `value_of` entry is excluded from the verify
         // oracle by the live-expr filter in `verify_maintained_graph`.
-        if self.value_graph.is_some() {
+        if self.body.value_graph.is_some() {
             if let Some(vid) = new.as_value() {
-                self.value_graph.as_mut().unwrap().value_of.insert(id, vid);
+                self.body
+                    .value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .insert(id, vid);
             }
             if let NodeRef::Expr(p) = parent {
                 self.maintain_value_after_edit(p);

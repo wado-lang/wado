@@ -187,7 +187,7 @@ struct FlowArm {
 /// Impure positions are absent from `value_of`. A rule that wants "this
 /// expression's value" should look it up and treat the absence as "no
 /// value-graph identity available" rather than panicking.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValueGraphBuild {
     pub value_of: IndexMap<ExprId, ValueId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
