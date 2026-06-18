@@ -694,6 +694,37 @@ findings are the deliverable.
   leaf-mistyping. Experiment + instrumentation discarded; branch green at
   `adecff3ca`.
 
+### Pass migration begun: passes that mishandle promoted operands (commit `ebf1af821`)
+
+The early-promotion experiment, though the wrong production vehicle, is the right
+**diagnostic** for the pass migration the real design needs: with it on,
+`WADO_SKIP_PASS` bisection pinpoints exactly which pass mishandles a promoted
+`Operand::Value`. Two found and fixed:
+
+- **`inline`** — `splice_operand` re-allocated a callee value into the caller pool
+  by cloning its _kind_ and calling `alloc_unshared`, but a composite kind
+  (`Binary` / `Cast` / `Select` / `FieldAccess` / `LoopPhi`) carries **child
+  `ValueId`s scoped to the callee pool**; verbatim, they denote unrelated
+  (often different-width) values in the caller. Fixed by a recursive `splice_value`
+  that re-allocates the whole tree and remaps `Opaque` source locals via the
+  inline `ctx`.
+- **`dae`** — three gaps: (1) `find_dead_params` only scanned skeleton reads, so a
+  param read **only through a promoted `Opaque(Local)`** looked dead (now unions
+  `ValuePool::opaque_local_sources`); (2) local renumbering skipped
+  `OpaqueSource::Local` indices (added `ValuePool::remap_opaque_locals`); (3) the
+  dead-arg purity check `expect`ed a skeleton `Expr` (a promoted value is pure by
+  construction).
+
+With both fixed, all four benchmarks compile valid Wasm under early promotion and
+count_prime runs correctly (`78498`). The fixes are **behavior-neutral in the
+late-freeze flow** (no promoted composites reach `inline`/`dae` there): committed,
+2960/0 e2e, 770 lib. Full e2e under early promotion still has **347 O2 failures**
+(O0 skips the optimize loop, so it is unaffected) — the remaining pass-migration
+surface (more passes to teach + `wir_expect` fixtures whose WIR shape changes
+under promotion). These pass fixes are permanent and reused by the real
+`lower`-emits-operands design; the next step is to keep bisecting the 347 for the
+real-miscompile subset (vs `wir_expect` churn) and migrate those passes.
+
 Standing pre-existing finding from Probe A's harness run: `WADO_VERIFY_VG` is
 **not clean on count_prime even on the committed baseline** (a
 `cse → store_load_forward` over-merge). Currently benign (e2e green), but it
