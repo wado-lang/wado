@@ -511,6 +511,41 @@ Done this round (prerequisites): scalars / `Null` / `String` / `Unit` promoted;
 `ExprKind::Dead` tombstone split; the extraction machinery + `OpaqueSource` +
 `value_fully_reemittable_locally` + the freeze, all full-e2e green.
 
+### Keystone execution plan (multi-session, behind `WADO_PROMOTE_EARLY`)
+
+The rewrite is developed behind the `WADO_PROMOTE_EARLY` flag (commit `4bb79d30d`):
+flag-on freezes pure values _before_ the value passes and skips the late freeze;
+default-off keeps the committed late-freeze behavior, so the branch stays green
+and continuously validated while the keystone is built up. Flip the default when
+flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
+
+- [ ] **P1 — flag-on e2e green** (the pass migration). Today flag-on is at **10**
+      O2 failures (down from 347): ~5 `wir_expect` shape churn (update the
+      fixtures once promotion is the vehicle), 3 `Select`/`elide_local` miscompiles
+      (root-caused to a liveness gap, see above), 1 fixed ICE, 1 assert-format.
+      Close the real ones so flag-on is correct (still measurement-neutral — the
+      builder still runs).
+- [ ] **P2 — availability-aware extraction.** Extend promotion past the
+      re-emittable subset to _every_ pure value, materialising a shared or
+      flow-dependent value (`Select`, shared `Binary`, `FieldAccess`) into a `let`
+      at an available point and pointing uses at it (`local.get`), instead of
+      re-emitting an `if`/recompute. This is the one genuinely new analysis and the
+      main code-quality risk; it is also what makes full promotion sound. Gates
+      `Select` promotion on it.
+- [ ] **P3 — migrate the value passes to operands.** `cse` / `licm` /
+      `const_fold` / `condition_implication` / `store_load_forward` read
+      `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
+      passes grow the graph at splice points. Once no pass calls `engine.value`,
+      `builder::build` stops running inside `optimize`.
+- [ ] **P4 — retire `value_of` + per-pass build; flip the default.** The graph is
+      built once (at lower / first promotion) and never re-derived. Verify
+      `WADO_MEASURE_VG` reports `rebuilds = 0`, measure `optimize` CPU halved,
+      delete the `value_of` side-table — the three acceptance criteria — then make
+      `WADO_PROMOTE_EARLY` the default and remove the flag + the late freeze.
+
+Each phase is `WADO_VERIFY_VG`- and e2e-checkable with the flag on while the
+default stays green; the criteria flip together at P4.
+
 ### Per-pass attribution, and an incremental route under fix-while-advancing
 
 Fresh `WADO_MEASURE_VG` on `benchmark/zlib/zlib_bench.wado -O2` (a stable
