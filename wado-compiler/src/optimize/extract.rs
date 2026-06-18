@@ -102,6 +102,12 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
             record_value_tree_types(e, lhs, type_id) && record_value_tree_types(e, rhs, type_id)
         }
         ValueKind::Unary { operand, .. } => record_value_tree_types(e, operand, type_id),
+        // A `Select`'s arms share its result type; the condition is bool.
+        ValueKind::Select { cond, then, else_ } => {
+            record_value_tree_types(e, then, type_id)
+                && record_value_tree_types(e, else_, type_id)
+                && record_value_tree_types(e, cond, crate::tir::TypeTable::BOOL)
+        }
         _ => true,
     }
 }

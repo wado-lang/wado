@@ -520,6 +520,15 @@ impl ValuePool {
             ValueKind::Unary { operand, .. } => {
                 self.value_fully_reemittable_locally(operand, mut_locals)
             }
+            // A `Select` extracts as a value-producing `if` over its pure arms;
+            // re-emittable when the condition and both arms are. The
+            // duplication guard keeps a multi-use `Select` from recomputing the
+            // `if` at each use.
+            ValueKind::Select { cond, then, else_ } => {
+                self.value_fully_reemittable_locally(cond, mut_locals)
+                    && self.value_fully_reemittable_locally(then, mut_locals)
+                    && self.value_fully_reemittable_locally(else_, mut_locals)
+            }
             _ => false,
         }
     }
@@ -551,6 +560,14 @@ impl ValuePool {
                     return true;
                 }
                 self.dup_work_walk(operand, seen)
+            }
+            ValueKind::Select { cond, then, else_ } => {
+                if !seen.insert(rep) {
+                    return true;
+                }
+                self.dup_work_walk(cond, seen)
+                    || self.dup_work_walk(then, seen)
+                    || self.dup_work_walk(else_, seen)
             }
             _ => false,
         }
