@@ -1,0 +1,36 @@
+//! Stage 2 left recursion: the homogeneous-tree emitter parses a directly
+//! left-recursive, precedence grammar via precedence climbing + the builder
+//! `checkpoint`/`start_node_at` wrap. Labelled alternatives do not add tree
+//! nodes (one node per rule).
+
+use lr from "./grammars/arith_lr.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_lr",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = lr::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = lr::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "lr: single atom" {
+    assert_tree(&"1", &"(expr 1)");
+}
+
+test "lr: left-associative addition" {
+    assert_tree(&"1 + 2 + 3", &"(expr (expr (expr 1) + (expr 2)) + (expr 3))");
+}
+
+test "lr: precedence, * binds tighter than +" {
+    assert_tree(&"1 + 2 * 3", &"(expr (expr 1) + (expr (expr 2) * (expr 3)))");
+}
+
+test "lr: precedence, left operand is a product" {
+    assert_tree(&"1 * 2 + 3", &"(expr (expr (expr 1) * (expr 2)) + (expr 3))");
+}

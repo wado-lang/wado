@@ -119,18 +119,26 @@ ignoring the typed-struct machinery entirely — there are no typed structs,
 #### Stage 2a — new emitter behind a flag ✅ (done)
 
 Gated by `GenerateOptions.homogeneous` (Kiln `options: { homogeneous: true }`),
-so the old typed path stays the default and the corpus stays green. Proven
-end-to-end on an LL(1) `Direct`-dispatch grammar (`tests/grammars/calc_ll.g4`,
-`tests/driver_cst_calc_test.wado`): homogeneous tree, infallible parse, and
-fail-soft diagnostics. Runtime is `lex` + `diag` + `tree`. Tournament dispatch,
-left recursion, and non-greedy raise a codegen-time panic (out of 2a scope).
+so the old typed path stays the default and the corpus stays green. Runtime is
+`lex` + `diag` + `tree`. Covered shapes, each proven end-to-end:
+
+- **LL(1) `Direct` dispatch** — tokens, literals, rule refs, sequences,
+  `*`/`+`/`?`, transparent/token-only groups, wildcard, set complement
+  (`tests/grammars/calc_ll.g4`, `tests/driver_cst_calc_test.wado`).
+- **Left recursion** — precedence climbing using the builder's
+  `checkpoint`/`start_node_at` left-associative wrap; self-ref suffixes recurse
+  at their baked `min_prec` (`tests/grammars/arith_lr.g4`,
+  `tests/driver_cst_lr_test.wado`).
+
+Tournament dispatch, overlapping LR suffixes, and non-greedy raise a
+codegen-time panic (still out of scope).
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Cover Tournament dispatch / LR / non-greedy (reuse `parser_gen`'s scan &
-prediction), migrate the full driver + ANTLR4-compat corpus to the homogeneous
-parser, then delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and
-make `homogeneous` the only path.
+Cover Tournament dispatch / non-greedy / overlapping LR suffixes (reuse
+`parser_gen`'s scan & prediction), migrate the full driver + ANTLR4-compat
+corpus to the homogeneous parser, then delete the typed-CST emitter
+(`gen_cst_types`, `visitor_gen`) and make `homogeneous` the only path.
 
 ### Stage 3 — Recovery
 

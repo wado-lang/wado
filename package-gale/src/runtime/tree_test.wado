@@ -186,6 +186,42 @@ test "error region is a K_ERROR node and bubbles error up to the parent" {
     assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a (<error> <skip @>) b)";
 }
 
+test "start_node_at wraps left-associatively across iterations" {
+    // Mirrors precedence climbing for `1 + 2 + 3` →
+    // (expr (expr (expr 1) + (expr 2)) + (expr 3)).
+    let ts = stream_of("1+2+3", [
+        [0, 0, 1],
+        [1, 1, 2],
+        [0, 2, 3],
+        [1, 3, 4],
+        [0, 4, 5],
+    ]);
+    let mut b = TreeBuilder::new();
+    let cp = b.checkpoint();
+    // atom: (expr 1)
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    // iter 1: wrap, '+', (expr 2)
+    b.start_node_at(cp, 0 as NodeKind, 0);
+    b.token(1);
+    b.start_node(0 as NodeKind, 2);
+    b.token(2);
+    b.finish_node(3);
+    b.finish_node(3);
+    // iter 2: wrap, '+', (expr 3)
+    b.start_node_at(cp, 0 as NodeKind, 0);
+    b.token(3);
+    b.start_node(0 as NodeKind, 4);
+    b.token(4);
+    b.finish_node(5);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.span == Span::new(0, 5);
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr (expr (expr 1) + (expr 2)) + (expr 3))";
+}
+
 // === ParseResult ===
 
 test "ParseResult ok when there are no diagnostics" {

@@ -18,6 +18,9 @@ use { LitToken } from "./lexer_gen.wado";
 use {
     LoweredGrammar,
     Rule,
+    LeftRecursiveRule,
+    LrAlt,
+    LrDispatchData,
     AltBody,
     Op,
     RepeatOp,
@@ -297,6 +300,10 @@ fn gen_parser_runtime(w: &mut CodeWriter) {
 fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
     let snake = rule_snake(rule);
     let rk = `RK_{rule_const(&rule_name(rule))}`;
+    if let LeftRecursive(l) = rule {
+        gen_lr_rule_fn(w, l, &rk, &snake);
+        return;
+    }
     w.begin(&`fn _parse_{snake}(p: &mut Parser)`);
     w.line(&"if p.bailed { return; }");
     w.line(&"let start = p.peek_start();");
@@ -304,11 +311,70 @@ fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
     match *rule {
         Simple(s) => emit_ops(w, &s.body.ops),
         MultiAlt(m) => emit_alt_dispatch(w, &m.alts, &m.dispatch),
-        LeftRecursive(_) => panic(`cst_gen: left-recursive rule '{snake}' is outside Stage 2 scope`),
+        LeftRecursive(_) => panic("cst_gen: unreachable"),
     }
     w.line(&"p.b.finish_node(p.last_end());");
     w.end();
     w.blank();
+}
+
+/// Emit a left-recursive rule as a precedence-climbing parser. The atom (the
+/// non-recursive alternatives) opens one rule node; the LR loop wraps it
+/// left-associatively via `start_node_at` at a fixed checkpoint. A self-ref
+/// `RuleCall` in a suffix carries its `min_prec_arg` (baked by lowering), so
+/// the right operand recurses at the correct precedence. Only single-alt
+/// dispatch groups are handled; overlapping LR suffixes (needing scan) raise a
+/// codegen-time panic.
+fn gen_lr_rule_fn(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, snake: &String) {
+    w.begin(&`fn _parse_{snake}(p: &mut Parser, min_prec: i32 = 0)`);
+    w.line(&"if p.bailed { return; }");
+    w.line(&"let cp = p.b.checkpoint();");
+    w.line(&"let start = p.peek_start();");
+    w.line(&`p.b.start_node({*rk}, start);`);
+    if l.atom.alts.len() == 1 {
+        emit_ops(w, &l.atom.alts[0].ops);
+    } else {
+        emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch);
+    }
+    w.line(&"p.b.finish_node(p.last_end());");
+    gen_lr_loop(w, l, rk);
+    w.end();
+    w.blank();
+}
+
+fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String) {
+    w.begin(&"loop");
+    w.line(&"if p.bailed { break; }");
+    w.line(&"let suffix_kind = p.peek_kind();");
+    let mut first = true;
+    for let group of &l.lr_dispatch.groups {
+        if group.len() != 1 {
+            panic("cst_gen: overlapping LR suffixes are outside Stage 2 scope");
+        }
+        let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[0]]];
+        let cond = kinds_or(&lr.suffix_first, &"suffix_kind");
+        if first {
+            w.begin(&`if {cond}`);
+            first = false;
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        w.begin(&`if {lr.own_prec} >= min_prec`);
+        w.line(&`p.b.start_node_at(cp, {*rk}, start);`);
+        emit_ops(w, &lr.suffix.ops);
+        w.line(&"p.b.finish_node(p.last_end());");
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    }
+    if first {
+        w.line(&"break;");
+    } else {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    }
+    w.end();
 }
 
 /// Emit token-led dispatch over a rule's / group's alternatives.
@@ -356,7 +422,14 @@ fn emit_op(w: &mut CodeWriter, op: &Op) {
     match *op {
         Token(t) => w.line(&`p.expect_token({t.kind});`),
         Literal(l) => w.line(&`p.expect_token({l.kind});`),
-        RuleCall(rc) => w.line(&`_parse_{rc.target_snake}(p);`),
+        RuleCall(rc) => {
+            // A self-ref in an LR suffix carries the precedence to recurse at.
+            if let Some(prec) = rc.min_prec_arg {
+                w.line(&`_parse_{rc.target_snake}(p, {prec});`);
+            } else {
+                w.line(&`_parse_{rc.target_snake}(p);`);
+            }
+        },
         Wildcard(_) => w.line(&"p.expect_any();"),
         Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
         ListLabel(ll) => emit_op(w, &ll.inner),

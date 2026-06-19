@@ -187,6 +187,22 @@ impl TreeBuilder {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
     }
 
+    /// A position in the event stream to retro-open a node at. Used for
+    /// left-associative wrapping (precedence climbing): capture a checkpoint
+    /// before the first operand, then `start_node_at` to make a new node whose
+    /// first child is everything recorded since the checkpoint.
+    pub fn checkpoint(&self) -> i32 {
+        return self.events.len();
+    }
+
+    /// Retro-open a node of `kind` (starting at byte offset `start`) at a
+    /// previously captured `checkpoint`, so all events recorded since wrap
+    /// inside it. Close it with the matching `finish_node`. Re-using the same
+    /// checkpoint across loop iterations nests left-associatively.
+    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));
