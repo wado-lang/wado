@@ -155,10 +155,14 @@ loud `panic` rather than a silently-wrong static dispatch.
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Non-ATN real grammars already migrate cleanly: the grammars-v4 `calculator.g4`
-(nested rules, token groups, `*` repeats, multi-alt Direct dispatch, prefix
-recursion) parses through the homogeneous emitter unchanged
-(`tests/driver_cst_calculator_test.wado`).
+Non-ATN real grammars already migrate cleanly, each with the same one-node-
+per-rule tree the typed emitter produces (so migrating a driver test is just
+swapping the API, not the expectations): the grammars-v4 `calculator.g4`
+(nested precedence rules, token groups, `*` repeats, multi-alt Direct dispatch,
+prefix recursion, `func_` calls), `label_gaps.g4` (element + list labels, all
+transparent), and `at_end_alt_gaps.g4` (a shared-prefix tournament resolved by
+the second token, nested in Direct dispatch) all parse through the homogeneous
+emitter unchanged (`tests/driver_cst_{calculator,labels,at_end_alt_gaps}_test.wado`).
 
 **Architectural limit of the GIR-only emitter (proven).** `cst_gen` consumes
 the lowered GIR, whose `MultiAltDispatch` has only `Direct` (disjoint first
@@ -169,7 +173,12 @@ scannable. The typed emitter resolves those through its surface
 scan-tournament → hybrid save-rewind → runtime ATN simulator), which is the
 bulk of `parser_gen`. So a GIR-only `cst_gen` cannot reach full corpus parity,
 and the `needs_atn` boundary check in `gen_cst_parser` rejects those grammars
-up front rather than mis-emitting a static dispatch.
+up front rather than mis-emitting a static dispatch. A second, smaller GIR-only
+gap is **group / atom-level tournaments** (e.g. `('x' | 'x' 'y')` in
+`multiple_eof.g4`): `cst_gen` emits a rule-level tournament (`emit_tournament`)
+but `emit_alt_dispatch` panics on a `Tournament` group dispatch, which the
+typed emitter handles via the same surface group-prediction path. Both gaps
+close together under the sink refactor below, not by extending `cst_gen`.
 
 **Decision: one emitter, pluggable node sink (not two emitters).** Reaching
 "homogeneous is the only path" by porting the prediction/ATN core into `cst_gen`

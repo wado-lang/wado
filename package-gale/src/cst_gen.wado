@@ -669,7 +669,7 @@ fn emit_lr_overlap(
 fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     let dd = match *dispatch {
         Direct(d) => d,
-        Tournament(_) => panic("cst_gen: tournament dispatch is outside Stage 2 scope"),
+        Tournament(_) => panic("cst_gen: group / atom-level tournament dispatch is not yet covered (only rule-level tournaments via emit_tournament); needs parser_gen's group-prediction path — see resilient-parser.md Stage 2b"),
     };
     w.line(&"let kind = p.peek_kind();");
     let mut all_first: List<String> = [];
