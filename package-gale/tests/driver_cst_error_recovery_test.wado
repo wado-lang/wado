@@ -1,0 +1,30 @@
+//! Stage 3 down-payment on the homogeneous sink: a malformed element inside a
+//! scan-gated repetition reports the error at the malformed token, not at the
+//! following required token (the "off-by-one statement" symptom). The precise
+//! position comes from the scan-gated repeat's speculative re-parse, which now
+//! runs builder-safe (checkpoint/truncate) under the homogeneous sink.
+
+use errrec from "./grammars/error_recovery.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_error_recovery",
+        },
+    };
+
+fn first_diag_col(input: &String) -> i32 {
+    let r = errrec::parse(input);
+    assert !r.ok(), `expected a diagnostic for {*input}`;
+    return r.diagnostics[0].col;
+}
+
+test "error position: malformed item under `item* EOF`" {
+    assert first_diag_col(&"let x = ;") == 8, `expected col 8 (the ';')`;
+}
+test "error position: malformed item under `item* '}'`" {
+    assert first_diag_col(&"{ let x = ; }") == 10, `expected col 10 (the ';')`;
+}
+test "error position: non-item token stays put" {
+    assert first_diag_col(&"let x = y ; +") == 12, `expected col 12 (the '+')`;
+}

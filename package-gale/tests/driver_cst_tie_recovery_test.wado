@@ -1,0 +1,19 @@
+//! Stage 3 down-payment on the homogeneous sink: when a malformed repeated
+//! element and the following construct fail at the same position, the reported
+//! diagnostic must name the malformed element (the `_gale_pick_error`
+//! tie-break, now applied on the homogeneous parse entry too).
+use tie from "./grammars/tie_recovery.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_tie_recovery",
+        },
+    };
+
+test "tie prefers the malformed element over the next construct" {
+    let r = tie::parse(&"x");
+    assert !r.ok(), "expected a diagnostic";
+    assert r.diagnostics[0].message.contains("ID"),
+        `expected the malformed-element error ('expected ID'), got: {r.diagnostics[0].message}`;
+}

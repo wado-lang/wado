@@ -749,6 +749,17 @@ impl TreeBuilder {
         self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
     }
 
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// homogeneous sink the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));
@@ -13000,7 +13011,16 @@ fn _parse_crate__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -13013,7 +13033,16 @@ fn _parse_crate__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let item = _parse_item(p, &EMPTY_FOLLOW)?;
     }
     let eof = p.expect(TK_EOF)?;
@@ -13067,7 +13096,16 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
         }
         let rparen = p.expect(TK_RPAREN)?;
@@ -13085,7 +13123,16 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -13103,7 +13150,16 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -13145,7 +13201,16 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
-                if rep_scan_pos < 0 { break; }
+                if rep_scan_pos < 0 {
+                    if _gale_kind_set_2(p.peek_kind()) {
+                        let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        if let Err(_rec_e) = _parse_token_tree_token(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
+                    }
+                    break;
+                }
             }
             _plus_first = false;
             let token_tree_token = _parse_token_tree_token(p, &EMPTY_FOLLOW)?;
@@ -13279,7 +13344,16 @@ fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser, follow: &List<List<
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_1(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
     }
     let rparen = p.expect(TK_RPAREN)?;
@@ -13323,7 +13397,16 @@ fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser, follow: &List<List<
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_1(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
     }
     let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -13367,7 +13450,16 @@ fn _parse_macro_invocation_semi__inner_alt_2(p: &mut Parser, follow: &List<List<
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_1(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_token_tree(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let token_tree = _parse_token_tree(p, &EMPTY_FOLLOW)?;
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -13589,7 +13681,16 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
         }
         let rparen = p.expect(TK_RPAREN)?;
@@ -13607,7 +13708,16 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
         }
         let rsquarebracket = p.expect(TK_RSQUAREBRACKET)?;
@@ -13625,7 +13735,16 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -13666,7 +13785,16 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &E
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_1(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_macro_match(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let macro_match = _parse_macro_match(p, &EMPTY_FOLLOW)?;
@@ -13766,7 +13894,16 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
-                if rep_scan_pos < 0 { break; }
+                if rep_scan_pos < 0 {
+                    if _gale_kind_set_5(p.peek_kind()) {
+                        let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        if let Err(_rec_e) = _parse_macro_match_token(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
+                    }
+                    break;
+                }
             }
             _plus_first = false;
             let macro_match_token = _parse_macro_match_token(p, &EMPTY_FOLLOW)?;
@@ -14050,7 +14187,16 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -14271,7 +14417,16 @@ fn _parse_module__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_POUND {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
         }
         loop {
@@ -14284,7 +14439,16 @@ fn _parse_module__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 if pos <= p.pos { break rep_scan_2; }
                 rep_scan_pos_2 = pos;
             }
-            if rep_scan_pos_2 < 0 { break; }
+            if rep_scan_pos_2 < 0 {
+                if _gale_kind_set_0(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let item = _parse_item(p, &EMPTY_FOLLOW)?;
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -14917,7 +15081,16 @@ fn _parse_self_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -15016,7 +15189,16 @@ fn _parse_function_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -15323,7 +15505,16 @@ fn _parse_struct_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     if p.peek_kind() == TK_KW_PUB {
@@ -15403,7 +15594,16 @@ fn _parse_tuple_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     if p.peek_kind() == TK_KW_PUB {
@@ -15511,7 +15711,16 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     if p.peek_kind() == TK_KW_PUB {
@@ -15751,7 +15960,16 @@ fn _parse_trait___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -15764,7 +15982,16 @@ fn _parse_trait___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_36(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_associated_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let associated_item = _parse_associated_item(p, &EMPTY_FOLLOW)?;
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -15875,7 +16102,16 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -15888,7 +16124,16 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_36(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_associated_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let associated_item = _parse_associated_item(p, &EMPTY_FOLLOW)?;
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -15936,7 +16181,16 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -15949,7 +16203,16 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_36(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_associated_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let associated_item = _parse_associated_item(p, &EMPTY_FOLLOW)?;
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -15988,7 +16251,16 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -16001,7 +16273,16 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_37(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_external_item(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let external_item = _parse_external_item(p, &EMPTY_FOLLOW)?;
     }
     let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
@@ -16032,7 +16313,16 @@ fn _parse_external_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -16151,7 +16441,16 @@ fn _parse_generic_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -16458,7 +16757,16 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -16781,7 +17089,16 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let kw_let = p.expect(TK_KW_LET)?;
@@ -16922,7 +17239,16 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_POUND {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
@@ -17011,7 +17337,16 @@ fn _parse_expression__inner_alt_32(p: &mut Parser, follow: &List<List<i32>> = &E
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     let expression = _parse_expression(p, &FOLLOW_MASK_25)?;
@@ -17049,7 +17384,16 @@ fn _parse_expression__inner_alt_34(p: &mut Parser, follow: &List<List<i32>> = &E
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     if _gale_kind_set_48(p.peek_kind()) {
@@ -17278,7 +17622,16 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_POUND {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
         }
         if _gale_kind_set_48(p.peek_kind()) {
@@ -17693,7 +18046,16 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> 
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
                 }
-                if rep_scan_pos < 0 { break; }
+                if rep_scan_pos < 0 {
+                    if p.peek_kind() == TK_POUND {
+                        let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
+                    }
+                    break;
+                }
             }
             _plus_first = false;
             let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
@@ -17818,7 +18180,16 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     if _gale_kind_set_51(p.peek_kind()) {
@@ -17868,7 +18239,16 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_51(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let statement = _parse_statement(p, &EMPTY_FOLLOW)?;
@@ -18282,7 +18662,16 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     let mut opt_scan_pos: i32 = -1;
@@ -18407,7 +18796,16 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -18505,7 +18903,16 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     let mut opt_scan_pos: i32 = -1;
@@ -19094,7 +19501,16 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let pattern = _parse_pattern(p, follow)?;
@@ -19369,7 +19785,16 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_inner_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let inner_attribute = _parse_inner_attribute(p, &EMPTY_FOLLOW)?;
     }
     if _gale_kind_set_55(p.peek_kind()) {
@@ -19536,7 +19961,16 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let pattern = _parse_pattern(p, follow)?;
@@ -20537,7 +20971,16 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: &List<List<i32>> =
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let grp_kind = p.peek_kind();
@@ -20602,7 +21045,16 @@ fn _parse_struct_pattern_et_cetera__inner(p: &mut Parser, follow: &List<List<i32
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let dotdot = p.expect(TK_DOTDOT)?;
@@ -21816,7 +22268,16 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let mut opt_scan_pos: i32 = -1;
@@ -21907,7 +22368,16 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if p.peek_kind() == TK_POUND {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_outer_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW)?;
     }
     let dotdotdot = p.expect(TK_DOTDOTDOT)?;
@@ -23533,6 +24003,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let mut p = Parser::new(tokens);
     let _r = _parse_crate(&mut p, &EMPTY_FOLLOW);
     if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
         let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
         p.diagnostics.push(d);

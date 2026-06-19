@@ -166,6 +166,11 @@ fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx
     w.line(&"let mut p = Parser::new(tokens);");
     w.line(&`let _r = _parse_{header.snake_name}(&mut p{follow_arg});`);
     w.begin(&"if let Err(e) = _r");
+    // Surface the deepest error: a scan-gated repeat's speculative re-parse
+    // records the precise inner error in `p.pending` (see
+    // `gen_rep_break_with_recovery`); prefer it over the shallow propagated
+    // `e` when it sits at or past `e` (mirrors the typed `_gale_pick_error`).
+    w.line(&"let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };");
     w.line(&"let lc = line_col(p.tokens.chars, e.span.start);");
     w.line(
         &"let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);",
@@ -4837,6 +4842,14 @@ fn gen_rep_break_with_recovery(
         w.begin(&`if {scan_pos} < 0`);
         w.begin(&`if {ctx.first_check_str(loop_first)}`);
         w.line(&"let _rec_pos = p.pos;");
+        // Homogeneous sink: the speculative re-parse drives the real
+        // `TreeBuilder`, so bracket it with a checkpoint/truncate to discard
+        // the throwaway subtree (the cursor is restored too — only the
+        // recorded deep error survives, which is the whole point).
+        let homog = ctx.is_homogeneous();
+        if homog {
+            w.line(&"let _rec_cp = p.b.checkpoint();");
+        }
         // Stamp the call's exact ATN return state for the speculative recovery
         // parse, just as a normal parse call does, so a context-sensitive
         // callee (`??` / ATN-class LR) sees the right caller frame and records
@@ -4846,6 +4859,9 @@ fn gen_rep_break_with_recovery(
         }
         w.line(&`if let Err(_rec_e) = {call} \{ p.record_deeper(_rec_e); \}`);
         w.line(&"p.pos = _rec_pos;");
+        if homog {
+            w.line(&"p.b.truncate(_rec_cp);");
+        }
         w.end();
         w.line(&"break;");
         w.end();
@@ -4957,18 +4973,14 @@ fn gen_op_repeat_star_plus_storable(
     }
 }
 
-/// Loop-exit guard for a scan-gated Repeat. The typed sink augments the
-/// plain `if scan_pos < 0 { break }` with a speculative re-parse of a
-/// RuleRef inner for a precise deep error (`gen_rep_break_with_recovery`);
-/// the homogeneous sink must NOT speculate — a re-parse would append the
-/// rewound tokens to the `TreeBuilder` and corrupt the tree — so it emits
-/// the plain break. (Recovery diagnostics are reintroduced at Stage 3 with
-/// a builder checkpoint.)
+/// Loop-exit guard for a scan-gated Repeat. Both sinks augment the plain
+/// `if scan_pos < 0 { break }` with a speculative re-parse of a RuleRef inner
+/// that records the precise deep error (`gen_rep_break_with_recovery`); the
+/// homogeneous sink brackets the speculative parse with a builder
+/// checkpoint/truncate (the speculation drives the real `TreeBuilder`, so the
+/// throwaway subtree is rolled back along with the cursor — only the recorded
+/// deep error survives).
 fn gen_rep_break(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
-    if ctx.is_homogeneous() {
-        w.line(&`if {*scan_pos} < 0 \{ break; \}`);
-        return;
-    }
     gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
 }
 

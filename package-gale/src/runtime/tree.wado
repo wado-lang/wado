@@ -203,6 +203,17 @@ impl TreeBuilder {
         self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
     }
 
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// homogeneous sink the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));

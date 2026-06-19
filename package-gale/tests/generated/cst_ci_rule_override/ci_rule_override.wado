@@ -748,6 +748,17 @@ impl TreeBuilder {
         self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
     }
 
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// homogeneous sink the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));
@@ -1243,6 +1254,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let mut p = Parser::new(tokens);
     let _r = _parse_line(&mut p);
     if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
         let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
         p.diagnostics.push(d);

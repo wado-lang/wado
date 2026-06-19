@@ -748,6 +748,17 @@ impl TreeBuilder {
         self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
     }
 
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// homogeneous sink the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));
@@ -2704,7 +2715,16 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW)?;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_XML) {
@@ -2721,7 +2741,16 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW)?;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_DTD) {
@@ -2738,7 +2767,16 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan_3; }
             rep_scan_pos_3 = pos;
         }
-        if rep_scan_pos_3 < 0 { break; }
+        if rep_scan_pos_3 < 0 {
+            if _gale_kind_set_0(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -2752,7 +2790,16 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan_4; }
             rep_scan_pos_4 = pos;
         }
-        if rep_scan_pos_4 < 0 { break; }
+        if rep_scan_pos_4 < 0 {
+            if _gale_kind_set_1(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_html_elements(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let html_elements = _parse_html_elements(p, &EMPTY_FOLLOW)?;
     }
     return Result::Ok(());
@@ -2808,7 +2855,16 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_2(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_html_misc(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let html_misc = _parse_html_misc(p, &EMPTY_FOLLOW)?;
     }
     let html_element = _parse_html_element(p, &follow_prepend(&FOLLOW_MASK_0, follow))?;
@@ -2823,7 +2879,16 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
-        if rep_scan_pos_2 < 0 { break; }
+        if rep_scan_pos_2 < 0 {
+            if _gale_kind_set_2(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_html_misc(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let html_misc = _parse_html_misc(p, &EMPTY_FOLLOW)?;
     }
     return Result::Ok(());
@@ -2857,7 +2922,16 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_TAG_NAME {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_html_attribute(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
             let html_attribute = _parse_html_attribute(p, &EMPTY_FOLLOW)?;
         }
         let grp_kind = p.peek_kind();
@@ -3148,6 +3222,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let mut p = Parser::new(tokens);
     let _r = _parse_html_document(&mut p, &EMPTY_FOLLOW);
     if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
         let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
         p.diagnostics.push(d);

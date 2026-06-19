@@ -749,6 +749,17 @@ impl TreeBuilder {
         self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
     }
 
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// homogeneous sink the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
     /// Close the innermost open node at byte offset `end`.
     pub fn finish_node(&mut self, end: i32) {
         self.events.push(BuildEvent::Close(end));
@@ -14875,7 +14886,16 @@ fn _parse_decorator_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_LIT_AT {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_decorator(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let decorator = _parse_decorator(p, &EMPTY_FOLLOW)?;
@@ -16402,7 +16422,16 @@ fn _parse_statement_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_18(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let statement = _parse_statement(p, &EMPTY_FOLLOW)?;
@@ -17979,7 +18008,16 @@ fn _parse_case_clauses__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if p.peek_kind() == TK_Case {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_case_clause(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let case_clause = _parse_case_clause(p, &EMPTY_FOLLOW)?;
@@ -18283,7 +18321,16 @@ fn _parse_class_tail__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_18(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_class_element(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let class_element = _parse_class_element(p, &EMPTY_FOLLOW)?;
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;
@@ -19316,7 +19363,16 @@ fn _parse_source_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
-            if rep_scan_pos < 0 { break; }
+            if rep_scan_pos < 0 {
+                if _gale_kind_set_18(p.peek_kind()) {
+                    let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    if let Err(_rec_e) = _parse_source_element(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
+                }
+                break;
+            }
         }
         _plus_first = false;
         let source_element = _parse_source_element(p, &EMPTY_FOLLOW)?;
@@ -21967,7 +22023,16 @@ fn _parse_template_string_literal__inner(p: &mut Parser, follow: &List<List<i32>
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
-        if rep_scan_pos < 0 { break; }
+        if rep_scan_pos < 0 {
+            if _gale_kind_set_37(p.peek_kind()) {
+                let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                if let Err(_rec_e) = _parse_template_string_atom(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
+            }
+            break;
+        }
         let template_string_atom = _parse_template_string_atom(p, &EMPTY_FOLLOW)?;
     }
     let backtick_2 = p.expect(TK_BackTick)?;
@@ -22395,6 +22460,7 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let mut p = Parser::new(tokens);
     let _r = _parse_initializer(&mut p, &EMPTY_FOLLOW);
     if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
         let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
         p.diagnostics.push(d);
