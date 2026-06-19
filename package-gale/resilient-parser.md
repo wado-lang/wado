@@ -155,10 +155,38 @@ loud `panic` rather than a silently-wrong static dispatch.
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Wire the runtime ATN simulator into the homogeneous `Parser` (non-greedy `??`,
-ATN-class prediction), migrate the full driver + ANTLR4-compat corpus to the
-homogeneous parser, then delete the typed-CST emitter (`gen_cst_types`,
-`visitor_gen`) and make `homogeneous` the only path.
+Non-ATN real grammars already migrate cleanly: the grammars-v4 `calculator.g4`
+(nested rules, token groups, `*` repeats, multi-alt Direct dispatch, prefix
+recursion) parses through the homogeneous emitter unchanged
+(`tests/driver_cst_calculator_test.wado`).
+
+**Architectural limit of the GIR-only emitter (proven).** `cst_gen` consumes
+the lowered GIR, whose `MultiAltDispatch` has only `Direct` (disjoint first
+sets) and `Tournament` (all alts fully scannable). It has **no representation
+for ATN-class multi-alt rules** — alts that overlap *and* are not all fully
+scannable. The typed emitter resolves those through its surface
+`PredictionNode` path (`build_prediction` → `gen_prediction_code`:
+scan-tournament → hybrid save-rewind → runtime ATN simulator), which is the
+bulk of `parser_gen`. So a GIR-only `cst_gen` cannot reach full corpus parity,
+and the `needs_atn` boundary check in `gen_cst_parser` rejects those grammars
+up front rather than mis-emitting a static dispatch.
+
+**Decision: one emitter, pluggable node sink (not two emitters).** Reaching
+"homogeneous is the only path" by porting the prediction/ATN core into `cst_gen`
+would clone `parser_gen`'s most intricate logic into a second body kept in
+lockstep — the exact anti-pattern soundness invariant #3 retired. Instead,
+refactor `parser_gen`'s single emission pipeline over a node **sink**
+(`Typed` builds structs + `Result`/`?`; `Homogeneous` drives the `TreeBuilder`,
+infallible), reusing every prediction decision (incl. ATN) unchanged:
+
+1. Thread the sink through `parser_gen`'s emit functions; `Typed` stays the
+   default and the corpus stays byte-identical and green.
+2. Wire the `Homogeneous` sink at the leaf / rule-entry / dispatch layers
+   (the ATN return-stack plumbing — `emit_atn_enter`, `gen_atn_ret_pending`,
+   `atn_*_decision` — is reused verbatim). Migrate the driver + ANTLR4-compat
+   corpus behind the `homogeneous` flag, batch by batch, each proven green.
+3. Delete the `Typed` sink, `gen_cst_types`, `visitor_gen`, and `cst_gen`;
+   `homogeneous` becomes the only path.
 
 ### Stage 3 — Recovery
 
