@@ -2489,9 +2489,9 @@ fn gen_alt_body(
 /// Emit `{field.name},` for every entry in the alt body's
 /// `FieldDecl` list, skipping the leading `Span` entry that
 /// `gen_clamped_span_field` writes immediately before. `body.fields`
-/// is lower's canonical struct shape (matches what
-/// `codegen.wado::gen_cst_types` emits), so the struct literal stays
-/// in lockstep with the type definition.
+/// is lower's canonical struct shape, so the struct literal stays in
+/// lockstep with the type definition. (Typed-sink arm only — dead under
+/// the homogeneous-only emitter, pending sink-branch removal.)
 fn gen_field_assignments_from_fields(w: &mut CodeWriter, fields: &List<FieldDecl>) {
     for let mut i = 0; i < fields.len(); i += 1 {
         if let Span = &fields[i].kind {
@@ -4047,10 +4047,9 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
 /// then constructs the SingleAlt's CST struct. The outer field name
 /// (`sa.field`) and struct type name (`sa.struct_name`) come from the
 /// `SingleAltShape` payload; the struct-literal field list comes from
-/// `body.fields` (lower's canonical list — `gen_cst_types` emits the
-/// same shape). Inner element parsing still walks surface IR via
-/// `gen_elements_with_non_greedy` for now; that walker migrates to
-/// consume `body.ops` in a later (2) slice.
+/// `body.fields` (lower's canonical list). Inner element parsing still
+/// walks surface IR via `gen_elements_with_non_greedy`. (Typed-sink arm
+/// only — dead under the homogeneous-only emitter.)
 fn gen_consume_single_alt_group_op(
     w: &mut CodeWriter,
     sa: &SingleAltShape,

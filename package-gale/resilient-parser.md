@@ -199,26 +199,39 @@ and matches the typed trees one-node-per-rule:
   (Rust, TypeScript, SQLite, CSS3, HTML, ANTLRv4) — parse homogeneously, with
   `driver_cst_*` driver tests pinning the trees / end-to-end parse.
 
-The typed corpus stays byte-identical and green throughout (the `Typed` branch
-is never touched). A pre-existing scan bug surfaced by the unified walker — a
-non-greedy wildcard `.*?` / `.+?` scanned zero inner tokens (empty
-`inner_first`) and undershot — was fixed: the scan now skips to the exit set
-(`gen_scan_non_greedy_skip`, `ScanRepeatElement.non_greedy`).
+A pre-existing scan bug surfaced by the unified walker — a non-greedy wildcard
+`.*?` / `.+?` scanned zero inner tokens (empty `inner_first`) and undershot —
+was fixed: the scan now skips to the exit set (`gen_scan_non_greedy_skip`,
+`ScanRepeatElement.non_greedy`).
 
-**Remaining for "homogeneous the only path" (step 3).** Every feature now runs
-on the homogeneous sink — parse/tree (this stage), error reporting (Stage 3
-down-payment below), and highlight (Stage 4 down-payment below). The typed-CST
-emitter (`gen_cst_types`, `visitor_gen`) is kept alive only by tests that still
-drive the *typed* path: the typed-API `sexpression_ast`, the `trace` test, the
-redundant `driver_<x>` duplicates of the `driver_cst_<x>` tests, and the
-generated ANTLR4-compat **stage_b** corpus (83 parse tests — these flip to
-homogeneous in one extractor change once the homogeneous parser exposes
-per-rule entry points and sub-tree rendering; stage_a's 285 tokenize tests are
-sink-independent and need no migration). Retiring the typed path is now a
-mechanical cleanup (migrate/delete those tests, then drop `gen_cst_types` /
-`visitor_gen` / the typed codegen branch), not a feature dependency. The
-temporary `sink_v2` bring-up flag and its duplicate `driver_cst_v2_*` tests are
-already removed.
+#### Step 3 — homogeneous is the only path ✅ (done)
+
+`generate()` now **always** emits the homogeneous parser; the typed-CST emitter
+is deleted, not merely unselected:
+
+- `codegen.wado` drops the `if homogeneous {…} else {typed}` fork and
+  hard-sets `set_homogeneous(true)`; the typed `gen_runtime` and the whole
+  `gen_cst_types` block are gone.
+- `visitor_gen.wado`, `runtime/tools_typed.wado`, and
+  `runtime/highlight_visitor.wado` are deleted, along with the dead typed
+  `gen_highlight` / `gen_highlight_fn` in `highlight_gen.wado`.
+- The 52 redundant typed `driver_<x>_test.wado` are deleted (the homogeneous
+  `driver_cst_<x>` tests cover the same grammars), and `codegen_test.wado` is
+  migrated to the homogeneous output.
+- The ANTLR4-compat **stage_b** corpus (83 parse tests) flipped to homogeneous
+  in one extractor change (`homogeneous: true` + `to_string_tree` /
+  `to_string_subtree` per-rule rendering); stage_a's tokenize tests are
+  sink-independent.
+
+The full suite is green on the homogeneous-only emitter: 622 src + `driver_cst`
+tests, stage_a 264, stage_b 77, all 0 failed.
+
+Remaining mechanical cleanup: `parser_gen.wado` keeps the typed structure-build
+arms behind ~27 `ctx.is_homogeneous()` branches whose `false` side is now
+unreachable (`is_homogeneous` is constant-true). Collapsing those arms and the
+`homogeneous` field / typed-only helpers (`gen_field_assignments_from_fields`,
+the SingleAlt CST struct emitters, …) is a safe follow-up — it changes no
+generated output.
 
 ### Stage 3 — Recovery (error reporting on the homogeneous sink ✅; error-token edits remaining)
 
@@ -238,8 +251,7 @@ asserting error-token trees for broken input.
 
 Highlight walks the homogeneous `CstNode` tree directly: the sink-independent
 core (`HighlightVisitor` + mapping + `classify` + `highlight_html` with inherent
-`hl_*` hooks) lives in `highlight.wado`, the typed-CST `Visitor` bridge in a thin
-`highlight_visitor.wado` (typed path only), and the homogeneous walk
+`hl_*` hooks) lives in `highlight.wado`, and the homogeneous walk
 (`highlight_walk` over `CstNode`) in `highlight_homog.wado`. A clean parse walks
 the tree (rule-context overrides apply); a broken parse falls back to a flat
 default-class token pass. `json_highlight` / `sqlite_highlight` pass as

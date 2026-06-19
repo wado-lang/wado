@@ -7,7 +7,7 @@
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
-use { gen_highlight } from "./highlight_gen.wado";
+use { gen_highlight_homogeneous } from "./highlight_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
 fn parse_grammar(input: String) -> Grammar {
@@ -20,7 +20,7 @@ fn highlight_output(input: String) -> String {
     let g = parse_grammar(input);
     let lits = collect_literal_tokens(&g.parser_rules);
     let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits);
+    gen_highlight_homogeneous(&mut w, &g, &lits);
     return w.to_string();
 }
 
@@ -71,8 +71,8 @@ WS : ' ' -> skip ;
 
 test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
     // A lexer-only grammar has no parser rules, so the generated module has
-    // no `parse` / `walk_*`. The highlight fn must fall back to tokenizing
-    // instead of emitting an invalid `walk_(...)` call.
+    // no `parse` / tree walk. The highlight fn must fall back to tokenizing
+    // instead of emitting an invalid `highlight_walk(...)` call.
     let out = highlight_output("lexer grammar L;
 B : 'b' ;
 WS : ' ' -> skip ;

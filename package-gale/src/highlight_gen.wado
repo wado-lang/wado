@@ -3,12 +3,6 @@ use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
-pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
-    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
-    gen_highlight_fn(w, &grammar.parser_rules);
-    gen_highlight_run(w);
-}
-
 /// Homogeneous-sink `highlight`: reuse the (sink-independent) token/rule
 /// mapping, then drive the generic `highlight_walk` over the parsed `CstNode`
 /// tree. The homogeneous `parse` always returns a tree (partial on broken
@@ -100,44 +94,6 @@ fn gen_highlight_mapping(
 
     w.end();
     w.blank();
-}
-
-fn gen_highlight_fn(w: &mut CodeWriter, parser_rules: &List<ParserRule>) {
-    let mut f = FnSpec::new("highlight");
-    f.set_pub();
-    f.add_param(&"input", &"&String");
-    f.set_return_type(&"String");
-    f.emit_begin(w);
-
-    w.line(&"let mapping = highlight_mapping();");
-    w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-    if parser_rules.len() > 0 {
-        let root_rule = parser_rules[0].name;
-        w.line(&"let parse_result = parse(input);");
-        w.begin(&"if let Ok(tree) = parse_result");
-        w.line(&`walk_{root_rule}(&mut visitor, &tree.tokens, &tree.root);`);
-        w.else_begin(&"else");
-        // Parse failed — highlight the raw token stream instead.
-        emit_tokenize_only_highlight(w);
-        w.end();
-    } else {
-        // Lexer-only grammar: there is no `parse` / `walk_*` in the
-        // generated module, so highlighting is tokenize-only.
-        emit_tokenize_only_highlight(w);
-    }
-    w.line(&"return highlight_html(input, &visitor.captures);");
-
-    w.end();
-    w.blank();
-}
-
-/// Emit the tokenize-only highlight fallback (no parse tree), shared by the
-/// parse-failure and lexer-only-grammar paths.
-fn emit_tokenize_only_highlight(w: &mut CodeWriter) {
-    w.line(&"let tokens = tokenize(input);");
-    w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-    w.line(&"visitor.visit_token(&tokens, _i);");
-    w.end();
 }
 
 fn gen_highlight_run(w: &mut CodeWriter) {
