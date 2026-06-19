@@ -158,9 +158,26 @@ fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx
     if lowered.parser_rules.len() == 0 {
         return;
     }
-    let header = rule_header(&lowered.parser_rules[0]);
-    let follow_arg = if ctx.emit_follow() { ", &EMPTY_FOLLOW" } else { "" };
+    // `parse` is the start (first) rule. Per-rule `parse_<rule>` entries let a
+    // caller parse from any rule (ANTLR4 lets you pick a start rule; the
+    // ANTLR4-compat descriptors name one), mirroring the typed parser.
+    let start = rule_header(&lowered.parser_rules[0]);
     w.begin(&"pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult");
+    w.line(&`return parse_{start.snake_name}(input, max_errors);`);
+    w.end();
+    w.blank();
+    for let rule of &lowered.parser_rules {
+        gen_homog_parse_rule_entry(w, rule, ctx);
+    }
+}
+
+/// Emit one `pub fn parse_<rule>(input) -> ParseResult` homogeneous entry:
+/// tokenize, run `_parse_<rule>`, fold the partial tree, and on error push a
+/// single diagnostic (deepest of the propagated error and `p.pending`).
+fn gen_homog_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
+    let header = rule_header(rule);
+    let follow_arg = if ctx.emit_follow() { ", &EMPTY_FOLLOW" } else { "" };
+    w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
     w.line(&"let _ = max_errors;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");

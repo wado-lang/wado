@@ -86,6 +86,20 @@ impl CstNode {
         cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
         return out;
     }
+
+    /// First direct child node of rule `kind`, or `null`. Used by sub-tree
+    /// rendering (e.g. an ANTLR4 descriptor whose `[output]` is a labelled
+    /// child subtree, not the start rule's full tree).
+    pub fn find_child(&self, kind: NodeKind) -> Option<CstNode> {
+        for let child of &self.children {
+            if let Node(n) = *child {
+                if n.kind == kind {
+                    return Option::Some(n);
+                }
+            }
+        }
+        return null;
+    }
 }
 
 fn cst_to_string_tree_impl(
