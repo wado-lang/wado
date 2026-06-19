@@ -1,0 +1,143 @@
+use html from "./grammars/HTMLLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/HTMLParser.g4"],
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_html",
+        },
+    };
+use { normalize_tree } from "./grammars/HTMLLexer.g4";
+use { TK_TAG_WHITESPACE, TK_TAG_NAME } from "./grammars/HTMLLexer.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = html::parse(input);
+    let actual = html::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+fn assert_parses(input: &String) {
+    let result = html::parse(input);
+    if !result.ok() {
+        panic(`parse failed: {result.diagnostics[0].message}`);
+    }
+}
+
+test "tokenize simple html" {
+    let tokens = html::tokenize(&"<p>hello</p>");
+    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+}
+
+test "parse simple tag" {
+    assert_parses(&"<p>hello</p>");
+}
+
+test "parse self-closing tag" {
+    assert_parses(&"<br/>");
+}
+
+test "parse nested tags" {
+    assert_parses(&"<div><p>hello</p></div>");
+}
+
+test "parse with attributes" {
+    assert_parses(&"<a href=\"url\">link</a>");
+}
+
+
+test "tree: simple tag" {
+    assert_tree(&"<p>hello</p>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < p >
+              (htmlContent
+                (htmlChardata hello))
+              < / p >)))
+    ");
+}
+
+test "tree: self-closing tag" {
+    assert_tree(&"<br/>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < br />)))
+    ");
+}
+
+test "tree: tag with attributes" {
+    assert_tree(&"<img src=\"a.png\" alt=\"pic\"/>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < img
+              (htmlAttribute src = \"a.png\")
+              (htmlAttribute alt = \"pic\")
+              />)))
+    ");
+}
+
+test "tree: nested tags" {
+    assert_tree(&"<div class=\"main\"><p>text</p></div>", &"
+        (htmlDocument
+          (htmlElements
+            (htmlElement < div
+              (htmlAttribute class = \"main\")
+              >
+              (htmlContent
+                (htmlElement < p >
+                  (htmlContent
+                    (htmlChardata text))
+                  < / p >))
+              < / div >)))
+    ");
+}
+
+//
+// HTMLLexer declares `TAG_WHITESPACE : [ \t\r\n] -> channel(HIDDEN)`. ANTLR4
+// routes HIDDEN tokens to a separate channel so the parser never sees them,
+// but they are NOT discarded — they remain available for downstream tools
+// (highlighters, formatters). Gale attaches them to the following token's
+// `leading_trivia` array with `channel == 1` (the predefined HIDDEN channel
+// id).
+//
+// This test exercises the full pipeline:
+//   1. Whitespace between the tag name and an attribute must NOT appear as
+//      its own entry in the `tokens` array.
+//   2. The whitespace must appear in the next token's `leading_trivia`.
+//   3. The trivia Token's `channel` field must be 1 (HIDDEN), not 0.
+test "HIDDEN channel: TAG_WHITESPACE routed to trivia" {
+    let tokens = html::tokenize(&"<p class=\"x\">");
+    // No main-channel token may have kind TAG_WHITESPACE — HIDDEN tokens
+    // are hidden from the parser.
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_TAG_WHITESPACE, "TAG_WHITESPACE leaked into main token stream";
+    }
+    // After `<p` the next non-hidden token is the TAG_NAME `class`; the
+    // space between `p` and `class` must show up in its leading_trivia.
+    // (The first TAG_NAME is `p`; we want the second.)
+    let mut tag_name_count = 0;
+    let mut found_hidden_ws = false;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_TAG_NAME {
+            tag_name_count += 1;
+            if tag_name_count == 2 {
+                for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                    if tokens.triv_kinds[j] == TK_TAG_WHITESPACE {
+                        assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got {tokens.triv_chans[j]}`;
+                        found_hidden_ws = true;
+                    }
+                }
+            }
+        }
+    }
+    assert tag_name_count >= 2, `expected >=2 TAG_NAME tokens, got {tag_name_count}`;
+    assert found_hidden_ws, "TAG_WHITESPACE trivia not found on second TAG_NAME token";
+}
+
+test "HIDDEN channel: parser accepts whitespace-separated attributes" {
+    // End-to-end: the parser must not see TAG_WHITESPACE at all, so
+    // `<img src="a" alt="b"/>` must parse successfully even though the
+    // whitespace between attributes would be a stray token without the
+    // HIDDEN routing.
+    assert_parses(&"<img src=\"a\" alt=\"b\"/>");
+}

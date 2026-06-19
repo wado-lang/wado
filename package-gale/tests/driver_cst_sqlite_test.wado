@@ -1,0 +1,117 @@
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_sqlite",
+        },
+    };
+use { normalize_tree } from "./grammars/SQLite.g4";
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = sqlite::parse(input);
+    let actual = sqlite::to_string_tree(&result);
+    let norm = normalize_tree(expected);
+    assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
+}
+
+// NOTE: the typed-CST `assert_xml` tests (select_literal, select_column,
+// create_table, insert, delete, update, drop_table, begin) navigated the
+// typed `CstNode`/`CstChild` tree via `unparse_xml`, which the homogeneous
+// module does not expose. They are dropped here; the homogeneous tree
+// shape is covered by the `assert_tree` cases below and the dedicated
+// driver_cst_sqlite_{minimal,case_when,create_table,regression}_test files.
+
+test "tree: select literal" {
+    assert_tree(&"SELECT 1;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (factored_select_stmt
+                (select_core SELECT
+                  (result_column (expr (literal_value 1))))))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: select with join" {
+    assert_tree(&"SELECT a FROM t1 JOIN t2 ON t1.id = t2.id;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (factored_select_stmt
+                (select_core SELECT
+                  (result_column (expr (column_name (any_name a))))
+                  FROM
+                  (join_clause
+                    (table_or_subquery (table_name (any_name t1)))
+                    (join_operator JOIN)
+                    (table_or_subquery (table_name (any_name t2)))
+                    (join_constraint ON
+                      (expr
+                        (expr (table_name (any_name t1)) . (column_name (any_name id)))
+                        =
+                        (expr (table_name (any_name t2)) . (column_name (any_name id)))))))))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: create table with constraint" {
+    assert_tree(&"CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL);", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (create_table_stmt CREATE TABLE
+                (table_name (any_name t))
+                (
+                  (column_def
+                    (column_name (any_name id))
+                    (type_name (name (any_name INTEGER)))
+                    (column_constraint PRIMARY KEY (conflict_clause)))
+                  ,
+                  (column_def
+                    (column_name (any_name name))
+                    (type_name (name (any_name TEXT)))
+                    (column_constraint NOT NULL (conflict_clause)))
+                )))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: select with between" {
+    assert_tree(&"SELECT * FROM t WHERE x BETWEEN 1 AND 10;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (factored_select_stmt
+                (select_core SELECT
+                  (result_column *)
+                  FROM
+                  (join_clause
+                    (table_or_subquery (table_name (any_name t))))
+                  WHERE
+                  (expr
+                    (expr (column_name (any_name x)))
+                    BETWEEN
+                    (expr (literal_value 1))
+                    AND
+                    (expr (literal_value 10))))))
+            ; (sql_stmt)))
+    ");
+}
+
+test "tree: delete with where" {
+    assert_tree(&"DELETE FROM t WHERE id = 1;", &"
+        (parse
+          (sql_stmt_list
+            (sql_stmt
+              (delete_stmt DELETE FROM
+                (qualified_table_name (table_name (any_name t)))
+                WHERE
+                (expr
+                  (expr (column_name (any_name id)))
+                  =
+                  (expr (literal_value 1)))))
+            ; (sql_stmt)))
+    ");
+}
