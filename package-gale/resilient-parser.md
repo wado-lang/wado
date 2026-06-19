@@ -128,7 +128,10 @@ so the old typed path stays the default and the corpus stays green. Runtime is
 - **Left recursion** — precedence climbing using the builder's
   `checkpoint`/`start_node_at` left-associative wrap; self-ref suffixes recurse
   at their baked `min_prec` (`tests/grammars/arith_lr.g4`,
-  `tests/driver_cst_lr_test.wado`).
+  `tests/driver_cst_lr_test.wado`). Suffixes that share a first token form an
+  **overlap group**, disambiguated by a second-token sub-dispatch reusing the
+  typed emitter's `compute_lr_second_token` projection
+  (`tests/grammars/lr_overlap.g4`, `tests/driver_cst_lr_overlap_test.wado`).
 - **Tournament dispatch** — alternatives that share a lookahead prefix are
   disambiguated by a longest-match scan, reusing `parser_gen`'s scan functions
   verbatim (emitted only when a tournament exists; gated with their kind-set
@@ -140,15 +143,14 @@ so the old typed path stays the default and the corpus stays green. Runtime is
   soundness invariants are reused, not re-derived) (`tests/grammars/follow_gate.g4`,
   `tests/driver_cst_follow_test.wado`).
 
-Non-greedy and overlapping LR suffixes raise a codegen-time panic (still out of
-scope).
+Non-greedy repetition raises a codegen-time panic (still out of scope).
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Cover non-greedy / overlapping LR suffixes (reuse `parser_gen`'s scan &
-prediction), migrate the full driver + ANTLR4-compat corpus to the homogeneous
-parser, then delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and
-make `homogeneous` the only path.
+Cover non-greedy repetition (reuse `parser_gen`'s ATN simulator / prediction),
+migrate the full driver + ANTLR4-compat corpus to the homogeneous parser, then
+delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and make
+`homogeneous` the only path.
 
 ### Stage 3 — Recovery
 

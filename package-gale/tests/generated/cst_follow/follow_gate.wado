@@ -1032,6 +1032,12 @@ impl Parser {
         return TK_EOF;
     }
 
+    fn peek_at(&self, offset: i32) -> i32 {
+        let idx = self.pos + offset;
+        if idx >= self.toks.len() { return TK_EOF; }
+        return self.toks.kinds[idx];
+    }
+
     fn peek_start(&self) -> i32 {
         if self.pos < self.toks.len() { return self.toks.starts[self.pos]; }
         if self.toks.len() > 0 { return self.toks.ends[self.toks.len() - 1]; }

@@ -9,13 +9,14 @@
 //! Covered: LL(1) `Direct` dispatch (tokens, literals, rule refs, sequences,
 //! `*`/`+`/`?`, transparent/token-only groups, wildcard, set complement), left
 //! recursion (precedence climbing via the builder's `checkpoint`/`start_node_at`
-//! wrap), and longest-match tournament dispatch (reusing `parser_gen`'s scan
-//! functions). On the first mismatch the parser fails soft — records one
+//! wrap, including overlapping LR suffixes resolved by a second-token
+//! sub-dispatch), and longest-match tournament dispatch (reusing `parser_gen`'s
+//! scan functions). On the first mismatch the parser fails soft — records one
 //! diagnostic and folds the tree closed (no recovery yet; that is Stage 3).
-//! Non-greedy repetition and overlapping LR suffixes raise a codegen-time panic
-//! so a grammar that exceeds the scope is caught loudly.
+//! Non-greedy repetition raises a codegen-time panic so a grammar that exceeds
+//! the scope is caught loudly.
 
-use { Grammar, ParserRule, LexerRule } from "./ir.wado";
+use { Grammar, ParserRule, LexerRule, Element } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use {
     LoweredGrammar,
@@ -35,7 +36,7 @@ use {
 } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { GenContext } from "./gen_context.wado";
-use { gen_scan_functions, gen_alt_scan_if_possible, follow_arg_expr } from "./parser_gen.wado";
+use { gen_scan_functions, gen_alt_scan_if_possible, follow_arg_expr, compute_lr_second_token } from "./parser_gen.wado";
 
 /// The defaulted `follow` parameter every `_parse_*` carries when the grammar
 /// has a caller-FOLLOW gate, else nothing. Threaded to a tail-greedy `Repeat`'s
@@ -135,7 +136,7 @@ pub fn gen_cst_parser(
         }
     }
     for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
-        gen_rule_fn(w, &lowered.parser_rules[i], i, ef);
+        gen_rule_fn(w, &lowered.parser_rules[i], &grammar.parser_rules[i], i, ctx, ef);
     }
     gen_parse_entry(w, lowered, ef);
     gen_string_tree_helper(w, grammar, lit_tokens);
@@ -255,6 +256,17 @@ fn gen_parser_runtime(w: &mut CodeWriter, needs_scan: bool) {
     w.indent();
     w.line(&"if self.pos < self.toks.len() { return self.toks.kinds[self.pos]; }");
     w.line(&"return TK_EOF;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // Lookahead `offset` tokens past the cursor (overlapping-LR second-token
+    // dispatch); past the end reads `TK_EOF`.
+    w.line(&"fn peek_at(&self, offset: i32) -> i32 {");
+    w.indent();
+    w.line(&"let idx = self.pos + offset;");
+    w.line(&"if idx >= self.toks.len() { return TK_EOF; }");
+    w.line(&"return self.toks.kinds[idx];");
     w.dedent();
     w.line(&"}");
     w.blank();
@@ -386,11 +398,11 @@ fn gen_parser_runtime(w: &mut CodeWriter, needs_scan: bool) {
 
 /// Emit `fn _parse_<rule>(p: &mut Parser)` for one rule. `ef` threads the
 /// caller-FOLLOW machinery (the `follow` parameter and its uses).
-fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32, ef: bool) {
+fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, ast_rule: &ParserRule, rule_index: i32, ctx: &mut GenContext, ef: bool) {
     let snake = rule_snake(rule);
     let rk = `RK_{rule_const(&rule_name(rule))}`;
     if let LeftRecursive(l) = rule {
-        gen_lr_rule_fn(w, l, &rk, &snake, ef);
+        gen_lr_rule_fn(w, l, ast_rule, &rk, &snake, ctx, ef);
         return;
     }
     w.begin(&`fn _parse_{snake}(p: &mut Parser{follow_param(ef)})`);
@@ -450,10 +462,18 @@ fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDisp
 /// non-recursive alternatives) opens one rule node; the LR loop wraps it
 /// left-associatively via `start_node_at` at a fixed checkpoint. A self-ref
 /// `RuleCall` in a suffix carries its `min_prec_arg` (baked by lowering), so
-/// the right operand recurses at the correct precedence. Only single-alt
-/// dispatch groups are handled; overlapping LR suffixes (needing scan) raise a
-/// codegen-time panic.
-fn gen_lr_rule_fn(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, snake: &String, ef: bool) {
+/// the right operand recurses at the correct precedence. Suffixes that share
+/// their first token are an overlap group, disambiguated by a second-token
+/// sub-dispatch (the same projection the typed emitter uses).
+fn gen_lr_rule_fn(
+    w: &mut CodeWriter,
+    l: &LeftRecursiveRule,
+    ast_rule: &ParserRule,
+    rk: &String,
+    snake: &String,
+    ctx: &mut GenContext,
+    ef: bool,
+) {
     // `follow` precedes `min_prec` (uniform with the typed emitter's signature).
     w.begin(&`fn _parse_{snake}(p: &mut Parser{follow_param(ef)}, min_prec: i32 = 0)`);
     w.line(&"if p.bailed { return; }");
@@ -466,35 +486,39 @@ fn gen_lr_rule_fn(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, snake:
         emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch, ef);
     }
     w.line(&"p.b.finish_node(p.last_end());");
-    gen_lr_loop(w, l, rk, ef);
+    gen_lr_loop(w, l, ast_rule, rk, ctx, ef);
     w.end();
     w.blank();
 }
 
-fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, ef: bool) {
+fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, ast_rule: &ParserRule, rk: &String, ctx: &mut GenContext, ef: bool) {
     w.begin(&"loop");
     w.line(&"if p.bailed { break; }");
     w.line(&"let suffix_kind = p.peek_kind();");
     let mut first = true;
     for let group of &l.lr_dispatch.groups {
-        if group.len() != 1 {
-            panic("cst_gen: overlapping LR suffixes are outside Stage 2 scope");
+        // Union of every member suffix's first set gates the group's outer arm.
+        let mut union_first: List<String> = [];
+        for let gi of group {
+            for let tk of &l.lr_alts[l.lr_dispatch.valid_lr_alts[*gi]].suffix_first {
+                if !union_first.contains(tk) {
+                    union_first.push(*tk);
+                }
+            }
         }
-        let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[0]]];
-        let cond = kinds_or(&lr.suffix_first, &"suffix_kind");
+        let cond = kinds_or(&union_first, &"suffix_kind");
         if first {
             w.begin(&`if {cond}`);
             first = false;
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        w.begin(&`if {lr.own_prec} >= min_prec`);
-        w.line(&`p.b.start_node_at(cp, {*rk}, start);`);
-        emit_ops(w, &lr.suffix.ops, ef);
-        w.line(&"p.b.finish_node(p.last_end());");
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
+        if group.len() == 1 {
+            let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[0]]];
+            emit_lr_branch(w, lr, rk, ef);
+        } else {
+            emit_lr_overlap(w, l, ast_rule, group, rk, ctx, ef);
+        }
     }
     if first {
         w.line(&"break;");
@@ -504,6 +528,121 @@ fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, ef: bool)
         w.end();
     }
     w.end();
+}
+
+/// Emit one LR continuation: gate on precedence, wrap the in-progress tree
+/// left-associatively, and emit the suffix ops. Below `min_prec` the loop
+/// stops climbing.
+fn emit_lr_branch(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ef: bool) {
+    w.begin(&`if {lr.own_prec} >= min_prec`);
+    w.line(&`p.b.start_node_at(cp, {*rk}, start);`);
+    emit_ops(w, &lr.suffix.ops, ef);
+    w.line(&"p.b.finish_node(p.last_end());");
+    w.else_begin(&"else");
+    w.line(&"break;");
+    w.end();
+}
+
+/// Disambiguate an overlap group (suffixes sharing a first token) by a
+/// second-token sub-dispatch, mirroring the typed emitter's
+/// `gen_lr_overlap_dispatch`: unique first tokens commit directly; a shared
+/// first token branches on `peek_at(1)`, the last candidate falling through.
+fn emit_lr_overlap(
+    w: &mut CodeWriter,
+    l: &LeftRecursiveRule,
+    ast_rule: &ParserRule,
+    group: &List<i32>,
+    rk: &String,
+    ctx: &mut GenContext,
+    ef: bool,
+) {
+    let mut first_sets: List<List<String>> = [];
+    for let gi of group {
+        first_sets.push(l.lr_alts[l.lr_dispatch.valid_lr_alts[*gi]].suffix_first);
+    }
+    let mut emitted: List<String> = [];
+    let mut first_branch = true;
+
+    // First pass: tokens owned by exactly one member commit to that member.
+    for let mut k = 0; k < group.len(); k += 1 {
+        for let tk of &first_sets[k] {
+            if emitted.contains(tk) {
+                continue;
+            }
+            let mut shared = false;
+            for let mut j = 0; j < group.len(); j += 1 {
+                if j != k && first_sets[j].contains(tk) {
+                    shared = true;
+                }
+            }
+            if !shared {
+                if first_branch {
+                    w.begin(&`if suffix_kind == {*tk}`);
+                    first_branch = false;
+                } else {
+                    w.else_begin(&`else if suffix_kind == {*tk}`);
+                }
+                emit_lr_branch(w, &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[k]]], rk, ef);
+                emitted.push(*tk);
+            }
+        }
+    }
+
+    // Second pass: shared tokens resolved by the following token.
+    let mut shared_tokens: List<String> = [];
+    for let mut k = 0; k < group.len(); k += 1 {
+        for let tk of &first_sets[k] {
+            if emitted.contains(tk) || shared_tokens.contains(tk) {
+                continue;
+            }
+            shared_tokens.push(*tk);
+        }
+    }
+    for let shared_tk of &shared_tokens {
+        if first_branch {
+            w.begin(&`if suffix_kind == {*shared_tk}`);
+            first_branch = false;
+        } else {
+            w.else_begin(&`else if suffix_kind == {*shared_tk}`);
+        }
+        let mut last_k = -1;
+        for let mut k = 0; k < group.len(); k += 1 {
+            if first_sets[k].contains(shared_tk) {
+                last_k = k;
+            }
+        }
+        let mut sub_first = true;
+        for let mut k = 0; k < group.len(); k += 1 {
+            if !first_sets[k].contains(shared_tk) {
+                continue;
+            }
+            let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[k]]];
+            if k == last_k {
+                if sub_first {
+                    emit_lr_branch(w, lr, rk, ef);
+                } else {
+                    w.else_begin(&"else");
+                    emit_lr_branch(w, lr, rk, ef);
+                    w.end();
+                }
+            } else {
+                let elements = &ast_rule.alternatives[lr.alt_index].elements;
+                let second = compute_lr_second_token(shared_tk, elements, ctx);
+                let sub_cond = kinds_or(&second, &"p.peek_at(1)");
+                if sub_first {
+                    w.begin(&`if {sub_cond}`);
+                    sub_first = false;
+                } else {
+                    w.else_begin(&`else if {sub_cond}`);
+                }
+                emit_lr_branch(w, lr, rk, ef);
+            }
+        }
+        emitted.push(*shared_tk);
+    }
+    if !first_branch {
+        w.end();
+    }
 }
 
 /// Emit token-led dispatch over a rule's / group's alternatives.

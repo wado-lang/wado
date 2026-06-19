@@ -1,0 +1,36 @@
+//! Stage 2 overlapping LR suffixes: two left-recursive alternatives share a
+//! first suffix token (`'['`), so the homogeneous emitter disambiguates them
+//! by a second-token sub-dispatch — `'[' INT` is an index, `'[' ']'` an empty
+//! index — mirroring the typed emitter's overlap projection.
+
+use lr from "./grammars/lr_overlap.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_lr_overlap",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = lr::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = lr::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "lr-overlap: bare atom" {
+    assert_tree(&"5", &"(e 5)");
+}
+
+test "lr-overlap: indexed picks the INT-second alt" {
+    assert_tree(&"5[3]", &"(e (e 5) [ (e 3) ])");
+}
+
+test "lr-overlap: empty index picks the ']'-second alt" {
+    assert_tree(&"5[]", &"(e (e 5) [ ])");
+}
+
+test "lr-overlap: left-associative chain mixes both suffixes" {
+    assert_tree(&"5[][3]", &"(e (e (e 5) [ ]) [ (e 3) ])");
+}
