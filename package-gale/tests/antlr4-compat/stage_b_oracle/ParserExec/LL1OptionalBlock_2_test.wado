@@ -18,8 +18,8 @@ use { normalize_tree } from "../../grammars/ParserExec/LL1OptionalBlock_2.g4";
 test "stage_b_oracle: ParserExec/LL1OptionalBlock_2" {
     let input = "a";
     let expected = "(a a)";
-    let root = t::parse_a(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_a(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }
