@@ -21,14 +21,16 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 ## The tree
 
 ```
-CstNode  { kind: NodeKind, span, children: List<CstChild>, flags, toks: &TokenStream }
+CstNode  { kind: NodeKind, span, children: List<CstChild>, flags }
 CstChild = Token(i32) | Missing(i32) | Skipped(i32) | Node(CstNode)
 ```
 
-- A node's terminals are `i32` indices into a `TokenStream`, so a node is only
-  meaningful with that stream. Each node holds a `&TokenStream` (a GC reference,
-  not a borrow), so node-local methods (`to_string_tree`, future `text()`) need
-  no external state. `ParseResult` references the same stream object.
+- `CstNode` is a pure value tree: terminals are `i32` indices into a
+  `TokenStream` held by `ParseResult`, and the node stores no reference to it,
+  so the result is a freely movable value. Rendering methods (`to_string_tree`)
+  take the `&TokenStream`. (A `&TokenStream` field on the node tripped a current
+  WIR-lowering ICE when the result was returned by value, and the value tree is
+  the cleaner design anyway — composable and cacheable.)
 - `NodeKind` is an `i32` newtype (rule id; `K_ERROR` for a recovery region).
   Its `Display` renders the rule name and `Inspect` renders `name(id)`, so
   debugging shows names. The name table is grammar-specific, emitted by codegen.
@@ -85,14 +87,15 @@ applied; `related` carries secondary notes (e.g. "'(' opened here").
 ## Public API
 
 ```
-parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult<CstNode>
-ParseResult { root: CstNode, tokens: &TokenStream, diagnostics: List<Diagnostic> }
+parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult
+ParseResult { root: CstNode, tokens: TokenStream, diagnostics: List<Diagnostic> }
 ```
 
-One entry point, behavior tuned by a number: when `diagnostics.len()` reaches
-`max_errors` the parser stops recovering and folds the tree closed. `max_errors
-<= 1` is effectively fail-fast (still returns a partial tree). There is no
-generator option for recovery on/off — recovery is always built in.
+One entry point, behaviour tuned by a number: `max_errors` caps how many
+diagnostics the parser collects before it stops recovering and folds the tree
+closed (`<= 1` is effectively fail-fast, still returning a partial tree).
+Defaulted, so the common call is just `parse(input)`. There is no generator
+option for recovery on/off — recovery is always built in.
 
 ## Stages
 
@@ -106,11 +109,28 @@ isolation; no codegen change yet.
 
 ### Stage 2 — Builder-based codegen, no recovery
 
-Rewrite `parser_gen` / `codegen` / `visitor_gen` so generated parsers build the
-homogeneous tree via `TreeBuilder` and are infallible on _valid_ input. Retire
-typed structs, `walk_*`/`to_tree`, and the `Result`/`?` machinery. On the first
-error, fail soft (report one diagnostic, close the tree). Regenerate the corpus;
-driver tests compare `root.to_string_tree(...)`.
+A new emitter (`cst_gen.wado`) builds the homogeneous tree via `TreeBuilder` and
+is infallible on _valid_ input; on the first error it fails soft (one
+diagnostic, close the tree). It reuses the shared lexer / token / lowering
+pipeline and consumes the lowered GIR (`Direct` dispatch + `AltBody.ops`),
+ignoring the typed-struct machinery entirely — there are no typed structs,
+`walk_*`, `to_tree`, or `Result`/`?`. `parse` returns a `ParseResult`.
+
+#### Stage 2a — new emitter behind a flag ✅ (done)
+
+Gated by `GenerateOptions.homogeneous` (Kiln `options: { homogeneous: true }`),
+so the old typed path stays the default and the corpus stays green. Proven
+end-to-end on an LL(1) `Direct`-dispatch grammar (`tests/grammars/calc_ll.g4`,
+`tests/driver_cst_calc_test.wado`): homogeneous tree, infallible parse, and
+fail-soft diagnostics. Runtime is `lex` + `diag` + `tree`. Tournament dispatch,
+left recursion, and non-greedy raise a codegen-time panic (out of 2a scope).
+
+#### Stage 2b — broaden coverage, retire the old path (remaining)
+
+Cover Tournament dispatch / LR / non-greedy (reuse `parser_gen`'s scan &
+prediction), migrate the full driver + ANTLR4-compat corpus to the homogeneous
+parser, then delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and
+make `homogeneous` the only path.
 
 ### Stage 3 — Recovery
 

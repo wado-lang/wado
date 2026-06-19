@@ -1,0 +1,54 @@
+//! Stage 2 end-to-end: the resilient homogeneous-tree parser, generated with
+//! `options: { homogeneous: true }`, on an LL(1) `Direct`-dispatch grammar.
+//! Verifies the single `CstNode` tree (no typed structs, no `to_tree`), the
+//! infallible `parse -> ParseResult`, and fail-soft diagnostics.
+
+use calc from "./grammars/calc_ll.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_calc",
+        },
+    };
+fn assert_tree(input: &String, expected: &String) {
+    let result = calc::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = calc::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "homogeneous tree: single integer" {
+    assert_tree(&"42", &"(prog (expr (term (factor 42))))");
+}
+
+test "homogeneous tree: precedence and grouping" {
+    assert_tree(
+        &"1 + 2 * 3",
+        &"(prog (expr (term (factor 1)) + (term (factor 2) * (factor 3))))",
+    );
+}
+
+test "homogeneous tree: parenthesised subexpression" {
+    assert_tree(
+        &"(1 + 2) * 3",
+        &"(prog (expr (term (factor ( (expr (term (factor 1)) + (term (factor 2))) )) * (factor 3))))",
+    );
+}
+
+test "fail-soft: a syntax error yields a tree plus one diagnostic" {
+    // Missing right operand after '+'. The parser records one diagnostic and
+    // folds the tree closed rather than trapping.
+    let result = calc::parse(&"1 +");
+    assert result.has_errors();
+    assert result.diagnostics.len() == 1;
+    let d = &result.diagnostics[0];
+    assert d.code matches { UnexpectedToken };
+    assert d.is_error();
+}
+
+test "clean parse reports no diagnostics" {
+    let result = calc::parse(&"7 * (8 - 9)");
+    assert result.ok();
+    assert result.diagnostics.is_empty();
+}

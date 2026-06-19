@@ -11,6 +11,7 @@ use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
+use { gen_cst_parser } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
@@ -41,6 +42,12 @@ pub struct GenerateOptions {
     /// decisions. Off by default; enabled by `gale gen --trace` or the
     /// `trace: true` Kiln generator option.
     pub trace: bool = false,
+    /// Emit the resilient homogeneous-tree parser (`resilient-parser.md`)
+    /// instead of the typed-CST parser: an infallible recursive-descent parser
+    /// that builds one `CstNode` tree via `TreeBuilder` and returns a
+    /// `ParseResult` with diagnostics. Stage 2 supports LL(1) `Direct`-dispatch
+    /// grammars; broader coverage and recovery land in later stages.
+    pub homogeneous: bool = false,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus the
@@ -113,6 +120,20 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
+    if options.homogeneous {
+        // Resilient homogeneous-tree parser: reuse the shared lexer/token
+        // pipeline, swap the typed-CST runtime + parser/visitor for the
+        // homogeneous tree + diagnostics runtime and the builder-based emitter.
+        gen_runtime_homogeneous(&mut w);
+        gen_token_kind(&mut w, &grammar.lexer_rules);
+        gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
+        gen_lexer(&mut w, grammar, &lit_tokens);
+        gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens);
+        return GeneratedOutput {
+            source: w.to_string(),
+            diagnostics: lowered.diagnostics,
+        };
+    }
     gen_runtime(&mut w, &ctx, options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_cst_types(&mut w, &lowered, grammar);
@@ -231,6 +252,17 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
     if ctx.needs_atn() {
         gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
     }
+}
+
+/// The runtime for the resilient homogeneous-tree parser: the core lexing
+/// vocabulary, the diagnostics types, and the homogeneous `CstNode` tree +
+/// `TreeBuilder`. Concatenated in dependency order (`lex` first, then `diag`,
+/// then `tree`, which references both); each fragment's sibling `from "./..."`
+/// imports are stripped by `gen_runtime_fragment`.
+fn gen_runtime_homogeneous(w: &mut CodeWriter) {
+    gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
 }
 
 /// Append a runtime fragment, dropping only its sibling-runtime imports

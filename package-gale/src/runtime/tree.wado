@@ -7,11 +7,10 @@
 //! step. Consumers (compiler front ends, LSP, syntax highlight) read this tree
 //! as-is, so the generic view they want is free.
 //!
-//! A `CstNode`'s terminals are `i32` indices into a `TokenStream`, so a node is
-//! only meaningful together with that stream. Each node therefore holds a
-//! `&TokenStream` (a GC reference, not a borrow), so node-local methods like
-//! `to_string_tree` need no external state. `ParseResult` references the same
-//! stream, so the whole result shares one `TokenStream` object.
+//! `CstNode` is a pure value tree: it holds no reference to the token stream,
+//! so it composes and stores freely and `ParseResult` can own both the tree and
+//! the stream it indexes without a self-referential borrow. Methods that need
+//! terminal text or kinds take a `&TokenStream` argument.
 //!
 //! Error tokens are first-class and lossless: `Missing` (an inserted synthetic
 //! terminal), `Skipped` (a real terminal deleted during recovery), and a
@@ -53,21 +52,20 @@ pub global NODE_INCOMPLETE: i32 = 2;
 /// `Missing` is an inserted terminal, `Skipped` a deleted terminal, and an
 /// error region is a `Node` whose kind is `K_ERROR`.
 pub variant CstChild {
-    Token(i32),     // a real terminal: an index into the TokenStream
-    Missing(i32),   // an inserted synthetic terminal (zero-width; TOK_SYNTHETIC)
-    Skipped(i32),   // a real terminal deleted during recovery (TOK_SKIPPED)
+    Token(i32),  // a real terminal: an index into the TokenStream
+    Missing(i32),  // an inserted synthetic terminal (zero-width; TOK_SYNTHETIC)
+    Skipped(i32),  // a real terminal deleted during recovery (TOK_SKIPPED)
     Node(CstNode),  // a sub-rule (an error region when its kind is K_ERROR)
 }
 
-/// A node in the homogeneous tree. Holds a `&TokenStream` (a GC reference) so
-/// terminal text/span resolve from the stored `i32` indices without threading
-/// the stream through every call.
+/// A node in the homogeneous tree. A pure value: terminals are `i32` indices
+/// into a `TokenStream` that lives outside the tree (in `ParseResult`), so
+/// rendering methods take that stream as an argument.
 pub struct CstNode {
     pub kind: NodeKind,
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
-    pub toks: &TokenStream,
 }
 
 impl CstNode {
@@ -83,14 +81,20 @@ impl CstNode {
     /// `rule_names[kind]` names rule nodes (`K_ERROR` renders `<error>`);
     /// `token_names[kind]` names missing terminals. Real terminals with empty
     /// text (e.g. EOF) are omitted; missing/skipped terminals render markers.
-    pub fn to_string_tree(&self, rule_names: &List<String>, token_names: &List<String>) -> String {
+    pub fn to_string_tree(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
         let mut out = String::with_capacity(256);
-        cst_to_string_tree_impl(&mut out, self, rule_names, token_names);
+        cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
         return out;
     }
 }
 
-fn cst_to_string_tree_impl(out: &mut String, node: &CstNode, rule_names: &List<String>, token_names: &List<String>) {
+fn cst_to_string_tree_impl(
+    out: &mut String,
+    node: &CstNode,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) {
     out.push_str(&"(");
     if node.kind == K_ERROR {
         out.push_str(&"<error>");
@@ -100,34 +104,35 @@ fn cst_to_string_tree_impl(out: &mut String, node: &CstNode, rule_names: &List<S
     for let child of &node.children {
         match *child {
             Token(i) => {
-                if !node.toks.is_empty_text(i) {
+                if !toks.is_empty_text(i) {
                     out.push_str(&" ");
-                    node.toks.push_token_text(out, i);
+                    toks.push_token_text(out, i);
                 }
-            }
+            },
             Missing(i) => {
-                out.push_str(&` <missing {token_names[node.toks.kind_at(i)]}>`);
-            }
+                out.push_str(&` <missing {token_names[toks.kind_at(i)]}>`);
+            },
             Skipped(i) => {
                 out.push_str(&" <skip ");
-                node.toks.push_token_text(out, i);
+                toks.push_token_text(out, i);
                 out.push_str(&">");
-            }
+            },
             Node(n) => {
                 out.push_str(&" ");
-                cst_to_string_tree_impl(out, &n, rule_names, token_names);
-            }
+                cst_to_string_tree_impl(out, &n, toks, rule_names, token_names);
+            },
         }
     }
     out.push_str(&")");
 }
 
 /// What a parse returns: the homogeneous root, the token stream its terminal
-/// indices point into (the same GC object the tree references), and any
-/// diagnostics. A clean parse leaves `diagnostics` empty.
+/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
+/// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
+/// the result is a freely movable value.
 pub struct ParseResult {
     pub root: CstNode,
-    pub tokens: &TokenStream,
+    pub tokens: TokenStream,
     pub diagnostics: List<Diagnostic>,
 }
 
@@ -151,26 +156,25 @@ impl ParseResult {
 /// events once to materialise the tree, so each `CstNode` is allocated exactly
 /// once (no per-step deep copy of the in-progress subtree).
 variant BuildEvent {
-    Open([NodeKind, i32]),   // [kind, start byte offset]
-    Close(i32),              // end byte offset
-    Tok(i32),                // real terminal index
-    Miss(i32),               // inserted synthetic terminal index
-    Skip(i32),               // skipped real terminal index
+    Open([NodeKind, i32]),  // [kind, start byte offset]
+    Close(i32),  // end byte offset
+    Tok(i32),  // real terminal index
+    Miss(i32),  // inserted synthetic terminal index
+    Skip(i32),  // skipped real terminal index
 }
 
 /// The builder the generated parser drives. It records a flat event stream
 /// (`start_node` / `token` / `missing` / `skip` / `finish_node`) and replays it
-/// in `finish()`. Holds a `&TokenStream` (the parser's own stream) so it can
-/// stamp it into every built node; the parser appends synthetic "missing"
-/// tokens and marks skipped ones on that same stream.
+/// in `finish()`. It is purely structural — it stores token *indices*, never the
+/// stream itself; the parser owns the `TokenStream`, appending synthetic
+/// "missing" tokens and marking skipped ones on its own copy.
 pub struct TreeBuilder {
-    toks: &TokenStream,
     events: List<BuildEvent>,
 }
 
 impl TreeBuilder {
-    pub fn new(toks: &TokenStream) -> TreeBuilder with stores[toks] {
-        return TreeBuilder { toks, events: [] };
+    pub fn new() -> TreeBuilder {
+        return TreeBuilder { events: [] };
     }
 
     /// Open a rule node of `kind` starting at byte offset `start`.
@@ -208,11 +212,11 @@ impl TreeBuilder {
     /// Materialise the tree. Valid once the root node has been closed.
     pub fn finish(&self) -> CstNode {
         let mut pos = 0;
-        return tree_build_node(&self.events, self.toks, &mut pos);
+        return tree_build_node(&self.events, &mut pos);
     }
 }
 
-fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32) -> CstNode with stores[toks] {
+fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
     if let Open(info) = events[*pos] {
         let kind = info.0;
         let start = info.1;
@@ -231,7 +235,7 @@ fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32)
                 break;
             }
             if let Open(_) = ev {
-                let child = tree_build_node(events, toks, pos);
+                let child = tree_build_node(events, pos);
                 if child.flags & NODE_ERROR != 0 {
                     flags = flags | NODE_ERROR;
                 }
@@ -252,7 +256,7 @@ fn tree_build_node(events: &List<BuildEvent>, toks: &TokenStream, pos: &mut i32)
                 *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags, toks };
+        return CstNode { kind, span: Span::new(start, end), children, flags };
     }
     panic("TreeBuilder: expected Open event");
 }

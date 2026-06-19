@@ -108,3 +108,21 @@ impl Display for Diagnostic {
         }
     }
 }
+
+/// Resolve a char index to (line, column): 1-based line, 0-based column
+/// (ANTLR4 `Token` convention). A linear scan; the parser resolves at most a
+/// handful of positions per parse, so this stays off the hot path.
+pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}

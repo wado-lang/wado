@@ -1,0 +1,460 @@
+//! Homogeneous-tree parser emission (the resilient-parser model).
+//!
+//! Emits an infallible recursive-descent parser that builds the single
+//! homogeneous `CstNode` tree directly via `TreeBuilder` — no typed structs,
+//! no `walk_*`/`to_tree`, no `Result`/`?`. One tree node per parser rule;
+//! groups, alternatives, and repetitions are control flow only. Diagnostics
+//! accumulate on the `Parser`; `parse` returns a `ParseResult`.
+//!
+//! Stage 2 scope: LL(1) `Direct`-dispatch grammars (tokens, literals, rule
+//! refs, sequences, `*`/`+`/`?`, transparent/`Direct` groups, wildcard, set
+//! complement). On the first mismatch the parser fails soft — records one
+//! diagnostic and folds the tree closed (no recovery yet; that is Stage 3).
+//! Unsupported shapes (Tournament dispatch, left recursion, non-greedy) raise
+//! a codegen-time panic so a grammar that exceeds the scope is caught loudly.
+
+use { Grammar, ParserRule, LexerRule } from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use {
+    LoweredGrammar,
+    Rule,
+    AltBody,
+    Op,
+    RepeatOp,
+    GroupOp,
+    MultiAltDispatch,
+    DirectDispatch,
+    DispatchBranch,
+} from "./gir.wado";
+use { CodeWriter } from "./wadopoet.wado";
+
+/// Number of distinct token kinds: one per non-fragment lexer rule, the two
+/// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
+/// the contiguous `0..n` numbering `gen_token_constants` assigns.
+fn num_token_kinds(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> i32 {
+    let mut n = 0;
+    for let r of lexer_rules {
+        if !r.is_fragment {
+            n += 1;
+        }
+    }
+    return n + 2 + lit_tokens.len();
+}
+
+/// Build an inline disjunction `(expr == TK_A || expr == TK_B || ...)`.
+/// Empty set renders `false`.
+fn kinds_or(tokens: &List<String>, expr: &String) -> String {
+    if tokens.is_empty() {
+        return String::from("false");
+    }
+    let mut out = String::with_capacity(tokens.len() * 16);
+    out.push('(');
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&" || ");
+        }
+        out.push_str(&`{*expr} == {tokens[i]}`);
+    }
+    out.push(')');
+    return out;
+}
+
+/// Render a `List<i32>` literal of token-kind constants for a diagnostic's
+/// `expected` field.
+fn kinds_list(tokens: &List<String>) -> String {
+    let mut out = String::with_capacity(tokens.len() * 12);
+    out.push('[');
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if i > 0 {
+            out.push_str(&", ");
+        }
+        out.push_str(&tokens[i]);
+    }
+    out.push(']');
+    return out;
+}
+
+pub fn gen_cst_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, lit_tokens: &List<LitToken>) {
+    gen_node_kinds(w, &lowered.parser_rules);
+    gen_parser_runtime(w);
+    for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
+        gen_rule_fn(w, &lowered.parser_rules[i], i);
+    }
+    gen_parse_entry(w, lowered);
+    gen_string_tree_helper(w, grammar, lit_tokens);
+}
+
+/// Emit the per-rule `RK_<RULE>` node-kind constants and the `GALE_RULE_NAMES`
+/// table (rule-index order). `NodeKind`'s name-aware `Display`/`Inspect` are a
+/// later stage; for now the name table drives `to_string_tree`.
+fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
+    for let mut i = 0; i < rules.len(); i += 1 {
+        w.line(&`global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
+    }
+    w.blank();
+    let mut names = String::with_capacity(rules.len() * 12);
+    names.push('[');
+    for let mut i = 0; i < rules.len(); i += 1 {
+        if i > 0 {
+            names.push_str(&", ");
+        }
+        names.push('"');
+        names.push_str(&rule_name(&rules[i]));
+        names.push('"');
+    }
+    names.push(']');
+    w.line(&`global GALE_RULE_NAMES: List<String> = {names};`);
+    w.blank();
+}
+
+fn rule_name(rule: &Rule) -> String {
+    return match *rule {
+        Simple(s) => s.header.name,
+        MultiAlt(m) => m.header.name,
+        LeftRecursive(l) => l.header.name,
+    };
+}
+
+fn rule_snake(rule: &Rule) -> String {
+    return match *rule {
+        Simple(s) => s.header.snake_name,
+        MultiAlt(m) => m.header.snake_name,
+        LeftRecursive(l) => l.header.snake_name,
+    };
+}
+
+/// Uppercase the rule name for the `RK_` constant suffix.
+fn rule_const(name: &String) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        out.push(c.to_ascii_uppercase());
+    }
+    return out;
+}
+
+/// Emit the infallible `Parser` and its helpers.
+fn gen_parser_runtime(w: &mut CodeWriter) {
+    // `toks` is owned by value (not a reference): the parse path holds no
+    // references, so the result `tokens` and tree (`i32` indices) carry none
+    // either. (A `&TokenStream` field tripped a WIR-lowering ICE when the
+    // owning local was moved into the returned `ParseResult`.)
+    w.line(&"struct Parser {");
+    w.indent();
+    w.line(&"toks: TokenStream,");
+    w.line(&"pos: i32,");
+    w.line(&"b: TreeBuilder,");
+    w.line(&"diagnostics: List<Diagnostic>,");
+    w.line(&"max_errors: i32,");
+    w.line(&"bailed: bool,");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    w.line(&"impl Parser {");
+    w.indent();
+
+    w.line(&"fn new(toks: TokenStream, max_errors: i32) -> Parser {");
+    w.indent();
+    w.line(&"return Parser { toks, pos: 0, b: TreeBuilder::new(), diagnostics: [], max_errors, bailed: false };");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    w.line(&"fn peek_kind(&self) -> i32 {");
+    w.indent();
+    w.line(&"if self.pos < self.toks.len() { return self.toks.kinds[self.pos]; }");
+    w.line(&"return TK_EOF;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    w.line(&"fn peek_start(&self) -> i32 {");
+    w.indent();
+    w.line(&"if self.pos < self.toks.len() { return self.toks.starts[self.pos]; }");
+    w.line(&"if self.toks.len() > 0 { return self.toks.ends[self.toks.len() - 1]; }");
+    w.line(&"return 0;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    w.line(&"fn last_end(&self) -> i32 {");
+    w.indent();
+    w.line(&"if self.pos > 0 { return self.toks.ends[self.pos - 1]; }");
+    w.line(&"return self.peek_start();");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    w.line(&"fn advance(&mut self) -> i32 {");
+    w.indent();
+    w.line(&"let i = self.pos;");
+    w.line(&"if self.pos < self.toks.len() { self.pos += 1; }");
+    w.line(&"return i;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // Consume a terminal of `kind`, adding it to the open node. EOF is added
+    // without advancing (it is the trailing sentinel). A mismatch fails soft.
+    w.line(&"fn expect_token(&mut self, kind: i32) {");
+    w.indent();
+    w.line(&"if self.bailed { return; }");
+    w.line(&"if self.peek_kind() == kind {");
+    w.indent();
+    w.line(&"if kind == TK_EOF { self.b.token(self.pos); return; }");
+    w.line(&"self.b.token(self.advance());");
+    w.line(&"return;");
+    w.dedent();
+    w.line(&"}");
+    w.line(&"self.fail([kind]);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // Consume the current token if its kind is in `kinds` (a token-only group
+    // such as `('+' | '-')`), else fail soft.
+    w.line(&"fn expect_one_of(&mut self, kinds: List<i32>) {");
+    w.indent();
+    w.line(&"if self.bailed { return; }");
+    w.line(&"let k = self.peek_kind();");
+    w.line(&"for let e of &kinds { if *e == k { self.b.token(self.advance()); return; } }");
+    w.line(&"self.fail(kinds);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // `.` wildcard: consume any non-EOF token.
+    w.line(&"fn expect_any(&mut self) {");
+    w.indent();
+    w.line(&"if self.bailed { return; }");
+    w.line(&"if self.peek_kind() != TK_EOF { self.b.token(self.advance()); return; }");
+    w.line(&"self.fail([]);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // `~(...)` set complement: consume any token not in `excluded`.
+    w.line(&"fn expect_not(&mut self, excluded: List<i32>) {");
+    w.indent();
+    w.line(&"if self.bailed { return; }");
+    w.line(&"let k = self.peek_kind();");
+    w.line(&"if k != TK_EOF {");
+    w.indent();
+    w.line(&"for let e of &excluded { if *e == k { self.fail(excluded); return; } }");
+    w.line(&"self.b.token(self.advance());");
+    w.line(&"return;");
+    w.dedent();
+    w.line(&"}");
+    w.line(&"self.fail(excluded);");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // Record one diagnostic and fold the tree closed (Stage 2 fail-soft).
+    w.line(&"fn fail(&mut self, expected: List<i32>) {");
+    w.indent();
+    w.line(&"if self.bailed { return; }");
+    w.line(&"let found = self.peek_kind();");
+    w.line(
+        &"let span = if self.pos < self.toks.len() { self.toks.span_at(self.pos) } else { Span::new(self.last_end(), self.last_end()) };",
+    );
+    w.line(&"let lc = line_col(self.toks.chars, span.start);");
+    w.line(&"let mut msg = String::with_capacity(32);");
+    w.line(&"msg.push_str(&\"expected \");");
+    w.line(&"msg.push_str(&expected_names(&expected));");
+    w.line(&"msg.push_str(&\", found \");");
+    w.line(&"msg.push_str(&token_kind_name(found));");
+    w.line(&"let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, msg, span, lc.0, lc.1);");
+    w.line(&"d.expected = expected;");
+    w.line(&"d.found = found;");
+    w.line(&"self.diagnostics.push(d);");
+    w.line(&"self.bailed = true;");
+    w.dedent();
+    w.line(&"}");
+
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+
+    // Render an `expected` kind list as `A or B or ...` for a message.
+    w.line(&"fn expected_names(kinds: &List<i32>) -> String {");
+    w.indent();
+    w.line(&"if kinds.is_empty() { return String::from(\"a token\"); }");
+    w.line(&"let mut out = String::with_capacity(kinds.len() * 8);");
+    w.line(&"for let mut i = 0; i < kinds.len(); i += 1 {");
+    w.indent();
+    w.line(&"if i > 0 { out.push_str(&\" or \"); }");
+    w.line(&"out.push_str(&token_kind_name(kinds[i]));");
+    w.dedent();
+    w.line(&"}");
+    w.line(&"return out;");
+    w.dedent();
+    w.line(&"}");
+    w.blank();
+}
+
+/// Emit `fn _parse_<rule>(p: &mut Parser)` for one rule.
+fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
+    let snake = rule_snake(rule);
+    let rk = `RK_{rule_const(&rule_name(rule))}`;
+    w.begin(&`fn _parse_{snake}(p: &mut Parser)`);
+    w.line(&"if p.bailed { return; }");
+    w.line(&"let start = p.peek_start();");
+    w.line(&`p.b.start_node({rk}, start);`);
+    match *rule {
+        Simple(s) => emit_ops(w, &s.body.ops),
+        MultiAlt(m) => emit_alt_dispatch(w, &m.alts, &m.dispatch),
+        LeftRecursive(_) => panic(`cst_gen: left-recursive rule '{snake}' is outside Stage 2 scope`),
+    }
+    w.line(&"p.b.finish_node(p.last_end());");
+    w.end();
+    w.blank();
+}
+
+/// Emit token-led dispatch over a rule's / group's alternatives.
+fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch) {
+    let dd = match *dispatch {
+        Direct(d) => d,
+        Tournament(_) => panic("cst_gen: tournament dispatch is outside Stage 2 scope"),
+    };
+    w.line(&"let kind = p.peek_kind();");
+    let mut all_first: List<String> = [];
+    for let mut i = 0; i < dd.branches.len(); i += 1 {
+        let br = &dd.branches[i];
+        for let t of &br.tokens {
+            all_first.push(*t);
+        }
+        let cond = kinds_or(&br.tokens, &"kind");
+        if i == 0 {
+            w.begin(&`if {cond}`);
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        emit_ops(w, &alt_by_index(alts, br.alt_index).ops);
+    }
+    w.else_begin(&"else");
+    w.line(&`p.fail({kinds_list(&all_first)});`);
+    w.end();
+}
+
+fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
+    for let a of alts {
+        if a.alt_index == idx {
+            return a;
+        }
+    }
+    panic(`cst_gen: no alt with index {idx}`);
+}
+
+fn emit_ops(w: &mut CodeWriter, ops: &List<Op>) {
+    for let op of ops {
+        emit_op(w, op);
+    }
+}
+
+fn emit_op(w: &mut CodeWriter, op: &Op) {
+    match *op {
+        Token(t) => w.line(&`p.expect_token({t.kind});`),
+        Literal(l) => w.line(&`p.expect_token({l.kind});`),
+        RuleCall(rc) => w.line(&`_parse_{rc.target_snake}(p);`),
+        Wildcard(_) => w.line(&"p.expect_any();"),
+        Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
+        ListLabel(ll) => emit_op(w, &ll.inner),
+        Repeat(r) => emit_repeat(w, &r),
+        Group(g) => emit_group(w, &g),
+    }
+}
+
+fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp) {
+    let cond = kinds_or(&r.body_first_set, &"p.peek_kind()");
+    match r.kind {
+        Optional => {
+            w.begin(&`if !p.bailed && {cond}`);
+            emit_op(w, &r.body);
+            w.end();
+        },
+        Star => {
+            w.begin(&`while !p.bailed && {cond}`);
+            emit_op(w, &r.body);
+            w.end();
+        },
+        Plus => {
+            // One mandatory iteration, then the same first-set-gated loop.
+            emit_op(w, &r.body);
+            w.begin(&`while !p.bailed && {cond}`);
+            emit_op(w, &r.body);
+            w.end();
+        },
+    }
+}
+
+/// A group contributes no tree node (it is transparent); only its control
+/// flow matters. A token-only group (`('+' | '-')`) consumes one of its
+/// tokens directly; a single-alt group inlines its ops; a general multi-alt
+/// group dispatches like a rule.
+fn emit_group(w: &mut CodeWriter, g: &GroupOp) {
+    if let Some(kinds) = group_token_only_kinds(&g.alts) {
+        w.line(&`p.expect_one_of({kinds_list(&kinds)});`);
+        return;
+    }
+    if g.alts.len() == 1 {
+        emit_ops(w, &g.alts[0].ops);
+        return;
+    }
+    emit_alt_dispatch(w, &g.alts, &g.dispatch);
+}
+
+/// If every alt is a single terminal (`Token` or `Literal`), return the list
+/// of their kind constants; otherwise `None`. Lets a token-only group consume
+/// one token without relying on the group's dispatch table.
+fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
+    let mut kinds: List<String> = [];
+    for let alt of alts {
+        if alt.ops.len() != 1 {
+            return null;
+        }
+        match &alt.ops[0] {
+            Token(t) => kinds.push(t.kind),
+            Literal(l) => kinds.push(l.kind),
+            _ => {
+                return null;
+            },
+        }
+    }
+    return Option::Some(kinds);
+}
+
+/// Emit the public `parse` entry plus the `_parse_<start>` driver.
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+    if lowered.parser_rules.is_empty() {
+        panic("cst_gen: grammar has no parser rules");
+    }
+    let start = rule_snake(&lowered.parser_rules[0]);
+    // `max_errors` caps how many diagnostics the parser collects before it
+    // stops recovering and folds the tree closed (`<= 1` ≈ fail-fast).
+    // Defaulted, so the common call is just `parse(input)`.
+    w.begin(&"pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult");
+    w.line(&"let tokens = tokenize(input);");
+    w.line(&"let mut p = Parser::new(tokens, max_errors);");
+    w.line(&`_parse_{start}(&mut p);`);
+    // The parser owns the stream; hand it back in the result. The tree holds
+    // only `i32` indices, so the returned `ParseResult` carries no references.
+    w.line(&"return ParseResult { root: p.b.finish(), tokens: p.toks, diagnostics: p.diagnostics };");
+    w.end();
+    w.blank();
+}
+
+/// Emit a `to_string_tree(node)` convenience that supplies the grammar's name
+/// tables (rules from `GALE_RULE_NAMES`, tokens via the generated
+/// `token_kind_name`). Used by driver tests; never called by the parser.
+fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+    let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
+    w.begin(&"pub fn to_string_tree(result: &ParseResult) -> String");
+    w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
+    w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+    w.line(&"token_names.push(token_kind_name(k));");
+    w.end();
+    w.line(&"return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);");
+    w.end();
+    w.blank();
+}
