@@ -1,0 +1,21 @@
+//! Stage 2b migration: case-insensitive keyword lexing (`'if'` matches any
+//! casing, keyword text preserved) through the homogeneous emitter.
+
+use ci from "./grammars/ci_sql.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_ci_sql",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = ci::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = ci::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "ci-sql: keyword uppercased input preserved" { assert_tree(&"IF foo", &"(stmt IF foo)"); }
+test "ci-sql: lowercase keyword, uppercase ident" { assert_tree(&"if FOO", &"(stmt if FOO)"); }

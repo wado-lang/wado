@@ -1,0 +1,20 @@
+//! Stage 2b migration: the s-expression grammar (atoms + nested lists) parses
+//! through the homogeneous emitter without diagnostics.
+
+use sx from "./grammars/sexpression.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_sexpression",
+        },
+    };
+
+fn assert_ok(input: &String) {
+    let result = sx::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}: {result.diagnostics.len()}`;
+}
+
+test "sexpr: single atom" { assert_ok(&"hello"); }
+test "sexpr: flat list" { assert_ok(&"(a b c)"); }
+test "sexpr: nested" { assert_ok(&"(define (square x) (* x x))"); }

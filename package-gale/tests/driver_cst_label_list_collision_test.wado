@@ -1,0 +1,22 @@
+//! Stage 2b migration: a mandatory first `+=` label plus a Repeat that also
+//! `+=`-labels into the same list — all transparent in the homogeneous tree.
+
+use g from "./grammars/label_list_collision.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_label_list_collision",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "label-list: single mandatory label" { assert_tree(&"tag", &"(stream tag)"); }
+test "label-list: first label + one Repeat iter" { assert_tree(&"tag tag", &"(stream tag tag)"); }
+test "label-list: many iters" { assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)"); }
