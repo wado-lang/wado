@@ -207,12 +207,25 @@ pub(super) fn freeze_pure_arith(
             }
             if let Some(vid) = engine.value(id) {
                 let rep = engine.value_find(vid);
-                if engine
-                    .body
-                    .values
-                    .value_fully_reemittable_locally(rep, &mut_locals)
-                    && !engine.body.values.extraction_duplicates_work(rep)
-                {
+                // A standalone `FieldAccess` is reemittable when its receiver is
+                // (it materialises via the source-point path). For every other
+                // value, `FieldAccess` is non-reemittable (it cannot be inlined),
+                // so `value_fully_reemittable_locally` rejects any value nesting
+                // one — keeping arith-over-`FieldAccess` from inline promotion.
+                let reemittable = match engine.body.values.kind(rep) {
+                    ValueKind::FieldAccess { receiver, .. } => {
+                        let recv = *receiver;
+                        engine
+                            .body
+                            .values
+                            .value_fully_reemittable_locally(recv, &mut_locals)
+                    }
+                    _ => engine
+                        .body
+                        .values
+                        .value_fully_reemittable_locally(rep, &mut_locals),
+                };
+                if reemittable && !engine.body.values.extraction_duplicates_work(rep) {
                     to_freeze.push((id, rep));
                 }
             }
