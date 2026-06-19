@@ -296,6 +296,16 @@ pub fn optimize(
         }
     }
 
+    // FieldAccess promotion (WEP P2), gated by WADO_PROMOTE_FIELDS, runs here:
+    // after the optimization loop (so the struct shape is post-SROA) but BEFORE
+    // select_lowering / multi_value_return, which rewrite the body into
+    // WIR-shaped forms the value-graph build would misread.
+    if std::env::var_os("WADO_PROMOTE_FIELDS").is_some() {
+        run_pass("nir/promote_fields", &mut project, profiler, |p| {
+            extract::freeze_pure_arith(p, /* include_fields */ true)
+        });
+    }
+
     // Post-optimization rewrites: select lowering for branchless Wasm
     profiler.span_start("nir/select_lowering");
     select_lowering::select_lowering(&mut project);
@@ -325,9 +335,8 @@ pub fn optimize(
     // promote `FieldAccess` here — after every pass incl. SROA, so the struct
     // shape is final and the materialised `let _av = obj.field` re-emits a valid
     // load. (Early arith promotion already ran before the loop.)
-    let include_fields = std::env::var_os("WADO_PROMOTE_FIELDS").is_some();
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, include_fields)
+        extract::freeze_pure_arith(p, /* include_fields */ false)
     });
 
     project
