@@ -433,7 +433,7 @@ fn scannable_prefix_len(elements: &List<Element>, ctx: &mut GenContext) -> i32 {
 /// Generate a scan function for a tournament alternative (`parse_X_alt_N` —
 /// the `_alt_` infix is historical) if it has at least one scannable leading
 /// element. The scan covers the scannable prefix only.
-fn gen_alt_scan_if_possible(
+pub fn gen_alt_scan_if_possible(
     w: &mut CodeWriter,
     alt: &Alternative,
     lowered_rule: &Rule,
@@ -494,7 +494,7 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 // successful recognition, or -1 on failure. Used to disambiguate Ambiguous
 // alternatives without expensive speculative parsing.
 
-fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
+pub fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
     }

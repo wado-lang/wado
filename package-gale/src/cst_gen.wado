@@ -28,8 +28,11 @@ use {
     MultiAltDispatch,
     DirectDispatch,
     DispatchBranch,
+    TournamentDispatch,
 } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { GenContext } from "./gen_context.wado";
+use { gen_scan_functions, gen_alt_scan_if_possible } from "./parser_gen.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -77,14 +80,52 @@ fn kinds_list(tokens: &List<String>) -> String {
     return out;
 }
 
-pub fn gen_cst_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, lit_tokens: &List<LitToken>) {
+pub fn gen_cst_parser(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    lowered: &LoweredGrammar,
+    lit_tokens: &List<LitToken>,
+    ctx: &mut GenContext,
+    needs_scan: bool,
+) {
     gen_node_kinds(w, &lowered.parser_rules);
-    gen_parser_runtime(w);
+    gen_parser_runtime(w, needs_scan);
+    // Whole-rule scan functions (lookahead-only; Parser-independent free
+    // functions) plus per-alt scans for tournament rules — reused verbatim
+    // from the typed emitter, then driven by the homogeneous tournament
+    // dispatch below. Only a grammar with a tournament needs them.
+    if needs_scan {
+        gen_scan_functions(w, grammar, lowered, ctx);
+        for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
+            gen_tournament_alt_scans(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
+        }
+    }
     for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
         gen_rule_fn(w, &lowered.parser_rules[i], i);
     }
     gen_parse_entry(w, lowered);
     gen_string_tree_helper(w, grammar, lit_tokens);
+}
+
+/// Emit per-alt scan helpers (`_parse_<rule>_scan_<idx>`) for a tournament
+/// rule, so the longest-match dispatch can weigh each alternative.
+fn gen_tournament_alt_scans(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
+    if let MultiAlt(m) = lowered_rule {
+        if let Tournament(_) = &m.dispatch {
+            let fn_name = `_parse_{m.header.snake_name}`;
+            for let alt of &m.alts {
+                gen_alt_scan_if_possible(
+                    w,
+                    &rule.alternatives[alt.alt_index],
+                    lowered_rule,
+                    &fn_name,
+                    alt.alt_index,
+                    &rule.name,
+                    ctx,
+                );
+            }
+        }
+    }
 }
 
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `GALE_RULE_NAMES`
@@ -136,7 +177,7 @@ fn rule_const(name: &String) -> String {
 }
 
 /// Emit the infallible `Parser` and its helpers.
-fn gen_parser_runtime(w: &mut CodeWriter) {
+fn gen_parser_runtime(w: &mut CodeWriter, needs_scan: bool) {
     // `toks` is owned by value (not a reference): the parse path holds no
     // references, so the result `tokens` and tree (`i32` indices) carry none
     // either. (A `&TokenStream` field tripped a WIR-lowering ICE when the
@@ -144,6 +185,12 @@ fn gen_parser_runtime(w: &mut CodeWriter) {
     w.line(&"struct Parser {");
     w.indent();
     w.line(&"toks: TokenStream,");
+    if needs_scan {
+        // `kinds` is an `Array<i32>` snapshot of `toks.kinds` for the scan
+        // functions (longest-match tournament lookahead), which take
+        // `&Array<i32>`. Only carried when a tournament needs them.
+        w.line(&"kinds: Array<i32>,");
+    }
     w.line(&"pos: i32,");
     w.line(&"b: TreeBuilder,");
     w.line(&"diagnostics: List<Diagnostic>,");
@@ -158,7 +205,14 @@ fn gen_parser_runtime(w: &mut CodeWriter) {
 
     w.line(&"fn new(toks: TokenStream, max_errors: i32) -> Parser {");
     w.indent();
-    w.line(&"return Parser { toks, pos: 0, b: TreeBuilder::new(), diagnostics: [], max_errors, bailed: false };");
+    if needs_scan {
+        w.line(&"let kinds = toks.kinds.to_array();");
+        w.line(
+            &"return Parser { toks, kinds, pos: 0, b: TreeBuilder::new(), diagnostics: [], max_errors, bailed: false };",
+        );
+    } else {
+        w.line(&"return Parser { toks, pos: 0, b: TreeBuilder::new(), diagnostics: [], max_errors, bailed: false };");
+    }
     w.dedent();
     w.line(&"}");
     w.blank();
@@ -310,12 +364,51 @@ fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
     w.line(&`p.b.start_node({rk}, start);`);
     match *rule {
         Simple(s) => emit_ops(w, &s.body.ops),
-        MultiAlt(m) => emit_alt_dispatch(w, &m.alts, &m.dispatch),
+        MultiAlt(m) => {
+            if let Tournament(td) = &m.dispatch {
+                emit_tournament(w, &m.alts, td, &snake);
+            } else {
+                emit_alt_dispatch(w, &m.alts, &m.dispatch);
+            }
+        },
         LeftRecursive(_) => panic("cst_gen: unreachable"),
     }
     w.line(&"p.b.finish_node(p.last_end());");
     w.end();
     w.blank();
+}
+
+/// Emit a longest-match tournament: scan every alternative, pick the one that
+/// advances furthest, and emit its ops (builder mode). Mirrors the typed
+/// emitter's ANTLR4-compatible first-success-on-ties longest-match. Requires
+/// every alt to have a full scan (`gen_tournament_alt_scans`); partial-scan
+/// tournaments are out of scope.
+fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDispatch, snake: &String) {
+    w.line(&"let _sd_pos = p.pos;");
+    for let idx of &td.alts {
+        w.line(&`let _sd_p_{*idx} = _parse_{*snake}_scan_{*idx}(&p.kinds, _sd_pos);`);
+    }
+    w.line(&"let mut _sd_best_i: i32 = -1;");
+    w.line(&"let mut _sd_best_p: i32 = -1;");
+    for let idx of &td.alts {
+        w.begin(&`if _sd_p_{*idx} > _sd_best_p`);
+        w.line(&`_sd_best_p = _sd_p_{*idx};`);
+        w.line(&`_sd_best_i = {*idx};`);
+        w.end();
+    }
+    let mut first = true;
+    for let idx of &td.alts {
+        if first {
+            w.begin(&`if _sd_best_i == {*idx}`);
+            first = false;
+        } else {
+            w.else_begin(&`else if _sd_best_i == {*idx}`);
+        }
+        emit_ops(w, &alt_by_index(alts, *idx).ops);
+    }
+    w.else_begin(&"else");
+    w.line(&"p.fail([]);");
+    w.end();
 }
 
 /// Emit a left-recursive rule as a precedence-climbing parser. The atom (the

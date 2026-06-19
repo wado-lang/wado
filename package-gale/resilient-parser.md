@@ -129,16 +129,21 @@ so the old typed path stays the default and the corpus stays green. Runtime is
   `checkpoint`/`start_node_at` left-associative wrap; self-ref suffixes recurse
   at their baked `min_prec` (`tests/grammars/arith_lr.g4`,
   `tests/driver_cst_lr_test.wado`).
+- **Tournament dispatch** — alternatives that share a lookahead prefix are
+  disambiguated by a longest-match scan, reusing `parser_gen`'s scan functions
+  verbatim (emitted only when a tournament exists; gated with their FOLLOW /
+  kind-set dependencies) (`tests/grammars/amb_tour.g4`,
+  `tests/driver_cst_tour_test.wado`).
 
-Tournament dispatch, overlapping LR suffixes, and non-greedy raise a
-codegen-time panic (still out of scope).
+Non-greedy and overlapping LR suffixes raise a codegen-time panic (still out of
+scope).
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Cover Tournament dispatch / non-greedy / overlapping LR suffixes (reuse
-`parser_gen`'s scan & prediction), migrate the full driver + ANTLR4-compat
-corpus to the homogeneous parser, then delete the typed-CST emitter
-(`gen_cst_types`, `visitor_gen`) and make `homogeneous` the only path.
+Cover non-greedy / overlapping LR suffixes (reuse `parser_gen`'s scan &
+prediction), migrate the full driver + ANTLR4-compat corpus to the homogeneous
+parser, then delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and
+make `homogeneous` the only path.
 
 ### Stage 3 — Recovery
 

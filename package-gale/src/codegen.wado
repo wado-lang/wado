@@ -23,6 +23,7 @@ use {
     Rule,
     SimpleRule,
     MultiAltRule,
+    MultiAltDispatch,
     LeftRecursiveRule,
     LrAlt,
     AltBody,
@@ -124,11 +125,23 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // Resilient homogeneous-tree parser: reuse the shared lexer/token
         // pipeline, swap the typed-CST runtime + parser/visitor for the
         // homogeneous tree + diagnostics runtime and the builder-based emitter.
-        gen_runtime_homogeneous(&mut w);
+        // Scan functions (and their FOLLOW / kind-set dependencies) are only
+        // emitted when a rule actually needs a longest-match tournament; a pure
+        // Direct/LR grammar carries none.
+        let needs_scan = homogeneous_has_tournament(&lowered);
+        gen_runtime_homogeneous(&mut w, needs_scan && ctx.emit_follow());
         gen_token_kind(&mut w, &grammar.lexer_rules);
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
-        gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens);
+        gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens, &mut ctx, needs_scan);
+        if needs_scan {
+            // Token-kind-set helpers interned by the scan functions'
+            // `kind_check_str` calls; emitted after `gen_cst_parser`.
+            gen_kind_set_helpers(&mut w, &lowered, &ctx);
+            if ctx.emit_follow() {
+                gen_follow_mask_globals(&mut w, &ctx);
+            }
+        }
         return GeneratedOutput {
             source: w.to_string(),
             diagnostics: lowered.diagnostics,
@@ -259,10 +272,29 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
 /// `TreeBuilder`. Concatenated in dependency order (`lex` first, then `diag`,
 /// then `tree`, which references both); each fragment's sibling `from "./..."`
 /// imports are stripped by `gen_runtime_fragment`.
-fn gen_runtime_homogeneous(w: &mut CodeWriter) {
+fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
+    // Reused scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
+    // grammar has a caller-FOLLOW gate.
+    if emit_follow {
+        gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
+    }
+}
+
+/// True when some rule needs a longest-match scan tournament — the only case
+/// the homogeneous emitter pulls in the scan functions (and their FOLLOW /
+/// kind-set dependencies).
+fn homogeneous_has_tournament(lowered: &LoweredGrammar) -> bool {
+    for let r of &lowered.parser_rules {
+        if let MultiAlt(m) = r {
+            if let Tournament(_) = &m.dispatch {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Append a runtime fragment, dropping only its sibling-runtime imports

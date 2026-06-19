@@ -1,0 +1,31 @@
+//! Stage 2 tournament dispatch: `stat`'s alternatives share the `ID` prefix, so
+//! the homogeneous emitter scans each and commits to the longest match, reusing
+//! the typed emitter's scan functions.
+
+use t from "./grammars/amb_tour.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_tour",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = t::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = t::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "tournament: assignment wins on '='" {
+    assert_tree(&"x = 5", &"(prog (stat x = (expr 5)))");
+}
+
+test "tournament: bare identifier expr" {
+    assert_tree(&"x", &"(prog (stat (expr x)))");
+}
+
+test "tournament: bare integer expr" {
+    assert_tree(&"42", &"(prog (stat (expr 42)))");
+}
