@@ -36,12 +36,9 @@ pub struct Options {
     /// default; set `trace: true` to debug why a grammar rejects an input.
     pub trace: bool = false,
     /// Emit the resilient homogeneous-tree parser instead of the typed-CST
-    /// parser (see `resilient-parser.md`). Stage 2: LL(1) `Direct` grammars.
+    /// parser (see `resilient-parser.md`). Covers the full parse/tree corpus,
+    /// ATN-class grammars included.
     pub homogeneous: bool = false,
-    /// Sink-refactor bring-up route: emit the homogeneous parser through
-    /// parser_gen's sink-aware path (full prediction/ATN reuse) instead of
-    /// cst_gen. Temporary, per-grammar verified.
-    pub sink_v2: bool = false,
 }
 
 impl Deserialize for Options;
@@ -81,7 +78,6 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         highlight: req.options.highlight,
         trace: req.options.trace,
         homogeneous: req.options.homogeneous,
-        sink_v2: req.options.sink_v2,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Surface Gale's prediction-strategy diagnostics through the Kiln host so

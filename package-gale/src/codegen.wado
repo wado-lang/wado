@@ -46,16 +46,12 @@ pub struct GenerateOptions {
     /// Emit the resilient homogeneous-tree parser (`resilient-parser.md`)
     /// instead of the typed-CST parser: an infallible recursive-descent parser
     /// that builds one `CstNode` tree via `TreeBuilder` and returns a
-    /// `ParseResult` with diagnostics. Stage 2 supports LL(1) `Direct`-dispatch
-    /// grammars; broader coverage and recovery land in later stages.
+    /// `ParseResult` with diagnostics. The Parser drives the `TreeBuilder`
+    /// while every prediction / scan / ATN decision is reused from the typed
+    /// emitter unchanged, so the full parse/tree corpus — including the
+    /// ATN-class grammars — is covered. Recovery and highlight land in later
+    /// stages.
     pub homogeneous: bool = false,
-    /// Temporary route (sink-refactor bring-up): emit the homogeneous parser
-    /// through `parser_gen`'s sink-aware path (the Parser drives a
-    /// `TreeBuilder`, reusing the full prediction/ATN emission) instead of the
-    /// GIR-only `cst_gen`. Verified per-grammar against the existing
-    /// homogeneous tree expectations; once it reaches parity, it becomes the
-    /// only homogeneous path and `cst_gen` is deleted.
-    pub sink_v2: bool = false,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus the

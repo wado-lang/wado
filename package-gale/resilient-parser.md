@@ -153,140 +153,67 @@ Grammars whose prediction needs the runtime ATN simulator — a non-greedy `??`
 are rejected up front by a `needs_atn` boundary check, so the scope edge is a
 loud `panic` rather than a silently-wrong static dispatch.
 
-#### Stage 2b — broaden coverage, retire the old path (remaining)
+#### Stage 2b — full corpus on the homogeneous sink ✅ (done)
 
-**Corpus migration status.** Every driver grammar that does **not** need the
-runtime ATN simulator is migrated to the homogeneous emitter — 29 homogeneous
-driver tests (107 cases), each with the same one-node-per-rule tree the typed
-emitter produces (so migrating a driver test is just swapping the API, not the
-expectations). The migrated set spans precedence climbing with left/right
-associativity (`calculator`, `right_assoc_gaps`), labels (`label_gaps`,
-`label_list_collision`), shared-prefix tournaments (`at_end_alt_gaps`,
-`overlap_tournament`, `alt_shared_ident_prefix`), caller-FOLLOW gates
-(`ll_multi_token_tail`, `ll_k_prefix_cascade`), set/consume groups
-(`parser_set_group_dispatch`, `ll_consume_group`, `parser_gaps`), non-greedy
-spans (`non_greedy_gaps`), case-insensitive lexing (`ci_sql`, `ci_rule_override`),
-and the lexer fixtures (`recursive_lexer`, `unicode_props`, `lexer_command_gaps`,
-`lexer_greedy_suffix`, `mode_gaps`, `sexpression`).
+**One emitter, sink-branched (not two emitters).** The homogeneous parser is
+emitted by `parser_gen`'s **single** emission pipeline, branched on the node
+sink (`GenContext.is_homogeneous`). The `Typed` sink binds CST fields and
+assembles structs + `Result`/`?`; the `Homogeneous` sink drives a
+`TreeBuilder` (the Parser's `expect`/`match_*` append the matched token, and a
+rule-entry wrapper does `start_node`/`finish_node`), so **every prediction /
+scan / ATN / LR / group / repeat decision is reused verbatim** — only the
+structure-building sites differ:
 
-The driver grammars that remain on the typed path fall into exactly three
-buckets, none migratable by hand: **(a) ATN-class** prediction (the big
-real-world grammars — Rust / TypeScript / SQLite / CSS3 / HTML — and the
-`ll_*` prediction fixtures and the `lr_*` overlap fixtures), which hit the
-`needs_atn` boundary and need the prediction reuse below; **(b) typed-API
-tests** (`sexpression_ast` reads typed CST struct fields — these are deleted in
-step 3, not migrated); **(c) later stages** (recovery: `error_recovery` /
-`tie_recovery` / `diagnostics` → Stage 3; highlight: `*_highlight` → Stage 4).
+- `gen_alt_body` returns `Ok(())` instead of assembling the alt struct.
+- The repeat storables (`gen_op_repeat_star_plus_storable`,
+  `gen_op_repeat_non_greedy_storable`) drop the `List<T>` accumulation and the
+  per-iteration `.push`, keeping the loop / scan-guard / caller-FOLLOW gate.
+- The greedy/shape-lookahead Optionals collapse the `Option<T>` if-expression
+  to a present/absent statement.
+- The group store ops (`gen_consume_*` / `gen_general_*` / the overlap loops)
+  drop the `let var: Type = …` value binding and the variant construction; the
+  dispatch (overlap grouping + scan tournament) and the chosen alt's appending
+  body are shared. A standalone group that matches nothing appends nothing
+  (matching the typed `_optional_op` path, which yields `null`).
+- ATN-class LR uses the same `atn_lr_loop_decision` dispatch
+  (`gen_lr_fn_homog_atn`) the typed `gen_lr_suffix_dispatch_atn` emits.
 
-**Architectural limit of the GIR-only emitter (proven).** `cst_gen` consumes
-the lowered GIR, whose `MultiAltDispatch` has only `Direct` (disjoint first
-sets) and `Tournament` (all alts fully scannable). It has **no representation
-for ATN-class multi-alt rules** — alts that overlap *and* are not all fully
-scannable. The typed emitter resolves those through its surface
-`PredictionNode` path (`build_prediction` → `gen_prediction_code`:
-scan-tournament → hybrid save-rewind → runtime ATN simulator), which is the
-bulk of `parser_gen`. So a GIR-only `cst_gen` cannot reach full corpus parity,
-and the `needs_atn` boundary check in `gen_cst_parser` rejects those grammars
-up front rather than mis-emitting a static dispatch. A second, smaller GIR-only
-gap is **group / atom-level tournaments** (e.g. `('x' | 'x' 'y')` in
-`multiple_eof.g4`): `cst_gen` emits a rule-level tournament (`emit_tournament`)
-but `emit_alt_dispatch` panics on a `Tournament` group dispatch, which the
-typed emitter handles via the same surface group-prediction path. Both gaps
-close together under the sink refactor below, not by extending `cst_gen`.
+Because the structure-building branch lets the **typed** prediction code drive
+the appending Parser, the ATN-class gaps close by reuse, not re-implementation:
+the runtime ATN simulator (`atn_predict_with_stack`, `atn_lr_loop_decision`)
+and the scan-tournament machinery (`gen_scan_winner_tournament`) emit the same
+calls for both sinks; the homogeneous runtime inlines `atn.wado` when
+`needs_atn`. `?`-propagation **is** the Stage-2 fail-soft: the first error
+folds every open node on the way up and `parse` returns the partial tree plus
+one diagnostic.
 
-**The realization — swap the Parser backend, not the emission.** The key
-insight that makes this tractable: a typed rule emits `let f = p.expect(K)?` /
-`let c = _parse_Y(p)?` / `return Ok(XType{…})`. If the **Parser's methods append
-to the `TreeBuilder` and still return `Result`** (same signatures), then every
-line of prediction / scan / ATN / LR / group / repeat emission is **byte-for-byte
-identical** between typed and homogeneous — because it only ever calls the
-Parser API. The sink difference collapses to exactly three places:
+**Corpus status.** The whole parse/tree corpus runs on the homogeneous sink
+and matches the typed trees one-node-per-rule:
 
-1. **Parser runtime** — `expect` / `match_any` / `match_not` append the matched
-   token to `b: TreeBuilder` (and `_parse_Y` appends its subtree); the struct is
-   the typed Parser + `b`, keeping `kinds` / `atn_stack` / scan helpers so the
-   shared emission and the ATN runtime calls work unchanged.
-2. **Rule entry wrapper** (`gen_rule_entry_wrapper`) — `start_node(RK_X)` before
-   the captured inner call, `finish_node` after, return type `Result<()>`. The
-   wrapper captures `let r = inner(p)` (no `?`), so on an inner `Err` the
-   `finish_node` still runs and the open node folds as the error propagates up —
-   the per-alt `return _alt_N(p)?` inside the inner needs no change.
-3. **`gen_alt_body` exit** — `return Ok(())` instead of assembling the struct
-   (the leaf ops already appended via the Parser methods).
+- The non-ATN grammars (precedence climbing, labels, shared-prefix
+  tournaments, caller-FOLLOW gates, set/consume groups, non-greedy spans,
+  case-insensitive + lexer fixtures).
+- The **ATN-class** grammars — the `ll_*` / `lr_*` prediction fixtures
+  (`ll_basic`, `ll_multi_alt`, `ll_wildcard_alt`, `lr_between`,
+  `lr_scan_caller`, `multiple_eof`, …) and the big real-world grammars
+  (Rust, TypeScript, SQLite, CSS3, HTML, ANTLRv4) — parse homogeneously, with
+  `driver_cst_*` driver tests pinning the trees / end-to-end parse.
 
-`?`-propagation **is** Stage 2 fail-soft: the first error folds every open node
-on the way up and the public `parse` returns the partial tree plus one
-diagnostic. **ATN works for free** — the prediction emission (incl.
-`atn_predict_with_stack`) is untouched and drives the same `atn_stack`-carrying
-Parser. Incremental + testable: the 29 homogeneous driver tests pin the trees,
-so each grammar flips to the new path (behind a temporary route) and is verified
-against its existing expectation; once every non-ATN grammar matches, `cst_gen`
-retires and the ATN grammars pass by reuse.
+The typed corpus stays byte-identical and green throughout (the `Typed` branch
+is never touched). A pre-existing scan bug surfaced by the unified walker — a
+non-greedy wildcard `.*?` / `.+?` scanned zero inner tokens (empty
+`inner_first`) and undershot — was fixed: the scan now skips to the exit set
+(`gen_scan_non_greedy_skip`, `ScanRepeatElement.non_greedy`).
 
-This supersedes the heavier "sink-branch every emit function" framing below
-(kept for context); only a small set of structure-building sites actually
-differ.
-
-**Bring-up status (proven).** The realization is wired end-to-end behind a
-temporary `sink_v2` generator option (`codegen` routes the homogeneous parser
-through `parser_gen`'s sink-aware path + `cst_gen`'s node-kind / `to_string_tree`
-scaffolding). It already **generates a runnable parser** for `calc_ll`: the
-homogeneous `Parser` (builder-appending `expect`/`match_*`, `Result` kept), the
-rule wrapper (`start_node`/`finish_node`, `Result<()>`), the public `parse`
-(returns `ParseResult`, `Err` → one diagnostic), `gen_alt_body`'s `Ok(())`, and
-the leaf line (identical for both sinks — `gen_op_leaf` is typed-only again,
-the Parser appends) are all in and green. The remaining work to reach tree
-parity is to give the **typed structure-building sites** a sink branch that
-skips field assembly and just lets the body append: `gen_op_repeat` (drop the
-`List<ItemX>` accumulation — loop the body), `gen_op_group` (drop the group
-struct — dispatch + emit the chosen alt's elements), and the single-token /
-LR-assembly fns. Each is mechanical and verified against the 29 existing
-homogeneous trees, one grammar at a time, until `sink_v2` reaches parity and
-becomes the only path.
-
-**Decision: one emitter, pluggable node sink (not two emitters).** Reaching
-"homogeneous is the only path" by porting the prediction/ATN core into `cst_gen`
-would clone `parser_gen`'s most intricate logic into a second body kept in
-lockstep — the exact anti-pattern soundness invariant #3 retired. Instead,
-refactor `parser_gen`'s single emission pipeline over a node **sink**
-(`Typed` builds structs + `Result`/`?`; `Homogeneous` drives the `TreeBuilder`,
-infallible), reusing every prediction decision (incl. ATN) unchanged:
-
-1. Thread the sink through `parser_gen`'s emit functions; `Typed` stays the
-   default and the corpus stays byte-identical and green. **Done:** the sink
-   flag (`GenContext.is_homogeneous`) and the first leaf layer — `gen_op_leaf`
-   now branches on the sink (typed binds a CST field with `?`; homogeneous
-   drives the `TreeBuilder`), and `cst_gen.emit_op` delegates its leaf ops to
-   it. Both corpora byte-identical and green.
-2. Wire the `Homogeneous` sink at the leaf / rule-entry / dispatch layers
-   (the ATN return-stack plumbing — `emit_atn_enter`, `gen_atn_ret_pending`,
-   `atn_*_decision` — is reused verbatim). Migrate the driver + ANTLR4-compat
-   corpus behind the `homogeneous` flag, batch by batch, each proven green.
-3. Delete the `Typed` sink, `gen_cst_types`, `visitor_gen`, and `cst_gen`;
-   `homogeneous` becomes the only path.
-
-**Mechanics established while starting the refactor.** Two facts shape the
-remaining steps:
-
-- **Surface-element threading is the shared prerequisite.** `cst_gen` walks the
-  lowered GIR `Op`s; every reuse of `parser_gen`'s prediction (group dispatch,
-  ATN) needs the *surface* `Element`s (`build_prediction` consumes them). So the
-  next foundational step is to walk `Element`s and `Op`s in parallel (as
-  `gen_alt_elements` already does) so the homogeneous emission has surface
-  access at each op.
-- **`build_prediction` is a pure decision oracle** (`prediction.wado` — returns
-  the `PredictionNode` tree, no emission). The ATN-class / group-tournament gaps
-  close by walking that same tree emitting `TreeBuilder` actions, so the
-  prediction *logic* is reused unchanged (not cloned) — only the emission walk
-  differs by sink, which cannot diverge on the decision because both walks read
-  the one `PredictionNode`.
-
-Because the homogeneous op-emission and the prediction it calls are mutually
-recursive (a group's prediction emits ops; an op may be a group needing
-prediction), they must live in one module: the leaf/repeat/group/dispatch
-emission consolidates into `parser_gen`'s sink-branched emitters (it cannot
-import `cst_gen`), shrinking `cst_gen` to scaffolding (runtime, node kinds,
-`to_string_tree`) until step 3 absorbs it.
+**Remaining for "homogeneous the only path" (step 3).** The typed-CST emitter
+(`gen_cst_types`, `visitor_gen`) is still required by features that have **not**
+moved to the homogeneous sink yet: recovery (`error_recovery` / `tie_recovery`
+/ `diagnostics` → Stage 3), highlight (`*_highlight` → Stage 4), and the
+typed-API `sexpression_ast`. Deleting it now would delete those features, so
+the deletion is correctly sequenced **after** Stages 3–4 reimplement recovery
+and highlight on the homogeneous tree. The temporary `sink_v2` bring-up flag
+and its duplicate `driver_cst_v2_*` tests are removed now that the sink-aware
+path is the homogeneous path.
 
 ### Stage 3 — Recovery
 
