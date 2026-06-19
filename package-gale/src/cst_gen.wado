@@ -31,10 +31,38 @@ use {
     DirectDispatch,
     DispatchBranch,
     TournamentDispatch,
+    FollowArg,
 } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { GenContext } from "./gen_context.wado";
-use { gen_scan_functions, gen_alt_scan_if_possible } from "./parser_gen.wado";
+use { gen_scan_functions, gen_alt_scan_if_possible, follow_arg_expr } from "./parser_gen.wado";
+
+/// The defaulted `follow` parameter every `_parse_*` carries when the grammar
+/// has a caller-FOLLOW gate, else nothing. Threaded to a tail-greedy `Repeat`'s
+/// `follow_yields` gate; passed down at each `RuleCall` per its `FollowArg`.
+fn follow_param(ef: bool) -> String {
+    if ef {
+        return ", follow: &List<List<i32>> = &EMPTY_FOLLOW";
+    }
+    return "";
+}
+
+/// `, <FollowArg expr>` at a `RuleCall` site (e.g. `, &FOLLOW_MASK_3`), or "".
+fn follow_arg(ef: bool, arg: &FollowArg) -> String {
+    if ef {
+        return `, {follow_arg_expr(arg)}`;
+    }
+    return "";
+}
+
+/// ` && !follow_yields(...)` appended to a tail-greedy `Repeat`'s loop / option
+/// condition: the loop yields the matching token to the caller's continuation.
+fn repeat_gate(r: &RepeatOp, ef: bool) -> String {
+    if ef && r.gate_caller_follow {
+        return " && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
+    }
+    return "";
+}
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -90,8 +118,12 @@ pub fn gen_cst_parser(
     ctx: &mut GenContext,
     needs_scan: bool,
 ) {
+    let ef = ctx.emit_follow();
+    // The Parser's `kinds` snapshot feeds both the tournament scans and a
+    // tail-greedy `Repeat`'s `follow_yields` gate.
+    let needs_kinds = needs_scan || ef;
     gen_node_kinds(w, &lowered.parser_rules);
-    gen_parser_runtime(w, needs_scan);
+    gen_parser_runtime(w, needs_kinds);
     // Whole-rule scan functions (lookahead-only; Parser-independent free
     // functions) plus per-alt scans for tournament rules — reused verbatim
     // from the typed emitter, then driven by the homogeneous tournament
@@ -103,9 +135,9 @@ pub fn gen_cst_parser(
         }
     }
     for let mut i = 0; i < lowered.parser_rules.len(); i += 1 {
-        gen_rule_fn(w, &lowered.parser_rules[i], i);
+        gen_rule_fn(w, &lowered.parser_rules[i], i, ef);
     }
-    gen_parse_entry(w, lowered);
+    gen_parse_entry(w, lowered, ef);
     gen_string_tree_helper(w, grammar, lit_tokens);
 }
 
@@ -352,25 +384,26 @@ fn gen_parser_runtime(w: &mut CodeWriter, needs_scan: bool) {
     w.blank();
 }
 
-/// Emit `fn _parse_<rule>(p: &mut Parser)` for one rule.
-fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
+/// Emit `fn _parse_<rule>(p: &mut Parser)` for one rule. `ef` threads the
+/// caller-FOLLOW machinery (the `follow` parameter and its uses).
+fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32, ef: bool) {
     let snake = rule_snake(rule);
     let rk = `RK_{rule_const(&rule_name(rule))}`;
     if let LeftRecursive(l) = rule {
-        gen_lr_rule_fn(w, l, &rk, &snake);
+        gen_lr_rule_fn(w, l, &rk, &snake, ef);
         return;
     }
-    w.begin(&`fn _parse_{snake}(p: &mut Parser)`);
+    w.begin(&`fn _parse_{snake}(p: &mut Parser{follow_param(ef)})`);
     w.line(&"if p.bailed { return; }");
     w.line(&"let start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, start);`);
     match *rule {
-        Simple(s) => emit_ops(w, &s.body.ops),
+        Simple(s) => emit_ops(w, &s.body.ops, ef),
         MultiAlt(m) => {
             if let Tournament(td) = &m.dispatch {
-                emit_tournament(w, &m.alts, td, &snake);
+                emit_tournament(w, &m.alts, td, &snake, ef);
             } else {
-                emit_alt_dispatch(w, &m.alts, &m.dispatch);
+                emit_alt_dispatch(w, &m.alts, &m.dispatch, ef);
             }
         },
         LeftRecursive(_) => panic("cst_gen: unreachable"),
@@ -385,7 +418,7 @@ fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, rule_index: i32) {
 /// emitter's ANTLR4-compatible first-success-on-ties longest-match. Requires
 /// every alt to have a full scan (`gen_tournament_alt_scans`); partial-scan
 /// tournaments are out of scope.
-fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDispatch, snake: &String) {
+fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDispatch, snake: &String, ef: bool) {
     w.line(&"let _sd_pos = p.pos;");
     for let idx of &td.alts {
         w.line(&`let _sd_p_{*idx} = _parse_{*snake}_scan_{*idx}(&p.kinds, _sd_pos);`);
@@ -406,7 +439,7 @@ fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDisp
         } else {
             w.else_begin(&`else if _sd_best_i == {*idx}`);
         }
-        emit_ops(w, &alt_by_index(alts, *idx).ops);
+        emit_ops(w, &alt_by_index(alts, *idx).ops, ef);
     }
     w.else_begin(&"else");
     w.line(&"p.fail([]);");
@@ -420,24 +453,25 @@ fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDisp
 /// the right operand recurses at the correct precedence. Only single-alt
 /// dispatch groups are handled; overlapping LR suffixes (needing scan) raise a
 /// codegen-time panic.
-fn gen_lr_rule_fn(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, snake: &String) {
-    w.begin(&`fn _parse_{snake}(p: &mut Parser, min_prec: i32 = 0)`);
+fn gen_lr_rule_fn(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, snake: &String, ef: bool) {
+    // `follow` precedes `min_prec` (uniform with the typed emitter's signature).
+    w.begin(&`fn _parse_{snake}(p: &mut Parser{follow_param(ef)}, min_prec: i32 = 0)`);
     w.line(&"if p.bailed { return; }");
     w.line(&"let cp = p.b.checkpoint();");
     w.line(&"let start = p.peek_start();");
     w.line(&`p.b.start_node({*rk}, start);`);
     if l.atom.alts.len() == 1 {
-        emit_ops(w, &l.atom.alts[0].ops);
+        emit_ops(w, &l.atom.alts[0].ops, ef);
     } else {
-        emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch);
+        emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch, ef);
     }
     w.line(&"p.b.finish_node(p.last_end());");
-    gen_lr_loop(w, l, rk);
+    gen_lr_loop(w, l, rk, ef);
     w.end();
     w.blank();
 }
 
-fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String) {
+fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String, ef: bool) {
     w.begin(&"loop");
     w.line(&"if p.bailed { break; }");
     w.line(&"let suffix_kind = p.peek_kind();");
@@ -456,7 +490,7 @@ fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String) {
         }
         w.begin(&`if {lr.own_prec} >= min_prec`);
         w.line(&`p.b.start_node_at(cp, {*rk}, start);`);
-        emit_ops(w, &lr.suffix.ops);
+        emit_ops(w, &lr.suffix.ops, ef);
         w.line(&"p.b.finish_node(p.last_end());");
         w.else_begin(&"else");
         w.line(&"break;");
@@ -473,7 +507,7 @@ fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, rk: &String) {
 }
 
 /// Emit token-led dispatch over a rule's / group's alternatives.
-fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch) {
+fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch, ef: bool) {
     let dd = match *dispatch {
         Direct(d) => d,
         Tournament(_) => panic("cst_gen: tournament dispatch is outside Stage 2 scope"),
@@ -491,7 +525,7 @@ fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiA
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        emit_ops(w, &alt_by_index(alts, br.alt_index).ops);
+        emit_ops(w, &alt_by_index(alts, br.alt_index).ops, ef);
     }
     w.else_begin(&"else");
     w.line(&`p.fail({kinds_list(&all_first)});`);
@@ -507,50 +541,52 @@ fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
     panic(`cst_gen: no alt with index {idx}`);
 }
 
-fn emit_ops(w: &mut CodeWriter, ops: &List<Op>) {
+fn emit_ops(w: &mut CodeWriter, ops: &List<Op>, ef: bool) {
     for let op of ops {
-        emit_op(w, op);
+        emit_op(w, op, ef);
     }
 }
 
-fn emit_op(w: &mut CodeWriter, op: &Op) {
+fn emit_op(w: &mut CodeWriter, op: &Op, ef: bool) {
     match *op {
         Token(t) => w.line(&`p.expect_token({t.kind});`),
         Literal(l) => w.line(&`p.expect_token({l.kind});`),
         RuleCall(rc) => {
-            // A self-ref in an LR suffix carries the precedence to recurse at.
-            if let Some(prec) = rc.min_prec_arg {
-                w.line(&`_parse_{rc.target_snake}(p, {prec});`);
+            // `follow` (caller continuation) precedes `min_prec` (LR self-ref).
+            let mp = if let Some(prec) = rc.min_prec_arg {
+                `, {prec}`;
             } else {
-                w.line(&`_parse_{rc.target_snake}(p);`);
-            }
+                String::from("");
+            };
+            w.line(&`_parse_{rc.target_snake}(p{follow_arg(ef, &rc.follow_arg)}{mp});`);
         },
         Wildcard(_) => w.line(&"p.expect_any();"),
         Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
-        ListLabel(ll) => emit_op(w, &ll.inner),
-        Repeat(r) => emit_repeat(w, &r),
-        Group(g) => emit_group(w, &g),
+        ListLabel(ll) => emit_op(w, &ll.inner, ef),
+        Repeat(r) => emit_repeat(w, &r, ef),
+        Group(g) => emit_group(w, &g, ef),
     }
 }
 
-fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp) {
+fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp, ef: bool) {
     let cond = kinds_or(&r.body_first_set, &"p.peek_kind()");
+    let gate = repeat_gate(r, ef);
     match r.kind {
         Optional => {
-            w.begin(&`if !p.bailed && {cond}`);
-            emit_op(w, &r.body);
+            w.begin(&`if !p.bailed && {cond}{gate}`);
+            emit_op(w, &r.body, ef);
             w.end();
         },
         Star => {
-            w.begin(&`while !p.bailed && {cond}`);
-            emit_op(w, &r.body);
+            w.begin(&`while !p.bailed && {cond}{gate}`);
+            emit_op(w, &r.body, ef);
             w.end();
         },
         Plus => {
             // One mandatory iteration, then the same first-set-gated loop.
-            emit_op(w, &r.body);
-            w.begin(&`while !p.bailed && {cond}`);
-            emit_op(w, &r.body);
+            emit_op(w, &r.body, ef);
+            w.begin(&`while !p.bailed && {cond}{gate}`);
+            emit_op(w, &r.body, ef);
             w.end();
         },
     }
@@ -560,16 +596,16 @@ fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp) {
 /// flow matters. A token-only group (`('+' | '-')`) consumes one of its
 /// tokens directly; a single-alt group inlines its ops; a general multi-alt
 /// group dispatches like a rule.
-fn emit_group(w: &mut CodeWriter, g: &GroupOp) {
+fn emit_group(w: &mut CodeWriter, g: &GroupOp, ef: bool) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
         w.line(&`p.expect_one_of({kinds_list(&kinds)});`);
         return;
     }
     if g.alts.len() == 1 {
-        emit_ops(w, &g.alts[0].ops);
+        emit_ops(w, &g.alts[0].ops, ef);
         return;
     }
-    emit_alt_dispatch(w, &g.alts, &g.dispatch);
+    emit_alt_dispatch(w, &g.alts, &g.dispatch, ef);
 }
 
 /// If every alt is a single terminal (`Token` or `Literal`), return the list
@@ -593,18 +629,19 @@ fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
 }
 
 /// Emit the public `parse` entry plus the `_parse_<start>` driver.
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ef: bool) {
     if lowered.parser_rules.is_empty() {
         panic("cst_gen: grammar has no parser rules");
     }
     let start = rule_snake(&lowered.parser_rules[0]);
+    let start_follow = if ef { ", &EMPTY_FOLLOW" } else { "" };
     // `max_errors` caps how many diagnostics the parser collects before it
     // stops recovering and folds the tree closed (`<= 1` ≈ fail-fast).
     // Defaulted, so the common call is just `parse(input)`.
     w.begin(&"pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens, max_errors);");
-    w.line(&`_parse_{start}(&mut p);`);
+    w.line(&`_parse_{start}(&mut p{start_follow});`);
     // The parser owns the stream; hand it back in the result. The tree holds
     // only `i32` indices, so the returned `ParseResult` carries no references.
     w.line(&"return ParseResult { root: p.b.finish(), tokens: p.toks, diagnostics: p.diagnostics };");

@@ -131,9 +131,14 @@ so the old typed path stays the default and the corpus stays green. Runtime is
   `tests/driver_cst_lr_test.wado`).
 - **Tournament dispatch** — alternatives that share a lookahead prefix are
   disambiguated by a longest-match scan, reusing `parser_gen`'s scan functions
-  verbatim (emitted only when a tournament exists; gated with their FOLLOW /
-  kind-set dependencies) (`tests/grammars/amb_tour.g4`,
+  verbatim (emitted only when a tournament exists; gated with their kind-set
+  dependencies) (`tests/grammars/amb_tour.g4`,
   `tests/driver_cst_tour_test.wado`).
+- **Caller-FOLLOW gates** — a tail-greedy `Repeat` yields to the caller's
+  continuation via `follow_yields`, threading the defaulted `follow` parameter
+  and per-call-site `FollowArg` exactly as lowering computed them (so the
+  soundness invariants are reused, not re-derived) (`tests/grammars/follow_gate.g4`,
+  `tests/driver_cst_follow_test.wado`).
 
 Non-greedy and overlapping LR suffixes raise a codegen-time panic (still out of
 scope).

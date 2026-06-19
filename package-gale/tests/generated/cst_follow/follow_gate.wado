@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/calc_ll.g4"])]
+#![generated(by = "gale", sources = ["grammars/follow_gate.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -890,22 +890,18 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
     return true;
 }
 pub enum TokenKind {
-    INT,
+    X,
+    Y,
     WS,
     Eof,
     Error,
 }
 
-global TK_INT: i32 = 0;
-global TK_WS: i32 = 1;
-global TK_EOF: i32 = 2;
-global TK_ERROR: i32 = 3;
-global TK_LIT_PLUS: i32 = 4;
-global TK_LIT_MINUS: i32 = 5;
-global TK_LIT_STAR: i32 = 6;
-global TK_LIT_SLASH: i32 = 7;
-global TK_LIT_LPAREN: i32 = 8;
-global TK_LIT_RPAREN: i32 = 9;
+global TK_X: i32 = 0;
+global TK_Y: i32 = 1;
+global TK_WS: i32 = 2;
+global TK_EOF: i32 = 3;
+global TK_ERROR: i32 = 4;
 
 struct Lexer {
     chars: List<char>,
@@ -926,22 +922,17 @@ impl Lexer {
     }
 }
 
-fn try_INT(chars: &List<char>, start: i32) -> i32 {
+fn try_X(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9') { return -1; }
+    if pos >= chars.len() || chars[pos] != 'X' { return -1; }
     pos += 1;
-    loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !('0' <= chars[pos] <= '9') { break rep_0; }
-            pos += 1;
-            continue;
-        }
-        pos = rep_saved_0;
-        break;
-    }
+    return pos;
+}
+
+fn try_Y(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'Y' { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -951,53 +942,17 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_1 = pos;
-        rep_1: {
-            if pos >= chars.len() { break rep_1; }
-            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_1; }
+        let rep_saved_0 = pos;
+        rep_0: {
+            if pos >= chars.len() { break rep_0; }
+            if !(chars[pos] == ' ' || chars[pos] == '\t' || chars[pos] == '\r' || chars[pos] == '\n') { break rep_0; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_1;
+        pos = rep_saved_0;
         break;
     }
     return pos;
-}
-
-fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_minus(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '-' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_slash(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '/' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_lparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '(' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_rparen(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != ')' { return -1; }
-    return pos + 1;
 }
 
 pub fn tokenize(input: &String) -> TokenStream {
@@ -1013,30 +968,12 @@ pub fn tokenize(input: &String) -> TokenStream {
         if first_char == '\t' || first_char == '\n' || first_char == '\r' || first_char == ' ' {
             end = try_WS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char == '(' {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char == ')' {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char == '*' {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        } else if first_char == '+' {
-            end = try_lit_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char == '-' {
-            end = try_lit_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        } else if first_char == '/' {
-            end = try_lit_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-        } else if '0' <= first_char <= '9' {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
+        } else if first_char == 'X' {
+            end = try_X(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_X; }
+        } else if first_char == 'Y' {
+            end = try_Y(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_Y; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1060,26 +997,19 @@ pub fn tokenize(input: &String) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_INT => "INT",
+        TK_X => "X",
+        TK_Y => "Y",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
-        TK_LIT_PLUS => "TK_LIT_PLUS",
-        TK_LIT_MINUS => "TK_LIT_MINUS",
-        TK_LIT_STAR => "TK_LIT_STAR",
-        TK_LIT_SLASH => "TK_LIT_SLASH",
-        TK_LIT_LPAREN => "TK_LIT_LPAREN",
-        TK_LIT_RPAREN => "TK_LIT_RPAREN",
         _ => "Unknown",
     };
 }
 
-global RK_PROG: NodeKind = 0;
-global RK_EXPR: NodeKind = 1;
-global RK_TERM: NodeKind = 2;
-global RK_FACTOR: NodeKind = 3;
+global RK_R: NodeKind = 0;
+global RK_A: NodeKind = 1;
 
-global GALE_RULE_NAMES: List<String> = ["prog", "expr", "term", "factor"];
+global GALE_RULE_NAMES: List<String> = ["r", "a"];
 
 struct Parser {
     toks: TokenStream,
@@ -1181,52 +1111,22 @@ fn expected_names(kinds: &List<i32>) -> String {
     return out;
 }
 
-fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
+fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
     if p.bailed { return; }
     let start = p.peek_start();
-    p.b.start_node(RK_PROG, start);
-    _parse_expr(p, &FOLLOW_MASK_0);
-    p.expect_token(TK_EOF);
+    p.b.start_node(RK_R, start);
+    _parse_a(p, &FOLLOW_MASK_0);
+    p.expect_token(TK_Y);
     p.b.finish_node(p.last_end());
 }
 
-fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
+fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
     if p.bailed { return; }
     let start = p.peek_start();
-    p.b.start_node(RK_EXPR, start);
-    _parse_term(p, follow);
-    while !p.bailed && (p.peek_kind() == TK_LIT_PLUS || p.peek_kind() == TK_LIT_MINUS) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-        p.expect_one_of([TK_LIT_PLUS, TK_LIT_MINUS]);
-        _parse_term(p, follow);
-    }
-    p.b.finish_node(p.last_end());
-}
-
-fn _parse_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
-    if p.bailed { return; }
-    let start = p.peek_start();
-    p.b.start_node(RK_TERM, start);
-    _parse_factor(p, follow);
-    while !p.bailed && (p.peek_kind() == TK_LIT_STAR || p.peek_kind() == TK_LIT_SLASH) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-        p.expect_one_of([TK_LIT_STAR, TK_LIT_SLASH]);
-        _parse_factor(p, follow);
-    }
-    p.b.finish_node(p.last_end());
-}
-
-fn _parse_factor(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
-    if p.bailed { return; }
-    let start = p.peek_start();
-    p.b.start_node(RK_FACTOR, start);
-    let kind = p.peek_kind();
-    if (kind == TK_INT) {
-        p.expect_token(TK_INT);
-    } else if (kind == TK_LIT_LPAREN) {
-        p.expect_token(TK_LIT_LPAREN);
-        _parse_expr(p, &FOLLOW_MASK_1);
-        p.expect_token(TK_LIT_RPAREN);
-    } else {
-        p.fail([TK_INT, TK_LIT_LPAREN]);
+    p.b.start_node(RK_A, start);
+    p.expect_token(TK_X);
+    if !p.bailed && (p.peek_kind() == TK_Y) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+        p.expect_token(TK_Y);
     }
     p.b.finish_node(p.last_end());
 }
@@ -1234,18 +1134,17 @@ fn _parse_factor(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) {
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens, max_errors);
-    _parse_prog(&mut p, &EMPTY_FOLLOW);
+    _parse_r(&mut p, &EMPTY_FOLLOW);
     return ParseResult { root: p.b.finish(), tokens: p.toks, diagnostics: p.diagnostics };
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(10);
-    for let mut k = 0; k < 10; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(5);
+    for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
 }
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_RPAREN]];
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_Y]];
 

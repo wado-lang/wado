@@ -125,22 +125,23 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // Resilient homogeneous-tree parser: reuse the shared lexer/token
         // pipeline, swap the typed-CST runtime + parser/visitor for the
         // homogeneous tree + diagnostics runtime and the builder-based emitter.
-        // Scan functions (and their FOLLOW / kind-set dependencies) are only
-        // emitted when a rule actually needs a longest-match tournament; a pure
-        // Direct/LR grammar carries none.
+        // Scan functions (and their kind-set helpers) are emitted only when a
+        // rule needs a longest-match tournament. The FOLLOW runtime / mask
+        // globals are emitted whenever lowering built a caller-FOLLOW gate
+        // (`emit_follow`) — a tail-greedy `Repeat` can need them with no
+        // tournament present (e.g. an LL(1) grammar like calc).
         let needs_scan = homogeneous_has_tournament(&lowered);
-        gen_runtime_homogeneous(&mut w, needs_scan && ctx.emit_follow());
+        let ef = ctx.emit_follow();
+        gen_runtime_homogeneous(&mut w, ef);
         gen_token_kind(&mut w, &grammar.lexer_rules);
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
         gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens, &mut ctx, needs_scan);
         if needs_scan {
-            // Token-kind-set helpers interned by the scan functions'
-            // `kind_check_str` calls; emitted after `gen_cst_parser`.
             gen_kind_set_helpers(&mut w, &lowered, &ctx);
-            if ctx.emit_follow() {
-                gen_follow_mask_globals(&mut w, &ctx);
-            }
+        }
+        if ef {
+            gen_follow_mask_globals(&mut w, &ctx);
         }
         return GeneratedOutput {
             source: w.to_string(),
