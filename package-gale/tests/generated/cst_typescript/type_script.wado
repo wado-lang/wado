@@ -12446,8 +12446,6 @@ fn _parse_binding_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         let array_literal = _parse_array_literal(p, &EMPTY_FOLLOW)?;
     } else if grp_kind == TK_LIT_LBRACE {
         let object_literal = _parse_object_literal(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("ArrayLiteral")?;
     }
     return Result::Ok(());
 }
@@ -14258,8 +14256,6 @@ fn _parse_optional_parameter__inner(p: &mut Parser, follow: &List<List<i32>> = &
             let type_annotation = _parse_type_annotation(p, &EMPTY_FOLLOW)?;
         }
         let initializer = _parse_initializer(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -14920,8 +14916,6 @@ fn _parse_decorator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         } else {
             let decorator_call_expression = _parse_decorator_call_expression(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("DecoratorMemberExpression")?;
     }
     return Result::Ok(());
 }
@@ -16452,8 +16446,6 @@ fn _parse_abstract_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
         } else {
             let variable_statement = _parse_variable_statement(p, follow)?;
         }
-    } else {
-        p.fail("group alternative")?;
     }
     let eos = _parse_eos(p, follow)?;
     return Result::Ok(());
@@ -16499,8 +16491,6 @@ fn _parse_import_from_block__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             let import_namespace = _parse_import_namespace(p, &EMPTY_FOLLOW)?;
         } else if grp_kind == TK_LIT_LBRACE {
             let import_module_items = _parse_import_module_items(p, &EMPTY_FOLLOW)?;
-        } else {
-            p.fail("ImportNamespace")?;
         }
         let import_from = _parse_import_from(p, follow)?;
         let eos = _parse_eos(p, follow)?;
@@ -16683,8 +16673,6 @@ fn _parse_import_namespace__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         let star = p.expect(TK_LIT_STAR)?;
     } else if _gale_kind_set_9(grp_kind) {
         let identifier_name = _parse_identifier_name(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
         let as_ = p.expect(TK_As)?;
@@ -16770,8 +16758,6 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
         } else {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("ExportFromBlock")?;
     }
     let eos = _parse_eos(p, follow)?;
     return Result::Ok(());
@@ -17285,8 +17271,6 @@ fn _parse_variable_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
         let array_literal = _parse_array_literal(p, &EMPTY_FOLLOW)?;
     } else if grp_kind == TK_LIT_LBRACE {
         let object_literal = _parse_object_literal(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("IdentifierOrKeyWord")?;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COLON) {
         let type_annotation = _parse_type_annotation(p, &EMPTY_FOLLOW)?;
@@ -18112,8 +18096,6 @@ fn _parse_try_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
     } else if grp_kind == TK_Finally {
         let finally_production = _parse_finally_production(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18213,8 +18195,6 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
         let rbrace = p.expect(TK_LIT_RBRACE)?;
     } else if grp_kind == TK_SemiColon {
         let semicolon = p.expect(TK_SemiColon)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18597,8 +18577,6 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: &List
         let rbrace = p.expect(TK_LIT_RBRACE)?;
     } else if grp_kind == TK_SemiColon {
         let semicolon = p.expect(TK_SemiColon)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18664,8 +18642,6 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: &List
         } else {
             let set_accessor = _parse_set_accessor(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("GetAccessor")?;
     }
     return Result::Ok(());
 }
@@ -19496,8 +19472,6 @@ fn _parse_array_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         } else {
             let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("SingleExpression")?;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
         let comma = p.expect(TK_LIT_COMMA)?;
@@ -20100,8 +20074,6 @@ fn _parse_argument__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         } else {
             let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("SingleExpression")?;
     }
     return Result::Ok(());
 }

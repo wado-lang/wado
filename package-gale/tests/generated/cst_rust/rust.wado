@@ -13713,8 +13713,6 @@ fn _parse_macro_match__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &E
         let identifier = _parse_identifier(p, follow)?;
     } else if grp_kind == TK_KW_SELFVALUE {
         let kw_selfvalue = p.expect(TK_KW_SELFVALUE)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let colon = p.expect(TK_COLON)?;
     let macro_frag_spec = _parse_macro_frag_spec(p, follow)?;
@@ -14060,8 +14058,6 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let vis_item = _parse_vis_item(p, &EMPTY_FOLLOW)?;
     } else if _gale_kind_set_9(grp_kind) {
         let macro_item = _parse_macro_item(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("VisItem")?;
     }
     return Result::Ok(());
 }
@@ -14163,8 +14159,6 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         let union_ = _parse_union_(p, &EMPTY_FOLLOW)?;
     } else if grp_kind == TK_KW_STATIC {
         let static_item = _parse_static_item(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("Module")?;
     }
     return Result::Ok(());
 }
@@ -14294,8 +14288,6 @@ fn _parse_module__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             let item = _parse_item(p, &EMPTY_FOLLOW)?;
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -14374,8 +14366,6 @@ fn _parse_as_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let identifier = _parse_identifier(p, follow)?;
     } else if grp_kind == TK_UNDERSCORE {
         let underscore = p.expect(TK_UNDERSCORE)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -14422,8 +14412,6 @@ fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             let identifier = _parse_identifier(p, follow)?;
         } else if grp_kind == TK_UNDERSCORE {
             let underscore = p.expect(TK_UNDERSCORE)?;
-        } else {
-            p.fail("group alternative")?;
         }
     }
     return Result::Ok(());
@@ -14540,8 +14528,6 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             }
         }
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -14689,8 +14675,6 @@ fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let block_expression = _parse_block_expression(p, follow)?;
     } else if grp_kind == TK_SEMI {
         let semi = p.expect(TK_SEMI)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -14954,8 +14938,6 @@ fn _parse_self_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         } else {
             let typed_self = _parse_typed_self(p, &EMPTY_FOLLOW)?;
         }
-    } else {
-        p.fail("ShorthandSelf")?;
     }
     return Result::Ok(());
 }
@@ -15057,8 +15039,6 @@ fn _parse_function_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
     } else if grp_kind == TK_DOTDOTDOT {
         let dotdotdot = p.expect(TK_DOTDOTDOT)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -15084,8 +15064,6 @@ fn _parse_function_param_pattern__inner(p: &mut Parser, follow: &List<List<i32>>
         let type_ = _parse_type_(p, follow)?;
     } else if grp_kind == TK_DOTDOTDOT {
         let dotdotdot = p.expect(TK_DOTDOTDOT)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -15242,8 +15220,6 @@ fn _parse_struct_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let rcurlybrace = p.expect(TK_RCURLYBRACE)?;
     } else if grp_kind == TK_SEMI {
         let semi = p.expect(TK_SEMI)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -15693,8 +15669,6 @@ fn _parse_constant_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let identifier = _parse_identifier(p, follow)?;
     } else if grp_kind == TK_UNDERSCORE {
         let underscore = p.expect(TK_UNDERSCORE)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let colon = p.expect(TK_COLON)?;
     let type_ = _parse_type_(p, &FOLLOW_MASK_19)?;
@@ -16073,11 +16047,7 @@ fn _parse_external_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             let static_item = _parse_static_item(p, &EMPTY_FOLLOW)?;
         } else if _gale_kind_set_12(grp_kind) {
             let function_ = _parse_function_(p, &EMPTY_FOLLOW)?;
-        } else {
-            p.fail("StaticItem")?;
         }
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -16204,8 +16174,6 @@ fn _parse_generic_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
     } else if grp_kind == TK_KW_CONST {
         let const_param = _parse_const_param(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("LifetimeParam")?;
     }
     return Result::Ok(());
 }
@@ -16520,11 +16488,7 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             } else {
                 let function_ = _parse_function_(p, &EMPTY_FOLLOW)?;
             }
-        } else {
-            p.fail("TypeAlias")?;
         }
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18415,8 +18379,6 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: &List<List<i32>> = &
                 let comma = p.expect(TK_COMMA)?;
             }
         }
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18488,16 +18450,12 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
             } else if grp_kind == TK_INTEGER_LITERAL {
                 let tuple_index = _parse_tuple_index(p, &EMPTY_FOLLOW)?;
-            } else {
-                p.fail("Identifier")?;
             }
             let colon = p.expect(TK_COLON)?;
             let expression = _parse_expression(p, follow)?;
         } else {
             let identifier = _parse_identifier(p, follow)?;
         }
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -18821,8 +18779,6 @@ fn _parse_enum_expr_field__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> 
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
     } else if grp_kind == TK_INTEGER_LITERAL {
         let tuple_index = _parse_tuple_index(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("Identifier")?;
     }
     let colon = p.expect(TK_COLON)?;
     let expression = _parse_expression(p, follow)?;
@@ -19058,8 +19014,6 @@ fn _parse_closure_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &
             let closure_parameters = _parse_closure_parameters(p, &EMPTY_FOLLOW)?;
         }
         let or_2 = p.expect(TK_OR)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let grp_kind_2 = p.peek_kind();
     if _gale_kind_set_48(grp_kind_2) {
@@ -19068,8 +19022,6 @@ fn _parse_closure_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &
         let rarrow = p.expect(TK_RARROW)?;
         let type_no_bounds = _parse_type_no_bounds(p, &FOLLOW_MASK_28)?;
         let block_expression = _parse_block_expression(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -19192,8 +19144,6 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
     } else if grp_kind == TK_KW_FOR {
         let iterator_loop_expression = _parse_iterator_loop_expression(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("InfiniteLoopExpression")?;
     }
     return Result::Ok(());
 }
@@ -19340,8 +19290,6 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             } else {
                 let if_let_expression = _parse_if_let_expression(p, &EMPTY_FOLLOW)?;
             }
-        } else {
-            p.fail("BlockExpression")?;
         }
     }
     return Result::Ok(());
@@ -19389,8 +19337,6 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             } else {
                 let if_let_expression = _parse_if_let_expression(p, &EMPTY_FOLLOW)?;
             }
-        } else {
-            p.fail("BlockExpression")?;
         }
     }
     return Result::Ok(());
@@ -20628,8 +20574,6 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: &List<List<i32>> =
             }
             let identifier = _parse_identifier(p, follow)?;
         }
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -21908,8 +21852,6 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             let identifier = _parse_identifier(p, follow)?;
         } else if grp_kind == TK_UNDERSCORE {
             let underscore = p.expect(TK_UNDERSCORE)?;
-        } else {
-            p.fail("group alternative")?;
         }
         let colon = p.expect(TK_COLON)?;
     }
@@ -23342,8 +23284,6 @@ fn _parse_visibility__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         } else if grp_kind == TK_KW_IN {
             let kw_in = p.expect(TK_KW_IN)?;
             let simple_path = _parse_simple_path(p, follow)?;
-        } else {
-            p.fail("group alternative")?;
         }
         let rparen = p.expect(TK_RPAREN)?;
     }

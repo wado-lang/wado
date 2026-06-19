@@ -32268,8 +32268,6 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_5)?;
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3)?;
@@ -32323,8 +32321,6 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
@@ -32375,8 +32371,6 @@ fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, follow)?;
     let media_query_list = _parse_media_query_list(p, follow)?;
@@ -32424,8 +32418,6 @@ fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -32544,8 +32536,6 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
     let semicolon = p.expect(TK_LIT_SEMI)?;
@@ -32624,8 +32614,6 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
         let string_ = p.expect(TK_String_)?;
     } else if _gale_kind_set_2(grp_kind) {
         let url = _parse_url(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     let ws_2 = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -33236,8 +33224,6 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             } else {
                 let universal = _parse_universal(p, &EMPTY_FOLLOW)?;
             }
-        } else {
-            p.fail("TypeSelector")?;
         }
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -33597,8 +33583,6 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             let ident = _parse_ident(p, follow)?;
         } else if grp_kind == TK_String_ {
             let string_ = p.expect(TK_String_)?;
-        } else {
-            p.fail("group alternative")?;
         }
         let ws_2 = _parse_ws(p, follow)?;
     }
@@ -33629,8 +33613,6 @@ fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let ident = _parse_ident(p, &EMPTY_FOLLOW)?;
     } else if grp_kind == TK_Function_ {
         let functional_pseudo = _parse_functional_pseudo(p, &EMPTY_FOLLOW)?;
-    } else {
-        p.fail("Ident")?;
     }
     return Result::Ok(());
 }
@@ -33756,8 +33738,6 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             let string_ = p.expect(TK_String_)?;
         } else if _gale_kind_set_4(grp_kind) {
             let ident = _parse_ident(p, follow)?;
-        } else {
-            p.fail("group alternative")?;
         }
         let ws = _parse_ws(p, follow)?;
     }
@@ -35132,8 +35112,6 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     } else if grp_kind == TK_LIT_SEMI {
         let semicolon = p.expect(TK_LIT_SEMI)?;
         let ws = _parse_ws(p, follow)?;
-    } else {
-        p.fail("group alternative")?;
     }
     return Result::Ok(());
 }
@@ -35322,8 +35300,6 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             } else {
                 let block = _parse_block(p, follow)?;
             }
-        } else {
-            p.fail("group alternative")?;
         }
     }
     let rbrace = p.expect(TK_LIT_RBRACE)?;

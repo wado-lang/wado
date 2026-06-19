@@ -2888,8 +2888,6 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
             let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE)?;
-        } else {
-            p.fail("group alternative")?;
         }
         return Result::Ok(());
     }
@@ -2982,8 +2980,6 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             let cdata = p.expect(TK_CDATA)?;
         } else if _gale_kind_set_6(grp_kind) {
             let html_comment = _parse_html_comment(p, follow)?;
-        } else {
-            p.fail("group alternative")?;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_gale_kind_set_8(p.peek_kind())) {
             let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW)?;
