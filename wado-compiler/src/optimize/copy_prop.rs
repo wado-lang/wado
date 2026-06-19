@@ -43,13 +43,14 @@ struct CopyBinding {
 }
 
 impl CopySource {
-    /// The source local index for the index-bearing sources; `None` for
-    /// literals (which are always stable).
+    /// The source local index for the index-bearing sources; `None` for a
+    /// promoted-value source (which is immutable and always stable).
     fn local_index(&self) -> Option<u32> {
         match self {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
+            CopySource::Value { .. } => None,
         }
     }
 }
@@ -69,6 +70,13 @@ enum CopySource {
         index: u32,
         name: String,
         inner_type_id: TypeId,
+    },
+    /// A binding `let x = Operand::Value(v)` — `x` is a copy of the promoted
+    /// pure value `v`. Since `v` is immutable (a frozen operand cannot stale),
+    /// every read of `x` resolves to `v` directly; propagating it recovers the
+    /// const / store-load-forward folding the value passes do under promotion.
+    Value {
+        value: crate::nir_value_graph::ValueId,
     },
 }
 
@@ -97,16 +105,27 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         local_index,
         value,
         skip_value_copy,
+        type_id,
         ..
     } = &body.stmts[stmt].kind
     else {
         return None;
     };
-    let (local_index, value, skip_value_copy) = (*local_index, *value, *skip_value_copy);
+    let (local_index, value, skip_value_copy, let_type_id) =
+        (*local_index, *value, *skip_value_copy, *type_id);
     if skip_value_copy {
         return None;
     }
-    // A promoted constant binding is not a copy of another place.
+    // `let x = Operand::Value(v)` — propagate the promoted pure value `v` to
+    // every read of `x`. `v` is immutable, so the binding is always stable.
+    if let crate::nir_arena::Operand::Value(v) = value {
+        return Some(CopyBinding {
+            target_local: local_index,
+            source: CopySource::Value { value: v },
+            type_id: let_type_id,
+            source_scope_stable: true,
+        });
+    }
     let value = unwrap_copy_value(body, value.as_expr()?);
     let value_type = body.exprs[value].type_id;
 
@@ -502,6 +521,9 @@ fn can_propagate_copy(
             }
             true
         }
+        // A promoted pure value is immutable and has no source local to guard;
+        // propagating it to every read of the target is always safe.
+        CopySource::Value { .. } => true,
     }
 }
 
@@ -576,6 +598,11 @@ fn apply_in_expr(
                 name,
                 inner_type_id,
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            CopySource::Value { value } => {
+                // Redirect the read's parent operand slot to the promoted value
+                // (the read `id` becomes orphaned; a value is not an `ExprKind`).
+                engine.redirect_expr(id, crate::nir_arena::Operand::Value(value));
+            }
         }
         return;
     }
@@ -641,6 +668,8 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
+                // No source local to chain against.
+                CopySource::Value { .. } => false,
             };
             if source_conflicts {
                 has_deferred = true;
