@@ -707,6 +707,18 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
+                // Inline restructures the body through the arena directly, not
+                // the maintaining engine edit API, so the persisted value graph
+                // (`value_of` / `loop_entry_values`) is now stale for this
+                // function — a later promotion-reading pass (the late freeze,
+                // store-load-forward) would consume a stale value and miscompile
+                // (e.g. an i128 const field read as non-constant). Drop it so the
+                // next engine session rebuilds it fresh against the spliced body.
+                // The value pool persists (ids stay stable), so promoted operands
+                // still resolve.
+                if let Some(body) = func.body.as_mut() {
+                    body.value_graph = None;
+                }
                 // Only this caller's body changed (callee bodies are copied,
                 // not modified), so report just the caller. The caller's
                 // call-graph edges shift, but stale edges only cost 1-hop
