@@ -1933,6 +1933,47 @@ impl FunctionTranslator<'_, '_> {
                     else_body: Some(vec![e]),
                 }
             }
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => {
+                // Re-emit `receiver.field` as a `StructGet`. The value carries only
+                // `field_index` (the receiver `ValueId` pins the type), so derive
+                // the field name from the receiver value's recorded struct type
+                // (the builder stamped it from the receiver expr). Soundness of
+                // *where* this load runs is the materialiser's job (WEP P2): the
+                // shared `heap_ver` guarantees the field is unchanged across uses.
+                let recv_nir_ty = self
+                    .body
+                    .values
+                    .type_of(receiver)
+                    .expect("promoted FieldAccess receiver has no recorded type");
+                let recv = self.extract_value(receiver);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, recv_nir_ty);
+                let WirType::Ref {
+                    type_id: struct_tid,
+                    ..
+                } = wir_type
+                else {
+                    panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
+                };
+                let field_name = match self.ctx.types.get(struct_tid.index() as usize) {
+                    Some(crate::wir::WirTypeDef::Struct(st)) => st
+                        .fields
+                        .get(field_index as usize)
+                        .map(|f| f.name.clone())
+                        .expect("FieldAccess field_index out of range"),
+                    _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
+                };
+                let result_ty = self.struct_field_wir_type(&struct_tid, &field_name);
+                WirInstr::StructGet {
+                    type_id: struct_tid,
+                    field_name,
+                    expr: Box::new(recv),
+                    result_ty,
+                }
+            }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
     }
