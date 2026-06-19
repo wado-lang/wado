@@ -542,7 +542,7 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
     }
     return [line, col];
 }
-//! The single homogeneous (untyped) concrete syntax tree produced by every
+//! The single (untyped) concrete syntax tree produced by every
 //! generated error-resilient parser, the `TreeBuilder` the parser drives to
 //! construct it, and the `ParseResult` the parser returns.
 //!
@@ -600,7 +600,7 @@ pub variant CstChild {
     Node(CstNode),  // a sub-rule (an error region when its kind is K_ERROR)
 }
 
-/// A node in the homogeneous tree. A pure value: terminals are `i32` indices
+/// A node in the tree. A pure value: terminals are `i32` indices
 /// into a `TokenStream` that lives outside the tree (in `ParseResult`), so
 /// rendering methods take that stream as an argument.
 pub struct CstNode {
@@ -682,7 +682,7 @@ fn cst_to_string_tree_impl(
     out.push_str(&")");
 }
 
-/// What a parse returns: the homogeneous root, the token stream its terminal
+/// What a parse returns: the root, the token stream its terminal
 /// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
 /// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
 /// the result is a freely movable value.
@@ -762,7 +762,7 @@ impl TreeBuilder {
     /// Discard every event recorded since `checkpoint`, rolling the builder
     /// back to that point. Used by a *speculative* parse that runs only to
     /// localise a deep error (and then restores the cursor): under the
-    /// homogeneous sink the speculative subtree must not leak into the real
+    /// emitter the speculative subtree must not leak into the real
     /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
     pub fn truncate(&mut self, checkpoint: i32) {
         while self.events.len() > checkpoint {
