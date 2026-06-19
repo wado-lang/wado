@@ -42,7 +42,7 @@ use {
     compute_lr_second_token,
     compute_non_greedy_condition,
     gen_rep_scan_guard,
-    gen_op_leaf,
+    follow_arg_expr,
 } from "./parser_gen.wado";
 
 /// The defaulted `follow` parameter every `_parse_*` carries when the grammar
@@ -173,7 +173,7 @@ fn gen_tournament_alt_scans(w: &mut CodeWriter, rule: &ParserRule, lowered_rule:
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `GALE_RULE_NAMES`
 /// table (rule-index order). `NodeKind`'s name-aware `Display`/`Inspect` are a
 /// later stage; for now the name table drives `to_string_tree`.
-fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
+pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
         w.line(&`global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
     }
@@ -698,15 +698,27 @@ fn emit_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, ef: bool, 
 }
 
 fn emit_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
-    // Leaf terminals / rule calls are emitted by the shared, sink-aware
-    // `gen_op_leaf` (homogeneous branch) — the first step of consolidating
-    // emission into one sink-parameterised emitter. The control-flow ops
-    // (Repeat / Group) and the transparent ListLabel stay here for now.
+    // cst_gen's own leaf emission (the `bailed`-flag Parser: `expect_token` /
+    // `_parse_X(p, …)` with no `?`). The sink_v2 route instead uses
+    // parser_gen's typed `gen_op_leaf` against a builder-appending Parser; this
+    // legacy path retires once sink_v2 reaches parity.
     match *op {
+        Token(t) => w.line(&`p.expect_token({t.kind});`),
+        Literal(l) => w.line(&`p.expect_token({l.kind});`),
+        RuleCall(rc) => {
+            let mp = if let Some(prec) = rc.min_prec_arg {
+                `, {prec}`;
+            } else {
+                String::from("");
+            };
+            let fa = if ef { `, {follow_arg_expr(&rc.follow_arg)}` } else { String::from("") };
+            w.line(&`_parse_{rc.target_snake}(p{fa}{mp});`);
+        },
+        Wildcard(_) => w.line(&"p.expect_any();"),
+        Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
         ListLabel(ll) => emit_op(w, &ll.inner, ctx, ef, nc),
         Repeat(r) => emit_repeat(w, &r, ctx, ef, nc),
         Group(g) => emit_group(w, &g, ctx, ef, nc),
-        _ => gen_op_leaf(w, op, ctx, nc),
     }
 }
 
@@ -871,7 +883,7 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ef: bool) {
 /// Emit a `to_string_tree(node)` convenience that supplies the grammar's name
 /// tables (rules from `GALE_RULE_NAMES`, tokens via the generated
 /// `token_kind_name`). Used by driver tests; never called by the parser.
-fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
     w.begin(&"pub fn to_string_tree(result: &ParseResult) -> String");
     w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);

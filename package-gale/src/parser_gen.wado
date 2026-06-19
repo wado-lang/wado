@@ -143,7 +143,38 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered, ctx.is_trace());
+    if ctx.is_homogeneous() {
+        gen_parse_entry_homogeneous(w, lowered, ctx);
+    } else {
+        gen_parse_entry(w, lowered, ctx.is_trace());
+    }
+}
+
+/// Public `parse` entry under the homogeneous sink: tokenize, run the start
+/// rule (which drives the builder), and return a `ParseResult`. A propagated
+/// `Err` is the single fail-soft diagnostic; the partial tree (open nodes
+/// folded by each wrapper's `finish_node`) is still returned.
+fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+    if lowered.parser_rules.len() == 0 {
+        return;
+    }
+    let header = rule_header(&lowered.parser_rules[0]);
+    let follow_arg = if ctx.emit_follow() { ", &EMPTY_FOLLOW" } else { "" };
+    w.begin(&"pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult");
+    w.line(&"let _ = max_errors;");
+    w.line(&"let tokens = tokenize(input);");
+    w.line(&"let mut p = Parser::new(tokens);");
+    w.line(&`let _r = _parse_{header.snake_name}(&mut p{follow_arg});`);
+    w.begin(&"if let Err(e) = _r");
+    w.line(&"let lc = line_col(p.tokens.chars, e.span.start);");
+    w.line(
+        &"let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);",
+    );
+    w.line(&"p.diagnostics.push(d);");
+    w.end();
+    w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    w.end();
+    w.blank();
 }
 
 fn join_kinds(kinds: &List<String>) -> String {
@@ -241,7 +272,11 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, homogeneo
     fe.add_param(&"expected", &"List<String>");
     fe.set_return_type(&"ParseError");
     fe.emit_begin(w);
-    w.line(&"let lc = line_col_at(self.tokens.chars, span.start);");
+    if homogeneous {
+        w.line(&"let lc = line_col(self.tokens.chars, span.start);");
+    } else {
+        w.line(&"let lc = line_col_at(self.tokens.chars, span.start);");
+    }
     w.line(&"return ParseError::at(message, span, expected, lc.0, lc.1);");
     w.end();
     w.blank();
@@ -1786,6 +1821,15 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
     );
 }
 
+/// Return type of a rule's inner / alt parse function: the typed CST type, or
+/// `()` under the homogeneous sink (the tree accrues in the `TreeBuilder`).
+fn rule_result_type(ctx: &GenContext, type_name: &String) -> String {
+    if ctx.is_homogeneous() {
+        return String::from("Result<(), ParseError>");
+    }
+    return `Result<{*type_name}, ParseError>`;
+}
+
 /// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
 fn rule_kind_const(name: &String) -> String {
     let mut out = String::with_capacity(name.len() + 3);
@@ -2026,7 +2070,7 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    f.set_return_type(&rule_result_type(ctx, &type_name));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     let body = rule_alt_body(lowered_rule, 0).unwrap();
@@ -2049,7 +2093,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    f.set_return_type(&rule_result_type(ctx, &type_name));
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     w.line(&"let kind = p.peek_kind();");
@@ -2190,7 +2234,7 @@ fn gen_parse_fn_named(
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
-                    f.set_return_type(&`Result<{type_name}, ParseError>`);
+                    f.set_return_type(&rule_result_type(ctx, &type_name));
                     f.emit_begin(w);
                     w.line(&"let start = p.peek_start();");
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -2229,7 +2273,7 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&`Result<{type_name}, ParseError>`);
+        f.set_return_type(&rule_result_type(ctx, &type_name));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
@@ -2273,7 +2317,7 @@ fn gen_parse_fn_named(
             type_str: "i32",
             default_value: Option::Some("0"),
         });
-        f2.set_return_type(&`Result<{type_name}, ParseError>`);
+        f2.set_return_type(&rule_result_type(ctx, &type_name));
         f2.emit_begin(w);
         w.line(&"let start = p.peek_start();");
         w.line(&`let mut result = {*fn_name}_atom(p{follow_sep(ctx.emit_follow())})?;`);
@@ -2298,7 +2342,7 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&`Result<{type_name}, ParseError>`);
+        f.set_return_type(&rule_result_type(ctx, &type_name));
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
@@ -2342,6 +2386,14 @@ fn gen_alt_body(
     ctx: &mut GenContext,
 ) {
     gen_alt_elements(w, &alt.elements, &body.ops, ctx);
+
+    // Homogeneous sink: the alt's terminals / subtrees already appended to the
+    // builder via the Parser methods, so there is no struct to assemble — the
+    // rule wrapper's `finish_node` closes the node.
+    if ctx.is_homogeneous() {
+        w.line(&"return Result::Ok(());");
+        return;
+    }
 
     if let Some(case) = variant_case {
         let sname = struct_name.unwrap();
@@ -2641,10 +2693,10 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
 pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    if ctx.is_homogeneous() {
-        gen_op_leaf_homogeneous(w, op, ctx);
-        return;
-    }
+    // Sink-uniform: the homogeneous Parser's `expect` / `match_*` append the
+    // matched token to the builder while keeping the typed `Result<i32>`
+    // signature, so the leaf line is identical for both sinks. (The legacy
+    // cst_gen path emits its own `expect_token` form.)
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
@@ -2677,38 +2729,6 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
     };
 }
 
-/// Homogeneous-sink leaf emission: drive the infallible `TreeBuilder` `Parser`
-/// (append the terminal / recurse) instead of binding a typed-CST field with
-/// `?`. No field names, no `Result` — the node's children accrue in the builder
-/// in source order. Byte-identical to the `cst_gen` emitter it replaces, so the
-/// homogeneous corpus stays green as the bespoke emitter delegates here.
-fn gen_op_leaf_homogeneous(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {
-    match *op {
-        Token(t) => w.line(&`p.expect_token({t.kind});`),
-        Literal(l) => w.line(&`p.expect_token({l.kind});`),
-        RuleCall(r) => {
-            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
-            if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`_parse_{r.target_snake}(p{follow_arg_str}, {min_prec});`);
-            } else {
-                w.line(&`_parse_{r.target_snake}(p{follow_arg_str});`);
-            }
-        },
-        Wildcard(_) => w.line(&"p.expect_any();"),
-        Excluded(eop) => {
-            let mut list = String::with_capacity(32);
-            for let mut i = 0; i < eop.kinds.len(); i += 1 {
-                if i > 0 {
-                    list.push_str(&", ");
-                }
-                list.push_str(&eop.kinds[i]);
-            }
-            w.line(&`p.expect_not([{list}]);`);
-        },
-        Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf_homogeneous: non-leaf op; caller must guard with op_is_leaf"),
-    };
-}
 
 /// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
 /// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to
@@ -5245,7 +5265,7 @@ fn gen_lr_suffix_helpers(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&`Result<{type_name}, ParseError>`);
+        f.set_return_type(&rule_result_type(ctx, type_name));
         f.emit_begin(w);
 
         let mut name_counts: List<[String, i32]> = [];
