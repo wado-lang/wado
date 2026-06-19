@@ -628,6 +628,20 @@ impl CstNode {
         cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
         return out;
     }
+
+    /// First direct child node of rule `kind`, or `null`. Used by sub-tree
+    /// rendering (e.g. an ANTLR4 descriptor whose `[output]` is a labelled
+    /// child subtree, not the start rule's full tree).
+    pub fn find_child(&self, kind: NodeKind) -> Option<CstNode> {
+        for let child of &self.children {
+            if let Node(n) = *child {
+                if n.kind == kind {
+                    return Option::Some(n);
+                }
+            }
+        }
+        return null;
+    }
 }
 
 fn cst_to_string_tree_impl(
@@ -828,6 +842,195 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         return CstNode { kind, span: Span::new(start, end), children, flags };
     }
     panic("TreeBuilder: expected Open event");
+}
+//! Consumer-facing tree / token utilities exposed by every generated
+//! parser: S-expression normalisation, child-node lookup, and the
+//! ANTLR4-format token-stream dump used by the compatibility suite. Always
+//! emitted. The generated parser code never calls these itself; consumers
+//! (driver tests, the ANTLR4-compat suite) import them from the generated
+//! module. The
+//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+
+
+/// Normalize a multi-line S-expression string for comparison.
+/// Collapses whitespace runs to single spaces and trims, while preserving
+/// whitespace inside double-quoted strings.
+pub fn normalize_tree(s: &String) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut space_pending = false;
+    for let c of s.chars() {
+        if in_string {
+            out.push(c);
+            if c == '"' {
+                in_string = false;
+            }
+        } else if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+            if out.len() > 0 {
+                space_pending = true;
+            }
+        } else {
+            if space_pending {
+                out.push(' ');
+                space_pending = false;
+            }
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+/// Produce an ANTLR4-style `Token.toString()` dump of the token stream:
+///
+///   [@<idx>,<start>:<end>='<text>',<<type>>,<line>:<col>]\n  (per token)
+///
+/// Used by Stage L (token-stream equivalence) tests against the upstream
+/// `LexerExec` / etc. `[output]` blocks.
+///
+/// - `tokens` is the `TokenStream` returned by the generated
+///   `tokenize(input)`. Skip-channel trivia (channel 0) is discarded; only
+///   non-default-channel trivia is interleaved.
+/// - `eof_kind` is the value of the generated `TK_EOF` constant; EOF
+///   tokens print as `<EOF>` text with type id `-1`.
+///
+/// Type IDs are remapped from Gale's 0-based numbering to ANTLR4's
+/// 1-based: `kind + 1` for explicit lexer rules, `-1` for EOF. Lexer-only
+/// grammars never introduce implicit literals, so the contiguous
+/// `0..num_lexer_rules` range maps directly onto ANTLR4's
+/// `1..num_lexer_rules+1`.
+///
+/// Text escaping follows ANTLR4's `CommonToken.toString` format (observed
+/// via the published jar as a black-box oracle): only `\n`, `\r`, `\t` are
+/// escaped; backslashes and quotes pass through unchanged.
+pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
+    let chars = tokens.chars;
+    // Char index where each line begins; built once so each token's `line:col`
+    // is an O(log n) binary search (`line_col_from_starts`) not an O(pos) rescan.
+    let mut line_starts: List<i32> = [0];
+    for let mut i = 0; i < chars.len(); i += 1 {
+        if chars[i] == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let mut out = String::with_capacity(tokens.len() * 32);
+    let mut index = 0;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        // Non-default-channel trivia (`-> channel(HIDDEN)`) is parked in this
+        // token's trivia range; ANTLR4 still dumps it in source order with a
+        // `channel=N` attribute, so interleave it ahead of the host token.
+        // Skip trivia (channel 0) is discarded — neither printed nor indexed
+        // (matching ANTLR4's `Lexer.skip()`).
+        let lo = tokens.triv_lo[i];
+        let hi = tokens.triv_hi[i];
+        for let mut t = lo; t < hi; t += 1 {
+            if tokens.triv_chans[t] != 0 {
+                emit_lexer_token(
+                    &mut out,
+                    tokens,
+                    tokens.triv_kinds[t],
+                    tokens.triv_starts[t],
+                    tokens.triv_ends[t],
+                    tokens.triv_chans[t],
+                    &line_starts,
+                    index,
+                    eof_kind,
+                );
+                index += 1;
+            }
+        }
+        emit_lexer_token(
+            &mut out,
+            tokens,
+            tokens.kinds[i],
+            tokens.starts[i],
+            tokens.ends[i],
+            0,
+            &line_starts,
+            index,
+            eof_kind,
+        );
+        index += 1;
+    }
+    return out;
+}
+
+/// Renders a single token in ANTLR4's `CommonToken.toString` format, used by
+/// `to_lexer_string` for both main-stream tokens and interleaved
+/// non-default-channel trivia. `channel=N` is printed only for non-default
+/// channels, matching ANTLR4.
+fn emit_lexer_token(
+    out: &mut String,
+    tokens: &TokenStream,
+    kind: i32,
+    start: i32,
+    end: i32,
+    channel: i32,
+    line_starts: &List<i32>,
+    index: i32,
+    eof_kind: i32,
+) {
+    let is_eof = kind == eof_kind;
+    let mut text_buf = String::with_capacity(16);
+    if is_eof {
+        text_buf.push_str(&"<EOF>");
+    } else {
+        for let mut j = start; j < end; j += 1 {
+            let c = tokens.chars[j];
+            match c {
+                '\n' => text_buf.push_str(&"\\n"),
+                '\r' => text_buf.push_str(&"\\r"),
+                '\t' => text_buf.push_str(&"\\t"),
+                _ => text_buf.push(c),
+            }
+        }
+    }
+    let type_id = if is_eof { -1 } else { kind + 1 };
+    let line_col = line_col_from_starts(line_starts, start);
+    let line = line_col.0;
+    let col = line_col.1;
+    let end_inclusive = end - 1;
+    let channel_attr = if channel != 0 { `channel={channel},` } else { String::from("") };
+    out.push_str(&`[@{index},{start}:{end_inclusive}='{text_buf}',<{type_id}>,{channel_attr}{line}:{col}]\n`);
+}
+
+/// Compute (line, column) at a 0-based char index in `chars`, with
+/// 1-based line and 0-based column to match ANTLR4's `Token` getters.
+/// The parser's error path reports at most one position per parse, so the
+/// linear scan is fine; the per-token dump uses `line_col_from_starts`.
+fn line_col_at(chars: &List<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}
+
+/// Compute (line, column) from the precomputed `line_starts` table (char
+/// index where each line begins). Binary search for the greatest
+/// `line_starts[j] <= pos`: that line is `j + 1` and the column is the
+/// offset past its start. O(log lines) per call.
+fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let mut lo = 0;
+    let mut hi = line_starts.len() - 1;
+    while lo < hi {
+        let mid = (lo + hi + 1) / 2;
+        if line_starts[mid] <= pos {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return [lo + 1, pos - line_starts[lo]];
 }
 pub enum TokenKind {
     ID,
@@ -1230,10 +1433,44 @@ fn _parse_trailer(p: &mut Parser) -> Result<(), ParseError> {
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return parse_prog(input, max_errors);
+}
+
+pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     let _ = max_errors;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     let _r = _parse_prog(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
+pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = _parse_item(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
+pub fn parse_trailer(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = _parse_trailer(&mut p);
     if let Err(e) = _r {
         let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
@@ -1250,5 +1487,23 @@ pub fn to_string_tree(result: &ParseResult) -> String {
         token_names.push(token_kind_name(k));
     }
     return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+}
+
+pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
+    let mut token_names: List<String> = List::with_capacity(6);
+    for let mut k = 0; k < 6; k += 1 {
+        token_names.push(token_kind_name(k));
+    }
+    let mut _kind: i32 = -1;
+    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
+        if GALE_RULE_NAMES[i] == *rule {
+            _kind = i;
+            break;
+        }
+    }
+    if let Some(sub) = result.root.find_child(_kind as NodeKind) {
+        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    }
+    return String::new();
 }
 
