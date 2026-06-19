@@ -2118,13 +2118,19 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     }
     let check = ctx.kind_check_str(&firsts, &"kind");
     w.begin(&`if {check}`);
-    w.line(&"let token = p.expect(kind)?;");
-    w.line(&`return Result::Ok({type_name} \{`);
-    w.indent();
-    gen_clamped_span_field(w);
-    w.line(&"token,");
-    w.dedent();
-    w.line(&"});");
+    if ctx.is_homogeneous() {
+        // The token is appended by `expect`; no struct to build.
+        w.line(&"let _ = p.expect(kind)?;");
+        w.line(&"return Result::Ok(());");
+    } else {
+        w.line(&"let token = p.expect(kind)?;");
+        w.line(&`return Result::Ok({type_name} \{`);
+        w.indent();
+        gen_clamped_span_field(w);
+        w.line(&"token,");
+        w.dedent();
+        w.line(&"});");
+    }
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
     w.end();
