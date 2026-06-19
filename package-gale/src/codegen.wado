@@ -114,24 +114,17 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
-    // The resilient CST parser is the only emission path: the
-    // Parser drives a `TreeBuilder` while every prediction / scan / ATN
-    // decision is reused unchanged. Scan functions (and their kind-set
-    // helpers) are emitted only when a rule needs a longest-match tournament;
-    // the FOLLOW runtime / mask globals only when lowering built a
-    // caller-FOLLOW gate (`emit_follow`).
+    // Scan functions (and their kind-set helpers) are emitted only when a rule
+    // needs a longest-match tournament; the FOLLOW runtime / mask globals only
+    // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
     gen_runtime(&mut w, ef, ctx.needs_atn(), options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
-    // The node-kind table and `to_string_tree` come from the CST
-    // scaffolding (`cst_gen`).
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
-    // Highlight walks the `CstNode` tree directly (one generic
-    // recursive walk, `highlight_walk`), so it works on a partial tree too.
     if options.highlight {
         gen_highlight(&mut w, grammar, &lit_tokens);
     }
@@ -235,20 +228,18 @@ fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
-    // Sink-independent consumer tools (`normalize_tree`, `to_lexer_string`).
     gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
-    // Reused scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
+    // Scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
     // grammar has a caller-FOLLOW gate.
     if emit_follow {
         gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
     }
-    // The reused prediction emits ATN-simulator calls (`AtnSim`, `atn_decode`,
+    // Prediction emits ATN-simulator calls (`AtnSim`, `atn_decode`,
     // `atn_predict_with_stack`, …) for ATN-class decisions; inline the runtime
-    // so the generated parser resolves them, exactly as the typed path does.
+    // so the generated parser resolves them.
     if needs_atn {
         gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
     }
-    // Highlight: the visitor/mapping plus the `CstNode` walk.
     if highlight {
         gen_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
         gen_runtime_fragment(w, &#include_str("./runtime/highlight_walk.wado"));

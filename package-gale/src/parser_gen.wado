@@ -2613,10 +2613,8 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
 pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    // Sink-uniform: the Parser's `expect` / `match_*` append the
-    // matched token to the builder while keeping the typed `Result<i32>`
-    // signature, so the leaf line is identical for both sinks. (The legacy
-    // cst_gen path emits its own `expect_token` form.)
+    // The Parser's `expect` / `match_*` append the matched token to the
+    // builder and return `Result<i32>`.
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
@@ -3798,13 +3796,9 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
     return out;
 }
 
-/// Single-alt group emit `(e1 e2 …)`: parses each inner element and
-/// then constructs the SingleAlt's CST struct. The outer field name
-/// (`sa.field`) and struct type name (`sa.struct_name`) come from the
-/// `SingleAltShape` payload; the struct-literal field list comes from
-/// `body.fields` (lower's canonical list). Inner element parsing still
-/// walks surface IR via `gen_elements_with_non_greedy`. (Typed-sink arm
-/// only — dead under the single emitter.)
+/// Single-alt group emit `(e1 e2 …)`: parse each inner element (each appends
+/// its tokens / sub-nodes to the builder). Inner element parsing walks surface
+/// IR via `gen_elements_with_non_greedy`.
 fn gen_consume_single_alt_group_op(
     w: &mut CodeWriter,
     body: &AltBody,
@@ -4114,8 +4108,7 @@ fn gen_op_repeat_non_greedy_storable(
     let empty_iter_follow = [] as List<String>;
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
-    // the body appends to the builder, so drop the
-    // `List<T>` accumulation; the `while` exit condition is sink-uniform.
+    // The body appends to the builder, so there is no `List<T>` to accumulate.
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
@@ -4550,10 +4543,9 @@ fn gen_op_repeat_star_plus_storable(
     let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
-    // the iteration body appends to the builder via the
-    // Parser, so there is no `List<T>` to accumulate — skip the list decl
-    // and the per-iteration `.push`. The loop / scan-guard / caller-FOLLOW
-    // gate structure is identical (sink-uniform).
+    // The iteration body appends to the builder, so there is no `List<T>` to
+    // accumulate (no list decl, no per-iteration `.push`); the loop keeps the
+    // scan-guard / caller-FOLLOW gate.
 
     if let Star = rep.kind {
         if rep_op.body_scannable {
@@ -4616,7 +4608,7 @@ fn gen_op_repeat_star_plus_storable(
     }
 }
 
-/// Loop-exit guard for a scan-gated Repeat. Both sinks augment the plain
+/// Loop-exit guard for a scan-gated Repeat. Augments the plain
 /// `if scan_pos < 0 { break }` with a speculative re-parse of a RuleRef inner
 /// that records the precise deep error (`gen_rep_break_with_recovery`); the
 /// emitter brackets the speculative parse with a builder

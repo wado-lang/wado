@@ -3,11 +3,10 @@ use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
-/// `highlight`: reuse the (sink-independent) token/rule
-/// mapping, then drive the generic `highlight_walk` over the parsed `CstNode`
-/// tree. The `parse` always returns a tree (partial on broken
-/// input), so there is no parse-failure / tokenize-only branch — a broken
-/// input still highlights from its partial tree.
+/// `highlight`: build the token/rule mapping, then drive `highlight_walk`
+/// over the parsed `CstNode` tree. `parse` always returns a tree (partial on
+/// broken input), so there is no parse-failure / tokenize-only branch — a
+/// broken input still highlights from its partial tree.
 pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
     let mut f = FnSpec::new("highlight");
@@ -21,8 +20,7 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<Li
         w.line(&"let result = parse(input);");
         // A clean parse walks the tree (rule-context overrides apply); a broken
         // parse leaves a partial tree that need not cover every token, so fall
-        // back to a flat token pass (default classes only), matching the typed
-        // path's parse-failure behaviour.
+        // back to a flat token pass (default classes only).
         w.begin(&"if result.diagnostics.is_empty()");
         w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.root);");
         w.else_begin(&"else");
