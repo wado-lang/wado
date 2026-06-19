@@ -456,9 +456,12 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, homogeneo
     w.begin(&"for let x of included");
     w.begin(&"if x == k");
     w.begin(&"if k == TK_EOF");
+    if homogeneous {
+        w.line(&"self.b.token(self.pos);");
+    }
     w.line(&"return Result::Ok(self.pos);");
     w.end();
-    w.line(&"return Result::Ok(self.advance());");
+    emit_consume_return(w, homogeneous);
     w.end();
     w.end();
     w.line(&"return Result::Err(self.error(");
@@ -2531,6 +2534,12 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_suffix_helpers";
     let mut name_counts: List<[String, i32]> = [];
+    // Homogeneous sink: emit the body from the lowered ops alone — leaves
+    // append via the Parser, groups / repeats dispatch on their GIR shape.
+    if ctx.is_homogeneous() {
+        gen_ops_homog(w, ops, ctx, &mut name_counts);
+        return;
+    }
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
@@ -2727,6 +2736,128 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
         // the caller's `op_is_leaf` gate was bypassed.
         Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
     };
+}
+
+// === Homogeneous sink: GIR-op body emission ===
+// Under the homogeneous sink the alt body is emitted from the lowered ops (no
+// surface elements, no typed fields): leaves go through `gen_op_leaf` (the
+// Parser appends), groups / repeats dispatch on their GIR shape and recurse.
+// Mirrors `cst_gen`'s emitter but against the builder-appending Parser, so the
+// `?`-folding fail-soft and the typed leaf API are uniform with prediction.
+
+fn gen_ops_homog(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    for let op of ops {
+        gen_op_homog(w, op, ctx, nc);
+    }
+}
+
+fn gen_op_homog(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    match *op {
+        Repeat(r) => gen_op_repeat_homog(w, &r, ctx, nc),
+        Group(g) => gen_op_group_homog(w, &g, ctx, nc),
+        ListLabel(ll) => gen_op_homog(w, &ll.inner, ctx, nc),
+        _ => gen_op_leaf(w, op, ctx, nc),
+    }
+}
+
+/// If every alt is a single terminal, the kind constants; else `None`.
+fn group_token_only_kinds_homog(alts: &List<AltBody>) -> Option<List<String>> {
+    let mut kinds: List<String> = [];
+    for let alt of alts {
+        if alt.ops.len() != 1 {
+            return null;
+        }
+        match &alt.ops[0] {
+            Token(t) => kinds.push(t.kind),
+            Literal(l) => kinds.push(l.kind),
+            _ => {
+                return null;
+            },
+        }
+    }
+    return Option::Some(kinds);
+}
+
+fn gen_op_group_homog(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    if let Some(kinds) = group_token_only_kinds_homog(&g.alts) {
+        w.line(&`let _ = p.match_set([{join_kinds(&kinds)}])?;`);
+        return;
+    }
+    if g.alts.len() == 1 {
+        gen_ops_homog(w, &g.alts[0].ops, ctx, nc);
+        return;
+    }
+    gen_alt_dispatch_homog(w, &g.alts, &g.dispatch, ctx, nc);
+}
+
+fn alt_by_index_homog(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
+    for let a of alts {
+        if a.alt_index == idx {
+            return a;
+        }
+    }
+    panic(`gen_op_group_homog: no alt with index {idx}`);
+}
+
+/// Token-led `Direct` dispatch over a group's alts (homogeneous). Tournament /
+/// ATN-class group dispatch reuses the typed prediction in a later slice.
+fn gen_alt_dispatch_homog(
+    w: &mut CodeWriter,
+    alts: &List<AltBody>,
+    dispatch: &MultiAltDispatch,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    let dd = match *dispatch {
+        Direct(d) => d,
+        Tournament(_) => panic("gen_alt_dispatch_homog: group/atom tournament not yet on the sink_v2 path"),
+    };
+    w.line(&"let _gk = p.peek_kind();");
+    let mut all_first: List<String> = [];
+    for let mut i = 0; i < dd.branches.len(); i += 1 {
+        let br = &dd.branches[i];
+        for let t of &br.tokens {
+            all_first.push(*t);
+        }
+        let cond = ctx.kind_check_str(&br.tokens, &"_gk");
+        if i == 0 {
+            w.begin(&`if {cond}`);
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        gen_ops_homog(w, &alt_by_index_homog(alts, br.alt_index).ops, ctx, nc);
+    }
+    w.else_begin(&"else");
+    w.line(&`let _ = p.match_set([{join_kinds(&all_first)}])?;`);
+    w.end();
+}
+
+/// Greedy `*` / `+` / `?` under the homogeneous sink: loop the body (which
+/// appends), gated on the body's first set. Non-greedy / scan-guarded repeats
+/// reuse the typed prediction in a later slice.
+fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    if let NonGreedy(_) = r.strategy {
+        panic("gen_op_repeat_homog: non-greedy repeat not yet on the sink_v2 path");
+    }
+    let cond = ctx.first_check_str(&r.body_first_set);
+    match r.kind {
+        Optional => {
+            w.begin(&`if {cond}`);
+            gen_op_homog(w, &r.body, ctx, nc);
+            w.end();
+        },
+        Star => {
+            w.begin(&`while {cond}`);
+            gen_op_homog(w, &r.body, ctx, nc);
+            w.end();
+        },
+        Plus => {
+            gen_op_homog(w, &r.body, ctx, nc);
+            w.begin(&`while {cond}`);
+            gen_op_homog(w, &r.body, ctx, nc);
+            w.end();
+        },
+    }
 }
 
 

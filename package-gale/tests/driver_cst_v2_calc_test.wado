@@ -1,0 +1,43 @@
+//! Sink-refactor proof: the SAME calc_ll grammar emitted via the `sink_v2`
+//! route (parser_gen drives the TreeBuilder) must produce the identical tree
+//! the GIR-only cst_gen does (`driver_cst_calc_test.wado`), validating the
+//! "swap the Parser backend, not the emission" realization end-to-end.
+
+use calc from "./grammars/calc_ll.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true, sink_v2: true },
+            output_dir: "tests/generated/cst_v2_calc",
+        },
+    };
+fn assert_tree(input: &String, expected: &String) {
+    let result = calc::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = calc::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "v2: single integer" {
+    assert_tree(&"42", &"(prog (expr (term (factor 42))))");
+}
+
+test "v2: precedence and grouping" {
+    assert_tree(&"1 + 2 * 3", &"(prog (expr (term (factor 1)) + (term (factor 2) * (factor 3))))");
+}
+
+test "v2: parenthesised subexpression" {
+    assert_tree(&"(1 + 2) * 3", &"(prog (expr (term (factor ( (expr (term (factor 1)) + (term (factor 2))) )) * (factor 3))))");
+}
+
+test "v2: fail-soft yields a tree plus one diagnostic" {
+    let result = calc::parse(&"1 +");
+    assert result.has_errors();
+    assert result.diagnostics.len() == 1;
+}
+
+test "v2: clean parse reports no diagnostics" {
+    let result = calc::parse(&"7 * (8 - 9)");
+    assert result.ok();
+    assert result.diagnostics.is_empty();
+}
