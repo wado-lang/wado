@@ -2830,7 +2830,7 @@ fn gen_op_group_homog(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc:
         gen_ops_homog(w, &g.alts[0].ops, ctx, nc);
         return;
     }
-    gen_alt_dispatch_homog(w, &g.alts, &g.dispatch, ctx, nc);
+    gen_alt_dispatch_homog(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc);
 }
 
 fn alt_by_index_homog(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
@@ -2842,18 +2842,36 @@ fn alt_by_index_homog(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[al
     panic(`gen_op_group_homog: no alt with index {idx}`);
 }
 
-/// Token-led `Direct` dispatch over a group's alts (homogeneous). Tournament /
-/// ATN-class group dispatch reuses the typed prediction in a later slice.
+/// Group-alt dispatch under the homogeneous GIR walker (used for LR-suffix
+/// group bodies). `Direct` emits a token-led `if/else if` chain; `Tournament`
+/// reuses the longest-match scan tournament (`gen_scan_winner_tournament`
+/// over the group's `scan_alts`) and emits the winning alt's appending body.
 fn gen_alt_dispatch_homog(
     w: &mut CodeWriter,
     alts: &List<AltBody>,
+    scan_alts: &List<ScanBody>,
     dispatch: &MultiAltDispatch,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
     let dd = match *dispatch {
         Direct(d) => d,
-        Tournament(_) => panic("gen_alt_dispatch_homog: group/atom tournament not yet on the sink_v2 path"),
+        Tournament(td) => {
+            let winner = gen_scan_winner_tournament(w, &td.alts, scan_alts, ctx, nc);
+            let last = td.alts.len() - 1;
+            for let mut k = 0; k < td.alts.len(); k += 1 {
+                if k == 0 && k != last {
+                    w.begin(&`if {winner} == {k}`);
+                } else if k == last {
+                    w.else_begin(&"else");
+                } else {
+                    w.else_begin(&`else if {winner} == {k}`);
+                }
+                gen_ops_homog(w, &alt_by_index_homog(alts, td.alts[k]).ops, ctx, nc);
+            }
+            w.end();
+            return;
+        },
     };
     w.line(&"let _gk = p.peek_kind();");
     let mut all_first: List<String> = [];
