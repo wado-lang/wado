@@ -126,6 +126,19 @@ pub(crate) fn promote_early_enabled() -> bool {
     *ON.get_or_init(|| std::env::var_os("WADO_PROMOTE_EARLY").is_some())
 }
 
+/// Whether **any** operand promotion is active (arith early or FieldAccess).
+/// Liveness passes (`elide_local`, `copy_prop`) use the over-conservative
+/// promoted-reads set whenever promotion runs, since the precise live-slot walk
+/// has a known gap (a still-read local whose `Opaque(Local)` source it misses).
+pub(crate) fn promote_active() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var_os("WADO_PROMOTE_EARLY").is_some()
+            || std::env::var_os("WADO_PROMOTE_FIELDS").is_some()
+    })
+}
+
 /// Configuration for optimization passes
 struct OptConfig {
     /// Number of fixed-point iterations

@@ -61,7 +61,7 @@ impl Rule for ElideRule<'_> {
         // over-conserving is sound (it only keeps more locals, never drops a read
         // one) at the cost of some missed elisions. Flag-off keeps the precise walk,
         // so the committed default is unchanged.
-        let promoted_reads: IndexSet<u32> = if crate::optimize::promote_early_enabled() {
+        let promoted_reads: IndexSet<u32> = if crate::optimize::promote_active() {
             engine.body.values.opaque_local_sources().collect()
         } else {
             engine.body.locals_read_via_promotion()

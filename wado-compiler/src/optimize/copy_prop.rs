@@ -238,7 +238,7 @@ fn analyze_function_body(
 /// never propagates/eliminates a still-read one), at the cost of a few missed
 /// copies. Flag-off keeps the precise walk, so the default is unchanged.
 fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
-    if crate::optimize::promote_early_enabled() {
+    if crate::optimize::promote_active() {
         body.values.opaque_local_sources().collect()
     } else {
         body.locals_read_via_promotion()
