@@ -1,7 +1,7 @@
-//! Syntax-highlighting runtime: a `Visitor` that collects capture ranges
-//! during a CST walk plus the HTML renderer. Emitted into a generated
-//! parser only when the `highlight` generator option is on. The
-//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+//! Syntax-highlighting runtime: a `HighlightVisitor` that collects capture
+//! ranges during a CST walk plus the HTML renderer. Emitted into a generated
+//! parser only when the `highlight` generator option is on. The `./lex.wado`
+//! import is stripped at `#include_str` time.
 
 use { TokenStream } from "./lex.wado";
 
@@ -16,7 +16,7 @@ pub struct HighlightOverride {
 ///
 /// `rule_names` is the canonical name table used to resolve override
 /// `rule_name`s into integer ids that match what the generated walker
-/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// passes to `hl_enter`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: List<String>,
@@ -94,11 +94,8 @@ impl HighlightVisitor {
     }
 }
 
-/// Inherent visit hooks, sink-independent. The typed walk reaches these
-/// through the `Visitor` trait impl in `highlight_visitor.wado` (a thin
-/// delegate); the walk (`highlight_walk` in `highlight_walk.wado`)
-/// calls them directly off the `CstNode` tree. Keeping the trait out of this
-/// fragment means a parser carries no typed-CST dependency.
+/// Inherent visit hooks. The walk (`highlight_walk` in `highlight_walk.wado`)
+/// calls them directly off the `CstNode` tree.
 impl HighlightVisitor {
     pub fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);

@@ -1256,20 +1256,6 @@ pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
     return false;
 }
 
-pub fn is_simple_token_group(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = elem {
-            continue;
-        }
-        return false;
-    }
-    return true;
-}
-
 /// Canonicalise a K-prefix mask: sort each depth's token list so two
 /// otherwise-identical masks share the same registry key regardless of
 /// the order in which the underlying analysis discovered the tokens.

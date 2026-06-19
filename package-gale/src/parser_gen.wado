@@ -30,7 +30,7 @@ use {
     all_alts_are_single_token,
     single_token_first,
 } from "./gen_util.wado";
-use { GenContext, is_nullable, sets_overlap, is_simple_token_group, union_kind_arrays } from "./gen_context.wado";
+use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use { PredictionNode, build_prediction, prediction_collect_all_indices, MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
@@ -772,7 +772,7 @@ fn gen_scan_lr_functions(
     w.blank();
 }
 
-/// Scan-side twin of `gen_lr_suffix_helpers`. Emits `scan_X_lr_N(tokens, pos)`
+/// Scan-side twin of the LR-suffix emit in `gen_lr_fn`. Emits `scan_X_lr_N(tokens, pos)`
 /// for each valid LR alternative, scanning its suffix (elements[1..]). Self-
 /// recursive calls compile to `scan_X(tokens, pos, prec)` with the same
 /// precedence value the parse side uses; the precedence is baked onto
@@ -1842,7 +1842,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         w,
         &canonical,
         &inner,
-        &rule.type_name,
         &rule.name,
         rule_takes_min_prec(lowered_rule),
         ctx.emit_follow(),
@@ -1853,9 +1852,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 
 /// Return type of a rule's inner / alt parse function: `()` under the
 /// emitter (the tree accrues in the `TreeBuilder`).
-fn rule_result_type(ctx: &GenContext, type_name: &String) -> String {
-    let _ = ctx;
-    let _ = type_name;
+fn rule_result_type() -> String {
     return String::from("Result<(), ParseError>");
 }
 
@@ -1966,7 +1963,6 @@ fn gen_rule_entry_wrapper(
     w: &mut CodeWriter,
     outer_name: &String,
     inner_name: &String,
-    type_name: &String,
     rule_display: &String,
     takes_min_prec: bool,
     emit_follow: bool,
@@ -1989,7 +1985,6 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
-    let _ = type_name;
     f.set_return_type(&"Result<(), ParseError>");
     f.emit_begin(w);
     let lit = escape_string(rule_display);
@@ -2066,7 +2061,7 @@ fn gen_parse_fn_simple_named(
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&rule_result_type(ctx, &type_name));
+    f.set_return_type(&rule_result_type());
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     let body = rule_alt_body(lowered_rule, 0).unwrap();
@@ -2089,7 +2084,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     if ctx.emit_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&rule_result_type(ctx, &type_name));
+    f.set_return_type(&rule_result_type());
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     w.line(&"let kind = p.peek_kind();");
@@ -2225,7 +2220,7 @@ fn gen_parse_fn_named(
                     if ctx.emit_follow() {
                         add_follow_param(&mut f);
                     }
-                    f.set_return_type(&rule_result_type(ctx, &type_name));
+                    f.set_return_type(&rule_result_type());
                     f.emit_begin(w);
                     w.line(&"let start = p.peek_start();");
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -2264,7 +2259,7 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&rule_result_type(ctx, &type_name));
+        f.set_return_type(&rule_result_type());
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
@@ -2304,7 +2299,7 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&rule_result_type(ctx, &type_name));
+        f.set_return_type(&rule_result_type());
         f.emit_begin(w);
         if needs_start {
             w.line(&"let start = p.peek_start();");
@@ -3194,9 +3189,8 @@ fn gen_op_storable_group_inner(
     };
     return match &g_op.shape {
         TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
-        SingleAlt(sa) => gen_consume_single_alt_group_op(
+        SingleAlt(_) => gen_consume_single_alt_group_op(
             w,
-            sa,
             &g_op.alts[0],
             &g_elem.alternatives[0],
             ctx,
@@ -3259,36 +3253,6 @@ fn gen_op_dispatch_element(
         return;
     }
     panic("gen_op_dispatch_element: unreachable op shape — every Op variant is handled");
-}
-
-/// Op-driven absent-element decl for shape lookahead. Mirrors the
-/// surface `gen_absent_optional_field`: when a shape elides an
-/// `Optional` / list-label / `Star` / `Plus` element, the struct
-/// still needs the corresponding field in scope (`null` for `Option`,
-/// empty `List` for list / `Star` / `Plus`) so the alt-struct
-/// construction below can name it. Leaf ops never appear in an
-/// absent shape branch — only nullable shapes (Optional Repeats and
-/// list labels) get elided from the shape's parse path. The caller
-/// is `gen_op_optional_with_shape_lookahead_storable`.
-fn gen_op_absent_optional_field(w: &mut CodeWriter, op: &Op, name_counts: &mut List<[String, i32]>) {
-    if let Repeat(rep_op) = op {
-        if !rep_op.body_has_field {
-            return;
-        }
-        let inner_type = op_field_type(&rep_op.body);
-        let _ = dedup_name(&rep_op.field, name_counts);
-        match rep_op.kind {
-            Optional => w.line(&`let {rep_op.field}: Option<{inner_type}> = null;`),
-            Star | Plus => w.line(&`let mut {rep_op.field}: List<{inner_type}> = [];`),
-        }
-        return;
-    }
-    if let ListLabel(ll) = op {
-        let inner_type = op_field_type(&ll.inner);
-        let _ = dedup_name(&ll.field, name_counts);
-        w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
-    }
-    // Leaves never appear absent — they're always required.
 }
 
 /// Op-driven `unwrap_optional` analogue. Peels through an Optional
@@ -3367,8 +3331,7 @@ fn gen_op_opt_scan_guard_for_group(
 /// `match` is exhaustive over the strategies a greedy `?` can carry.
 ///
 /// In every case the inner parse routes through op-driven helpers
-/// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element` /
-/// `gen_op_absent_optional_field`).
+/// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element`).
 fn gen_op_storable_optional(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -3379,8 +3342,6 @@ fn gen_op_storable_optional(
     name_counts: &mut List<[String, i32]>,
 ) {
     let opt_field = rep_op.field;
-    let inner_type = op_field_type(&rep_op.body);
-    let inner_field = op_field(&rep_op.body);
     let _ = dedup_name(&opt_field, name_counts);
     let inner_elem = &rep.element;
 
@@ -3392,9 +3353,6 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &opt_field,
-            &inner_type,
-            &inner_field,
             &atn_optional_enter_cond(ctx),
         );
         return;
@@ -3406,9 +3364,6 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &opt_field,
-            &inner_type,
-            &inner_field,
             &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
         ),
         OptionalShapeLookahead(s) => gen_op_optional_with_shape_lookahead_storable(
@@ -3418,9 +3373,6 @@ fn gen_op_storable_optional(
             s,
             ctx,
             name_counts,
-            &opt_field,
-            &inner_type,
-            &inner_field,
             rep_op.gate_caller_follow,
         ),
         OptionalScanGuard => {
@@ -3430,9 +3382,6 @@ fn gen_op_storable_optional(
                 rep_op,
                 inner_elem,
                 ctx,
-                &opt_field,
-                &inner_type,
-                &inner_field,
                 &gate_cond_with_caller_follow(&`{scan_pos_var} >= 0`, rep_op.gate_caller_follow),
             );
         },
@@ -3443,9 +3392,6 @@ fn gen_op_storable_optional(
             rep_op,
             inner_elem,
             ctx,
-            &opt_field,
-            &inner_type,
-            &inner_field,
             &gate_cond_with_caller_follow(&ctx.first_check_str(&rep_op.body_first_set), rep_op.gate_caller_follow),
         ),
         // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
@@ -3495,16 +3441,10 @@ fn gen_op_storable_optional_with_first(
     rep_op: &RepeatOp,
     inner_elem: &Element,
     ctx: &mut GenContext,
-    opt_field: &String,
-    inner_type: &String,
-    inner_field: &String,
     cond: &String,
 ) {
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
-    let _ = opt_field;
-    let _ = inner_type;
-    let _ = inner_field;
     w.begin(&`if {*cond}`);
     let mut nch: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nch, &([] as List<String>));
@@ -3590,7 +3530,7 @@ fn gen_op_transparent_optional_with_cond(
 /// Op-driven shape-lookahead emit for the storable Optional + SingleAlt
 /// case. Mirrors `gen_storable_optional_with_lookahead` exactly except
 /// the inner per-element parse routes through op-driven dispatch
-/// (`gen_op_dispatch_element` / `gen_op_absent_optional_field`), and
+/// (`gen_op_dispatch_element`), and
 /// the struct construction reads `body.fields` (lower's canonical
 /// field list).
 fn gen_op_optional_with_shape_lookahead_storable(
@@ -3600,20 +3540,12 @@ fn gen_op_optional_with_shape_lookahead_storable(
     s: &OptionalShapeLookaheadStrategy,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    opt_field: &String,
-    inner_type: &String,
-    inner_field: &String,
     gate_caller_follow: bool,
 ) {
-    let sa = if let SingleAlt(sas) = &g_op.shape {
-        sas;
+    if let SingleAlt(_) = &g_op.shape {
     } else {
         panic("gen_op_optional_with_shape_lookahead_storable: shape lookahead is only valid on SingleAlt Group inners");
-    };
-    let _ = sa;
-    let _ = opt_field;
-    let _ = inner_type;
-    let _ = inner_field;
+    }
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
@@ -3785,9 +3717,8 @@ fn gen_op_group(
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
             TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, name_counts),
-            SingleAlt(sa) => gen_consume_single_alt_group_op(
+            SingleAlt(_) => gen_consume_single_alt_group_op(
                 w,
-                sa,
                 &g_op.alts[0],
                 &g_elem.alternatives[0],
                 ctx,
@@ -3876,7 +3807,6 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
 /// only — dead under the single emitter.)
 fn gen_consume_single_alt_group_op(
     w: &mut CodeWriter,
-    sa: &SingleAltShape,
     body: &AltBody,
     alt: &Alternative,
     ctx: &mut GenContext,
@@ -3886,8 +3816,7 @@ fn gen_consume_single_alt_group_op(
     let _ = dedup_name(&single_alt_group_field_name(alt), name_counts);
     // Nested General-group emitters consume `GeneralShape.variant_type`
     // / `alt_struct_names` baked by `lower_single_alt_group` under
-    // `sa.owner_rule`, so no walker-field swap is needed here.
-    let _ = sa;
+    // the SingleAlt's owner rule, so no walker-field swap is needed here.
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
     // the inner elements already appended; no struct.
 }
@@ -3977,26 +3906,6 @@ fn op_field(op: &Op) -> String {
             General(gen) => gen.field,
         },
         ListLabel(ll) => ll.field,
-    };
-}
-
-/// Type string the op contributes to its containing struct field.
-/// Mirrors `element_field_info`'s second return value for the matching
-/// surface element. Today this is consulted by `gen_op_list_label`'s
-/// `List<…>` declaration; other call sites read the FieldDecl directly.
-fn op_field_type(op: &Op) -> String {
-    return match op {
-        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) => "i32",
-        RuleCall(r) => rule_type_name(&r.target_name),
-        Group(g) => match &g.shape {
-            SimpleCst(scst) => scst.type_name,
-            TokenOnly(_) => "i32",
-            SingleAlt(sa) => sa.struct_name,
-            General(gen) => gen.variant_type,
-            Transparent => panic("op_field_type: Transparent groups have no own field type"),
-        },
-        Repeat(_) => panic("op_field_type: Repeat ops do not surface as a single typed field at this site"),
-        ListLabel(ll) => `List<{op_field_type(&ll.inner)}>`,
     };
 }
 
@@ -5013,9 +4922,7 @@ fn gen_simplecst_rulecall_value(
     w: &mut CodeWriter,
     op: &Op,
     ctx: &mut GenContext,
-    type_name: &String,
-    case_name: &String,
-) -> String {
+) {
     let rc = if let RuleCall(rc) = op {
         rc;
     } else {
@@ -5030,7 +4937,6 @@ fn gen_simplecst_rulecall_value(
     };
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
     w.line(&`let {local_var} = {fn_name}({call_args})?;`);
-    return `{*type_name}::{*case_name}({local_var})`;
 }
 
 fn gen_rule_ref_group_scan_dispatch(
@@ -5040,7 +4946,6 @@ fn gen_rule_ref_group_scan_dispatch(
     g_op_alts: &List<AltBody>,
     scan_alts: &List<ScanBody>,
     opt_var: &String,
-    type_name: &String,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
@@ -5059,8 +4964,7 @@ fn gen_rule_ref_group_scan_dispatch(
             w.else_begin(&`else if {winner_var} == {k}`);
         }
         let _ = opt_var;
-        let case_name = group_case_name(&alts[alt_index]);
-        let _val = gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx, type_name, &case_name);
+        gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx);
     }
     w.end();
 }
@@ -5070,7 +4974,6 @@ fn gen_rule_ref_group_scan_dispatch(
 fn gen_simplecst_overlap_loop(
     w: &mut CodeWriter,
     acc_var: &String,
-    type_name: &String,
     groups: &List<List<i32>>,
     first_sets: &List<List<String>>,
     alts: &List<Alternative>,
@@ -5103,7 +5006,7 @@ fn gen_simplecst_overlap_loop(
         if group.len() == 1 {
             let alt_index = group[0];
             let body = &g_op_alts[alt_index];
-            let _val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, type_name, &body.case_name);
+            gen_simplecst_rulecall_value(w, &body.ops[0], ctx);
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -5116,7 +5019,6 @@ fn gen_simplecst_overlap_loop(
                 g_op_alts,
                 g_op_scan_alts,
                 acc_var,
-                type_name,
                 ctx,
                 name_counts,
             );
@@ -5136,7 +5038,6 @@ fn gen_consume_group_store_op(
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
-    let type_name = scst.type_name;
 
     let mut first_sets: List<List<String>> = [];
     for let alt of alts {
@@ -5162,7 +5063,7 @@ fn gen_consume_group_store_op(
                 w.else_begin(&"else");
             }
             let body = &g_op_alts[alt_index];
-            let _val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
+            gen_simplecst_rulecall_value(w, &body.ops[0], ctx);
         }
         w.end();
     } else {
@@ -5170,7 +5071,6 @@ fn gen_consume_group_store_op(
         gen_simplecst_overlap_loop(
             w,
             &opt_var,
-            &type_name,
             &groups,
             &first_sets,
             alts,
@@ -5199,7 +5099,6 @@ fn gen_consume_group_store_optional_op(
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     let var_name = scst.field;
-    let type_name = scst.type_name;
 
     let mut first_sets: List<List<String>> = [];
     for let alt of alts {
@@ -5214,7 +5113,6 @@ fn gen_consume_group_store_optional_op(
     gen_simplecst_overlap_loop(
         w,
         &inner_var,
-        &type_name,
         &groups,
         &first_sets,
         alts,
@@ -5301,9 +5199,6 @@ fn gen_general_overlap_loop(
                 alts,
                 &g_op_alts[alt_index],
                 alt_index,
-                type_name,
-                alt_struct_names,
-                acc_var,
                 ctx,
                 name_counts,
             );
@@ -5368,13 +5263,11 @@ fn gen_general_group_store_op(
             } else {
                 w.else_begin(&"else");
             }
-            gen_general_alt_construct(
+            gen_general_alt_parse_and_store(
                 w,
                 alts,
                 &g_op_alts[alt_index],
                 alt_index,
-                &type_name,
-                &gs.alt_struct_names,
                 ctx,
                 name_counts,
             );
@@ -5446,48 +5339,21 @@ fn gen_general_group_store_optional_op(
     // alt (if any matched) already appended.
 }
 
-/// Generate a general group store without Option wrapper (required, inside Repeat).
+/// Parse one alt's elements; the chosen alt's elements append to the
+/// builder, so there is no variant value to store. Used both inside a
+/// Repeat (required group store) and as a plain `if`/`else` arm body.
 fn gen_general_alt_parse_and_store(
     w: &mut CodeWriter,
     alts: &List<Alternative>,
     body: &AltBody,
     alt_index: i32,
-    type_name: &String,
-    alt_struct_names: &List<String>,
-    inner_var: &String,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let _ = type_name;
-    let _ = alt_struct_names;
-    let _ = inner_var;
     let alt = &alts[alt_index];
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
-    // the chosen alt's elements already appended; no
-    // variant value to store.
-}
-
-/// Parse one alt's elements and return as variant value (for if/else expression).
-fn gen_general_alt_construct(
-    w: &mut CodeWriter,
-    alts: &List<Alternative>,
-    body: &AltBody,
-    alt_index: i32,
-    type_name: &String,
-    alt_struct_names: &List<String>,
-    ctx: &mut GenContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let _ = type_name;
-    let _ = alt_struct_names;
-    let alt = &alts[alt_index];
-
-    let mut nc: List<[String, i32]> = [];
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
-    // caller emitted this as a plain `{ … }` statement
-    // block (not an `if`-expression arm), so just append — no variant value.
 }
 
 /// First-success-wins scan dispatch wrapper for overlapping general-group
@@ -5585,9 +5451,6 @@ fn gen_general_group_scan_dispatch(
             alts,
             &g_op_alts[alt_index],
             alt_index,
-            type_name,
-            alt_struct_names,
-            inner_var,
             ctx,
             name_counts,
         );

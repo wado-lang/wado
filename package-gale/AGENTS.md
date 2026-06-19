@@ -221,9 +221,9 @@ use json from "./grammars/JSON.g4"
 use { normalize_tree } from "./grammars/JSON.g4";
 
 fn assert_tree(input: &String, expected: &String) {
-    let root = json::parse(input).unwrap();
-    let tree = json::to_tree(&root);
-    let actual = tree.to_string_tree();
+    let result = json::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = json::to_string_tree(&result);
     let norm = normalize_tree(expected);
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
@@ -241,9 +241,10 @@ test "tree: nested object with array" {
 }
 ```
 
-- `to_string_tree()` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
+- `parse()` returns a `ParseResult` (a clean parse has `result.ok() == true`); there is no typed-CST / `to_tree` step.
+- `to_string_tree(&result)` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
 - `normalize_tree()` collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
-- Both functions are defined in the inlined runtime (`src/runtime/cst.wado` and `src/runtime/tools.wado`) and available in all generated parsers.
+- `to_string_tree` is emitted into every generated parser by codegen (`cst_gen`); `normalize_tree` lives in the inlined `src/runtime/tools.wado`.
 
 #### Adding a new e2e test grammar
 
@@ -261,16 +262,17 @@ The runtime is split across `src/runtime/*.wado` and inlined into every
 generated file via `#include_str` in `gen_runtime` (`codegen.wado`), gated so a
 generated parser carries only the fragments it needs:
 
-- `lex.wado` (Span / LexerSlice / Token / ParseError), `cst.wado` (generic
-  `CstNode` tree + `Visitor` + `to_tree`), and `tools.wado` (consumer-facing
-  `normalize_tree` / `find_first_child_node` / `to_lexer_string`) are **always**
-  emitted.
+- `lex.wado` (Span / LexerSlice / Token / ParseError), `diag.wado`
+  (`Diagnostic`), `tree.wado` (the untyped `CstNode` tree + `TreeBuilder` +
+  `NodeKind` + `to_string_tree`), and `tools.wado` (consumer-facing
+  `normalize_tree` / `to_lexer_string`) are **always** emitted.
 - `follow.wado` only when lowering built a caller-FOLLOW gate (`emit_follow`).
-- `highlight.wado` only when the `highlight` generator option is on.
+- `highlight.wado` + `highlight_walk.wado` only when the `highlight` generator
+  option is on.
 - `atn.wado` only when lowering needs the runtime simulator (`needs_atn`).
 
 Each fragment is a real module for dev/test and imports its siblings via
-`use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` strips those
+`use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` strips those
 sibling-runtime imports when concatenating, since every fragment lands in the
 single generated module (with `lex` first). A fragment may also import the
 standard library (`core:` / `wasi:`); those imports are kept verbatim and flow

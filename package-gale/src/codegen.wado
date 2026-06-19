@@ -216,22 +216,21 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 /// Emit the inlined runtime, split across `src/runtime/*.wado` and gated so
 /// a generated parser carries only the fragments it actually needs:
 ///
-/// - `lex` / `cst` / `tools` are always emitted (core vocabulary, the
-///   generic tree + `Visitor`, and the consumer-facing tree/token utilities).
+/// - `lex` / `diag` / `tree` / `tools` are always emitted: the core lexing
+///   vocabulary, the diagnostics types, the `CstNode` tree + `TreeBuilder`,
+///   and the consumer-facing tree/token utilities (`normalize_tree`,
+///   `to_lexer_string`).
 /// - `follow` only when lowering built a caller-FOLLOW gate (`emit_follow`).
-/// - `highlight` only when the `highlight` generator option is on.
+/// - `highlight` (`highlight` + `highlight_walk`) only when the `highlight`
+///   generator option is on.
 /// - `atn` only when lowering needs the runtime simulator (`needs_atn`).
 ///
 /// Each fragment is a real module for dev/test, importing its siblings via
 /// `use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` drops those
 /// relative imports because every fragment is concatenated into the single
-/// generated module (with `lex` first), where such imports are both
-/// redundant and unresolvable.
-/// The runtime for the resilient CST parser: the core lexing
-/// vocabulary, the diagnostics types, and the `CstNode` tree +
-/// `TreeBuilder`. Concatenated in dependency order (`lex` first, then `diag`,
-/// then `tree`, which references both); each fragment's sibling `from "./..."`
-/// imports are stripped by `gen_runtime_fragment`.
+/// generated module (in dependency order — `lex` first, then `diag`, then
+/// `tree`, which references both), where such imports are both redundant and
+/// unresolvable.
 fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
