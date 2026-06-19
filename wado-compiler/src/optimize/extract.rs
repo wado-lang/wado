@@ -274,10 +274,7 @@ pub(super) fn freeze_pure_arith(
             // use to a **skeleton** `Local _av` read, so receiver-position passes
             // see an ordinary local (materialiser-first, WEP P2). MVP: single-use
             // (no dominance needed); shared/Select extend this.
-            let is_field = matches!(
-                engine.body.values.kind(rep),
-                ValueKind::FieldAccess { .. }
-            );
+            let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
             if is_field
                 && ids.len() == 1
                 && let Some((s, b)) = enclosing_stmt_and_block(&engine, ids[0])
