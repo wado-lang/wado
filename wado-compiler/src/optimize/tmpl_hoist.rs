@@ -682,16 +682,21 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
-            let value_span = body.exprs[value.as_expr().expect("skeleton operand")].span;
+            let init_value = value.as_expr().expect("skeleton operand");
+            let value_span = body.exprs[init_value].span;
+            // Operand promotion wraps the inlined builder init in a block with a
+            // dead capacity binding (`{ let capacity = N; String { … } }`); the
+            // hoist reuses the whole block as the init value (self-contained), so
+            // verify against the block's tail struct but keep `init_value` whole.
+            let struct_view = unwrap_block_tail(body, init_value);
             // Try pre-lowered form: String::with_capacity(N)
-            if let ExprKind::Call { func, .. } =
-                &body.exprs[value.as_expr().expect("skeleton operand")].kind
+            if let ExprKind::Call { func, .. } = &body.exprs[struct_view].kind
                 && func.method_info.is_some()
                 && func.name == "String::with_capacity"
             {
                 return Some(TmplCandidate {
                     buf_local_index: local_index,
-                    init_value: value.as_expr().expect("skeleton operand"),
+                    init_value,
                     string_type: type_id,
                     span: value_span,
                 });
@@ -701,7 +706,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                 struct_name,
                 fields,
                 ..
-            } = &body.exprs[value.as_expr().expect("skeleton operand")].kind
+            } = &body.exprs[struct_view].kind
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
@@ -1179,6 +1184,20 @@ fn array_new_has_capacity(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Call { func, args, .. } => func.name.contains("array_new") && !args.is_empty(),
         _ => false,
+    }
+}
+
+/// Unwrap a `{ let* …; <tail> }` block to its tail expression. Operand
+/// promotion wraps an inlined builder init in such a block (a dead `let
+/// capacity = N` binding plus the struct tail); the tail is the real
+/// constructor. Returns `e` unchanged when it is not a tail-yielding block.
+fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
+    let (ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. }) = &body.exprs[e].kind else {
+        return e;
+    };
+    match body.blocks[*b].stmts.last().map(|s| &body.stmts[*s].kind) {
+        Some(StmtKind::Expr(op)) => op.as_expr().map_or(e, |t| unwrap_block_tail(body, t)),
+        _ => e,
     }
 }
 
