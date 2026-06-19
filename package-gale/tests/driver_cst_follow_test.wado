@@ -1,0 +1,19 @@
+//! Stage 2 caller-FOLLOW gate: `a : X Y?` must yield its trailing `Y` to the
+//! caller `r : a Y`. The emitter threads `follow` and gates the
+//! tail-greedy `Y?` with `follow_yields` (reusing lowering's decisions).
+
+use g from "./grammars/follow_gate.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_follow",
+        },
+    };
+
+test "follow gate: a yields its trailing Y to r" {
+    let result = g::parse(&"X Y");
+    assert result.ok(), `unexpected diagnostics`;
+    let actual = g::to_string_tree(&result);
+    assert actual == "(r (a X) Y)", `actual: {actual}`;
+}

@@ -1,0 +1,21 @@
+//! Two modules each define a recursive variant type pair with the *same names*
+//! (`Child` / `Node`). They must remain distinct WIR types; compiling both into
+//! one program must not ICE. Regression for the WIR ref-nullability mismatch
+//! ("expected (ref null $type), found (ref $type)") that fired when a same-name
+//! recursive variant payload was extracted (`if let Node(inner) = c`) in two
+//! modules at once. (Any two Gale-generated parsers hit this: each inlines a
+//! `CstNode` / `CstChild` recursive pair.)
+
+use { make_a, sum_a } from "./sub/cross_module_recursive_variant_a.wado";
+use { make_b, sum_b } from "./sub/cross_module_recursive_variant_b.wado";
+
+test "same-name recursive variant types from two modules coexist" {
+    let a = make_a();
+    let b = make_b();
+    // a: 1 + 2 = 3; b: 5 + 7 = 12.
+    assert sum_a(&a) == 3;
+    assert sum_b(&b) == 12;
+}
+
+__DATA__
+{"test": {}}

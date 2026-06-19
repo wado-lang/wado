@@ -1,0 +1,35 @@
+use g from "./grammars/ll_multi_alt_overlap.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_ll_multi_alt_overlap",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+// Bare `a` alone still parses through alt 1 (`X`).
+test "tree: X parses through a's second alt" {
+    assert_tree(&"X", &"(r (a X))");
+}
+
+// `a` must yield the trailing `Y` to the outer `b`.
+test "tree: X Y yields Y to outer b" {
+    assert_tree(&"X Y", &"(r (a X) (b Y))");
+}
+
+// Recursive nesting through `a`.
+test "tree: X X Y is parsed by alt 0 (a b)" {
+    assert_tree(&"X X Y", &"(r (a X (a X)) (b Y))");
+}
+
+// When no `Y` follows, the `a` rule must consume input greedily.
+test "tree: X X with no Y goes through bare a" {
+    assert_tree(&"X X", &"(r (a X (a X)))");
+}

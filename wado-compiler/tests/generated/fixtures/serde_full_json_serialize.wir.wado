@@ -14,7 +14,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>> {  // TypeId(3)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>> {  // TypeId(3)
     mut value: ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//Point",
 }
 
@@ -247,7 +247,7 @@ type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/User
 
 type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/list.wado/List<core:prelude/string.wado/String>>" = fn(ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude//List<core:prelude/string.wado/String>") -> ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError";  // TypeId(87)
 
-type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>" = fn(ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/types.wado//Box<Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>") -> ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError";  // TypeId(88)
+type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>" = fn(ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>") -> ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError";  // TypeId(88)
 
 type "functype//wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<bool>" = fn(ref "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//JsonStructSerializer", ref "core:prelude/string.wado//String", ref "core:prelude/types.wado//Box<bool>") -> ref null "wado-compiler/tests/fixtures/serde_full_json_serialize.wado//SerializeError";  // TypeId(89)
 
@@ -1725,7 +1725,7 @@ fn "wado-compiler/tests/fixtures/serde_full_json_serialize.wado/User^Serialize::
         drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/string.wado/String>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }, self.name));
         drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<i32>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 }, struct.new "core:prelude/types.wado//Box<i32>" { value: self.age }));
         drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<bool>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("active"), used: 6 }, struct.new "core:prelude/types.wado//Box<bool>" { value: self.active }));
-        drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("location"), used: 8 }, struct.new "core:prelude/types.wado//Box<Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>" { value: self.location }));
+        drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("location"), used: 8 }, struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_full_json_serialize.wado/Point>>" { value: self.location }));
         drop("wado-compiler/tests/fixtures/serde_full_json_serialize.wado/JsonStructSerializer^SerializeStruct::field<core:prelude/list.wado/List<core:prelude/string.wado/String>>"(st_3, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 97, 103, 115), used: 4 }, self.tags));
         return self_12 = st_3.w.buf, s_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(125), used: 1 }, "core:prelude/string.wado/String::push_str"(self_12, s_13), ref.null none;
     } else {

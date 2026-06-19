@@ -19,7 +19,8 @@ use t from "../../grammars/ParserExec/OpenDeviceStatement_Case3.g4"
 test "stage_a_parse: ParserExec/OpenDeviceStatement_Case3" {
     let input = "OPEN DEVICE DEVICE.";
     let result = t::parse_statement(&input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);
     }
 }

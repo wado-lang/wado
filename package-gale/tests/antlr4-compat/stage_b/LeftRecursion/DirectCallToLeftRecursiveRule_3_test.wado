@@ -17,8 +17,8 @@ use { normalize_tree } from "../../grammars/LeftRecursion/DirectCallToLeftRecurs
 test "stage_b: LeftRecursion/DirectCallToLeftRecursiveRule_3" {
     let input = "x y z";
     let expected = "(a (a (a x) y) z)";
-    let root = t::parse_a(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_a(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

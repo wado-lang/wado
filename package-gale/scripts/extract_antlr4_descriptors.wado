@@ -674,8 +674,8 @@ fn emit_stage_b_test_file(
     w.begin(&`test "stage_b: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
-    w.line(&"let actual = t::to_tree(&root).to_string_tree();");
+    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+    w.line(&"let actual = t::to_string_tree(&result);");
     w.line(&"let norm = normalize_tree(&expected);");
     // Backticks land in the generated source verbatim; the Wado compiler
     // there interprets them as a template string with `{actual}` etc.
@@ -730,10 +730,8 @@ fn emit_stage_sub_b_test_file(
     w.begin(&`test "stage_b_sub: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
-    w.line(&"let tree = t::to_tree(&root);");
-    w.line(&`let sub = t::find_first_child_node(&tree, &"{*sub_rule}").unwrap();`);
-    w.line(&"let actual = sub.to_string_tree();");
+    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+    w.line(&`let actual = t::to_string_subtree(&result, &"{*sub_rule}");`);
     w.line(&"let norm = normalize_tree(&expected);");
     w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
     w.end();
@@ -785,9 +783,10 @@ fn emit_stage_a_parse_test_file(
     w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-    w.line(&"if let Err(err) = &result {");
+    w.line(&"if !result.ok() {");
     w.indent();
-    w.line(&"panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);");
+    w.line(&"let d = &result.diagnostics[0];");
+    w.line(&"panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);");
     w.dedent();
     w.line(&"}");
     w.end();
@@ -941,7 +940,7 @@ fn emit_stage_a_err_test_file(
         w.line(&"assert has_err, `expected at least one TK_ERROR token in tokenize output`;");
     } else {
         w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-        w.line(&"assert result matches { Err(_) }, `expected parse to fail but it succeeded`;");
+        w.line(&"assert !result.ok(), `expected parse to fail but it succeeded`;");
     }
     w.end();
     return w.to_string();
@@ -1912,8 +1911,8 @@ fn emit_stage_b_oracle_test_file(
     w.begin(&`test "stage_b_oracle: {*category}/{*name}"`);
     w.line(&`let input = "{escape_for_wado_str(input)}";`);
     w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let root = t::{parse_call_for_start(start)}(&input).unwrap();`);
-    w.line(&"let actual = t::to_tree(&root).to_string_tree();");
+    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+    w.line(&"let actual = t::to_string_tree(&result);");
     w.line(&"let norm = normalize_tree(&expected);");
     w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
     w.end();

@@ -1,13 +1,12 @@
 //! Consumer-facing tree / token utilities exposed by every generated
-//! parser: S-expression normalisation, child-node lookup, and the
-//! ANTLR4-format token-stream dump used by the compatibility suite. Always
-//! emitted. The generated parser code never calls these itself; consumers
-//! (driver tests, the ANTLR4-compat suite) import them from the generated
-//! module. The
-//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+//! parser: S-expression normalisation (`normalize_tree`) and the
+//! ANTLR4-format token-stream dump (`to_lexer_string`) used by the
+//! compatibility suite. Always emitted. The generated parser code never calls
+//! these itself; consumers (driver tests, the ANTLR4-compat suite) import them
+//! from the generated module. The `./lex.wado` import is stripped at
+//! `#include_str` time.
 
 use { TokenStream } from "./lex.wado";
-use { CstNode, CstChild } from "./cst.wado";
 
 /// Normalize a multi-line S-expression string for comparison.
 /// Collapses whitespace runs to single spaces and trims, while preserving
@@ -38,25 +37,6 @@ pub fn normalize_tree(s: &String) -> String {
         }
     }
     return out;
-}
-
-/// Find the first direct child Node of `parent` whose rule name equals
-/// `name`. Returns `None` when no such child exists.
-///
-/// Used by Stage B sub-tree drivers: many ANTLR4 descriptors print a
-/// labelled sub-tree (`@after { <ToStringTree("$r.ctx"):writeln()> }`)
-/// rather than the start rule's full tree. Gale's `parse()` always
-/// returns the full tree, so the test must navigate down to the
-/// referenced child before comparing.
-pub fn find_first_child_node(parent: &CstNode, name: &String) -> Option<CstNode> {
-    for let child of &parent.children {
-        if let Node(n) = *child {
-            if n.name == *name {
-                return Option::Some(n);
-            }
-        }
-    }
-    return null;
 }
 
 /// Produce an ANTLR4-style `Token.toString()` dump of the token stream:

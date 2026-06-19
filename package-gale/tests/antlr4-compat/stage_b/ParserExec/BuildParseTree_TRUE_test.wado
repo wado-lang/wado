@@ -17,8 +17,8 @@ use { normalize_tree } from "../../grammars/ParserExec/BuildParseTree_TRUE.g4";
 test "stage_b: ParserExec/BuildParseTree_TRUE" {
     let input = "A B";
     let expected = "(r (a A) (b B))";
-    let root = t::parse_r(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_r(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

@@ -44,9 +44,9 @@ use { LitToken } from "./lexer_gen.wado";
 // ==========================================================================
 
 /// The complete lowered grammar consumed by parser-side code
-/// generation. Lexer / visitor / highlight emission still take
-/// surface `Grammar` in v1; their data is included here so that a
-/// future migration can drop the surface IR entirely.
+/// generation. Lexer / highlight emission still take surface `Grammar`
+/// in v1; their data is included here so that a future migration can
+/// drop the surface IR entirely.
 ///
 /// Construction is the responsibility of `lower(Grammar)`; consumers
 /// treat all fields as read-only. The struct is plain data so a
@@ -469,10 +469,9 @@ pub struct TokenOp {
     pub field: String,
     /// Pre-dedup base name (the surface element's `field_name`).
     /// Drives emit's per-leaf `dedup_name(&dedup_base, name_counts)`
-    /// sync so siblings that still walk surface IR (e.g.
-    /// `gen_lr_suffix_helpers`'s inline RuleRef paths and
-    /// `gen_element` fallbacks) observe the same count `gen_element`
-    /// would have produced. For non-rebound leaves it matches the
+    /// sync so siblings that still walk surface IR (e.g. the LR-suffix
+    /// emit in `gen_lr_fn` and `gen_element` fallbacks) observe the same
+    /// count `gen_element` would have produced. For non-rebound leaves it matches the
     /// surface element's base name (so `dedup_base == field` when the
     /// leaf was the first occurrence in its alt). For label-rebound
     /// leaves (`name = ID` lowered to `Op::Token { field: "name",
@@ -722,9 +721,9 @@ pub variant RepeatBodyShape {
 }
 
 /// How an `e?` / `e*` / `e+` repeat is emitted at parse time. The
-/// strategy is decided once by `lower`, so emit doesn't reproduce the
+/// strategy is decided once by `lower`, so the emitter doesn't reproduce the
 /// "is the inner storable? does it have a follow? is it non-greedy?"
-/// fan-out that legacy `gen_repeat_body` performs.
+/// fan-out inline.
 pub variant RepeatStrategy {
     /// Plain greedy loop. `while peek in first { ... }` for `*` /
     /// `+`; bare `if peek in first { ... }` for `?`. The tail-position
@@ -835,8 +834,7 @@ pub struct GeneralShape {
     /// Per-alt struct names (`<RuleName>Group<idx>Alt<j>`).
     pub alt_struct_names: List<String>,
     pub field: String,
-    /// Group counter id, stable across runs and matching the
-    /// `gen_cst_types` enumeration order.
+    /// Group counter id, stable across runs (group enumeration order).
     pub group_index: i32,
 }
 
@@ -917,6 +915,13 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
+    /// True for a non-greedy `*?` / `+?`. When the body has an empty
+    /// `inner_first` (a wildcard `.`), the plain `while peek ∈ inner_first`
+    /// guard can never fire, so the scan would undershoot (match zero
+    /// inner tokens). For non-greedy wildcards the scan instead skips
+    /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
+    /// the parse-side `compute_non_greedy_condition`.
+    pub non_greedy: bool,
 }
 
 pub struct ScanGroupElement {

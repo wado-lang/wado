@@ -14,7 +14,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Color> {  // TypeId(3)
+struct core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color> {  // TypeId(3)
     mut value: i32,
 }
 
@@ -260,7 +260,7 @@ type "functype//core:prelude/string.wado/String::push" = fn(ref "core:prelude/st
 
 type "functype//core:prelude/string.wado/String::from_utf8_slice" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>";  // TypeId(79)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<Color>", ref "core:prelude/format.wado//Formatter");  // TypeId(80)
+type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>", ref "core:prelude/format.wado//Formatter");  // TypeId(80)
 
 type "functype//core:serde/DeserializeError::unexpected_type" = fn(ref "core:prelude/string.wado//String", i64) -> ref "core:serde//DeserializeError";  // TypeId(81)
 
@@ -300,7 +300,7 @@ type "functype//core:prelude/slice.wado/ArraySlice<u8>::get_unchecked" = fn(ref 
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::len" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> i32;  // TypeId(99)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<Color>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(100)
+type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(100)
 
 type "functype//wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color,core:serde/DeserializeError>";  // TypeId(101)
 
@@ -310,7 +310,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(103)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(104)
 
-type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" = fn(ref "core:prelude/types.wado//Box<Color>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(105)
+type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(105)
 
 type "functype//core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color,core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(106)
 
@@ -336,12 +336,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_0_enum_serialize_red"() {
-    let c: ref "core:prelude/types.wado//Box<Color>";
+    let c: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    c = struct.new "core:prelude/types.wado//Box<Color>" { value: 0 };
+    c = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" { value: 0 };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -363,7 +363,7 @@ condition: s == `\"Red\"`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_1_enum_roundtrip_green"() {
-    let c: ref "core:prelude/types.wado//Box<Color>";
+    let c: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>";
     let json: ref "core:prelude/string.wado//String";
     let __cond_4: bool;
     let __v1: "wado-compiler/tests/fixtures/serde_json_synth_enum.wado//enum:Color";
@@ -372,7 +372,7 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_1_enum_roundt
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
-    c = struct.new "core:prelude/types.wado//Box<Color>" { value: 1 };
+    c = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" { value: 1 };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -398,7 +398,7 @@ condition: json == `\"Green\"`
                 cold_path;
                 "core:internal/panic"(__local_12 = "core:prelude/string.wado/String::with_capacity"(164); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_enum_roundtrip_green"), used: 29 }); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 116); "core:prelude/string.wado/String::push"(__local_12, 32); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_synth_enum.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_12, 58); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 30 }, __local_13); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: parsed == Color::Green
-"), used: 35 }); "core:prelude/string.wado/String::push"(__local_12, 112); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 114); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 101); "core:prelude/string.wado/String::push"(__local_12, 100); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Color>" { value: __sroa_parsed_r_case0_payload_0 }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color::Green: "), used: 14 }); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<Color>" { value: __v1 }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
+"), used: 35 }); "core:prelude/string.wado/String::push"(__local_12, 112); "core:prelude/string.wado/String::push"(__local_12, 97); "core:prelude/string.wado/String::push"(__local_12, 114); "core:prelude/string.wado/String::push"(__local_12, 115); "core:prelude/string.wado/String::push"(__local_12, 101); "core:prelude/string.wado/String::push"(__local_12, 100); "core:prelude/string.wado/String::push"(__local_12, 58); "core:prelude/string.wado/String::push"(__local_12, 32); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" { value: __sroa_parsed_r_case0_payload_0 }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); "core:prelude/string.wado/String::push_str"(__local_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color::Green: "), used: 14 }); __local_13 = "core:prelude/format.wado/Formatter::new"(__local_12); "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color>" { value: __v1 }, __local_13); "core:prelude/string.wado/String::push"(__local_12, 10); __local_12);
                 unreachable;
             }
         } else {

@@ -1,5 +1,4 @@
 use { Span, Token, LexerSlice, ParseError, TokenStream } from "./runtime/lex.wado";
-use { CstNode, CstChild, TreeRecorder, Visitor } from "./runtime/cst.wado";
 use { normalize_tree, to_lexer_string } from "./runtime/tools.wado";
 use {
     HighlightMapping,
@@ -238,95 +237,6 @@ test "ParseError::new creates error" {
     assert err.expected[1] == "STRING";
 }
 
-test "TreeRecorder builds CstNode" {
-    let ts = stream_of("hello world", [
-        [1, 0, 5],
-        [2, 6, 11],
-    ]);
-    let mut rec = TreeRecorder::new(&ts);
-    rec.enter_rule(0, &"root", &Span::new(0, 10));
-    rec.visit_token(&ts, 0);
-    rec.visit_token(&ts, 1);
-    rec.exit_rule(0, &"root", &Span::new(0, 10));
-    let tree = rec.build();
-    assert tree.name == "root";
-    assert tree.children.len() == 2;
-    if let Token(i) = tree.children[0] {
-        assert ts.token_text(i) == "hello";
-    } else {
-        panic("expected Token");
-    }
-}
-
-test "TreeRecorder builds nested tree" {
-    let ts = stream_of("a234567890b", [
-        [1, 0, 1],
-        [2, 10, 11],
-    ]);
-    let mut rec = TreeRecorder::new(&ts);
-    rec.enter_rule(0, &"parent", &Span::new(0, 20));
-    rec.enter_rule(1, &"child", &Span::new(0, 5));
-    rec.visit_token(&ts, 0);
-    rec.exit_rule(1, &"child", &Span::new(0, 5));
-    rec.visit_token(&ts, 1);
-    rec.exit_rule(0, &"parent", &Span::new(0, 20));
-    let tree = rec.build();
-    assert tree.name == "parent";
-    assert tree.children.len() == 2;
-    if let Node(child) = tree.children[0] {
-        assert child.name == "child";
-        assert child.children.len() == 1;
-    } else {
-        panic("expected Node");
-    }
-}
-
-test "to_string_tree leaf token" {
-    let ts = stream_of("42", [
-        [1, 0, 2],
-    ]);
-    let mut rec = TreeRecorder::new(&ts);
-    rec.enter_rule(0, &"root", &Span::new(0, 2));
-    rec.visit_token(&ts, 0);
-    rec.exit_rule(0, &"root", &Span::new(0, 2));
-    let tree = rec.build();
-    assert tree.to_string_tree() == "(root 42)";
-}
-
-test "to_string_tree nested" {
-    let ts = stream_of("x  + y", [
-        [1, 0, 1],
-        [2, 3, 4],
-        [1, 5, 6],
-    ]);
-    let mut rec = TreeRecorder::new(&ts);
-    rec.enter_rule(0, &"a", &Span::new(0, 10));
-    rec.enter_rule(1, &"b", &Span::new(0, 2));
-    rec.visit_token(&ts, 0);
-    rec.exit_rule(1, &"b", &Span::new(0, 2));
-    rec.visit_token(&ts, 1);
-    rec.enter_rule(1, &"b", &Span::new(5, 7));
-    rec.visit_token(&ts, 2);
-    rec.exit_rule(1, &"b", &Span::new(5, 7));
-    rec.exit_rule(0, &"a", &Span::new(0, 10));
-    let tree = rec.build();
-    assert tree.to_string_tree() == "(a (b x) + (b y))";
-}
-
-test "to_string_tree skips empty text tokens" {
-    let ts = stream_of("x", [
-        [1, 0, 1],
-        [0, 1, 1],
-    ]);
-    let mut rec = TreeRecorder::new(&ts);
-    rec.enter_rule(0, &"root", &Span::new(0, 5));
-    rec.visit_token(&ts, 0);
-    rec.visit_token(&ts, 1);
-    rec.exit_rule(0, &"root", &Span::new(0, 5));
-    let tree = rec.build();
-    assert tree.to_string_tree() == "(root x)";
-}
-
 test "normalize_tree collapses whitespace" {
     let input = "
         (json
@@ -386,11 +296,11 @@ test "HighlightVisitor collects captures from tokens" {
         [2, 7, 8],
     ]);
     let mut visitor = HighlightVisitor::new(mapping);
-    visitor.enter_rule(0, &"root", &Span::new(0, 10));
-    visitor.visit_token(&ts, 0);
-    visitor.visit_token(&ts, 1);
-    visitor.visit_token(&ts, 2);
-    visitor.exit_rule(0, &"root", &Span::new(0, 10));
+    visitor.hl_enter(0);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_visit_token(&ts, 2);
+    visitor.hl_exit();
     assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "string";
     assert visitor.captures[0].start == 0;
@@ -413,12 +323,12 @@ test "HighlightVisitor applies context overrides" {
         [0, 11, 16],
     ]);
     let mut visitor = HighlightVisitor::new(mapping);
-    visitor.enter_rule(0, &"root", &Span::new(0, 20));
-    visitor.enter_rule(1, &"pair", &Span::new(0, 10));
-    visitor.visit_token(&ts, 0);
-    visitor.exit_rule(1, &"pair", &Span::new(0, 10));
-    visitor.visit_token(&ts, 1);
-    visitor.exit_rule(0, &"root", &Span::new(0, 20));
+    visitor.hl_enter(0);
+    visitor.hl_enter(1);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_exit();
+    visitor.hl_visit_token(&ts, 1);
+    visitor.hl_exit();
     assert visitor.captures[0].capture == "string.special.key";
     assert visitor.captures[1].capture == "string";
 }
@@ -435,9 +345,9 @@ test "HighlightVisitor handles trivia" {
     ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
     ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword
     let mut visitor = HighlightVisitor::new(mapping);
-    visitor.enter_rule(0, &"root", &Span::new(0, 11));
-    visitor.visit_token(&ts, 0);
-    visitor.exit_rule(0, &"root", &Span::new(0, 11));
+    visitor.hl_enter(0);
+    visitor.hl_visit_token(&ts, 0);
+    visitor.hl_exit();
     assert visitor.captures.len() == 2;
     assert visitor.captures[0].capture == "comment";
     assert visitor.captures[0].start == 0;

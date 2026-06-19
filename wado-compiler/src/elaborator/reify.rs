@@ -6368,12 +6368,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         callee_name: &str,
         ctx: &mut FunctionContext,
     ) {
-        let ast::Expr::Ident(ident) = callee else {
+        // Only an ident callee names a free function with defaults. A
+        // namespace-qualified callee (`g::make`) is still a free function —
+        // `callee_module` / `callee_name` already carry its resolved home and
+        // name — so do NOT bail on `::` here; `lookup_free_func_params` returns
+        // empty for anything that is not a free function in `callee_module`.
+        let ast::Expr::Ident(_) = callee else {
             return;
         };
-        if ident.name.contains("::") {
-            return;
-        }
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
@@ -6935,7 +6937,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `is_mut` per-arg are still handled elsewhere (`coercions`); see
             // `arg_is_unannotated_closure` for why the forward is restricted.
             let call_param_types = self.ann_call_param_types(call.id);
-            let args: Vec<CallArg> = call
+            let mut args: Vec<CallArg> = call
                 .args
                 .iter()
                 .enumerate()
@@ -6951,6 +6953,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, false)
                 })
                 .collect();
+
+            // Pad omitted trailing args with the callee's declared defaults,
+            // matching annotate's `pad_args_with_defaults` (call.rs). Without
+            // this the type checker sees the padded arity but the TIR keeps
+            // only the explicit args, so WIR lowers a call with a missing
+            // trailing operand.
+            self.reify_pad_args_with_defaults(
+                &call.callee,
+                &mut args,
+                &callee_module,
+                &callee_name,
+                ctx,
+            );
 
             return TirExpr::new(
                 TirExprKind::Call {

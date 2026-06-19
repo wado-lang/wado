@@ -43,12 +43,12 @@ export fn run() with Stdout, Stderr, Environment, Preopens {
     let file = open_result.unwrap();
     let input = String::from_utf8_unchecked(read_all(&file));
 
-    match wado::parse(&input) {
-        Ok(_) => {
-            eprintln(`{path}: parsed OK`);
-            print(wado::highlight(&input));
-        },
-        Err(e) => eprintln(`{path}: parse error: {e.message}`),
+    let result = wado::parse(&input);
+    if result.ok() {
+        eprintln(`{path}: parsed OK`);
+        print(wado::highlight(&input));
+    } else {
+        eprintln(`{path}: parse error: {result.diagnostics[0].message}`);
     }
 }
 
@@ -73,7 +73,7 @@ fn read_all(file: &Descriptor) -> List<u8> {
 // error, so the `parse` check is what surfaces a grammar gap.
 fn assert_highlights(src: &String) {
     let _ = wado::highlight(src);
-    assert wado::parse(src) matches { Ok(_) }, "parse failed";
+    assert wado::parse(src).ok(), "parse failed";
 }
 
 test "highlight cat.wado" {

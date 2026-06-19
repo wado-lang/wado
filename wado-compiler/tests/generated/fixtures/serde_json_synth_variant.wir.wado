@@ -14,7 +14,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Shape> {  // TypeId(3)
+struct core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape> {  // TypeId(3)
     mut value: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape",
 }
 
@@ -385,7 +385,7 @@ type "functype//core:prelude/slice.wado/ArraySlice<u8>::get_unchecked" = fn(ref 
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::len" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> i32;  // TypeId(132)
 
-type "functype//wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<Shape>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(133)
+type "functype//wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(133)
 
 type "functype//wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape,core:serde/DeserializeError>";  // TypeId(134)
 
@@ -395,7 +395,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(136)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(137)
 
-type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" = fn(ref "core:prelude/types.wado//Box<Shape>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(138)
+type "functype//core:json/core/json/to_string<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" = fn(ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(138)
 
 type "functype//core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape,core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape", ref null "core:serde//DeserializeError"];  // TypeId(139)
 
@@ -426,12 +426,12 @@ global global:core::prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_0_variant_serialize_unit_case"() {
-    let s: ref "core:prelude/types.wado//Box<Shape>";
+    let s: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>";
     let json: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
+    s = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -453,12 +453,12 @@ condition: json == `\"Point\"`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_1_variant_serialize_payload_case"() {
-    let s: ref "core:prelude/types.wado//Box<Shape>";
+    let s: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>";
     let json: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 5 } };
+    s = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 5 } };
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -480,10 +480,10 @@ condition: json == `\\{\"Circle\":5\\}`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_2_variant_roundtrip_unit_case"() {
-    let s: ref "core:prelude/types.wado//Box<Shape>";
+    let s: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>";
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
-    s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
+    s = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape" { 1 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -512,14 +512,14 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_2_variant_
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_synth_variant.wado/__test_3_variant_roundtrip_payload_case"() {
-    let s: ref "core:prelude/types.wado//Box<Shape>";
+    let s: ref "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>";
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape";
     let r: f64;
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    s = struct.new "core:prelude/types.wado//Box<Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 } };
+    s = struct.new "core:prelude/types.wado//Box<wado-compiler/tests/fixtures/serde_json_synth_variant.wado/Shape>" { value: struct.new "wado-compiler/tests/fixtures/serde_json_synth_variant.wado//Shape::Circle" { discriminant: 0, payload_0: 3.14 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";

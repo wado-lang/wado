@@ -1,0 +1,303 @@
+//! The single (untyped) concrete syntax tree produced by every
+//! generated error-resilient parser, the `TreeBuilder` the parser drives to
+//! construct it, and the `ParseResult` the parser returns.
+//!
+//! Unlike the retired typed-CST-then-convert design, the parser builds *this*
+//! tree directly — there is no second typed representation and no walk/convert
+//! step. Consumers (compiler front ends, LSP, syntax highlight) read this tree
+//! as-is, so the generic view they want is free.
+//!
+//! `CstNode` is a pure value tree: it holds no reference to the token stream,
+//! so it composes and stores freely and `ParseResult` can own both the tree and
+//! the stream it indexes without a self-referential borrow. Methods that need
+//! terminal text or kinds take a `&TokenStream` argument.
+//!
+//! Error tokens are first-class and lossless: `Missing` (an inserted synthetic
+//! terminal), `Skipped` (a real terminal deleted during recovery), and a
+//! `<error>` region node (kind `K_ERROR`) together capture every recovery edit
+//! (insert / delete / region) so the original input round-trips. The token-
+//! stream flags (`TOK_SYNTHETIC` / `TOK_SKIPPED`, see `lex.wado`) carry the same
+//! facts at the terminal level.
+//!
+//! Imports `TokenStream` from `lex.wado` and `Diagnostic` from `diag.wado`;
+//! those imports are stripped at `#include_str` time (see `gen_runtime` in
+//! `codegen.wado`), where the fragments are concatenated into one module.
+
+use { Span, TokenStream } from "./lex.wado";
+use { Diagnostic } from "./diag.wado";
+
+/// A node's kind: a parser-rule id (`0..num_rules`, in grammar declaration
+/// order) or the reserved `K_ERROR` sentinel for a recovery region node. A
+/// newtype over `i32` so the generated parser can give it a name-aware
+/// `Display` (`Inspect` shows `name(id)`); the name table is grammar-specific,
+/// so codegen emits those impls.
+pub type NodeKind = i32;
+
+/// The reserved kind for a `<error>` region node — a run of skipped tokens or
+/// a partial sub-parse swept up during panic-mode recovery. Never collides with
+/// a real rule id (those are non-negative).
+pub global K_ERROR: NodeKind = -1;
+
+/// `CstNode.flags` bits.
+///
+/// - `NODE_ERROR` — this node, or some descendant, contains a recovery edit
+///   (a missing/skipped terminal or an error region). Bubbles up so a consumer
+///   can prune clean subtrees in one check.
+/// - `NODE_INCOMPLETE` — this node is missing a required terminal that the
+///   parser had to insert (it has a `Missing` child).
+pub global NODE_ERROR: i32 = 1;
+pub global NODE_INCOMPLETE: i32 = 2;
+
+/// A child slot of a `CstNode`. The full error-token vocabulary lives here:
+/// `Missing` is an inserted terminal, `Skipped` a deleted terminal, and an
+/// error region is a `Node` whose kind is `K_ERROR`.
+pub variant CstChild {
+    Token(i32),  // a real terminal: an index into the TokenStream
+    Missing(i32),  // an inserted synthetic terminal (zero-width; TOK_SYNTHETIC)
+    Skipped(i32),  // a real terminal deleted during recovery (TOK_SKIPPED)
+    Node(CstNode),  // a sub-rule (an error region when its kind is K_ERROR)
+}
+
+/// A node in the tree. A pure value: terminals are `i32` indices
+/// into a `TokenStream` that lives outside the tree (in `ParseResult`), so
+/// rendering methods take that stream as an argument.
+pub struct CstNode {
+    pub kind: NodeKind,
+    pub span: Span,
+    pub children: List<CstChild>,
+    pub flags: i32,
+}
+
+impl CstNode {
+    pub fn is_error(&self) -> bool {
+        return self.flags & NODE_ERROR != 0;
+    }
+
+    pub fn is_incomplete(&self) -> bool {
+        return self.flags & NODE_INCOMPLETE != 0;
+    }
+
+    /// ANTLR4-style S-expression: `(name child ...)`, tokens as their text.
+    /// `rule_names[kind]` names rule nodes (`K_ERROR` renders `<error>`);
+    /// `token_names[kind]` names missing terminals. Real terminals with empty
+    /// text (e.g. EOF) are omitted; missing/skipped terminals render markers.
+    pub fn to_string_tree(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
+        let mut out = String::with_capacity(256);
+        cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
+        return out;
+    }
+
+    /// First direct child node of rule `kind`, or `null`. Used by sub-tree
+    /// rendering (e.g. an ANTLR4 descriptor whose `[output]` is a labelled
+    /// child subtree, not the start rule's full tree).
+    pub fn find_child(&self, kind: NodeKind) -> Option<CstNode> {
+        for let child of &self.children {
+            if let Node(n) = *child {
+                if n.kind == kind {
+                    return Option::Some(n);
+                }
+            }
+        }
+        return null;
+    }
+}
+
+fn cst_to_string_tree_impl(
+    out: &mut String,
+    node: &CstNode,
+    toks: &TokenStream,
+    rule_names: &List<String>,
+    token_names: &List<String>,
+) {
+    out.push_str(&"(");
+    if node.kind == K_ERROR {
+        out.push_str(&"<error>");
+    } else {
+        out.push_str(&rule_names[node.kind as i32]);
+    }
+    for let child of &node.children {
+        match *child {
+            Token(i) => {
+                if !toks.is_empty_text(i) {
+                    out.push_str(&" ");
+                    toks.push_token_text(out, i);
+                }
+            },
+            Missing(i) => {
+                out.push_str(&` <missing {token_names[toks.kind_at(i)]}>`);
+            },
+            Skipped(i) => {
+                out.push_str(&" <skip ");
+                toks.push_token_text(out, i);
+                out.push_str(&">");
+            },
+            Node(n) => {
+                out.push_str(&" ");
+                cst_to_string_tree_impl(out, &n, toks, rule_names, token_names);
+            },
+        }
+    }
+    out.push_str(&")");
+}
+
+/// What a parse returns: the root, the token stream its terminal
+/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
+/// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
+/// the result is a freely movable value.
+pub struct ParseResult {
+    pub root: CstNode,
+    pub tokens: TokenStream,
+    pub diagnostics: List<Diagnostic>,
+}
+
+impl ParseResult {
+    pub fn has_errors(&self) -> bool {
+        for let d of &self.diagnostics {
+            if d.is_error() {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// True when the parse produced no error-severity diagnostics.
+    pub fn ok(&self) -> bool {
+        return !self.has_errors();
+    }
+}
+
+/// A flat event recorded by the parser as it descends. `finish()` replays the
+/// events once to materialise the tree, so each `CstNode` is allocated exactly
+/// once (no per-step deep copy of the in-progress subtree).
+variant BuildEvent {
+    Open([NodeKind, i32]),  // [kind, start byte offset]
+    Close(i32),  // end byte offset
+    Tok(i32),  // real terminal index
+    Miss(i32),  // inserted synthetic terminal index
+    Skip(i32),  // skipped real terminal index
+}
+
+/// The builder the generated parser drives. It records a flat event stream
+/// (`start_node` / `token` / `missing` / `skip` / `finish_node`) and replays it
+/// in `finish()`. It is purely structural — it stores token *indices*, never the
+/// stream itself; the parser owns the `TokenStream`, appending synthetic
+/// "missing" tokens and marking skipped ones on its own copy.
+pub struct TreeBuilder {
+    events: List<BuildEvent>,
+}
+
+impl TreeBuilder {
+    pub fn new() -> TreeBuilder {
+        return TreeBuilder { events: [] };
+    }
+
+    /// Open a rule node of `kind` starting at byte offset `start`.
+    pub fn start_node(&mut self, kind: NodeKind, start: i32) {
+        self.events.push(BuildEvent::Open([kind, start]));
+    }
+
+    /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
+    pub fn start_error(&mut self, start: i32) {
+        self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// A position in the event stream to retro-open a node at. Used for
+    /// left-associative wrapping (precedence climbing): capture a checkpoint
+    /// before the first operand, then `start_node_at` to make a new node whose
+    /// first child is everything recorded since the checkpoint.
+    pub fn checkpoint(&self) -> i32 {
+        return self.events.len();
+    }
+
+    /// Retro-open a node of `kind` (starting at byte offset `start`) at a
+    /// previously captured `checkpoint`, so all events recorded since wrap
+    /// inside it. Close it with the matching `finish_node`. Re-using the same
+    /// checkpoint across loop iterations nests left-associatively.
+    pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        self.events.insert(checkpoint, BuildEvent::Open([kind, start]));
+    }
+
+    /// Discard every event recorded since `checkpoint`, rolling the builder
+    /// back to that point. Used by a *speculative* parse that runs only to
+    /// localise a deep error (and then restores the cursor): under the
+    /// emitter the speculative subtree must not leak into the real
+    /// tree, so the caller brackets it with `checkpoint()` / `truncate()`.
+    pub fn truncate(&mut self, checkpoint: i32) {
+        while self.events.len() > checkpoint {
+            let _ = self.events.pop();
+        }
+    }
+
+    /// Close the innermost open node at byte offset `end`.
+    pub fn finish_node(&mut self, end: i32) {
+        self.events.push(BuildEvent::Close(end));
+    }
+
+    /// Append a real terminal (`idx` into the stream) to the open node.
+    pub fn token(&mut self, idx: i32) {
+        self.events.push(BuildEvent::Tok(idx));
+    }
+
+    /// Append an inserted synthetic terminal. `syn_idx` is the index returned
+    /// by `TokenStream::push_synthetic`.
+    pub fn missing(&mut self, syn_idx: i32) {
+        self.events.push(BuildEvent::Miss(syn_idx));
+    }
+
+    /// Append a skipped real terminal. The caller marks `idx` with
+    /// `TokenStream::mark_skipped` first.
+    pub fn skip(&mut self, idx: i32) {
+        self.events.push(BuildEvent::Skip(idx));
+    }
+
+    /// Materialise the tree. Valid once the root node has been closed.
+    pub fn finish(&self) -> CstNode {
+        let mut pos = 0;
+        return tree_build_node(&self.events, &mut pos);
+    }
+}
+
+fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
+    if let Open(info) = events[*pos] {
+        let kind = info.0;
+        let start = info.1;
+        *pos += 1;
+        let mut children: List<CstChild> = [];
+        let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut end = start;
+        loop {
+            if *pos >= events.len() {
+                break;
+            }
+            let ev = events[*pos];
+            if let Close(e) = ev {
+                end = e;
+                *pos += 1;
+                break;
+            }
+            if let Open(_) = ev {
+                let child = tree_build_node(events, pos);
+                if child.flags & NODE_ERROR != 0 {
+                    flags = flags | NODE_ERROR;
+                }
+                if child.span.end > end {
+                    end = child.span.end;
+                }
+                children.push(CstChild::Node(child));
+            } else if let Tok(i) = ev {
+                children.push(CstChild::Token(i));
+                *pos += 1;
+            } else if let Miss(i) = ev {
+                children.push(CstChild::Missing(i));
+                flags = flags | NODE_INCOMPLETE | NODE_ERROR;
+                *pos += 1;
+            } else if let Skip(i) = ev {
+                children.push(CstChild::Skipped(i));
+                flags = flags | NODE_ERROR;
+                *pos += 1;
+            }
+        }
+        return CstNode { kind, span: Span::new(start, end), children, flags };
+    }
+    panic("TreeBuilder: expected Open event");
+}

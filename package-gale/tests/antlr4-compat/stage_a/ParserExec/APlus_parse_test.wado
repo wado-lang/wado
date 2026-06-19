@@ -19,7 +19,8 @@ use t from "../../grammars/ParserExec/APlus.g4"
 test "stage_a_parse: ParserExec/APlus" {
     let input = "a b c";
     let result = t::parse_a(&input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);
     }
 }

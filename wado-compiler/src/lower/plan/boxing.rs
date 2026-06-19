@@ -207,8 +207,16 @@ impl TypeBuilder {
             return box_type;
         }
 
-        // Create the Box struct type name: e.g., "Box<i32>"
-        let inner_name = type_table.mangle_type_name(inner_type_id);
+        // Create the Box struct type name: e.g., "Box<i32>". Use the
+        // module-qualifying, ref-preserving mangler (not `mangle_type_name`,
+        // which peels refs and drops the module qualifier): two modules that
+        // each define a same-named recursive variant produce distinct inner
+        // types (`&./a/Child` vs `&./b/Child`) that must yield distinct Box
+        // names. The unqualified `Box<Child>` collapsed them in `intern`,
+        // making one module's iterator hand back the other module's `Child`
+        // and tripping a WIR ref-nullability ICE. Primitives are unaffected
+        // (`mangle_type_arg_for_generic(i32) == "i32"`).
+        let inner_name = type_table.mangle_type_arg_for_generic(inner_type_id);
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).

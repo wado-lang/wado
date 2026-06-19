@@ -1,0 +1,46 @@
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_sqlite",
+        },
+    };
+
+// The simpler form (expr c.id isolated)
+test "m1 select c.id" {
+    let sql = "SELECT c.id;";
+    let r = sqlite::parse(&sql);
+    if !r.ok() {
+        let d = &r.diagnostics[0];
+        panic(`m1: [{d.span.start},{d.span.end}): {d.message}`);
+    }
+}
+
+// The failure reproducer
+test "m2 select f(c.id)" {
+    let sql = "SELECT f(c.id);";
+    let r = sqlite::parse(&sql);
+    if !r.ok() {
+        let d = &r.diagnostics[0];
+        panic(`m2: [{d.span.start},{d.span.end}): {d.message}`);
+    }
+}
+
+test "m3 select count c.id as comment_count" {
+    let sql = "SELECT COUNT(c.id) AS comment_count FROM comments c;";
+    let r = sqlite::parse(&sql);
+    if !r.ok() {
+        let d = &r.diagnostics[0];
+        panic(`m3: [{d.span.start},{d.span.end}): {d.message}`);
+    }
+}
+
+test "m4 select * from users where active=1" {
+    let sql = "SELECT * FROM users WHERE is_active = 1;";
+    let r = sqlite::parse(&sql);
+    if !r.ok() {
+        let d = &r.diagnostics[0];
+        panic(`m4: [{d.span.start},{d.span.end}): {d.message}`);
+    }
+}

@@ -10,7 +10,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>> {  // TypeId(2)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>> {  // TypeId(2)
     mut value: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>",
 }
 
@@ -402,7 +402,7 @@ type "functype//core:prelude/slice.wado/ArraySlice<u8>::get_unchecked" = fn(ref 
 
 type "functype//core:prelude/slice.wado/ArraySlice<u8>::len" = fn(ref "core:prelude/slice.wado//ArraySlice<u8>") -> i32;  // TypeId(128)
 
-type "functype//core:serde/Result<i32,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(129)
+type "functype//core:serde/Result<i32,core:prelude/string.wado/String>^Serialize::serialize<core:json/JsonSerializer>" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>", ref "core:json//JsonSerializer") -> ref null "core:serde//SerializeError";  // TypeId(129)
 
 type "functype//core:serde/Result<i32,core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> ref "core:prelude/types.wado//Result<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>,core:serde/DeserializeError>";  // TypeId(130)
 
@@ -412,7 +412,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(132)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(133)
 
-type "functype//core:json/core/json/to_string<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(134)
+type "functype//core:json/core/json/to_string<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(134)
 
 type "functype//core:json/core/json/from_bytes<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>,core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>", ref null "core:serde//DeserializeError"];  // TypeId(135)
 
@@ -436,12 +436,12 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/serde_json_result.wado/__test_0_result_serialize_ok"() {
-    let r: ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>";
+    let r: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    r = struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 } };
+    r = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -463,12 +463,12 @@ condition: s == `\\{\"Ok\":42\\}`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_result.wado/__test_1_result_serialize_err"() {
-    let r: ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>";
+    let r: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>";
     let s: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
-    r = struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 } } };
+    r = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not found"), used: 9 } } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -490,14 +490,14 @@ condition: s == `\\{\"Err\":\"not found\"\\}`
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_result.wado/__test_2_result_roundtrip_ok"() {
-    let orig: ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>";
+    let orig: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>";
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let v: i32;
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    orig = struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 100 } };
+    orig = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 100 } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";
@@ -535,14 +535,14 @@ condition: v == 100
 }
 
 fn "wado-compiler/tests/fixtures/serde_json_result.wado/__test_3_result_roundtrip_err"() {
-    let orig: ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>";
+    let orig: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>";
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
     let e: ref "core:prelude/string.wado//String";
     let __cond: bool;
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
-    orig = struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } } };
+    orig = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } } };
     let __sroa_json_r_discriminant: i32;
     let __sroa_json_r_case0_payload_0: ref null "core:prelude/string.wado//String";
     let __sroa_json_r_case1_payload_0: ref null "core:serde//SerializeError";

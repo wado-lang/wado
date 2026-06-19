@@ -17,8 +17,8 @@ use { normalize_tree } from "../../grammars/LeftRecursion/PrecedenceFilterConsid
 test "stage_b: LeftRecursion/PrecedenceFilterConsidersContext" {
     let input = "aa";
     let expected = "(prog (statement (letterA a)) (statement (letterA a)))";
-    let root = t::parse_prog(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_prog(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }
