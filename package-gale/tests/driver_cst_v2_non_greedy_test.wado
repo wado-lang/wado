@@ -1,0 +1,13 @@
+//! sink_v2 parity on non-greedy `.*?` / `.+?`.
+use ng from "./grammars/non_greedy.g4"
+    with { generator: { module: "../src/generator.wado", options: { highlight: false, homogeneous: true, sink_v2: true }, output_dir: "tests/generated/cst_v2_non_greedy" } };
+fn assert_tree(input: &String, expected: &String) {
+    let result = ng::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = ng::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+test "v2-ng: `.*?` stops at the first close paren" { assert_tree(&"( a 1 b )", &"(start (seg ( a 1 b )))"); }
+test "v2-ng: `.*?` matches zero inner tokens" { assert_tree(&"( )", &"(start (seg ( )))"); }
+test "v2-ng: `.+?` requires one inner token" { assert_tree(&"[ z ]", &"(start (seg [ z ]))"); }
+test "v2-ng: mixed segments" { assert_tree(&"( a ) [ b ]", &"(start (seg ( a )) (seg [ b ]))"); }

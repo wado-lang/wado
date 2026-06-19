@@ -2920,12 +2920,39 @@ fn gen_lr_fn_homog(
     w.blank();
 }
 
+/// Non-greedy `*?` / `+?` under the homogeneous sink: loop only while the
+/// lowered static exit condition holds, so the inner yields the closing
+/// delimiter to the continuation (the same gate cst_gen computes). `??` lowers
+/// to `Plain` + `mark_needs_atn` and so never reaches here.
+fn gen_op_repeat_non_greedy_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
+    let loops = cond != "false";
+    match r.kind {
+        Plus => {
+            gen_op_homog(w, &r.body, ctx, nc);
+            if loops {
+                w.begin(&`while ({cond})`);
+                gen_op_homog(w, &r.body, ctx, nc);
+                w.end();
+            }
+        },
+        Star => {
+            if loops {
+                w.begin(&`while ({cond})`);
+                gen_op_homog(w, &r.body, ctx, nc);
+                w.end();
+            }
+        },
+        Optional => panic("gen_op_repeat_non_greedy_homog: non-greedy `??` should be excluded by needs_atn"),
+    }
+}
+
 /// Greedy `*` / `+` / `?` under the homogeneous sink: loop the body (which
-/// appends), gated on the body's first set. Non-greedy / scan-guarded repeats
-/// reuse the typed prediction in a later slice.
+/// appends), gated on the body's first set.
 fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     if let NonGreedy(_) = r.strategy {
-        panic("gen_op_repeat_homog: non-greedy repeat not yet on the sink_v2 path");
+        gen_op_repeat_non_greedy_homog(w, r, ctx, nc);
+        return;
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
