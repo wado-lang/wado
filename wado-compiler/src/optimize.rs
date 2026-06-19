@@ -117,26 +117,18 @@ use value_copy_demote::demote_value_copies;
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
-/// Whether the operand-promotion keystone runs early (before the value passes),
-/// gated by `WADO_PROMOTE_EARLY`. Under construction; default off keeps the
-/// committed late-freeze behavior. See `docs/wep-2026-06-15-live-value-graph.md`.
+/// Whether the operand-promotion keystone runs early (before the value passes).
+/// Now unconditional: operand promotion is the production path (the live
+/// ValueGraph). See `docs/wep-2026-06-15-live-value-graph.md`.
 pub(crate) fn promote_early_enabled() -> bool {
-    use std::sync::OnceLock;
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("WADO_PROMOTE_EARLY").is_some())
+    true
 }
 
-/// Whether **any** operand promotion is active (arith early or FieldAccess).
-/// Liveness passes (`elide_local`, `copy_prop`) use the over-conservative
-/// promoted-reads set whenever promotion runs, since the precise live-slot walk
-/// has a known gap (a still-read local whose `Opaque(Local)` source it misses).
+/// Whether **any** operand promotion is active. Unconditional — promotion is the
+/// production path; the build-once persist, the cse subsumption, and the
+/// promotion-aware liveness in `elide_local` / `copy_prop` all key on it.
 pub(crate) fn promote_active() -> bool {
-    use std::sync::OnceLock;
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| {
-        std::env::var_os("WADO_PROMOTE_EARLY").is_some()
-            || std::env::var_os("WADO_PROMOTE_FIELDS").is_some()
-    })
+    true
 }
 
 /// Configuration for optimization passes
