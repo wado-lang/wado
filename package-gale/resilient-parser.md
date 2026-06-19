@@ -189,13 +189,40 @@ refactor `parser_gen`'s single emission pipeline over a node **sink**
 infallible), reusing every prediction decision (incl. ATN) unchanged:
 
 1. Thread the sink through `parser_gen`'s emit functions; `Typed` stays the
-   default and the corpus stays byte-identical and green.
+   default and the corpus stays byte-identical and green. **Done:** the sink
+   flag (`GenContext.is_homogeneous`) and the first leaf layer — `gen_op_leaf`
+   now branches on the sink (typed binds a CST field with `?`; homogeneous
+   drives the `TreeBuilder`), and `cst_gen.emit_op` delegates its leaf ops to
+   it. Both corpora byte-identical and green.
 2. Wire the `Homogeneous` sink at the leaf / rule-entry / dispatch layers
    (the ATN return-stack plumbing — `emit_atn_enter`, `gen_atn_ret_pending`,
    `atn_*_decision` — is reused verbatim). Migrate the driver + ANTLR4-compat
    corpus behind the `homogeneous` flag, batch by batch, each proven green.
 3. Delete the `Typed` sink, `gen_cst_types`, `visitor_gen`, and `cst_gen`;
    `homogeneous` becomes the only path.
+
+**Mechanics established while starting the refactor.** Two facts shape the
+remaining steps:
+
+- **Surface-element threading is the shared prerequisite.** `cst_gen` walks the
+  lowered GIR `Op`s; every reuse of `parser_gen`'s prediction (group dispatch,
+  ATN) needs the *surface* `Element`s (`build_prediction` consumes them). So the
+  next foundational step is to walk `Element`s and `Op`s in parallel (as
+  `gen_alt_elements` already does) so the homogeneous emission has surface
+  access at each op.
+- **`build_prediction` is a pure decision oracle** (`prediction.wado` — returns
+  the `PredictionNode` tree, no emission). The ATN-class / group-tournament gaps
+  close by walking that same tree emitting `TreeBuilder` actions, so the
+  prediction *logic* is reused unchanged (not cloned) — only the emission walk
+  differs by sink, which cannot diverge on the decision because both walks read
+  the one `PredictionNode`.
+
+Because the homogeneous op-emission and the prediction it calls are mutually
+recursive (a group's prediction emits ops; an op may be a group needing
+prediction), they must live in one module: the leaf/repeat/group/dispatch
+emission consolidates into `parser_gen`'s sink-branched emitters (it cannot
+import `cst_gen`), shrinking `cst_gen` to scaffolding (runtime, node kinds,
+`to_string_tree`) until step 3 absorbs it.
 
 ### Stage 3 — Recovery
 
