@@ -144,7 +144,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_token_kind(&mut w, &grammar.lexer_rules);
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
-        if options.sink_v2 {
+        if options.sink_v2 || options.homogeneous {
             // Sink-refactor route: parser_gen's sink-aware emitter drives the
             // TreeBuilder (full prediction/ATN reuse). cst_gen's scaffolding
             // (node kinds, to_string_tree) is shared verbatim.

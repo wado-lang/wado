@@ -2888,24 +2888,27 @@ fn gen_lr_fn_homog(
     let mut nc: List<[String, i32]> = [];
     let mut first = true;
     for let group of &lr_dispatch.groups {
-        if group.len() != 1 {
-            panic("gen_lr_fn_homog: overlapping LR suffix groups not yet on the sink_v2 path");
+        // Union of every member suffix's first set gates the group's arm.
+        let mut union_first: List<String> = [];
+        for let gi of group {
+            for let tk of &lr_alts[lr_dispatch.valid_lr_alts[*gi]].suffix_first {
+                if !union_first.contains(tk) {
+                    union_first.push(*tk);
+                }
+            }
         }
-        let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
-        let cond = ctx.kind_check_str(&lr.suffix_first, &"_sk");
+        let cond = ctx.kind_check_str(&union_first, &"_sk");
         if first {
             w.begin(&`if {cond}`);
             first = false;
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        w.begin(&`if {lr.own_prec} >= min_prec`);
-        w.line(&`p.b.start_node_at(_cp, {rk}, _start);`);
-        gen_ops_homog(w, &lr.suffix.ops, ctx, &mut nc);
-        w.line(&"p.b.finish_node(p.last_end());");
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
+        if group.len() == 1 {
+            emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, ctx, &mut nc);
+        } else {
+            emit_lr_overlap_homog(w, rule, lr_alts, lr_dispatch, group, &rk, ctx, &mut nc);
+        }
     }
     if first {
         w.line(&"break;");
@@ -2918,6 +2921,116 @@ fn gen_lr_fn_homog(
     w.line(&"return Result::Ok(());");
     w.end();
     w.blank();
+}
+
+/// One LR continuation (homogeneous): precedence gate, left-associative wrap,
+/// suffix ops. Below `min_prec` the climb stops.
+fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    w.begin(&`if {lr.own_prec} >= min_prec`);
+    w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
+    gen_ops_homog(w, &lr.suffix.ops, ctx, nc);
+    w.line(&"p.b.finish_node(p.last_end());");
+    w.else_begin(&"else");
+    w.line(&"break;");
+    w.end();
+}
+
+/// Overlap group (suffixes sharing a first token), homogeneous: unique first
+/// tokens commit directly; a shared first token branches on `peek_at(1)` via
+/// `compute_lr_second_token`, the last candidate falling through.
+fn emit_lr_overlap_homog(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    group: &List<i32>,
+    rk: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    let mut first_sets: List<List<String>> = [];
+    for let gi of group {
+        first_sets.push(lr_alts[lr_dispatch.valid_lr_alts[*gi]].suffix_first);
+    }
+    let mut emitted: List<String> = [];
+    let mut first_branch = true;
+    for let mut k = 0; k < group.len(); k += 1 {
+        for let tk of &first_sets[k] {
+            if emitted.contains(tk) {
+                continue;
+            }
+            let mut shared = false;
+            for let mut j = 0; j < group.len(); j += 1 {
+                if j != k && first_sets[j].contains(tk) {
+                    shared = true;
+                }
+            }
+            if !shared {
+                if first_branch {
+                    w.begin(&`if _sk == {*tk}`);
+                    first_branch = false;
+                } else {
+                    w.else_begin(&`else if _sk == {*tk}`);
+                }
+                emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, ctx, nc);
+                emitted.push(*tk);
+            }
+        }
+    }
+    let mut shared_tokens: List<String> = [];
+    for let mut k = 0; k < group.len(); k += 1 {
+        for let tk of &first_sets[k] {
+            if emitted.contains(tk) || shared_tokens.contains(tk) {
+                continue;
+            }
+            shared_tokens.push(*tk);
+        }
+    }
+    for let shared_tk of &shared_tokens {
+        if first_branch {
+            w.begin(&`if _sk == {*shared_tk}`);
+            first_branch = false;
+        } else {
+            w.else_begin(&`else if _sk == {*shared_tk}`);
+        }
+        let mut last_k = -1;
+        for let mut k = 0; k < group.len(); k += 1 {
+            if first_sets[k].contains(shared_tk) {
+                last_k = k;
+            }
+        }
+        let mut sub_first = true;
+        for let mut k = 0; k < group.len(); k += 1 {
+            if !first_sets[k].contains(shared_tk) {
+                continue;
+            }
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
+            if k == last_k {
+                if sub_first {
+                    emit_lr_branch_homog(w, lr, rk, ctx, nc);
+                } else {
+                    w.else_begin(&"else");
+                    emit_lr_branch_homog(w, lr, rk, ctx, nc);
+                    w.end();
+                }
+            } else {
+                let elements = &rule.alternatives[lr.alt_index].elements;
+                let second = compute_lr_second_token(shared_tk, elements, ctx);
+                let sub_cond = ctx.kind_check_str(&second, &"p.peek_at(1)");
+                if sub_first {
+                    w.begin(&`if {sub_cond}`);
+                    sub_first = false;
+                } else {
+                    w.else_begin(&`else if {sub_cond}`);
+                }
+                emit_lr_branch_homog(w, lr, rk, ctx, nc);
+            }
+        }
+        emitted.push(*shared_tk);
+    }
+    if !first_branch {
+        w.end();
+    }
 }
 
 /// Non-greedy `*?` / `+?` under the homogeneous sink: loop only while the
@@ -2953,6 +3066,29 @@ fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, n
     if let NonGreedy(_) = r.strategy {
         gen_op_repeat_non_greedy_homog(w, r, ctx, nc);
         return;
+    }
+    // Scan-guarded `*` / `+`: when the body's first set overlaps the caller's
+    // FOLLOW and the body is scannable, each iteration scans the whole body and
+    // only commits on a match — so a trailing token a following `,?` wants is
+    // yielded instead of greedily consumed (e.g. `(',' arm)* ','?`). `Optional`
+    // never needs it.
+    let overlaps_follow = sets_overlap(&r.body_first_set, &r.caller_follow_first);
+    if r.body_scannable && overlaps_follow {
+        let is_opt = if let Optional = r.kind { true } else { false };
+        if !is_opt {
+            if let Plus = r.kind {
+                gen_op_homog(w, &r.body, ctx, nc);
+            }
+            w.begin(&"loop");
+            if ctx.emit_follow() && r.gate_caller_follow {
+                w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
+            }
+            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, ctx, nc);
+            w.line(&`if {scan_pos} < 0 \{ break; \}`);
+            gen_op_homog(w, &r.body, ctx, nc);
+            w.end();
+            return;
+        }
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).

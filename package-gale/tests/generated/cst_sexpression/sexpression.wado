@@ -1314,109 +1314,142 @@ global RK_ATOM: NodeKind = 3;
 global GALE_RULE_NAMES: List<String> = ["sexpr", "item", "list_", "atom"];
 
 struct Parser {
-    toks: TokenStream,
+    tokens: TokenStream,
     kinds: Array<i32>,
     pos: i32,
+    pending: Option<ParseError>,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
-    max_errors: i32,
-    bailed: bool,
 }
 
 impl Parser {
-    fn new(toks: TokenStream, max_errors: i32) -> Parser {
-        let kinds = toks.kinds.to_array();
-        return Parser { toks, kinds, pos: 0, b: TreeBuilder::new(), diagnostics: [], max_errors, bailed: false };
+    fn new(tokens: TokenStream) -> Parser {
+        let kinds = tokens.kinds.to_array();
+        return Parser { tokens, kinds, pos: 0, pending: null, b: TreeBuilder::new(), diagnostics: [] };
+    }
+
+    fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
+        let lc = line_col(self.tokens.chars, span.start);
+        return ParseError::at(message, span, expected, lc.0, lc.1);
+    }
+
+    fn record_deeper(&mut self, e: ParseError) {
+        let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
+        if take {
+            self.pending = Option::Some(e);
+        }
+    }
+
+    fn peek_start(&self) -> i32 {
+        return self.tokens.starts[self.pos];
+    }
+
+    fn peek_span(&self) -> Span {
+        return self.tokens.span_at(self.pos);
     }
 
     fn peek_kind(&self) -> i32 {
-        if self.pos < self.toks.len() { return self.toks.kinds[self.pos]; }
-        return TK_EOF;
+        return self.kinds[self.pos];
     }
 
     fn peek_at(&self, offset: i32) -> i32 {
         let idx = self.pos + offset;
-        if idx >= self.toks.len() { return TK_EOF; }
-        return self.toks.kinds[idx];
-    }
-
-    fn peek_start(&self) -> i32 {
-        if self.pos < self.toks.len() { return self.toks.starts[self.pos]; }
-        if self.toks.len() > 0 { return self.toks.ends[self.toks.len() - 1]; }
-        return 0;
-    }
-
-    fn last_end(&self) -> i32 {
-        if self.pos > 0 { return self.toks.ends[self.pos - 1]; }
-        return self.peek_start();
+        if idx >= self.tokens.len() { return TK_EOF; }
+        return self.kinds[idx];
     }
 
     fn advance(&mut self) -> i32 {
         let i = self.pos;
-        if self.pos < self.toks.len() { self.pos += 1; }
+        self.pos += 1;
         return i;
     }
 
-    fn expect_token(&mut self, kind: i32) {
-        if self.bailed { return; }
-        if self.peek_kind() == kind {
-            if kind == TK_EOF { self.b.token(self.pos); return; }
-            self.b.token(self.advance());
-            return;
+    fn last_end(&self) -> i32 {
+        if self.pos == 0 { return 0; }
+        return self.tokens.ends[self.pos - 1];
+    }
+
+    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+        if self.kinds[self.pos] == kind {
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return Result::Ok(self.pos);
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return Result::Ok(_i);
         }
-        self.fail([kind]);
+        let name = token_kind_name(kind);
+        return Result::Err(self.error(
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            [name],
+        ));
     }
 
-    fn expect_one_of(&mut self, kinds: List<i32>) {
-        if self.bailed { return; }
-        let k = self.peek_kind();
-        for let e of &kinds { if *e == k { self.b.token(self.advance()); return; } }
-        self.fail(kinds);
+    fn fail(&self, name: String) -> Result<i32, ParseError> {
+        return Result::Err(self.error(
+            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            [name],
+        ));
     }
 
-    fn expect_any(&mut self) {
-        if self.bailed { return; }
-        if self.peek_kind() != TK_EOF { self.b.token(self.advance()); return; }
-        self.fail([]);
+    fn match_any(&mut self) -> Result<i32, ParseError> {
+        if self.kinds[self.pos] != TK_EOF {
+            let _i = self.advance();
+            self.b.token(_i);
+            return Result::Ok(_i);
+        }
+        return Result::Err(self.error(
+            `expected any token, got "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["any token"],
+        ));
     }
 
-    fn expect_not(&mut self, excluded: List<i32>) {
-        if self.bailed { return; }
-        let k = self.peek_kind();
+    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+        let k = self.kinds[self.pos];
         if k != TK_EOF {
-            for let e of &excluded { if *e == k { self.fail(excluded); return; } }
-            self.b.token(self.advance());
-            return;
+            let mut blocked = false;
+            for let x of excluded {
+                if x == k {
+                    blocked = true;
+                    break;
+                }
+            }
+            if !blocked {
+                let _i = self.advance();
+                self.b.token(_i);
+                return Result::Ok(_i);
+            }
         }
-        self.fail(excluded);
+        return Result::Err(self.error(
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["set complement"],
+        ));
     }
 
-    fn fail(&mut self, expected: List<i32>) {
-        if self.bailed { return; }
-        let found = self.peek_kind();
-        let span = if self.pos < self.toks.len() { self.toks.span_at(self.pos) } else { Span::new(self.last_end(), self.last_end()) };
-        let lc = line_col(self.toks.chars, span.start);
-        let mut msg = String::with_capacity(32);
-        msg.push_str(&"expected ");
-        msg.push_str(&expected_names(&expected));
-        msg.push_str(&", found ");
-        msg.push_str(&token_kind_name(found));
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, msg, span, lc.0, lc.1);
-        d.expected = expected;
-        d.found = found;
-        self.diagnostics.push(d);
-        self.bailed = true;
+    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+        let k = self.kinds[self.pos];
+        for let x of included {
+            if x == k {
+                if k == TK_EOF {
+                    self.b.token(self.pos);
+                    return Result::Ok(self.pos);
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return Result::Ok(_i);
+            }
+        }
+        return Result::Err(self.error(
+            `unexpected token "{self.tokens.token_text(self.pos)}"`,
+            self.tokens.span_at(self.pos),
+            ["token set"],
+        ));
     }
-}
-
-fn expected_names(kinds: &List<i32>) -> String {
-    if kinds.is_empty() { return String::from("a token"); }
-    let mut out = String::with_capacity(kinds.len() * 8);
-    for let mut i = 0; i < kinds.len(); i += 1 {
-        if i > 0 { out.push_str(&" or "); }
-        out.push_str(&token_kind_name(kinds[i]));
-    }
-    return out;
 }
 
 fn scan_sexpr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
@@ -1498,21 +1531,38 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return -1;
 }
 
-fn _parse_item_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_atom(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    return pos;
+fn _parse_sexpr__inner(p: &mut Parser) -> Result<(), ParseError> {
+    let start = p.peek_start();
+    while _gale_kind_set_0(p.peek_kind()) {
+        let item = _parse_item(p)?;
+    }
+    let eof = p.expect(TK_EOF)?;
+    return Result::Ok(());
 }
 
-fn _parse_item_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    pos = scan_list_(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    return pos;
+fn _parse_sexpr(p: &mut Parser) -> Result<(), ParseError> {
+    let _start = p.peek_start();
+    p.b.start_node(RK_SEXPR, _start);
+    let r = _parse_sexpr__inner(p);
+    p.b.finish_node(p.last_end());
+    if let Err(mut e) = r {
+        e.rule_stack.push("sexpr");
+        return Result::Err(e);
+    }
+    return Result::Ok(());
 }
 
-fn _parse_item_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
+fn _parse_item__inner_alt_2(p: &mut Parser) -> Result<(), ParseError> {
+    let start = p.peek_start();
+    let lparen = p.expect(TK_LPAREN)?;
+    let item = _parse_item(p)?;
+    let dot = p.expect(TK_DOT)?;
+    let item_2 = _parse_item(p)?;
+    let rparen = p.expect(TK_RPAREN)?;
+    return Result::Ok(());
+}
+
+fn _parse_item__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
@@ -1527,91 +1577,129 @@ fn _parse_item_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_sexpr(p: &mut Parser) {
-    if p.bailed { return; }
+fn _parse_item__inner_alt_1(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    p.b.start_node(RK_SEXPR, start);
-    while !p.bailed && (p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN) {
-        _parse_item(p);
-    }
-    p.expect_token(TK_EOF);
-    p.b.finish_node(p.last_end());
+    let list_ = _parse_list_(p)?;
+    return Result::Ok(());
 }
 
-fn _parse_item(p: &mut Parser) {
-    if p.bailed { return; }
-    let start = p.peek_start();
-    p.b.start_node(RK_ITEM, start);
-    let _sd_pos = p.pos;
-    let _sd_p_2 = _parse_item_scan_2(&p.kinds, _sd_pos);
-    let _sd_p_0 = _parse_item_scan_0(&p.kinds, _sd_pos);
-    let _sd_p_1 = _parse_item_scan_1(&p.kinds, _sd_pos);
-    let mut _sd_best_i: i32 = -1;
-    let mut _sd_best_p: i32 = -1;
-    if _sd_p_2 > _sd_best_p {
-        _sd_best_p = _sd_p_2;
-        _sd_best_i = 2;
-    }
-    if _sd_p_0 > _sd_best_p {
-        _sd_best_p = _sd_p_0;
-        _sd_best_i = 0;
-    }
-    if _sd_p_1 > _sd_best_p {
-        _sd_best_p = _sd_p_1;
-        _sd_best_i = 1;
-    }
-    if _sd_best_i == 2 {
-        p.expect_token(TK_LPAREN);
-        _parse_item(p);
-        p.expect_token(TK_DOT);
-        _parse_item(p);
-        p.expect_token(TK_RPAREN);
-    } else if _sd_best_i == 0 {
-        _parse_atom(p);
-    } else if _sd_best_i == 1 {
-        _parse_list_(p);
-    } else {
-        p.fail([]);
-    }
-    p.b.finish_node(p.last_end());
+fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_list_(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    return pos;
 }
 
-fn _parse_list_(p: &mut Parser) {
-    if p.bailed { return; }
+fn _parse_item__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    p.b.start_node(RK_LIST_, start);
-    p.expect_token(TK_LPAREN);
-    while !p.bailed && (p.peek_kind() == TK_STRING || p.peek_kind() == TK_SYMBOL || p.peek_kind() == TK_NUMBER || p.peek_kind() == TK_DOT || p.peek_kind() == TK_LPAREN) {
-        _parse_item(p);
-    }
-    p.expect_token(TK_RPAREN);
-    p.b.finish_node(p.last_end());
-}
-
-fn _parse_atom(p: &mut Parser) {
-    if p.bailed { return; }
-    let start = p.peek_start();
-    p.b.start_node(RK_ATOM, start);
     let kind = p.peek_kind();
-    if (kind == TK_STRING) {
-        p.expect_token(TK_STRING);
-    } else if (kind == TK_SYMBOL) {
-        p.expect_token(TK_SYMBOL);
-    } else if (kind == TK_NUMBER) {
-        p.expect_token(TK_NUMBER);
-    } else if (kind == TK_DOT) {
-        p.expect_token(TK_DOT);
-    } else {
-        p.fail([TK_STRING, TK_SYMBOL, TK_NUMBER, TK_DOT]);
+    if _gale_kind_set_1(kind) {
+        let atom = _parse_atom(p)?;
+        return Result::Ok(());
     }
+    if kind == TK_LPAREN {
+        if p.peek_kind() == TK_LPAREN {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_2 = _parse_item__inner_scan_2(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 2 {
+                return _parse_item__inner_alt_2(p);
+            }
+            if _sd_best_i == 1 {
+                return _parse_item__inner_alt_1(p);
+            }
+            return _parse_item__inner_alt_1(p);
+        }
+    }
+    return Result::Err(p.error(
+        "expected item",
+        p.peek_span(),
+        ["TK_STRING", "TK_SYMBOL", "TK_NUMBER", "TK_DOT", "TK_LPAREN"],
+    ));
+}
+
+fn _parse_item(p: &mut Parser) -> Result<(), ParseError> {
+    let _start = p.peek_start();
+    p.b.start_node(RK_ITEM, _start);
+    let r = _parse_item__inner(p);
     p.b.finish_node(p.last_end());
+    if let Err(mut e) = r {
+        e.rule_stack.push("item");
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}
+
+fn _parse_list___inner(p: &mut Parser) -> Result<(), ParseError> {
+    let start = p.peek_start();
+    let lparen = p.expect(TK_LPAREN)?;
+    while _gale_kind_set_0(p.peek_kind()) {
+        let item = _parse_item(p)?;
+    }
+    let rparen = p.expect(TK_RPAREN)?;
+    return Result::Ok(());
+}
+
+fn _parse_list_(p: &mut Parser) -> Result<(), ParseError> {
+    let _start = p.peek_start();
+    p.b.start_node(RK_LIST_, _start);
+    let r = _parse_list___inner(p);
+    p.b.finish_node(p.last_end());
+    if let Err(mut e) = r {
+        e.rule_stack.push("list_");
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}
+
+fn _parse_atom__inner(p: &mut Parser) -> Result<(), ParseError> {
+    let start = p.peek_start();
+    let kind = p.peek_kind();
+    if _gale_kind_set_1(kind) {
+        let _ = p.expect(kind)?;
+        return Result::Ok(());
+    }
+    return Result::Err(p.error(
+        "expected atom",
+        p.peek_span(),
+        ["TK_STRING", "TK_SYMBOL", "TK_NUMBER", "TK_DOT"],
+    ));
+}
+
+fn _parse_atom(p: &mut Parser) -> Result<(), ParseError> {
+    let _start = p.peek_start();
+    p.b.start_node(RK_ATOM, _start);
+    let r = _parse_atom__inner(p);
+    p.b.finish_node(p.last_end());
+    if let Err(mut e) = r {
+        e.rule_stack.push("atom");
+        return Result::Err(e);
+    }
+    return Result::Ok(());
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    let _ = max_errors;
     let tokens = tokenize(input);
-    let mut p = Parser::new(tokens, max_errors);
-    _parse_sexpr(&mut p);
-    return ParseResult { root: p.b.finish(), tokens: p.toks, diagnostics: p.diagnostics };
+    let mut p = Parser::new(tokens);
+    let _r = _parse_sexpr(&mut p);
+    if let Err(e) = _r {
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
