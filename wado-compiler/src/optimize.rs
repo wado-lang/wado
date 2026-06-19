@@ -678,7 +678,14 @@ fn run_optimization_passes(
         gated!("nir/drve", eliminate_dead_return_values);
         // `cse` runs store-load forwarding in the same engine session (both
         // graph-preserving, adjacent passes) — one ValueGraph build for both.
-        gated!("nir/cse", eliminate_common_subexprs);
+        // Under operand promotion (WEP P3), pure-value CSE is subsumed by
+        // hash-consing (identical values already share a ValueId), so cse is
+        // skipped — removing its per-function `builder::build` (the path to
+        // `rebuilds = 0`). store-load forwarding is likewise subsumed once
+        // FieldAccess promotes at its heap version.
+        if !crate::optimize::promote_active() {
+            gated!("nir/cse", eliminate_common_subexprs);
+        }
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —
