@@ -20,6 +20,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 options.highlight = true;
             } else if arguments[i] == "--trace" {
                 options.trace = true;
+            } else if arguments[i].starts_with("--") {
+                eprintln(`gale gen: unknown flag '{arguments[i]}'`);
+                usage();
+                exit(1);
             } else {
                 paths.push(arguments[i]);
             }
@@ -34,6 +38,10 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         for let mut i = 1; i < arguments.len(); i += 1 {
             if arguments[i] == "--atn" {
                 atn = true;
+            } else if arguments[i].starts_with("--") {
+                eprintln(`gale dump: unknown flag '{arguments[i]}'`);
+                usage();
+                exit(1);
             } else {
                 paths.push(arguments[i]);
             }
@@ -42,9 +50,14 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
         return;
     }
 
+    usage();
+    exit(1);
+}
+
+/// The `gale` CLI usage banner, on stderr.
+fn usage() with Stderr {
     eprintln("Usage: gale gen [--highlight] [--trace] <grammar.g4> [grammar2.g4 ...]");
     eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
-    exit(1);
 }
 
 fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens, Exit {
