@@ -588,6 +588,18 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       from promotion at the source, shrinking the surface. The grind is bounded
       (a handful of receiver-position sites, found by re-enabling promotion and
       fixing each benchmark/e2e crash) and is the FieldAccess analogue of P1.
+
+      Strategy refinement (do this first): the **materialiser largely avoids the
+      grind**. If a `FieldAccess` is promoted by materialising `let _av =
+      obj.field` and rewriting its uses to **skeleton `Local _av` reads** (not
+      `Operand::Value(Opaque)`), passes at receiver/operand positions see an
+      ordinary skeleton local — already handled — and the only promoted operand is
+      the `let`-value slot. Two such lets over the same field share a value
+      (hash-cons), so `cse` / store-load-forward stay subsumed. So implement the
+      source-point materialiser *before* widening inline promotion: it makes
+      `FieldAccess` sound (load pinned at its source heap version) **and** keeps the
+      receiver-position migration surface from opening. The same shape covers
+      `Select` (materialise at the merge) and shared `Binary` (materialise once).
 - [ ] **P3 — migrate the value passes to operands.** `cse` / `licm` /
       `const_fold` / `condition_implication` / `store_load_forward` read
       `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
