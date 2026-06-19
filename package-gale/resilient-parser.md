@@ -194,6 +194,38 @@ but `emit_alt_dispatch` panics on a `Tournament` group dispatch, which the
 typed emitter handles via the same surface group-prediction path. Both gaps
 close together under the sink refactor below, not by extending `cst_gen`.
 
+**The realization — swap the Parser backend, not the emission.** The key
+insight that makes this tractable: a typed rule emits `let f = p.expect(K)?` /
+`let c = _parse_Y(p)?` / `return Ok(XType{…})`. If the **Parser's methods append
+to the `TreeBuilder` and still return `Result`** (same signatures), then every
+line of prediction / scan / ATN / LR / group / repeat emission is **byte-for-byte
+identical** between typed and homogeneous — because it only ever calls the
+Parser API. The sink difference collapses to exactly three places:
+
+1. **Parser runtime** — `expect` / `match_any` / `match_not` append the matched
+   token to `b: TreeBuilder` (and `_parse_Y` appends its subtree); the struct is
+   the typed Parser + `b`, keeping `kinds` / `atn_stack` / scan helpers so the
+   shared emission and the ATN runtime calls work unchanged.
+2. **Rule entry wrapper** (`gen_rule_entry_wrapper`) — `start_node(RK_X)` before
+   the captured inner call, `finish_node` after, return type `Result<()>`. The
+   wrapper captures `let r = inner(p)` (no `?`), so on an inner `Err` the
+   `finish_node` still runs and the open node folds as the error propagates up —
+   the per-alt `return _alt_N(p)?` inside the inner needs no change.
+3. **`gen_alt_body` exit** — `return Ok(())` instead of assembling the struct
+   (the leaf ops already appended via the Parser methods).
+
+`?`-propagation **is** Stage 2 fail-soft: the first error folds every open node
+on the way up and the public `parse` returns the partial tree plus one
+diagnostic. **ATN works for free** — the prediction emission (incl.
+`atn_predict_with_stack`) is untouched and drives the same `atn_stack`-carrying
+Parser. Incremental + testable: the 29 homogeneous driver tests pin the trees,
+so each grammar flips to the new path (behind a temporary route) and is verified
+against its existing expectation; once every non-ATN grammar matches, `cst_gen`
+retires and the ATN grammars pass by reuse.
+
+This supersedes the heavier "sink-branch every emit function" framing below
+(kept for context); only the three sites above actually differ.
+
 **Decision: one emitter, pluggable node sink (not two emitters).** Reaching
 "homogeneous is the only path" by porting the prediction/ATN core into `cst_gen`
 would clone `parser_gen`'s most intricate logic into a second body kept in
