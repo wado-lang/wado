@@ -709,15 +709,24 @@ pub fn inline_functions(
                 changed = true;
                 // Inline restructures the body through the arena directly, not
                 // the maintaining engine edit API, so the persisted value graph
-                // (`value_of` / `loop_entry_values`) is now stale for this
-                // function — a later promotion-reading pass (the late freeze,
-                // store-load-forward) would consume a stale value and miscompile
-                // (e.g. an i128 const field read as non-constant). Drop it so the
-                // next engine session rebuilds it fresh against the spliced body.
-                // The value pool persists (ids stay stable), so promoted operands
-                // still resolve.
-                if let Some(body) = func.body.as_mut() {
-                    body.value_graph = None;
+                // is now stale for this function — a later promotion-reading pass
+                // (the late freeze, store-load-forward) would consume a stale
+                // value and miscompile (e.g. an i128 const field read as
+                // non-constant). *Coarsen* rather than rebuild: keep the graph
+                // present (so no session rebuilds it — build-once stays intact)
+                // but clear its `value_of` / `loop_entry_values` so every stale
+                // entry is gone and a query returns no identity (conservative,
+                // never wrong). The value pool persists, so already-promoted
+                // `Operand::Value` slots still resolve. Recovering the lost
+                // identity for the spliced region (grow the graph at the splice
+                // point) is the follow-up that restores the missed optimizations.
+                if let Some(vg) = func
+                    .body
+                    .as_mut()
+                    .and_then(|b| b.value_graph.as_mut())
+                {
+                    vg.value_of.clear();
+                    vg.loop_entry_values.clear();
                 }
                 // Only this caller's body changed (callee bodies are copied,
                 // not modified), so report just the caller. The caller's

@@ -1525,9 +1525,12 @@ fn hoist_invariant_arith(
     loop_body: BlockId,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
-    // Earlier hoist rounds rewrote the body; rebuild so use-site values
-    // and the entry snapshot are current.
-    engine.invalidate_value_graph();
+    // Earlier hoist rounds may have changed which locals are address-taken;
+    // refresh that scan. The value graph is not rebuilt (build-once invariant):
+    // an arith hoist appends a pre-header `let t = <invariant>` and never
+    // reassigns an existing local, so every existing local's loop-entry value
+    // stays valid; the new `t` simply has no entry and is not a candidate.
+    engine.invalidate_address_taken();
 
     let mut pending_hoist_locals: IndexSet<u32> = IndexSet::default();
     for &s in all_hoist_stmts.iter() {

@@ -94,9 +94,9 @@ pub struct Engine<'a> {
     locals: &'a mut Vec<NirLocal>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
     /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
-    /// cleared with [`Engine::invalidate_value_graph`] so a rebuild after
-    /// edits rescans. Consumed by `Local`-read exclusions
-    /// (`store_load_forward`, licm's arithmetic hoist).
+    /// cleared with [`Engine::invalidate_address_taken`] so a rescan picks up
+    /// edits. Consumed by `Local`-read exclusions (`store_load_forward`, licm's
+    /// arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
     /// Reference-aliased locals (address-taken / `with stores[p]` /
     /// reference-typed). The `ValueGraph` builder invalidates these
@@ -146,15 +146,10 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             vg_type_table: None,
         };
-        // The value graph lives on `Body` so it persists across passes
-        // (build-once). Under promotion the graph is maintained through every
-        // edit (`maintain_value_after_edit` / `redirect_expr` / structural-pass
-        // maintenance), so a new session reuses it without a rebuild. Without
-        // promotion, drop any prior build at session start so behavior matches
-        // the former per-session cache exactly.
-        if !crate::optimize::promote_active() {
-            engine.body.value_graph = None;
-        }
+        // The value graph lives on `Body` and is built once, then maintained
+        // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
+        // structural-pass coarsening). A new session reuses it as-is — there is
+        // no session-start drop and no rebuild path (build-once is invariant).
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
@@ -166,13 +161,13 @@ impl<'a> Engine<'a> {
     /// control-flow expressions and for any `ExprId` allocated after the
     /// cache was built. Built lazily on first call.
     ///
-    /// # Invalidation contract
+    /// # Maintenance contract
     ///
-    /// Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
-    /// **not** invalidate this cache — it keeps returning the VNs from
-    /// build time. Snapshot any VN results before editing, or call
-    /// [`Engine::invalidate_value_graph`] to force a rebuild. See
-    /// `optimize/cse.rs` and `optimize/store_load_forward.rs`.
+    /// The graph is built once and maintained in place — there is no rebuild.
+    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
+    /// current through `maintain_value_after_edit`; a structural pass that edits
+    /// the arena directly (`inline`) coarsens the touched region instead. A
+    /// query reflects the maintained state.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
         self.body.value_graph.as_ref()?.value_of.get(&expr).copied()
@@ -310,10 +305,8 @@ impl<'a> Engine<'a> {
     /// [`Engine::rebuild_value_congruence`] after a batch of unions to restore
     /// congruence (so structurally-equal parents re-merge).
     ///
-    /// Unions live in the cached graph; a rebuild of the graph
-    /// ([`Engine::invalidate_value_graph`] or any `set_*` that drops the cache)
-    /// discards them. A pure-value rewrite that unions must therefore not
-    /// invalidate the graph before the result is used.
+    /// Unions live in the build-once graph and persist with it (there is no
+    /// rebuild that would discard them).
     pub fn value_union(
         &mut self,
         a: crate::nir_value_graph::ValueId,
@@ -330,17 +323,11 @@ impl<'a> Engine<'a> {
         self.body.values.rebuild();
     }
 
-    /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
-    /// rebuilds. Used by rules that intend to query the value graph again
-    /// after a structural rewrite that would invalidate the prior build.
-    pub fn invalidate_value_graph(&mut self) {
-        // Under build-once promotion the graph is maintained, not rebuilt; a
-        // forced drop here would reintroduce a rebuild. Callers that invalidate
-        // for correctness (a structural edit they do not yet maintain) keep
-        // working off-promotion; under promotion the maintenance covers them.
-        if !crate::optimize::promote_active() {
-            self.body.value_graph = None;
-        }
+    /// Drop the session's `&local` address-taken scan so the next
+    /// [`Engine::body_address_taken`] recomputes it. The value graph is
+    /// **never** dropped — it is built once and maintained in place (build-once
+    /// is a structural invariant; there is no rebuild path).
+    pub fn invalidate_address_taken(&mut self) {
         self.body_address_taken = None;
     }
 
@@ -356,54 +343,34 @@ impl<'a> Engine<'a> {
         self.body_address_taken.as_ref().unwrap()
     }
 
-    /// Record the owning function's parameter local indices so the
-    /// lazily-built `ValueGraph` seeds them up front (see the field doc on
-    /// `param_locals`). Must be called before the first value query; a later
-    /// change forces a rebuild on next query.
+    /// Record the owning function's parameter local indices so the value graph
+    /// seeds them up front (see the field doc on `param_locals`). Used by the
+    /// one build-once construction; the graph is never rebuilt on a later change.
     pub fn set_param_locals(&mut self, locals: Vec<u32>) {
-        if self.param_locals != locals {
-            self.param_locals = locals;
-            if !crate::optimize::promote_active() {
-                self.body.value_graph = None;
-            }
-        }
+        self.param_locals = locals;
     }
 
     /// Record the function's reference-aliased and `stores`-aliased locals so
-    /// the lazily-built `ValueGraph` invalidates field forwarding for them at
-    /// the right granularity. Must be called before the first value query; a
-    /// later change forces a rebuild on next query. Without it the builder
-    /// treats every receiver as non-aliased — sound only when the function has
-    /// no reference aliasing, so passes that may see aliasing must supply it.
+    /// the value graph invalidates field forwarding for them at the right
+    /// granularity. Used by the one build-once construction. Without it the
+    /// builder treats every receiver as non-aliased — sound only when the
+    /// function has no reference aliasing, so passes that may see aliasing must
+    /// supply it before the first value query.
     pub fn set_alias_sets(
         &mut self,
         aliased: IndexSet<u32>,
         untrackable: IndexSet<u32>,
         mut_escaped: IndexSet<u32>,
     ) {
-        if self.aliased_locals != aliased
-            || self.untrackable_locals != untrackable
-            || self.mut_escaped_locals != mut_escaped
-        {
-            self.aliased_locals = aliased;
-            self.untrackable_locals = untrackable;
-            self.mut_escaped_locals = mut_escaped;
-            if !crate::optimize::promote_active() {
-                self.body.value_graph = None;
-            }
-        }
+        self.aliased_locals = aliased;
+        self.untrackable_locals = untrackable;
+        self.mut_escaped_locals = mut_escaped;
     }
 
-    /// Provide the type table so the lazily-built `ValueGraph` folds pure
-    /// arithmetic on literal operands (`2 + 3 → 5`). Must be called before the
-    /// first value query; a later change forces a rebuild on next query.
+    /// Provide the type table so the value graph folds pure arithmetic on
+    /// literal operands (`2 + 3 → 5`). Used by the one build-once construction.
     pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
-        if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
-            self.vg_type_table = Some(type_table);
-            if !crate::optimize::promote_active() {
-                self.body.value_graph = None;
-            }
-        }
+        self.vg_type_table = Some(type_table);
     }
 
     /// The type table supplied for value-graph folding, if any. Used by
