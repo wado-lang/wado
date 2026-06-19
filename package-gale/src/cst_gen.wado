@@ -36,13 +36,14 @@ use {
     FollowArg,
 } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
-use { GenContext } from "./gen_context.wado";
+use { GenContext, sets_overlap } from "./gen_context.wado";
 use {
     gen_scan_functions,
     gen_alt_scan_if_possible,
     follow_arg_expr,
     compute_lr_second_token,
     compute_non_greedy_condition,
+    gen_rep_scan_guard,
 } from "./parser_gen.wado";
 
 /// The defaulted `follow` parameter every `_parse_*` carries when the grammar
@@ -424,13 +425,15 @@ fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, ast_rule: &ParserRule, rule_inde
     w.line(&"if p.bailed { return; }");
     w.line(&"let start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, start);`);
+    // Per-function name table for scan-guard label dedup (`gen_rep_scan_guard`).
+    let mut nc: List<[String, i32]> = [];
     match *rule {
-        Simple(s) => emit_ops(w, &s.body.ops, ctx, ef),
+        Simple(s) => emit_ops(w, &s.body.ops, ctx, ef, &mut nc),
         MultiAlt(m) => {
             if let Tournament(td) = &m.dispatch {
-                emit_tournament(w, &m.alts, td, &snake, ctx, ef);
+                emit_tournament(w, &m.alts, td, &snake, ctx, ef, &mut nc);
             } else {
-                emit_alt_dispatch(w, &m.alts, &m.dispatch, ctx, ef);
+                emit_alt_dispatch(w, &m.alts, &m.dispatch, ctx, ef, &mut nc);
             }
         },
         LeftRecursive(_) => panic("cst_gen: unreachable"),
@@ -445,7 +448,7 @@ fn gen_rule_fn(w: &mut CodeWriter, rule: &Rule, ast_rule: &ParserRule, rule_inde
 /// emitter's ANTLR4-compatible first-success-on-ties longest-match. Requires
 /// every alt to have a full scan (`gen_tournament_alt_scans`); partial-scan
 /// tournaments are out of scope.
-fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDispatch, snake: &String, ctx: &mut GenContext, ef: bool) {
+fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDispatch, snake: &String, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     w.line(&"let _sd_pos = p.pos;");
     for let idx of &td.alts {
         w.line(&`let _sd_p_{*idx} = _parse_{*snake}_scan_{*idx}(&p.kinds, _sd_pos);`);
@@ -466,7 +469,7 @@ fn emit_tournament(w: &mut CodeWriter, alts: &List<AltBody>, td: &TournamentDisp
         } else {
             w.else_begin(&`else if _sd_best_i == {*idx}`);
         }
-        emit_ops(w, &alt_by_index(alts, *idx).ops, ctx, ef);
+        emit_ops(w, &alt_by_index(alts, *idx).ops, ctx, ef, nc);
     }
     w.else_begin(&"else");
     w.line(&"p.fail([]);");
@@ -495,18 +498,19 @@ fn gen_lr_rule_fn(
     w.line(&"let cp = p.b.checkpoint();");
     w.line(&"let start = p.peek_start();");
     w.line(&`p.b.start_node({*rk}, start);`);
+    let mut nc: List<[String, i32]> = [];
     if l.atom.alts.len() == 1 {
-        emit_ops(w, &l.atom.alts[0].ops, ctx, ef);
+        emit_ops(w, &l.atom.alts[0].ops, ctx, ef, &mut nc);
     } else {
-        emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch, ctx, ef);
+        emit_alt_dispatch(w, &l.atom.alts, &l.atom.dispatch, ctx, ef, &mut nc);
     }
     w.line(&"p.b.finish_node(p.last_end());");
-    gen_lr_loop(w, l, ast_rule, rk, ctx, ef);
+    gen_lr_loop(w, l, ast_rule, rk, ctx, ef, &mut nc);
     w.end();
     w.blank();
 }
 
-fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, ast_rule: &ParserRule, rk: &String, ctx: &mut GenContext, ef: bool) {
+fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, ast_rule: &ParserRule, rk: &String, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     w.begin(&"loop");
     w.line(&"if p.bailed { break; }");
     w.line(&"let suffix_kind = p.peek_kind();");
@@ -530,9 +534,9 @@ fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, ast_rule: &ParserRule,
         }
         if group.len() == 1 {
             let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[0]]];
-            emit_lr_branch(w, lr, rk, ctx, ef);
+            emit_lr_branch(w, lr, rk, ctx, ef, nc);
         } else {
-            emit_lr_overlap(w, l, ast_rule, group, rk, ctx, ef);
+            emit_lr_overlap(w, l, ast_rule, group, rk, ctx, ef, nc);
         }
     }
     if first {
@@ -548,10 +552,10 @@ fn gen_lr_loop(w: &mut CodeWriter, l: &LeftRecursiveRule, ast_rule: &ParserRule,
 /// Emit one LR continuation: gate on precedence, wrap the in-progress tree
 /// left-associatively, and emit the suffix ops. Below `min_prec` the loop
 /// stops climbing.
-fn emit_lr_branch(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, ef: bool) {
+fn emit_lr_branch(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     w.begin(&`if {lr.own_prec} >= min_prec`);
     w.line(&`p.b.start_node_at(cp, {*rk}, start);`);
-    emit_ops(w, &lr.suffix.ops, ctx, ef);
+    emit_ops(w, &lr.suffix.ops, ctx, ef, nc);
     w.line(&"p.b.finish_node(p.last_end());");
     w.else_begin(&"else");
     w.line(&"break;");
@@ -570,6 +574,7 @@ fn emit_lr_overlap(
     rk: &String,
     ctx: &mut GenContext,
     ef: bool,
+    nc: &mut List<[String, i32]>,
 ) {
     let mut first_sets: List<List<String>> = [];
     for let gi of group {
@@ -597,7 +602,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if suffix_kind == {*tk}`);
                 }
-                emit_lr_branch(w, &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[k]]], rk, ctx, ef);
+                emit_lr_branch(w, &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[k]]], rk, ctx, ef, nc);
                 emitted.push(*tk);
             }
         }
@@ -634,10 +639,10 @@ fn emit_lr_overlap(
             let lr = &l.lr_alts[l.lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rk, ctx, ef);
+                    emit_lr_branch(w, lr, rk, ctx, ef, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rk, ctx, ef);
+                    emit_lr_branch(w, lr, rk, ctx, ef, nc);
                     w.end();
                 }
             } else {
@@ -650,7 +655,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rk, ctx, ef);
+                emit_lr_branch(w, lr, rk, ctx, ef, nc);
             }
         }
         emitted.push(*shared_tk);
@@ -661,7 +666,7 @@ fn emit_lr_overlap(
 }
 
 /// Emit token-led dispatch over a rule's / group's alternatives.
-fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch, ctx: &mut GenContext, ef: bool) {
+fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiAltDispatch, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     let dd = match *dispatch {
         Direct(d) => d,
         Tournament(_) => panic("cst_gen: tournament dispatch is outside Stage 2 scope"),
@@ -679,7 +684,7 @@ fn emit_alt_dispatch(w: &mut CodeWriter, alts: &List<AltBody>, dispatch: &MultiA
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        emit_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, ef);
+        emit_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, ef, nc);
     }
     w.else_begin(&"else");
     w.line(&`p.fail({kinds_list(&all_first)});`);
@@ -695,13 +700,13 @@ fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
     panic(`cst_gen: no alt with index {idx}`);
 }
 
-fn emit_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, ef: bool) {
+fn emit_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     for let op of ops {
-        emit_op(w, op, ctx, ef);
+        emit_op(w, op, ctx, ef, nc);
     }
 }
 
-fn emit_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, ef: bool) {
+fn emit_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     match *op {
         Token(t) => w.line(&`p.expect_token({t.kind});`),
         Literal(l) => w.line(&`p.expect_token({l.kind});`),
@@ -716,43 +721,82 @@ fn emit_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, ef: bool) {
         },
         Wildcard(_) => w.line(&"p.expect_any();"),
         Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
-        ListLabel(ll) => emit_op(w, &ll.inner, ctx, ef),
-        Repeat(r) => emit_repeat(w, &r, ctx, ef),
-        Group(g) => emit_group(w, &g, ctx, ef),
+        ListLabel(ll) => emit_op(w, &ll.inner, ctx, ef, nc),
+        Repeat(r) => emit_repeat(w, &r, ctx, ef, nc),
+        Group(g) => emit_group(w, &g, ctx, ef, nc),
     }
 }
 
-fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool) {
+fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     // Non-greedy `*?` / `+?`: lower bakes a `NonGreedy` strategy whose exit
     // condition is the negation of a static continue-while gate (the inner's
     // first set minus the caller's continuation, or a 2-token disambiguation).
     // (`??` lowers to a `Plain` strategy that needs the runtime ATN simulator
     // and is rejected up front by the `needs_atn` boundary in `gen_cst_parser`.)
     if let NonGreedy(_) = r.strategy {
-        emit_repeat_non_greedy(w, r, ctx, ef);
+        emit_repeat_non_greedy(w, r, ctx, ef, nc);
         return;
+    }
+    // A `Star` / `Plus` whose body first set overlaps its static caller-FOLLOW
+    // uses a scan-guarded loop when the body is scannable: each iteration first
+    // scans the whole body and only commits if it matches. This is what lets
+    // `(',' arm)*` yield a trailing `','` to the following `','?` instead of
+    // greedily consuming it and failing on the absent `arm`. When the body
+    // first and follow are disjoint the plain first-set guard already
+    // distinguishes "iterate" from "exit", so it is kept — both because it is
+    // correct and because it does not depend on the body's scan being exact
+    // (a body with an inner non-greedy `.*?` is not). Reuses the typed
+    // emitter's `gen_rep_scan_guard`. `Optional` never needs it.
+    let overlaps_follow = sets_overlap(&r.body_first_set, &r.caller_follow_first);
+    if r.body_scannable && overlaps_follow {
+        if let Optional = r.kind {
+            // fall through to the plain first-set form below
+        } else {
+            emit_repeat_scan_guarded(w, r, ctx, ef, nc);
+            return;
+        }
     }
     let cond = kinds_or(&r.body_first_set, &"p.peek_kind()");
     let gate = repeat_gate(r, ef);
     match r.kind {
         Optional => {
             w.begin(&`if !p.bailed && {cond}{gate}`);
-            emit_op(w, &r.body, ctx, ef);
+            emit_op(w, &r.body, ctx, ef, nc);
             w.end();
         },
         Star => {
             w.begin(&`while !p.bailed && {cond}{gate}`);
-            emit_op(w, &r.body, ctx, ef);
+            emit_op(w, &r.body, ctx, ef, nc);
             w.end();
         },
         Plus => {
             // One mandatory iteration, then the same first-set-gated loop.
-            emit_op(w, &r.body, ctx, ef);
+            emit_op(w, &r.body, ctx, ef, nc);
             w.begin(&`while !p.bailed && {cond}{gate}`);
-            emit_op(w, &r.body, ctx, ef);
+            emit_op(w, &r.body, ctx, ef, nc);
             w.end();
         },
     }
+}
+
+/// Scan-guarded `Star` / `Plus`: `loop { [caller-FOLLOW gate]; scan body; if it
+/// fails, break; else parse body }`. The scan (`gen_rep_scan_guard` over the
+/// lowered `scan_body`) requires the whole iteration to match before the parse
+/// commits, so the loop never over-consumes a token its continuation needs.
+fn emit_repeat_scan_guarded(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
+    if let Plus = r.kind {
+        // `+`: one mandatory iteration up front (the body must match once).
+        emit_op(w, &r.body, ctx, ef, nc);
+    }
+    w.begin(&"loop");
+    w.line(&"if p.bailed { break; }");
+    if ef && r.gate_caller_follow {
+        w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
+    }
+    let scan_pos = gen_rep_scan_guard(w, &r.scan_body, ctx, nc);
+    w.line(&`if {scan_pos} < 0 \{ break; \}`);
+    emit_op(w, &r.body, ctx, ef, nc);
+    w.end();
 }
 
 /// Non-greedy `*?` / `+?`: loop only while the static continue gate holds, so
@@ -760,23 +804,23 @@ fn emit_repeat(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool)
 /// `compute_non_greedy_condition` over the lowered per-position follow sets —
 /// the same condition the typed emitter computes — referencing `peek_kind()` /
 /// `peek_at(1)`. A `"false"` gate means "match the minimum" (never loop).
-fn emit_repeat_non_greedy(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool) {
+fn emit_repeat_non_greedy(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     let loops = cond != "false";
     match r.kind {
         Plus => {
             // `+?`: one mandatory iteration, then loop while the gate holds.
-            emit_op(w, &r.body, ctx, ef);
+            emit_op(w, &r.body, ctx, ef, nc);
             if loops {
                 w.begin(&`while !p.bailed && ({cond})`);
-                emit_op(w, &r.body, ctx, ef);
+                emit_op(w, &r.body, ctx, ef, nc);
                 w.end();
             }
         },
         Star => {
             if loops {
                 w.begin(&`while !p.bailed && ({cond})`);
-                emit_op(w, &r.body, ctx, ef);
+                emit_op(w, &r.body, ctx, ef, nc);
                 w.end();
             }
         },
@@ -788,16 +832,16 @@ fn emit_repeat_non_greedy(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext
 /// flow matters. A token-only group (`('+' | '-')`) consumes one of its
 /// tokens directly; a single-alt group inlines its ops; a general multi-alt
 /// group dispatches like a rule.
-fn emit_group(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, ef: bool) {
+fn emit_group(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
         w.line(&`p.expect_one_of({kinds_list(&kinds)});`);
         return;
     }
     if g.alts.len() == 1 {
-        emit_ops(w, &g.alts[0].ops, ctx, ef);
+        emit_ops(w, &g.alts[0].ops, ctx, ef, nc);
         return;
     }
-    emit_alt_dispatch(w, &g.alts, &g.dispatch, ctx, ef);
+    emit_alt_dispatch(w, &g.alts, &g.dispatch, ctx, ef, nc);
 }
 
 /// If every alt is a single terminal (`Token` or `Literal`), return the list

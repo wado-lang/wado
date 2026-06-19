@@ -13,7 +13,7 @@ use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser
 use { gen_visitor } from "./visitor_gen.wado";
 use { gen_cst_parser } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
-use { GenContext } from "./gen_context.wado";
+use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
@@ -130,7 +130,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // globals are emitted whenever lowering built a caller-FOLLOW gate
         // (`emit_follow`) — a tail-greedy `Repeat` can need them with no
         // tournament present (e.g. an LL(1) grammar like calc).
-        let needs_scan = homogeneous_has_tournament(&lowered);
+        let needs_scan = homogeneous_needs_scan(&lowered);
         let ef = ctx.emit_follow();
         gen_runtime_homogeneous(&mut w, ef);
         gen_token_kind(&mut w, &grammar.lexer_rules);
@@ -285,18 +285,75 @@ fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool) {
     }
 }
 
-/// True when some rule needs a longest-match scan tournament — the only case
-/// the homogeneous emitter pulls in the scan functions (and their FOLLOW /
-/// kind-set dependencies).
-fn homogeneous_has_tournament(lowered: &LoweredGrammar) -> bool {
+/// True when the homogeneous emitter pulls in the per-rule scan functions (and
+/// their FOLLOW / kind-set dependencies): a longest-match tournament needs the
+/// per-alt scans, and a scannable `*` / `+` body needs the scan guard
+/// (`gen_rep_scan_guard`), which calls `scan_<rule>` for any rule-ref it walks.
+fn homogeneous_needs_scan(lowered: &LoweredGrammar) -> bool {
     for let r of &lowered.parser_rules {
-        if let MultiAlt(m) = r {
-            if let Tournament(_) = &m.dispatch {
-                return true;
-            }
+        if rule_needs_scan(r) {
+            return true;
         }
     }
     return false;
+}
+
+fn rule_needs_scan(r: &Rule) -> bool {
+    return match r {
+        Simple(s) => ops_need_scan(&s.body.ops),
+        MultiAlt(m) => {
+            if let Tournament(_) = &m.dispatch {
+                return true;
+            }
+            for let a of &m.alts {
+                if ops_need_scan(&a.ops) {
+                    return true;
+                }
+            }
+            false;
+        },
+        LeftRecursive(l) => {
+            for let a of &l.atom.alts {
+                if ops_need_scan(&a.ops) {
+                    return true;
+                }
+            }
+            for let la of &l.lr_alts {
+                if ops_need_scan(&la.suffix.ops) {
+                    return true;
+                }
+            }
+            false;
+        },
+    };
+}
+
+fn ops_need_scan(ops: &List<Op>) -> bool {
+    for let op of ops {
+        if op_needs_scan(op) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn op_needs_scan(op: &Op) -> bool {
+    return match op {
+        // Mirror `emit_repeat`'s scan-guard gate: a scannable `*`/`+` whose body
+        // first set overlaps its caller-FOLLOW emits the scan guard (which calls
+        // `scan_<rule>`), so the scan functions must be emitted.
+        Repeat(r) => (r.body_scannable && sets_overlap(&r.body_first_set, &r.caller_follow_first)) || op_needs_scan(&r.body),
+        Group(g) => {
+            for let a of &g.alts {
+                if ops_need_scan(&a.ops) {
+                    return true;
+                }
+            }
+            false;
+        },
+        ListLabel(ll) => op_needs_scan(&ll.inner),
+        _ => false,
+    };
 }
 
 /// Append a runtime fragment, dropping only its sibling-runtime imports

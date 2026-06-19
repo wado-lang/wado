@@ -1,0 +1,35 @@
+//! Stage 2 corpus migration: `opt_sep_list.g4` exercises a nested optional
+//! separated list — `(arm (',' arm)* ','?)?` — plus a Direct multi-alt
+//! (`wrapped : braced | arm`), all non-ATN, through the homogeneous emitter.
+
+use osl from "./grammars/opt_sep_list.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_opt_sep_list",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = osl::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = osl::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "opt-sep-list: empty list" {
+    assert_tree(&"", &"(prog (list))");
+}
+
+test "opt-sep-list: single arm" {
+    assert_tree(&"a", &"(prog (list (arm a)))");
+}
+
+test "opt-sep-list: comma-separated arms" {
+    assert_tree(&"a , b", &"(prog (list (arm a) , (arm b)))");
+}
+
+test "opt-sep-list: trailing comma yields to the optional `,?`" {
+    assert_tree(&"a , b ,", &"(prog (list (arm a) , (arm b) ,))");
+}
