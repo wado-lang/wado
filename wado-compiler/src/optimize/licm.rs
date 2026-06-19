@@ -1548,7 +1548,10 @@ fn hoist_invariant_arith(
     let mut found: Vec<(ExprId, ValueId)> = Vec::new();
     walk.collect_in_block(engine, loop_body, &mut found);
     if found.is_empty() {
-        return false;
+        // No skeleton arith trees, but operand promotion may have left the
+        // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
+        // those.
+        return hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
     }
 
     // Group occurrences by (ValueId, type): equal values of equal type share
@@ -1599,7 +1602,222 @@ fn hoist_invariant_arith(
         }
     }
 
+    hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
     true
+}
+
+/// Hoist loop-invariant promoted *value* operands into a pre-header
+/// `let _licm_arith_N`. Operand promotion can leave a loop-invariant compound
+/// (e.g. `hi - lo`, born as a value before the loop) as a bare `Operand::Value`
+/// slot with no skeleton expr, so [`ArithHoist`] (which scans skeleton trees)
+/// never sees it. Materialise each distinct invariant value once in the
+/// pre-header and redirect its in-loop slots to a read of the temp.
+fn hoist_invariant_value_operands(
+    engine: &mut Engine,
+    loop_body: BlockId,
+    all_hoist_stmts: &mut Vec<StmtId>,
+) -> bool {
+    use crate::nir_value_graph::OpaqueSource;
+
+    let (expr_ids, stmt_ids) = collect_loop_subtree(engine.body, loop_body);
+
+    // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
+    let mut ops: Vec<Operand> = Vec::new();
+    for &e in &expr_ids {
+        engine.body.map_expr_operands(e, &mut |op| {
+            ops.push(op);
+            op
+        });
+    }
+    for &s in &stmt_ids {
+        engine.body.map_stmt_operands(s, &mut |op| {
+            ops.push(op);
+            op
+        });
+    }
+
+    // Locals available at the loop pre-header (where the hoisted `let` lands):
+    // exactly those with a loop-entry value. A value whose `Opaque(Local)` leaf
+    // names a local *bound inside* the loop (a pattern / while-let / nested
+    // binding — the value graph gives it a fresh per-iteration Opaque, never a
+    // `LoopPhi`) has no entry value, so hoisting it would compute the wrong
+    // thing. Collect the candidate leaves first, then keep only the entry-live
+    // ones — soundness gate for the hoist.
+    let mut leaf_locals: IndexSet<u32> = IndexSet::default();
+    for op in &ops {
+        if let Operand::Value(v) = *op {
+            let rep = engine.body.values.find_imm(v);
+            engine.body.values.collect_opaque_locals(rep, &mut leaf_locals);
+        }
+    }
+    let mut entry_locals: IndexSet<u32> = IndexSet::default();
+    for idx in leaf_locals {
+        if engine.loop_entry_value(loop_body, idx).is_some() {
+            entry_locals.insert(idx);
+        }
+    }
+
+    // Phase 2: pick the distinct invariant compound value reps, in first-seen
+    // order, and materialise a pre-header temp + read value for each.
+    let mut rep_read: IndexMap<ValueId, ValueId> = IndexMap::default();
+    for op in &ops {
+        let Operand::Value(v) = *op else { continue };
+        let rep = engine.body.values.find_imm(v);
+        if rep_read.contains_key(&rep)
+            || !is_hoistable_value(&engine.body.values, rep, &entry_locals)
+        {
+            continue;
+        }
+        let Some(ty) = engine.body.values.type_of(rep) else {
+            continue;
+        };
+        let name = format!("_licm_arith_{}", engine.locals().len());
+        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+        let read = engine
+            .body
+            .values
+            .fresh_opaque_with_source(OpaqueSource::Local(temp));
+        engine.body.values.set_type(read, ty);
+        let let_stmt = engine.alloc_stmt(
+            StmtKind::Let {
+                name,
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value: Operand::Value(rep),
+                skip_value_copy: true,
+            },
+            Span::new(0, 0, 0, 0),
+        );
+        all_hoist_stmts.push(let_stmt);
+        rep_read.insert(rep, read);
+    }
+    if rep_read.is_empty() {
+        return false;
+    }
+
+    // Phase 3: precompute the new operand for each snapshot slot, then re-apply
+    // in the same order (the closure touches no `Body` field, so no borrow
+    // conflicts with the map).
+    let new_ops: Vec<Operand> = ops
+        .iter()
+        .map(|op| match *op {
+            Operand::Value(v) => match rep_read.get(&engine.body.values.find_imm(v)) {
+                Some(&read) => Operand::Value(read),
+                None => *op,
+            },
+            _ => *op,
+        })
+        .collect();
+    let mut i = 0;
+    for &e in &expr_ids {
+        engine.body.map_expr_operands(e, &mut |_| {
+            let r = new_ops[i];
+            i += 1;
+            r
+        });
+    }
+    for &s in &stmt_ids {
+        engine.body.map_stmt_operands(s, &mut |_| {
+            let r = new_ops[i];
+            i += 1;
+            r
+        });
+    }
+    true
+}
+
+/// Collect every expression and statement id reachable from `loop_body` (the
+/// whole loop subtree, including nested loops — a pre-header temp dominates
+/// them, so rewriting their slots stays sound).
+fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
+    let mut expr_ids = Vec::new();
+    let mut stmt_ids = Vec::new();
+    let mut block_work = vec![loop_body];
+    while let Some(b) = block_work.pop() {
+        for &s in &body.blocks[b].stmts {
+            stmt_ids.push(s);
+            for child in stmt_child_nodes(body, s) {
+                match child {
+                    Child::Block(nb) => block_work.push(nb),
+                    Child::Expr(e) => collect_expr_subtree(body, e, &mut expr_ids, &mut block_work),
+                }
+            }
+        }
+    }
+    (expr_ids, stmt_ids)
+}
+
+fn collect_expr_subtree(
+    body: &Body,
+    e: ExprId,
+    expr_ids: &mut Vec<ExprId>,
+    block_work: &mut Vec<BlockId>,
+) {
+    expr_ids.push(e);
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => collect_expr_subtree(body, c, expr_ids, block_work),
+            Child::Block(b) => block_work.push(b),
+        }
+    }
+}
+
+/// Whether `v` is a loop-invariant arithmetic compound worth hoisting: a
+/// `Binary` / `Unary` root over leaves that are constants or `Opaque(Local)`
+/// reads of pre-header-available locals (`entry_locals`), with at least one such
+/// local leaf (a constant-only tree is left to const folding). Trap-prone ops
+/// (`Div` / `Mod`) and flow-merge / heap kinds (`LoopPhi` / `Select` /
+/// `FieldAccess` / `Opaque(Expr)` / `Cast`) are excluded — the same shape
+/// `ArithHoist` admits.
+fn is_hoistable_value(
+    pool: &crate::nir_value_graph::ValuePool,
+    v: ValueId,
+    entry_locals: &IndexSet<u32>,
+) -> bool {
+    use crate::nir_value_graph::ValueKind;
+    let compound = matches!(
+        pool.kind(v),
+        ValueKind::Binary { .. } | ValueKind::Unary { .. }
+    );
+    if !compound || !value_is_invariant(pool, v, entry_locals) {
+        return false;
+    }
+    let mut leaves = IndexSet::default();
+    pool.collect_opaque_locals(v, &mut leaves);
+    !leaves.is_empty()
+}
+
+fn value_is_invariant(
+    pool: &crate::nir_value_graph::ValuePool,
+    v: ValueId,
+    entry_locals: &IndexSet<u32>,
+) -> bool {
+    use crate::nir_value_graph::{OpaqueSource, ValueKind};
+    match pool.kind(v) {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::String(_)
+        | ValueKind::Null
+        | ValueKind::Unit => true,
+        ValueKind::Opaque(oid) => match pool.opaque_source(*oid) {
+            Some(OpaqueSource::Local(idx)) => entry_locals.contains(&idx),
+            _ => false,
+        },
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            is_hoistable_binop(*op)
+                && value_is_invariant(pool, *lhs, entry_locals)
+                && value_is_invariant(pool, *rhs, entry_locals)
+        }
+        ValueKind::Unary { op, operand, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && value_is_invariant(pool, *operand, entry_locals)
+        }
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
