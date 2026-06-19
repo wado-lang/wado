@@ -44,7 +44,7 @@
 //! matching the old visitor's recurse-then-collapse order.
 
 use crate::compiler_item::{CompilerItem, SeqField};
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -131,7 +131,8 @@ impl Collapser<'_> {
         // bound local reaches it. `[]` path = the local itself is the array.
         let mut targets = Vec::new();
         if let Some(value) = init_value(body, stmts[start]) {
-            collect_array_targets(body, value, &mut Vec::new(), &mut targets);
+            let mut const_env = IndexMap::default();
+            collect_array_targets(body, value, &mut Vec::new(), &mut const_env, &mut targets);
         }
         if targets.is_empty() {
             return 0;
@@ -325,21 +326,40 @@ fn collect_array_targets(
     body: &Body,
     expr: ExprId,
     path: &mut Vec<u32>,
+    const_env: &mut IndexMap<u32, u64>,
     out: &mut Vec<ArrayTarget>,
 ) {
     match &body.exprs[expr].kind {
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            // The direct-literal block binds `__b` to the array and yields it
-            // via a `*__b` / `__b` tail; the array struct is the let value.
-            let value = body.blocks[*block]
-                .stmts
-                .iter()
-                .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => Some(*value),
-                    _ => None,
-                });
-            if let Some(value) = value.and_then(Operand::as_expr) {
-                collect_array_targets(body, value, path, out);
+            // The array struct may be a `let __b = <array>` binding (the `*__b`
+            // direct-literal shape) or the block's tail expression (e.g.
+            // `{ let capacity = 4; List { repr: array_new(capacity), used: 0 } }`,
+            // where a dead `let capacity` survives operand promotion). Walk the
+            // statements in order: record each immutable `let x = <const int>`
+            // into `const_env` first so a later `array_new(x)` reads through it
+            // (operand promotion no longer constant-folds the inlined builder's
+            // capacity binding into the `array_new` arg), then recurse into every
+            // statement's value / yielded operand — a non-struct candidate records
+            // no target, so trying all is safe.
+            for &s in &body.blocks[*block].stmts {
+                let cand = match &body.stmts[s].kind {
+                    StmtKind::Let {
+                        local_index,
+                        is_mut,
+                        value,
+                        ..
+                    } => {
+                        if !is_mut && let Some(n) = body.operand_const_int(*value) {
+                            const_env.insert(*local_index, n);
+                        }
+                        *value
+                    }
+                    StmtKind::Expr(op) => *op,
+                    _ => continue,
+                };
+                if let Some(e) = cand.as_expr() {
+                    collect_array_targets(body, e, path, const_env, out);
+                }
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
@@ -347,7 +367,7 @@ fn collect_array_targets(
             // indistinguishable from a growable-array initialization (`let mut
             // v = []; v.push(…)`); collapsing it to a fixed 0-length
             // `array.new_fixed()` would break subsequent growth.
-            if let Some(capacity) = match_list_struct(body, expr).filter(|&n| n > 0) {
+            if let Some(capacity) = match_list_struct(body, expr, const_env).filter(|&n| n > 0) {
                 out.push(ArrayTarget {
                     struct_expr_id: expr,
                     path: path.clone(),
@@ -361,7 +381,7 @@ fn collect_array_targets(
                     .collect();
                 for (field_index, value) in fields {
                     path.push(field_index);
-                    collect_array_targets(body, value, path, out);
+                    collect_array_targets(body, value, path, const_env, out);
                     path.pop();
                 }
             }
@@ -370,8 +390,22 @@ fn collect_array_targets(
     }
 }
 
+/// A constant `i32`/`u64` operand: a promoted `Operand::Value(Int)`, or a
+/// skeleton `Local` read resolved through an enclosing immutable `let x =
+/// <const>` recorded in `const_env`.
+fn const_int(body: &Body, op: Operand, const_env: &IndexMap<u32, u64>) -> Option<u64> {
+    if let Some(n) = body.operand_const_int(op) {
+        return Some(n);
+    }
+    let e = op.as_expr()?;
+    if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+        return const_env.get(index).copied();
+    }
+    None
+}
+
 /// If `expr` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
-fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
+fn match_list_struct(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[expr].kind else {
         return None;
     };
@@ -380,15 +414,15 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if body.operand_const_int(used.value) != Some(0) {
+    if const_int(body, used.value, const_env) != Some(0) {
         return None;
     }
     let repr_expr = repr.value.as_expr()?;
-    array_new_capacity(body, repr_expr)
+    array_new_capacity(body, repr_expr, const_env)
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
-fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
+fn array_new_capacity(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
     let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind else {
         return None;
     };
@@ -403,7 +437,7 @@ fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    usize::try_from(body.operand_const_int(args[0].expr)?).ok()
+    usize::try_from(const_int(body, args[0].expr, const_env)?).ok()
 }
 
 /// If `receiver` is `local` reached through zero or more field accesses,
