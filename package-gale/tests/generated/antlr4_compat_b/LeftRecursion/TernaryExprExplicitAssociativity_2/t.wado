@@ -1494,6 +1494,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
         let _sk = p.peek_kind();
         if _sk == TK_LIT_STAR {
             if 4 >= min_prec {
+                if scan_e_lr_0(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let star = p.expect(TK_LIT_STAR)?;
                 let e_2 = _parse_e(p, 4)?;
@@ -1503,6 +1506,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             }
         } else if _sk == TK_LIT_PLUS {
             if 3 >= min_prec {
+                if scan_e_lr_1(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let plus = p.expect(TK_LIT_PLUS)?;
                 let e_2 = _parse_e(p, 3)?;
@@ -1512,6 +1518,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             }
         } else if _sk == TK_LIT_QUESTION {
             if 2 >= min_prec {
+                if scan_e_lr_2(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let question = p.expect(TK_LIT_QUESTION)?;
                 let e_2 = _parse_e(p, 0)?;
@@ -1523,6 +1532,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             }
         } else if _sk == TK_LIT_EQ {
             if 1 >= min_prec {
+                if scan_e_lr_3(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let eq = p.expect(TK_LIT_EQ)?;
                 let e_2 = _parse_e(p, 1)?;

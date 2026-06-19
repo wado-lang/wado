@@ -1507,6 +1507,9 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseErro
         let _sk = p.peek_kind();
         if _sk == TK_LIT_STAR {
             if 2 >= min_prec {
+                if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 let star = p.expect(TK_LIT_STAR)?;
                 let a_2 = _parse_expr(p, 3)?;
@@ -1516,6 +1519,9 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseErro
             }
         } else if _gale_kind_set_0(_sk) {
             if 1 >= min_prec {
+                if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 while p.peek_kind() == TK_LIT_COMMA {
                     let comma = p.expect(TK_LIT_COMMA)?;

@@ -1561,6 +1561,9 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
             if _sk == TK_LIT_LBRACKET {
                 if p.peek_at(1) == TK_INT {
                     if 3 >= min_prec {
+                        if scan_declarator_lr_0(&p.kinds, p.pos) < 0 {
+                            break;
+                        }
                         p.b.start_node_at(_cp, RK_DECLARATOR, _start);
                         let lbracket = p.expect(TK_LIT_LBRACKET)?;
                         let e = _parse_e(p)?;
@@ -1571,6 +1574,9 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     }
                 } else {
                     if 2 >= min_prec {
+                        if scan_declarator_lr_1(&p.kinds, p.pos) < 0 {
+                            break;
+                        }
                         p.b.start_node_at(_cp, RK_DECLARATOR, _start);
                         let lbracket = p.expect(TK_LIT_LBRACKET)?;
                         let rbracket = p.expect(TK_LIT_RBRACKET)?;
@@ -1582,6 +1588,9 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
             }
         } else if _sk == TK_LIT_LPAREN {
             if 1 >= min_prec {
+                if scan_declarator_lr_2(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_DECLARATOR, _start);
                 let lparen = p.expect(TK_LIT_LPAREN)?;
                 let rparen = p.expect(TK_LIT_RPAREN)?;

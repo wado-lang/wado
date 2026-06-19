@@ -1581,6 +1581,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             if _sk == TK_LIT_DOT {
                 if p.peek_at(1) == TK_ID {
                     if 4 >= min_prec {
+                        if scan_e_lr_0(&p.kinds, p.pos) < 0 {
+                            break;
+                        }
                         p.b.start_node_at(_cp, RK_E, _start);
                         let dot = p.expect(TK_LIT_DOT)?;
                         let id = p.expect(TK_ID)?;
@@ -1590,6 +1593,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
                     }
                 } else {
                     if 3 >= min_prec {
+                        if scan_e_lr_1(&p.kinds, p.pos) < 0 {
+                            break;
+                        }
                         p.b.start_node_at(_cp, RK_E, _start);
                         let dot = p.expect(TK_LIT_DOT)?;
                         let lit_this = p.expect(TK_LIT_THIS)?;
@@ -1601,6 +1607,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             }
         } else if _sk == TK_LIT_STAR {
             if 2 >= min_prec {
+                if scan_e_lr_3(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let star = p.expect(TK_LIT_STAR)?;
                 let e_2 = _parse_e(p, 3)?;
@@ -1610,6 +1619,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
             }
         } else if _gale_kind_set_0(_sk) {
             if 1 >= min_prec {
+                if scan_e_lr_4(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let _ = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
                 let e_2 = _parse_e(p, 2)?;

@@ -1470,6 +1470,9 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
         let _sk = p.peek_kind();
         if _gale_kind_set_0(_sk) {
             if 1 >= min_prec {
+                if scan_e_lr_0(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let _ = p.match_set([TK_LIT_STAR, TK_LIT_SLASH])?;
                 let b = _parse_e(p, 2)?;

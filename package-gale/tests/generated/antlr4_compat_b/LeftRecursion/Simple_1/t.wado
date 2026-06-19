@@ -1379,6 +1379,9 @@ fn _parse_a__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> 
         let _sk = p.peek_kind();
         if _sk == TK_ID {
             if 1 >= min_prec {
+                if scan_a_lr_0(&p.kinds, p.pos) < 0 {
+                    break;
+                }
                 p.b.start_node_at(_cp, RK_A, _start);
                 let id = p.expect(TK_ID)?;
                 p.b.finish_node(p.last_end());
