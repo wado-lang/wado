@@ -72,6 +72,49 @@ struct Acc {
 
 thread_local! {
     static ACC: RefCell<Acc> = RefCell::new(Acc::default());
+    /// The `(fid, pass)` an actual `builder::build` should be attributed to.
+    /// Set by a value pass (`cse` / `licm`) around its per-function engine
+    /// session; an actual build inside that session (via `ensure_value_graph`)
+    /// reads it. `None` outside a session, so a build the freeze does is not
+    /// counted — keeping the meter scoped to the value passes, as before.
+    static BUILD_CTX: RefCell<Option<(usize, &'static str)>> = const { RefCell::new(None) };
+}
+
+/// RAII guard naming the `(fid, pass)` an actual value-graph build should be
+/// attributed to. While it is alive, the first `builder::build` of this engine
+/// session (`Engine::ensure_value_graph`) records itself against `fid`/`pass`;
+/// reuse of a persisted graph records nothing — so under build-once the meter
+/// drops, honestly counting real builds rather than pass entries.
+pub struct BuildScope;
+
+impl BuildScope {
+    pub fn enter(fid: usize, pass: &'static str) -> Self {
+        if enabled() {
+            BUILD_CTX.with(|c| *c.borrow_mut() = Some((fid, pass)));
+        }
+        BuildScope
+    }
+}
+
+impl Drop for BuildScope {
+    fn drop(&mut self) {
+        if enabled() {
+            BUILD_CTX.with(|c| *c.borrow_mut() = None);
+        }
+    }
+}
+
+/// Record an actual `builder::build`, attributed to the active [`BuildScope`].
+/// Called from `Engine::ensure_value_graph` exactly when it builds (not on
+/// reuse). No-op when off or outside a value-pass session.
+pub fn record_actual_build(body: &Body) {
+    if !enabled() {
+        return;
+    }
+    let ctx = BUILD_CTX.with(|c| *c.borrow());
+    if let Some((fid, pass)) = ctx {
+        record_build(fid, body, pass);
+    }
 }
 
 /// Record one genuinely-new skeleton node created by the edit API. Called from

@@ -196,6 +196,24 @@ pub struct ValueGraphBuild {
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// The build config (param seeding + alias sets) this graph was produced
+    /// with. A persisted graph is reused across passes whose `Engine` sessions
+    /// configure differently (e.g. `select_lowering` does not seed params); the
+    /// `WADO_VERIFY_VG` oracle rebuilds with *this* config, not the consuming
+    /// session's, so a config-view difference is not mistaken for an over-merge
+    /// while a genuine maintenance staleness still fails. Build-once only.
+    pub config: BuildConfig,
+}
+
+/// The parameters [`build`] was called with, retained so a verify-time rebuild
+/// reproduces the same value partition. Not used for reuse decisions (that
+/// would be the rejected config-keyed cache) — only for the verify oracle.
+#[derive(Clone, Default, Debug)]
+pub struct BuildConfig {
+    pub param_locals: Vec<u32>,
+    pub aliased: crate::hashmap::IndexSet<u32>,
+    pub untrackable: crate::hashmap::IndexSet<u32>,
+    pub mut_escaped: crate::hashmap::IndexSet<u32>,
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -246,6 +264,12 @@ pub fn build(
     ValueGraphBuild {
         value_of,
         loop_entry_values,
+        config: BuildConfig {
+            param_locals: param_locals.to_vec(),
+            aliased: aliased.clone(),
+            untrackable: untrackable.clone(),
+            mut_escaped: mut_escaped.clone(),
+        },
     }
 }
 

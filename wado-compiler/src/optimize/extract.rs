@@ -151,11 +151,14 @@ pub(super) fn freeze_pure_arith(
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
-    for func_rc in &project.functions {
+    for (fid, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         if func.body.is_none() {
             continue;
         }
+        // Under build-once persist the freeze is the first (and only) pass to
+        // build each function's graph; scope it so the build is attributed here.
+        let _vg_scope = super::vg_measure::BuildScope::enter(fid, "freeze");
         let NirFunction {
             body,
             locals,

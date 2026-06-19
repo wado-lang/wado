@@ -146,13 +146,15 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             vg_type_table: None,
         };
-        // The value graph now lives on `Body` so it *can* persist across passes
-        // (build-once foundation), but a session's config (alias sets, param
-        // seeding) is set per `Engine`. Until per-pass maintenance makes a
-        // persisted graph sound to reuse, drop any prior build at session start so
-        // behavior matches the former per-session cache exactly — a stale reuse
-        // under a different config would over-merge.
-        engine.body.value_graph = None;
+        // The value graph lives on `Body` so it persists across passes
+        // (build-once). Under promotion the graph is maintained through every
+        // edit (`maintain_value_after_edit` / `redirect_expr` / structural-pass
+        // maintenance), so a new session reuses it without a rebuild. Without
+        // promotion, drop any prior build at session start so behavior matches
+        // the former per-session cache exactly.
+        if !crate::optimize::promote_active() {
+            engine.body.value_graph = None;
+        }
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
@@ -332,7 +334,13 @@ impl<'a> Engine<'a> {
     /// rebuilds. Used by rules that intend to query the value graph again
     /// after a structural rewrite that would invalidate the prior build.
     pub fn invalidate_value_graph(&mut self) {
-        self.body.value_graph = None;
+        // Under build-once promotion the graph is maintained, not rebuilt; a
+        // forced drop here would reintroduce a rebuild. Callers that invalidate
+        // for correctness (a structural edit they do not yet maintain) keep
+        // working off-promotion; under promotion the maintenance covers them.
+        if !crate::optimize::promote_active() {
+            self.body.value_graph = None;
+        }
         self.body_address_taken = None;
     }
 
@@ -355,7 +363,9 @@ impl<'a> Engine<'a> {
     pub fn set_param_locals(&mut self, locals: Vec<u32>) {
         if self.param_locals != locals {
             self.param_locals = locals;
-            self.body.value_graph = None;
+            if !crate::optimize::promote_active() {
+                self.body.value_graph = None;
+            }
         }
     }
 
@@ -378,7 +388,9 @@ impl<'a> Engine<'a> {
             self.aliased_locals = aliased;
             self.untrackable_locals = untrackable;
             self.mut_escaped_locals = mut_escaped;
-            self.body.value_graph = None;
+            if !crate::optimize::promote_active() {
+                self.body.value_graph = None;
+            }
         }
     }
 
@@ -388,7 +400,9 @@ impl<'a> Engine<'a> {
     pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
         if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
             self.vg_type_table = Some(type_table);
-            self.body.value_graph = None;
+            if !crate::optimize::promote_active() {
+                self.body.value_graph = None;
+            }
         }
     }
 
@@ -404,6 +418,7 @@ impl<'a> Engine<'a> {
             self.verify_maintained_graph();
             return;
         }
+        crate::optimize::vg_measure::record_actual_build(&*self.body);
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
             &self.param_locals,
@@ -428,12 +443,20 @@ impl<'a> Engine<'a> {
         if !crate::optimize::vg_measure::verify_enabled() || self.body.value_graph.is_none() {
             return;
         }
+        // Rebuild with the config the *graph* was built with, not this session's.
+        // A persisted graph is reused across sessions that configure their engine
+        // differently (e.g. `select_lowering` does not seed params); rebuilding
+        // with the consuming session's config would split param reads the build
+        // config legitimately merged — a spurious over-merge. The build config is
+        // the apples-to-apples baseline; a genuine maintenance staleness still
+        // fails against it.
+        let cfg = self.body.value_graph.as_ref().unwrap().config.clone();
         let fresh = crate::nir_value_graph::builder::build(
             &mut *self.body,
-            &self.param_locals,
-            &self.aliased_locals,
-            &self.untrackable_locals,
-            &self.mut_escaped_locals,
+            &cfg.param_locals,
+            &cfg.aliased,
+            &cfg.untrackable,
+            &cfg.mut_escaped,
             self.vg_type_table,
         );
         let maintained = self.body.value_graph.as_ref().unwrap();
@@ -921,8 +944,8 @@ impl<'a> Engine<'a> {
         for s in &kids {
             self.set_parent(NodeRef::Stmt(*s), Some(NodeRef::Block(block)));
         }
-        for s in kids {
-            self.enqueue(NodeRef::Stmt(s));
+        for s in &kids {
+            self.enqueue(NodeRef::Stmt(*s));
         }
         self.enqueue(NodeRef::Block(block));
         if let Some(p) = self.parent_of(NodeRef::Block(block)) {
