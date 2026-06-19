@@ -128,7 +128,7 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // `LoweredGrammar` is threaded through so we can dispatch on
     // `Rule::Simple` / `MultiAlt` / `LeftRecursive` instead of
     // recomputing the classification at every emit site.
-    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn());
+    gen_parser_struct(w, ctx.is_trace(), ctx.needs_atn(), ctx.is_homogeneous());
     if ctx.is_trace() {
         gen_trace_helpers(w);
     }
@@ -157,7 +157,20 @@ fn join_kinds(kinds: &List<String>) -> String {
     return result;
 }
 
-fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
+/// Emit the "matched — consume the current token and return its index" tail of
+/// a Parser consuming method. Homogeneous appends the token to the builder
+/// first; typed just advances.
+fn emit_consume_return(w: &mut CodeWriter, homogeneous: bool) {
+    if homogeneous {
+        w.line(&"let _i = self.advance();");
+        w.line(&"self.b.token(_i);");
+        w.line(&"return Result::Ok(_i);");
+    } else {
+        w.line(&"return Result::Ok(self.advance());");
+    }
+}
+
+fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool, homogeneous: bool) {
     let mut s = StructSpec::new("Parser");
     s.add_field(&"tokens", &"TokenStream");
     // Token kinds as a bare `Array<i32>` — the hot scan/peek read. A flat
@@ -186,6 +199,15 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         s.add_field(&"atn_stack", &"List<i32>");
         s.add_field(&"atn_ret_pending", &"i32");
     }
+    // Homogeneous sink: the parser drives a `TreeBuilder` (`b`) — the matched
+    // terminals / subtrees accrue there in source order — and collects
+    // `Diagnostic`s. The struct otherwise mirrors the typed Parser, so the
+    // shared prediction / scan / ATN emission and the runtime ATN calls work
+    // against it unchanged.
+    if homogeneous {
+        s.add_field(&"b", &"TreeBuilder");
+        s.add_field(&"diagnostics", &"List<Diagnostic>");
+    }
     s.emit(w);
     w.blank();
 
@@ -202,6 +224,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     }
     if needs_atn {
         init.push_str(&", atn_stack: [], atn_ret_pending: -1");
+    }
+    if homogeneous {
+        init.push_str(&", b: TreeBuilder::new(), diagnostics: []");
     }
     w.line(&`return Parser \{ {init} \};`);
     w.end();
@@ -302,9 +327,12 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f7.emit_begin(w);
     w.begin(&"if self.kinds[self.pos] == kind");
     w.begin(&"if kind == TK_EOF");
+    if homogeneous {
+        w.line(&"self.b.token(self.pos);");
+    }
     w.line(&"return Result::Ok(self.pos);");
     w.end();
-    w.line(&"return Result::Ok(self.advance());");
+    emit_consume_return(w, homogeneous);
     w.end();
     w.line(&"let name = token_kind_name(kind);");
     w.line(&"return Result::Err(self.error(");
@@ -339,7 +367,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f9.set_return_type(&"Result<i32, ParseError>");
     f9.emit_begin(w);
     w.begin(&"if self.kinds[self.pos] != TK_EOF");
-    w.line(&"return Result::Ok(self.advance());");
+    emit_consume_return(w, homogeneous);
     w.end();
     w.line(&"return Result::Err(self.error(");
     w.indent();
@@ -368,7 +396,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.end();
     w.begin(&"if !blocked");
-    w.line(&"return Result::Ok(self.advance());");
+    emit_consume_return(w, homogeneous);
     w.end();
     w.end();
     w.line(&"return Result::Err(self.error(");
@@ -1754,7 +1782,18 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx.emit_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
+        ctx.is_homogeneous(),
     );
+}
+
+/// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
+fn rule_kind_const(name: &String) -> String {
+    let mut out = String::with_capacity(name.len() + 3);
+    out.push_str(&"RK_");
+    for let c of name.chars() {
+        out.push(c.to_ascii_uppercase());
+    }
+    return out;
 }
 
 /// Emit the trace helpers (the `trace` option is on). The emit sites only
@@ -1860,6 +1899,7 @@ fn gen_rule_entry_wrapper(
     emit_follow: bool,
     trace: bool,
     needs_atn: bool,
+    homogeneous: bool,
 ) {
     let mut f = FnSpec::new(outer_name);
     f.add_param(&"p", &"&mut Parser");
@@ -1877,13 +1917,55 @@ fn gen_rule_entry_wrapper(
             default_value: Option::Some("0"),
         });
     }
-    f.set_return_type(&`Result<{type_name}, ParseError>`);
+    if homogeneous {
+        f.set_return_type(&"Result<(), ParseError>");
+    } else {
+        f.set_return_type(&`Result<{type_name}, ParseError>`);
+    }
     f.emit_begin(w);
     let lit = escape_string(rule_display);
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
     let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
+    // Homogeneous sink: open this rule's `CstNode` before the body and close it
+    // after, so the body's appended terminals / subtrees become its children.
+    // `let r = {call}` (no `?`) means an inner `Err` still runs `finish_node`,
+    // folding the open node as the error propagates up (Stage 2 fail-soft).
+    if homogeneous {
+        let rk = rule_kind_const(rule_display);
+        if trace {
+            w.line(&`trace_enter(p, &{lit});`);
+            w.line(&"p.trace_depth += 1;");
+        }
+        if needs_atn {
+            emit_atn_enter(w);
+        }
+        w.line(&`let _start = p.peek_start();`);
+        w.line(&`p.b.start_node({rk}, _start);`);
+        w.line(&`let r = {call};`);
+        w.line(&"p.b.finish_node(p.last_end());");
+        if needs_atn {
+            w.line(&"p.atn_stack.pop();");
+        }
+        if trace {
+            w.line(&"p.trace_depth -= 1;");
+        }
+        w.begin(&"if let Err(mut e) = r");
+        w.line(&`e.rule_stack.push({lit});`);
+        if trace {
+            w.line(&`trace_fail(p, &{lit}, &e.message);`);
+        }
+        w.line(&"return Result::Err(e);");
+        w.end();
+        if trace {
+            w.line(&`trace_ok(p, &{lit});`);
+        }
+        w.line(&"return Result::Ok(());");
+        w.end();
+        w.blank();
+        return;
+    }
     if !trace {
         // Compact form: shared `_gale_rule` tail; ATN stack still wraps the call.
         if needs_atn {
