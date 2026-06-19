@@ -2558,7 +2558,11 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
-fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
+pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
+    if ctx.is_homogeneous() {
+        gen_op_leaf_homogeneous(w, op, ctx);
+        return;
+    }
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
         Token(t) => w.line(&`let {t.field} = p.expect({t.kind})?;`),
@@ -2588,6 +2592,39 @@ fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.
         Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
+    };
+}
+
+/// Homogeneous-sink leaf emission: drive the infallible `TreeBuilder` `Parser`
+/// (append the terminal / recurse) instead of binding a typed-CST field with
+/// `?`. No field names, no `Result` — the node's children accrue in the builder
+/// in source order. Byte-identical to the `cst_gen` emitter it replaces, so the
+/// homogeneous corpus stays green as the bespoke emitter delegates here.
+fn gen_op_leaf_homogeneous(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {
+    match *op {
+        Token(t) => w.line(&`p.expect_token({t.kind});`),
+        Literal(l) => w.line(&`p.expect_token({l.kind});`),
+        RuleCall(r) => {
+            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
+            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            if let Some(min_prec) = r.min_prec_arg {
+                w.line(&`_parse_{r.target_snake}(p{follow_arg_str}, {min_prec});`);
+            } else {
+                w.line(&`_parse_{r.target_snake}(p{follow_arg_str});`);
+            }
+        },
+        Wildcard(_) => w.line(&"p.expect_any();"),
+        Excluded(eop) => {
+            let mut list = String::with_capacity(32);
+            for let mut i = 0; i < eop.kinds.len(); i += 1 {
+                if i > 0 {
+                    list.push_str(&", ");
+                }
+                list.push_str(&eop.kinds[i]);
+            }
+            w.line(&`p.expect_not([{list}]);`);
+        },
+        Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf_homogeneous: non-leaf op; caller must guard with op_is_leaf"),
     };
 }
 

@@ -33,17 +33,16 @@ use {
     DirectDispatch,
     DispatchBranch,
     TournamentDispatch,
-    FollowArg,
 } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use {
     gen_scan_functions,
     gen_alt_scan_if_possible,
-    follow_arg_expr,
     compute_lr_second_token,
     compute_non_greedy_condition,
     gen_rep_scan_guard,
+    gen_op_leaf,
 } from "./parser_gen.wado";
 
 /// The defaulted `follow` parameter every `_parse_*` carries when the grammar
@@ -52,14 +51,6 @@ use {
 fn follow_param(ef: bool) -> String {
     if ef {
         return ", follow: &List<List<i32>> = &EMPTY_FOLLOW";
-    }
-    return "";
-}
-
-/// `, <FollowArg expr>` at a `RuleCall` site (e.g. `, &FOLLOW_MASK_3`), or "".
-fn follow_arg(ef: bool, arg: &FollowArg) -> String {
-    if ef {
-        return `, {follow_arg_expr(arg)}`;
     }
     return "";
 }
@@ -707,23 +698,15 @@ fn emit_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, ef: bool, 
 }
 
 fn emit_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, ef: bool, nc: &mut List<[String, i32]>) {
+    // Leaf terminals / rule calls are emitted by the shared, sink-aware
+    // `gen_op_leaf` (homogeneous branch) — the first step of consolidating
+    // emission into one sink-parameterised emitter. The control-flow ops
+    // (Repeat / Group) and the transparent ListLabel stay here for now.
     match *op {
-        Token(t) => w.line(&`p.expect_token({t.kind});`),
-        Literal(l) => w.line(&`p.expect_token({l.kind});`),
-        RuleCall(rc) => {
-            // `follow` (caller continuation) precedes `min_prec` (LR self-ref).
-            let mp = if let Some(prec) = rc.min_prec_arg {
-                `, {prec}`;
-            } else {
-                String::from("");
-            };
-            w.line(&`_parse_{rc.target_snake}(p{follow_arg(ef, &rc.follow_arg)}{mp});`);
-        },
-        Wildcard(_) => w.line(&"p.expect_any();"),
-        Excluded(e) => w.line(&`p.expect_not({kinds_list(&e.kinds)});`),
         ListLabel(ll) => emit_op(w, &ll.inner, ctx, ef, nc),
         Repeat(r) => emit_repeat(w, &r, ctx, ef, nc),
         Group(g) => emit_group(w, &g, ctx, ef, nc),
+        _ => gen_op_leaf(w, op, ctx, nc),
     }
 }
 
