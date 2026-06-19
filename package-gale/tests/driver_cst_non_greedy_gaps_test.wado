@@ -1,0 +1,20 @@
+//! Stage 2b migration: a `.*?` non-greedy span skipping junk between constant
+//! declarations parses through the homogeneous emitter.
+
+use ng from "./grammars/non_greedy_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_non_greedy_gaps",
+        },
+    };
+
+fn assert_parses(input: &String) {
+    assert ng::parse(input).ok(), `unexpected diagnostics for {*input}`;
+}
+
+test "non-greedy-gaps: bare constant" { assert_parses(&"public static final int X"); }
+test "non-greedy-gaps: constant after junk" { assert_parses(&"foo bar = 1 ; public static final int Y"); }
+test "non-greedy-gaps: constant then junk" { assert_parses(&"public static final int A ; garbage here"); }
+test "non-greedy-gaps: interleaved" { assert_parses(&"int x ; public static final int A ; x = 1 ; public static final int B ; end"); }
