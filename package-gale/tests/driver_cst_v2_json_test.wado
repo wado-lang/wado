@@ -1,0 +1,22 @@
+//! sink_v2 parity on JSON (Simple rules + token groups + `*`/`?` repeats with
+//! separators) — same trees as the cst_gen homogeneous path.
+
+use json from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true, sink_v2: true },
+            output_dir: "tests/generated/cst_v2_json",
+        },
+    };
+fn assert_tree(input: &String, expected: &String) {
+    let result = json::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = json::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+test "v2-json: number" { assert_tree(&"42", &"(json (value 42))"); }
+test "v2-json: nested object with array" {
+    assert_tree(&"{\"a\":[1,true,null]}", &"(json (value (obj { (pair \"a\" : (value (arr [ (value 1) , (value true) , (value null) ]))) })))");
+}
+test "v2-json: empty object" { assert_tree(&"{}", &"(json (value (obj { })))"); }
