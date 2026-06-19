@@ -143,14 +143,14 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry_homogeneous(w, lowered, ctx);
+    gen_parse_entry(w, lowered, ctx);
 }
 
-/// Public `parse` entry under the homogeneous sink: tokenize, run the start
+/// Public `parse` entry under the emitter: tokenize, run the start
 /// rule (which drives the builder), and return a `ParseResult`. A propagated
 /// `Err` is the single fail-soft diagnostic; the partial tree (open nodes
 /// folded by each wrapper's `finish_node`) is still returned.
-fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
@@ -163,14 +163,14 @@ fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx
     w.end();
     w.blank();
     for let rule of &lowered.parser_rules {
-        gen_homog_parse_rule_entry(w, rule, ctx);
+        gen_parse_rule_entry(w, rule, ctx);
     }
 }
 
-/// Emit one `pub fn parse_<rule>(input) -> ParseResult` homogeneous entry:
+/// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry:
 /// tokenize, run `_parse_<rule>`, fold the partial tree, and on error push a
 /// single diagnostic (deepest of the propagated error and `p.pending`).
-fn gen_homog_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
     let follow_arg = if ctx.emit_follow() { ", &EMPTY_FOLLOW" } else { "" };
     w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
@@ -210,7 +210,7 @@ fn join_kinds(kinds: &List<String>) -> String {
 }
 
 /// Emit the "matched — consume the current token and return its index" tail of
-/// a Parser consuming method. Homogeneous appends the token to the builder
+/// a Parser consuming method. The Parser appends the token to the builder
 /// first; typed just advances.
 fn emit_consume_return(w: &mut CodeWriter) {
     w.line(&"let _i = self.advance();");
@@ -247,7 +247,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         s.add_field(&"atn_stack", &"List<i32>");
         s.add_field(&"atn_ret_pending", &"i32");
     }
-    // Homogeneous sink: the parser drives a `TreeBuilder` (`b`) — the matched
+    // the parser drives a `TreeBuilder` (`b`) — the matched
     // terminals / subtrees accrue there in source order — and collects
     // `Diagnostic`s. The struct otherwise mirrors the typed Parser, so the
     // shared prediction / scan / ATN emission and the runtime ATN calls work
@@ -1852,7 +1852,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 }
 
 /// Return type of a rule's inner / alt parse function: `()` under the
-/// homogeneous sink (the tree accrues in the `TreeBuilder`).
+/// emitter (the tree accrues in the `TreeBuilder`).
 fn rule_result_type(ctx: &GenContext, type_name: &String) -> String {
     let _ = ctx;
     let _ = type_name;
@@ -1997,7 +1997,7 @@ fn gen_rule_entry_wrapper(
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
     let call = if takes_min_prec { `{*inner_name}(p{fsep}, min_prec)` } else { `{*inner_name}(p{fsep})` };
-    // Homogeneous sink: open this rule's `CstNode` before the body and close it
+    // open this rule's `CstNode` before the body and close it
     // after, so the body's appended terminals / subtrees become its children.
     // `let r = {call}` (no `?`) means an inner `Err` still runs `finish_node`,
     // folding the open node as the error propagates up (Stage 2 fail-soft).
@@ -2296,7 +2296,7 @@ fn gen_parse_fn_named(
         let lr_dispatch = lr_data.1;
         let h_atn_class = if let LeftRecursive(l) = lowered_rule { l.atn_class } else { false };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
-        gen_lr_fn_homog(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
+        gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
         return;
     } else {
         let mut f = FnSpec::new(fn_name);
@@ -2343,7 +2343,7 @@ fn gen_alt_body(
     let _ = struct_name;
     gen_alt_elements(w, &alt.elements, &body.ops, ctx);
 
-    // Homogeneous sink: the alt's terminals / subtrees already appended to the
+    // the alt's terminals / subtrees already appended to the
     // builder via the Parser methods, so there is no struct to assemble — the
     // rule wrapper's `finish_node` closes the node.
     w.line(&"return Result::Ok(());");
@@ -2439,7 +2439,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // gen_alt_elements requires 1:1 correspondence between
     // `elements` and `ops` — full-alt bodies (Simple / MultiAlt /
     // LR atom). LR-suffix bodies strip the leading self-ref op and are
-    // emitted by `gen_lr_fn_homog`, not here. Wado's power-assert
+    // emitted by `gen_lr_fn`, not here. Wado's power-assert
     // surfaces the lengths automatically if a mismatched body reaches here.
     //
     // The element-side `if let Repeat(...)` and `gen_op_group` paths
@@ -2450,7 +2450,7 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // the peeled element so `t=ID*` and friends route correctly
     // (today's g4 parser keeps the `*` outside the label, so this
     // arm is defensive — see `peel_scalar_label` for the contract).
-    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn_homog";
+    assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_fn";
     let mut name_counts: List<[String, i32]> = [];
     // The emitter walks the surface elements + lowered ops in parallel: the
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
@@ -2612,13 +2612,13 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// The mirror `dedup_name(&op.dedup_base, name_counts)` keeps
 /// `name_counts` in sync with what `gen_element`'s leaf arms would
 /// have produced, so siblings that still walk surface IR (e.g.
-/// `gen_lr_fn_homog`'s inline `dedup_name(&rr.field_name, ...)`
+/// `gen_lr_fn`'s inline `dedup_name(&rr.field_name, ...)`
 /// paths and `gen_element` fallbacks) read a consistent count. The
 /// emitted field name comes from `op.field` exclusively — `dedup_base`
 /// is consulted only for the sync. The sync goes away entirely once
 /// every emit path consumes `Op`.
 pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
-    // Sink-uniform: the homogeneous Parser's `expect` / `match_*` append the
+    // Sink-uniform: the Parser's `expect` / `match_*` append the
     // matched token to the builder while keeping the typed `Result<i32>`
     // signature, so the leaf line is identical for both sinks. (The legacy
     // cst_gen path emits its own `expect_token` form.)
@@ -2654,30 +2654,30 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
     };
 }
 
-// === Homogeneous sink: GIR-op body emission ===
-// Under the homogeneous sink the alt body is emitted from the lowered ops (no
+// === GIR-op body emission ===
+// Under the emitter the alt body is emitted from the lowered ops (no
 // surface elements, no typed fields): leaves go through `gen_op_leaf` (the
 // Parser appends), groups / repeats dispatch on their GIR shape and recurse.
 // Mirrors `cst_gen`'s emitter but against the builder-appending Parser, so the
 // `?`-folding fail-soft and the typed leaf API are uniform with prediction.
 
-fn gen_ops_homog(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     for let op of ops {
-        gen_op_homog(w, op, ctx, nc);
+        gen_op(w, op, ctx, nc);
     }
 }
 
-fn gen_op_homog(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     match *op {
-        Repeat(r) => gen_op_repeat_homog(w, &r, ctx, nc),
-        Group(g) => gen_op_group_homog(w, &g, ctx, nc),
-        ListLabel(ll) => gen_op_homog(w, &ll.inner, ctx, nc),
+        Repeat(r) => gen_repeat_body(w, &r, ctx, nc),
+        Group(g) => gen_group_body(w, &g, ctx, nc),
+        ListLabel(ll) => gen_op(w, &ll.inner, ctx, nc),
         _ => gen_op_leaf(w, op, ctx, nc),
     }
 }
 
 /// If every alt is a single terminal, the kind constants; else `None`.
-fn group_token_only_kinds_homog(alts: &List<AltBody>) -> Option<List<String>> {
+fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
     let mut kinds: List<String> = [];
     for let alt of alts {
         if alt.ops.len() != 1 {
@@ -2694,32 +2694,32 @@ fn group_token_only_kinds_homog(alts: &List<AltBody>) -> Option<List<String>> {
     return Option::Some(kinds);
 }
 
-fn gen_op_group_homog(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
-    if let Some(kinds) = group_token_only_kinds_homog(&g.alts) {
+fn gen_group_body(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    if let Some(kinds) = group_token_only_kinds(&g.alts) {
         w.line(&`let _ = p.match_set([{join_kinds(&kinds)}])?;`);
         return;
     }
     if g.alts.len() == 1 {
-        gen_ops_homog(w, &g.alts[0].ops, ctx, nc);
+        gen_ops(w, &g.alts[0].ops, ctx, nc);
         return;
     }
-    gen_alt_dispatch_homog(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc);
+    gen_alt_dispatch(w, &g.alts, &g.scan_alts, &g.dispatch, ctx, nc);
 }
 
-fn alt_by_index_homog(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
+fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
     for let a of alts {
         if a.alt_index == idx {
             return a;
         }
     }
-    panic(`gen_op_group_homog: no alt with index {idx}`);
+    panic(`gen_group_body: no alt with index {idx}`);
 }
 
-/// Group-alt dispatch under the homogeneous GIR walker (used for LR-suffix
+/// Group-alt dispatch under the GIR walker (used for LR-suffix
 /// group bodies). `Direct` emits a token-led `if/else if` chain; `Tournament`
 /// reuses the longest-match scan tournament (`gen_scan_winner_tournament`
 /// over the group's `scan_alts`) and emits the winning alt's appending body.
-fn gen_alt_dispatch_homog(
+fn gen_alt_dispatch(
     w: &mut CodeWriter,
     alts: &List<AltBody>,
     scan_alts: &List<ScanBody>,
@@ -2740,7 +2740,7 @@ fn gen_alt_dispatch_homog(
                 } else {
                     w.else_begin(&`else if {winner} == {k}`);
                 }
-                gen_ops_homog(w, &alt_by_index_homog(alts, td.alts[k]).ops, ctx, nc);
+                gen_ops(w, &alt_by_index(alts, td.alts[k]).ops, ctx, nc);
             }
             w.end();
             return;
@@ -2759,20 +2759,20 @@ fn gen_alt_dispatch_homog(
         } else {
             w.else_begin(&`else if {cond}`);
         }
-        gen_ops_homog(w, &alt_by_index_homog(alts, br.alt_index).ops, ctx, nc);
+        gen_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, nc);
     }
     w.else_begin(&"else");
     w.line(&`let _ = p.match_set([{join_kinds(&all_first)}])?;`);
     w.end();
 }
 
-/// Left-recursive rule under the homogeneous sink: precedence climbing via the
+/// Left-recursive rule under the emitter: precedence climbing via the
 /// builder's `checkpoint` / `start_node_at` left-associative wrap (mirrors
 /// cst_gen). The atom opens one rule node; each LR continuation wraps the tree
-/// so far in a new same-rule node. Suffix ops append via `gen_ops_homog`; a
+/// so far in a new same-rule node. Suffix ops append via `gen_ops`; a
 /// self-ref carries its baked `min_prec`. Overlapping suffix groups (needing a
 /// second-token sub-dispatch) reuse the typed dispatch in a later slice.
-fn gen_lr_fn_homog(
+fn gen_lr_fn(
     w: &mut CodeWriter,
     rule: &ParserRule,
     lr_alts: &List<LrAlt>,
@@ -2808,7 +2808,7 @@ fn gen_lr_fn_homog(
     // appends to the builder; precedence is already accounted for by
     // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
     if atn_class && loop_dec >= 0 {
-        gen_lr_fn_homog_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
+        gen_lr_fn_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
         w.line(&"return Result::Ok(());");
         w.end();
         w.blank();
@@ -2837,9 +2837,9 @@ fn gen_lr_fn_homog(
             w.else_begin(&`else if {cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, ctx, &mut nc);
+            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, ctx, &mut nc);
         } else {
-            emit_lr_overlap_homog(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
+            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
         }
     }
     if first {
@@ -2855,13 +2855,13 @@ fn gen_lr_fn_homog(
     w.blank();
 }
 
-/// ATN-class LR loop (homogeneous): the runtime simulator picks the suffix
+/// ATN-class LR loop: the runtime simulator picks the suffix
 /// continuation (`atn_lr_loop_decision`) with full context and the chosen
 /// suffix's ops append to the builder, wrapping the tree so far in a new
-/// same-rule node. Mirrors `gen_lr_suffix_dispatch_atn` on the homogeneous
-/// sink. `min_prec` is consumed by the simulator, so the per-branch
+/// same-rule node. Mirrors `gen_lr_suffix_dispatch_atn`. `min_prec` is
+/// consumed by the simulator, so the per-branch
 /// precedence gate is dropped.
-fn gen_lr_fn_homog_atn(
+fn gen_lr_fn_atn(
     w: &mut CodeWriter,
     rule: &ParserRule,
     lr_alts: &List<LrAlt>,
@@ -2885,7 +2885,7 @@ fn gen_lr_fn_homog_atn(
         } else {
             w.else_begin(&`else if _atn_alt == {i}`);
         }
-        emit_lr_branch_homog_body(w, &lr_alts[valid[i]], rk, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rk, ctx, &mut nc);
     }
     if !is_first {
         w.else_begin(&"else");
@@ -2900,7 +2900,7 @@ fn gen_lr_fn_homog_atn(
     w.end();
 }
 
-/// One LR continuation (homogeneous): precedence gate, left-associative wrap,
+/// One LR continuation: precedence gate, left-associative wrap,
 /// suffix ops. Below `min_prec` the climb stops. First-token dispatch alone
 /// can mis-predict an LR continuation when the suffix's first token is shared
 /// with the atom (`statement: letterA | statement letterA 'b'` on `aa`): the
@@ -2908,12 +2908,12 @@ fn gen_lr_fn_homog_atn(
 /// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
 /// commit to the (mutating) suffix parse when the scan confirms it matches —
 /// mirroring the typed `gen_lr_call_with_prec`.
-fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, scan_fn: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn emit_lr_branch(w: &mut CodeWriter, lr: &LrAlt, rk: &String, scan_fn: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     w.begin(&`if {lr.own_prec} >= min_prec`);
     w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
     w.line(&"break;");
     w.end();
-    emit_lr_branch_homog_body(w, lr, rk, ctx, nc);
+    emit_lr_branch_body(w, lr, rk, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -2922,16 +2922,16 @@ fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, scan_fn: &S
 /// The left-associative wrap + suffix ops shared by the static and ATN LR
 /// loops: open a new same-rule node spanning the tree built so far, append
 /// the suffix, close it.
-fn emit_lr_branch_homog_body(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn emit_lr_branch_body(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
-    gen_ops_homog(w, &lr.suffix.ops, ctx, nc);
+    gen_ops(w, &lr.suffix.ops, ctx, nc);
     w.line(&"p.b.finish_node(p.last_end());");
 }
 
-/// Overlap group (suffixes sharing a first token), homogeneous: unique first
+/// Overlap group (suffixes sharing a first token), unique first
 /// tokens commit directly; a shared first token branches on `peek_at(1)` via
 /// `compute_lr_second_token`, the last candidate falling through.
-fn emit_lr_overlap_homog(
+fn emit_lr_overlap(
     w: &mut CodeWriter,
     rule: &ParserRule,
     lr_alts: &List<LrAlt>,
@@ -2966,7 +2966,7 @@ fn emit_lr_overlap_homog(
                 } else {
                     w.else_begin(&`else if _sk == {*tk}`);
                 }
-                emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, ctx, nc);
+                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, ctx, nc);
                 emitted.push(*tk);
             }
         }
@@ -3001,10 +3001,10 @@ fn emit_lr_overlap_homog(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
+                    emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
+                    emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
                     w.end();
                 }
             } else {
@@ -3017,7 +3017,7 @@ fn emit_lr_overlap_homog(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
+                emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
             }
         }
         emitted.push(*shared_tk);
@@ -3027,38 +3027,38 @@ fn emit_lr_overlap_homog(
     }
 }
 
-/// Non-greedy `*?` / `+?` under the homogeneous sink: loop only while the
+/// Non-greedy `*?` / `+?` under the emitter: loop only while the
 /// lowered static exit condition holds, so the inner yields the closing
 /// delimiter to the continuation (the same gate cst_gen computes). `??` lowers
 /// to `Plain` + `mark_needs_atn` and so never reaches here.
-fn gen_op_repeat_non_greedy_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let cond = compute_non_greedy_condition(r, &r.caller_follow_first, &r.caller_follow_second, ctx);
     let loops = cond != "false";
     match r.kind {
         Plus => {
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             if loops {
                 w.begin(&`while ({cond})`);
-                gen_op_homog(w, &r.body, ctx, nc);
+                gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
         },
         Star => {
             if loops {
                 w.begin(&`while ({cond})`);
-                gen_op_homog(w, &r.body, ctx, nc);
+                gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
         },
-        Optional => panic("gen_op_repeat_non_greedy_homog: non-greedy `??` should be excluded by needs_atn"),
+        Optional => panic("gen_repeat_non_greedy_body: non-greedy `??` should be excluded by needs_atn"),
     }
 }
 
-/// Greedy `*` / `+` / `?` under the homogeneous sink: loop the body (which
+/// Greedy `*` / `+` / `?` under the emitter: loop the body (which
 /// appends), gated on the body's first set.
-fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     if let NonGreedy(_) = r.strategy {
-        gen_op_repeat_non_greedy_homog(w, r, ctx, nc);
+        gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
     }
     // Scan-guarded `*` / `+`: when the body's first set overlaps the caller's
@@ -3071,7 +3071,7 @@ fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, n
         let is_opt = if let Optional = r.kind { true } else { false };
         if !is_opt {
             if let Plus = r.kind {
-                gen_op_homog(w, &r.body, ctx, nc);
+                gen_op(w, &r.body, ctx, nc);
             }
             w.begin(&"loop");
             if ctx.emit_follow() && r.gate_caller_follow {
@@ -3079,7 +3079,7 @@ fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, n
             }
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, ctx, nc);
             w.line(&`if {scan_pos} < 0 \{ break; \}`);
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             w.end();
             return;
         }
@@ -3095,18 +3095,18 @@ fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, n
     match r.kind {
         Optional => {
             w.begin(&`if {cond}`);
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             w.end();
         },
         Star => {
             w.begin(&`while {cond}`);
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             w.end();
         },
         Plus => {
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             w.begin(&`while {cond}`);
-            gen_op_homog(w, &r.body, ctx, nc);
+            gen_op(w, &r.body, ctx, nc);
             w.end();
         },
     }
@@ -3500,7 +3500,7 @@ fn gen_op_storable_optional_with_first(
     inner_field: &String,
     cond: &String,
 ) {
-    // Homogeneous sink: the inner body appends to the builder, so the
+    // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
     let _ = opt_field;
     let _ = inner_type;
@@ -3617,7 +3617,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
-    // Homogeneous sink: the present elements append to the builder, so the
+    // the present elements append to the builder, so the
     // `Option<T>` shape selection collapses to a plain `if cond { … } else if
     // … ` statement — no struct, no absent-field decls, no `null` else.
     let mut is_first = true;
@@ -3873,7 +3873,7 @@ fn collect_token_only_kinds(alts: &List<Alternative>) -> String {
 /// `SingleAltShape` payload; the struct-literal field list comes from
 /// `body.fields` (lower's canonical list). Inner element parsing still
 /// walks surface IR via `gen_elements_with_non_greedy`. (Typed-sink arm
-/// only — dead under the homogeneous-only emitter.)
+/// only — dead under the single emitter.)
 fn gen_consume_single_alt_group_op(
     w: &mut CodeWriter,
     sa: &SingleAltShape,
@@ -3889,7 +3889,7 @@ fn gen_consume_single_alt_group_op(
     // `sa.owner_rule`, so no walker-field swap is needed here.
     let _ = sa;
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
-    // Homogeneous sink: the inner elements already appended; no struct.
+    // the inner elements already appended; no struct.
 }
 
 /// Emit `name+=elem` outside a Repeat: allocate the array, parse the
@@ -3919,7 +3919,7 @@ fn gen_op_list_label(
         // (which emits `let <shape.field> = ...;`), then push.
         // Mirrors the leaf path's structure but routes inner emit
         // through GIR rather than surface `gen_element`.
-        // Homogeneous sink: the inner Group appends to the builder; drop
+        // the inner Group appends to the builder; drop
         // the `List<T>` container and its `.push`.
         sync_name_counts_for_op_list_label(ll, name_counts);
         gen_op_group(w, g_op, &lab.element, ctx, name_counts);
@@ -4205,7 +4205,7 @@ fn gen_op_repeat_non_greedy_storable(
     let empty_iter_follow = [] as List<String>;
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
-    // Homogeneous sink: the body appends to the builder, so drop the
+    // the body appends to the builder, so drop the
     // `List<T>` accumulation; the `while` exit condition is sink-uniform.
     if is_plus {
         let mut nc: List<[String, i32]> = [];
@@ -4350,7 +4350,7 @@ fn gen_op_repeat_optional_rulecall(
 
     if first.is_empty() {
         // RuleCall always has a field — `body_shape == LeafRuleCall`
-        // implies `body_has_field == true`. Homogeneous: the optional can
+        // implies `body_has_field == true`. The optional can
         // never match, so emit nothing.
         return;
     }
@@ -4364,15 +4364,15 @@ fn gen_op_repeat_optional_rulecall(
     } else {
         "";
     };
-    // Homogeneous: the if-expression collapses to a present/absent
+    // The if-expression collapses to a present/absent
     // statement — the body appends when taken, nothing otherwise.
-    gen_optional_present_homog(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
+    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
 }
 
-/// Homogeneous greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
+/// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
 /// The body appends to the builder when present; an absent optional emits
 /// nothing. `gate_expr` is the caller-FOLLOW yield check (empty = none).
-fn gen_optional_present_homog(
+fn gen_optional_present(
     w: &mut CodeWriter,
     body: &Op,
     gate_expr: &String,
@@ -4412,7 +4412,7 @@ fn gen_op_repeat_optional_leaf(
     } else {
         "";
     };
-    gen_optional_present_homog(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&loop_first), ctx);
+    gen_optional_present(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&loop_first), ctx);
 }
 
 /// Runtime caller-FOLLOW yield gate at a tail-greedy Repeat's
@@ -4602,7 +4602,7 @@ fn gen_rep_break_with_recovery(
         w.begin(&`if {scan_pos} < 0`);
         w.begin(&`if {ctx.first_check_str(loop_first)}`);
         w.line(&"let _rec_pos = p.pos;");
-        // Homogeneous sink: the speculative re-parse drives the real
+        // the speculative re-parse drives the real
         // `TreeBuilder`, so bracket it with a checkpoint/truncate to discard
         // the throwaway subtree (the cursor is restored too — only the
         // recorded deep error survives, which is the whole point).
@@ -4641,7 +4641,7 @@ fn gen_op_repeat_star_plus_storable(
     let iter_follow = if rep_op.body_is_single_alt_group { union_kind_arrays(&inner_first, follow) } else { *follow };
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
-    // Homogeneous sink: the iteration body appends to the builder via the
+    // the iteration body appends to the builder via the
     // Parser, so there is no `List<T>` to accumulate — skip the list decl
     // and the per-iteration `.push`. The loop / scan-guard / caller-FOLLOW
     // gate structure is identical (sink-uniform).
@@ -4710,7 +4710,7 @@ fn gen_op_repeat_star_plus_storable(
 /// Loop-exit guard for a scan-gated Repeat. Both sinks augment the plain
 /// `if scan_pos < 0 { break }` with a speculative re-parse of a RuleRef inner
 /// that records the precise deep error (`gen_rep_break_with_recovery`); the
-/// homogeneous sink brackets the speculative parse with a builder
+/// emitter brackets the speculative parse with a builder
 /// checkpoint/truncate (the speculation drives the real `TreeBuilder`, so the
 /// throwaway subtree is rolled back along with the cursor — only the recorded
 /// deep error survives).
@@ -5079,7 +5079,7 @@ fn gen_simplecst_overlap_loop(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    // Homogeneous sink: each alt's RuleRef appends, so no accumulator and no
+    // each alt's RuleRef appends, so no accumulator and no
     // fail on no-match — the dispatch simply takes no arm (matching the typed
     // standalone-group path, which yields `null` rather than erroring).
     let grp_var = dedup_name(&"grp_kind", name_counts);
@@ -5146,7 +5146,7 @@ fn gen_consume_group_store_op(
 
     let groups = compute_overlap_groups(&first_sets);
     let has_overlaps = has_multi_alt_groups(&groups);
-    // Homogeneous sink: each alt is a single RuleRef whose `_parse_X`
+    // each alt is a single RuleRef whose `_parse_X`
     // appends its subtree, so the `let {var}: {type} = if … ` binding
     // collapses to a plain `if … ` statement (the RuleRef parse line is
     // emitted by `gen_simplecst_rulecall_value`; the returned variant
@@ -5252,12 +5252,12 @@ fn gen_general_overlap_loop(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    // Homogeneous sink: the chosen alt appends to the builder, so there is
+    // the chosen alt appends to the builder, so there is
     // no `Option<type>` accumulator. A no-match leaves the dispatch with no
     // arm taken and appends nothing — matching the typed standalone-group
     // (`_optional_op`) path, which yields `null` rather than failing. (The
     // required `store_op` caller adds its own post-loop check on the typed
-    // side; the homogeneous repeat-guard already verified a match before
+    // side; the repeat-guard already verified a match before
     // entry, so no fail is emitted here.)
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let {grp_var} = p.peek_kind();`);
@@ -5355,7 +5355,7 @@ fn gen_general_group_store_op(
 
     let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
     let has_overlaps = has_multi_alt_groups(&groups);
-    // Homogeneous sink: the chosen alt's elements append to the builder, so
+    // the chosen alt's elements append to the builder, so
     // the `let {var}: {type} = if … ` value-binding collapses to a plain
     // `if … ` statement and the overlap loop needs no accumulator.
     if !has_overlaps {
@@ -5442,7 +5442,7 @@ fn gen_general_group_store_optional_op(
         ctx,
         name_counts,
     );
-    // Homogeneous sink: no accumulator to forward — the optional group's
+    // no accumulator to forward — the optional group's
     // alt (if any matched) already appended.
 }
 
@@ -5465,7 +5465,7 @@ fn gen_general_alt_parse_and_store(
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
-    // Homogeneous sink: the chosen alt's elements already appended; no
+    // the chosen alt's elements already appended; no
     // variant value to store.
 }
 
@@ -5486,7 +5486,7 @@ fn gen_general_alt_construct(
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
-    // Homogeneous sink: caller emitted this as a plain `{ … }` statement
+    // caller emitted this as a plain `{ … }` statement
     // block (not an `if`-expression arm), so just append — no variant value.
 }
 

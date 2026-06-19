@@ -1,12 +1,10 @@
-//! Homogeneous-tree scaffolding.
+//! CST scaffolding.
 //!
-//! The homogeneous parser itself is emitted by `parser_gen`'s sink-aware path
-//! (the `Parser` drives a `TreeBuilder` while every prediction / scan / ATN
-//! decision is reused from the typed emitter unchanged — see
-//! `resilient-parser.md`). This module retains only the two grammar-specific
-//! tables that path needs: the per-rule `NodeKind` constants + name table, and
-//! the `to_string_tree` convenience. The former GIR-only emitter (the parser /
-//! Parser-runtime / op walkers) is gone now that there is one emission path.
+//! The parser itself is emitted by `parser_gen` (the `Parser` drives a
+//! `TreeBuilder` while every prediction / scan / ATN decision drives the
+//! tree build — see `resilient-parser.md`). This module retains only the two
+//! grammar-specific tables that path needs: the per-rule `NodeKind` constants
+//! + name table, and the `to_string_tree` convenience.
 
 use { Grammar, LexerRule } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";

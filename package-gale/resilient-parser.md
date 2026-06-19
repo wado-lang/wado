@@ -6,7 +6,7 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 
 ## Principles
 
-- **One homogeneous tree.** The parser builds a single untyped `CstNode` tree
+- **One uniform tree.** The parser builds a single untyped `CstNode` tree
   directly — no typed-CST and no walk/convert step. The generic view consumers
   want (LSP, highlight) is the parser's only output, so it is free.
 - **Infallible parsing.** Every rule function returns its node; it never returns
@@ -16,7 +16,7 @@ language front ends, LSP, and syntax highlighting all work on broken input.
 - **Diagnostics are the error currency.** A clean parse has an empty diagnostic
   list; a broken parse still yields a usable tree alongside the diagnostics.
 - **Fast machine-generated highlight.** Highlight is one direct walk over the
-  homogeneous tree (rule-kind stack → `(span, class)`), no intermediate tree.
+  uniform tree (rule-kind stack → `(span, class)`), no intermediate tree.
 
 ## The tree
 
@@ -97,164 +97,21 @@ closed (`<= 1` is effectively fail-fast, still returning a partial tree).
 Defaulted, so the common call is just `parse(input)`. There is no generator
 option for recovery on/off — recovery is always built in.
 
-## Stages
+## TODO
 
-Each stage is a separate PR; the package stays green at every stage.
+Everything above is built: the single-emitter parser, the uniform tree, full
+prediction (LL / tournament / caller-FOLLOW / ATN-class LR), error *reporting*
+(diagnostics with the deepest error + active rule chain), and highlight. Two
+buckets remain.
 
-### Stage 1 — Runtime core ✅ (done)
+**Recovery — error-token edits.** Error *reporting* works; the lossless
+error-token *edits* the design above calls for are not built yet:
 
-`tree.wado` (homogeneous `CstNode` + `TreeBuilder` + `NodeKind`), `diag.wado`
-(`Diagnostic`), and `TokenStream` recovery flags in `lex.wado`. Unit-tested in
-isolation; no codegen change yet.
+- `expect_or_recover` — insert missing / delete extra / sync to FOLLOW.
+- `Missing` / `Skipped` / `K_ERROR` emission into the tree.
+- the no-viable-alt fallback (a `K_ERROR` node + `NoViableAlternative`).
+- honour the `max_errors` entry parameter.
+- fixtures asserting error-token trees for broken input.
 
-### Stage 2 — Builder-based codegen, no recovery
-
-A new emitter (`cst_gen.wado`) builds the homogeneous tree via `TreeBuilder` and
-is infallible on _valid_ input; on the first error it fails soft (one
-diagnostic, close the tree). It reuses the shared lexer / token / lowering
-pipeline and consumes the lowered GIR (`Direct` dispatch + `AltBody.ops`),
-ignoring the typed-struct machinery entirely — there are no typed structs,
-`walk_*`, `to_tree`, or `Result`/`?`. `parse` returns a `ParseResult`.
-
-#### Stage 2a — new emitter behind a flag ✅ (done)
-
-Originally gated by a temporary `GenerateOptions.homogeneous` flag (since
-removed — homogeneous is now the sole path; see step 3). Runtime is
-`lex` + `diag` + `tree`. Covered shapes, each proven end-to-end:
-
-- **LL(1) `Direct` dispatch** — tokens, literals, rule refs, sequences,
-  `*`/`+`/`?`, transparent/token-only groups, wildcard, set complement
-  (`tests/grammars/calc_ll.g4`, `tests/driver_cst_calc_test.wado`).
-- **Left recursion** — precedence climbing using the builder's
-  `checkpoint`/`start_node_at` left-associative wrap; self-ref suffixes recurse
-  at their baked `min_prec` (`tests/grammars/arith_lr.g4`,
-  `tests/driver_cst_lr_test.wado`). Suffixes that share a first token form an
-  **overlap group**, disambiguated by a second-token sub-dispatch reusing the
-  typed emitter's `compute_lr_second_token` projection
-  (`tests/grammars/lr_overlap.g4`, `tests/driver_cst_lr_overlap_test.wado`).
-- **Tournament dispatch** — alternatives that share a lookahead prefix are
-  disambiguated by a longest-match scan, reusing `parser_gen`'s scan functions
-  verbatim (emitted only when a tournament exists; gated with their kind-set
-  dependencies) (`tests/grammars/amb_tour.g4`,
-  `tests/driver_cst_tour_test.wado`).
-- **Caller-FOLLOW gates** — a tail-greedy `Repeat` yields to the caller's
-  continuation via `follow_yields`, threading the defaulted `follow` parameter
-  and per-call-site `FollowArg` exactly as lowering computed them (so the
-  soundness invariants are reused, not re-derived) (`tests/grammars/follow_gate.g4`,
-  `tests/driver_cst_follow_test.wado`).
-- **Non-greedy `*?` / `+?`** — the loop runs only while the lowered static exit
-  condition holds (`compute_non_greedy_condition` over the per-position follow
-  sets, the same gate the typed emitter computes), so the inner yields the
-  closing delimiter to the continuation (`tests/grammars/non_greedy.g4`,
-  `tests/driver_cst_non_greedy_test.wado`).
-
-Grammars whose prediction needs the runtime ATN simulator — a non-greedy `??`
-(lowered as `Plain` + `mark_needs_atn`) or any ATN-class LR / scan decision —
-are rejected up front by a `needs_atn` boundary check, so the scope edge is a
-loud `panic` rather than a silently-wrong static dispatch.
-
-#### Stage 2b — full corpus on the homogeneous sink ✅ (done)
-
-**One emitter, sink-branched (not two emitters).** The homogeneous parser is
-emitted by `parser_gen`'s **single** emission pipeline, branched on the node
-sink (`GenContext.is_homogeneous`). The `Typed` sink binds CST fields and
-assembles structs + `Result`/`?`; the `Homogeneous` sink drives a
-`TreeBuilder` (the Parser's `expect`/`match_*` append the matched token, and a
-rule-entry wrapper does `start_node`/`finish_node`), so **every prediction /
-scan / ATN / LR / group / repeat decision is reused verbatim** — only the
-structure-building sites differ:
-
-- `gen_alt_body` returns `Ok(())` instead of assembling the alt struct.
-- The repeat storables (`gen_op_repeat_star_plus_storable`,
-  `gen_op_repeat_non_greedy_storable`) drop the `List<T>` accumulation and the
-  per-iteration `.push`, keeping the loop / scan-guard / caller-FOLLOW gate.
-- The greedy/shape-lookahead Optionals collapse the `Option<T>` if-expression
-  to a present/absent statement.
-- The group store ops (`gen_consume_*` / `gen_general_*` / the overlap loops)
-  drop the `let var: Type = …` value binding and the variant construction; the
-  dispatch (overlap grouping + scan tournament) and the chosen alt's appending
-  body are shared. A standalone group that matches nothing appends nothing
-  (matching the typed `_optional_op` path, which yields `null`).
-- ATN-class LR uses the same `atn_lr_loop_decision` dispatch
-  (`gen_lr_fn_homog_atn`) the typed `gen_lr_suffix_dispatch_atn` emits.
-
-Because the structure-building branch lets the **typed** prediction code drive
-the appending Parser, the ATN-class gaps close by reuse, not re-implementation:
-the runtime ATN simulator (`atn_predict_with_stack`, `atn_lr_loop_decision`)
-and the scan-tournament machinery (`gen_scan_winner_tournament`) emit the same
-calls for both sinks; the homogeneous runtime inlines `atn.wado` when
-`needs_atn`. `?`-propagation **is** the Stage-2 fail-soft: the first error
-folds every open node on the way up and `parse` returns the partial tree plus
-one diagnostic.
-
-**Corpus status.** The whole parse/tree corpus runs on the homogeneous sink
-and matches the typed trees one-node-per-rule:
-
-- The non-ATN grammars (precedence climbing, labels, shared-prefix
-  tournaments, caller-FOLLOW gates, set/consume groups, non-greedy spans,
-  case-insensitive + lexer fixtures).
-- The **ATN-class** grammars — the `ll_*` / `lr_*` prediction fixtures
-  (`ll_basic`, `ll_multi_alt`, `ll_wildcard_alt`, `lr_between`,
-  `lr_scan_caller`, `multiple_eof`, …) and the big real-world grammars
-  (Rust, TypeScript, SQLite, CSS3, HTML, ANTLRv4) — parse homogeneously, with
-  `driver_cst_*` driver tests pinning the trees / end-to-end parse.
-
-A pre-existing scan bug surfaced by the unified walker — a non-greedy wildcard
-`.*?` / `.+?` scanned zero inner tokens (empty `inner_first`) and undershot —
-was fixed: the scan now skips to the exit set (`gen_scan_non_greedy_skip`,
-`ScanRepeatElement.non_greedy`).
-
-#### Step 3 — homogeneous is the only path ✅ (done)
-
-`generate()` now **always** emits the homogeneous parser; the typed-CST emitter
-is deleted, not merely unselected:
-
-- `codegen.wado` drops the `if homogeneous {…} else {typed}` fork and
-  hard-sets `set_homogeneous(true)`; the typed `gen_runtime` and the whole
-  `gen_cst_types` block are gone.
-- `visitor_gen.wado`, `runtime/tools_typed.wado`, and
-  `runtime/highlight_visitor.wado` are deleted, along with the dead typed
-  `gen_highlight` / `gen_highlight_fn` in `highlight_gen.wado`.
-- The 52 redundant typed `driver_<x>_test.wado` are deleted (the homogeneous
-  `driver_cst_<x>` tests cover the same grammars), and `codegen_test.wado` is
-  migrated to the homogeneous output.
-- The ANTLR4-compat **stage_b** corpus (83 parse tests) flipped to homogeneous
-  in one extractor change (`to_string_tree` / `to_string_subtree` per-rule
-  rendering); stage_a's tokenize tests are sink-independent.
-
-The full suite is green on the homogeneous-only emitter: 622 src + `driver_cst`
-tests, stage_a 264, stage_b 77, all 0 failed.
-
-Remaining mechanical cleanup: `parser_gen.wado` keeps the typed structure-build
-arms behind ~27 `ctx.is_homogeneous()` branches whose `false` side is now
-unreachable (`is_homogeneous` is constant-true). Collapsing those arms and the
-`homogeneous` field / typed-only helpers (`gen_field_assignments_from_fields`,
-the SingleAlt CST struct emitters, …) is a safe follow-up — it changes no
-generated output.
-
-### Stage 3 — Recovery (error reporting on the homogeneous sink ✅; error-token edits remaining)
-
-The error-*reporting* bucket runs on the homogeneous sink: a scan-gated repeat's
-speculative re-parse records the precise inner error (`TreeBuilder::truncate`
-brackets it so the throwaway subtree is rolled back along with the cursor), the
-parse entry picks the deepest error (`p.pending` vs the propagated `e`), and the
-diagnostic carries the active rule chain. `error_recovery`, `tie_recovery`, and
-`diagnostics` pass as `driver_cst_*` tests.
-
-Still to do for full recovery: `expect_or_recover` (insert missing / delete
-extra / sync to FOLLOW), `Missing`/`Skipped`/`K_ERROR` emission into the tree,
-the no-viable-alt fallback, and the `max_errors` entry parameter, with fixtures
-asserting error-token trees for broken input.
-
-### Stage 4 — Highlight ✅ (+ polish remaining)
-
-Highlight walks the homogeneous `CstNode` tree directly: the sink-independent
-core (`HighlightVisitor` + mapping + `classify` + `highlight_html` with inherent
-`hl_*` hooks) lives in `highlight.wado`, and the homogeneous walk
-(`highlight_walk` over `CstNode`) in `highlight_homog.wado`. A clean parse walks
-the tree (rule-context overrides apply); a broken parse falls back to a flat
-default-class token pass. `json_highlight` / `sqlite_highlight` pass as
-`driver_cst_*` tests.
-
-Polish remaining: generate `NodeKind` `Display`/`Inspect` name impls and add
-`related`-note hints (e.g. matching brackets).
+**Highlight — polish.** Generate `NodeKind` `Display`/`Inspect` name impls and
+add `related`-note hints (e.g. matching brackets).

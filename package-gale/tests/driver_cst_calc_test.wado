@@ -1,4 +1,4 @@
-//! Stage 2 end-to-end: the resilient homogeneous-tree parser, on an LL(1)
+//! Stage 2 end-to-end: the resilient CST parser, on an LL(1)
 //! `Direct`-dispatch grammar.
 //! Verifies the single `CstNode` tree (no typed structs, no `to_tree`), the
 //! infallible `parse -> ParseResult`, and fail-soft diagnostics.
@@ -18,18 +18,18 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "homogeneous tree: single integer" {
+test "tree: single integer" {
     assert_tree(&"42", &"(prog (expr (term (factor 42))))");
 }
 
-test "homogeneous tree: precedence and grouping" {
+test "tree: precedence and grouping" {
     assert_tree(
         &"1 + 2 * 3",
         &"(prog (expr (term (factor 1)) + (term (factor 2) * (factor 3))))",
     );
 }
 
-test "homogeneous tree: parenthesised subexpression" {
+test "tree: parenthesised subexpression" {
     assert_tree(
         &"(1 + 2) * 3",
         &"(prog (expr (term (factor ( (expr (term (factor 1)) + (term (factor 2))) )) * (factor 3))))",

@@ -1,9 +1,9 @@
-// Source: hand-written for Gale's resilient-parser (homogeneous-tree) tests.
+// Source: hand-written for Gale's resilient-parser (CST) tests.
 // License: same as the Gale package.
 //
 // An LL(1), non-left-recursive arithmetic grammar: every decision is a
 // `Direct` (token-led) dispatch, so it is within Stage 2 scope of the
-// homogeneous-tree emitter.
+// CST emitter.
 grammar CalcLL;
 
 prog   : expr EOF ;

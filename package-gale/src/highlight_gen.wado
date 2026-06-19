@@ -3,12 +3,12 @@ use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
 use { escape_string } from "./gen_util.wado";
 
-/// Homogeneous-sink `highlight`: reuse the (sink-independent) token/rule
+/// `highlight`: reuse the (sink-independent) token/rule
 /// mapping, then drive the generic `highlight_walk` over the parsed `CstNode`
-/// tree. The homogeneous `parse` always returns a tree (partial on broken
+/// tree. The `parse` always returns a tree (partial on broken
 /// input), so there is no parse-failure / tokenize-only branch — a broken
 /// input still highlights from its partial tree.
-pub fn gen_highlight_homogeneous(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
     gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
     let mut f = FnSpec::new("highlight");
     f.set_pub();

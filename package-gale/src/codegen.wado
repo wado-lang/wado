@@ -11,7 +11,7 @@ use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
 use { gen_node_kinds, gen_string_tree_helper } from "./cst_gen.wado";
-use { gen_highlight_homogeneous } from "./highlight_gen.wado";
+use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
@@ -114,26 +114,26 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
-    // The resilient homogeneous-tree parser is the only emission path: the
+    // The resilient CST parser is the only emission path: the
     // Parser drives a `TreeBuilder` while every prediction / scan / ATN
     // decision is reused unchanged. Scan functions (and their kind-set
     // helpers) are emitted only when a rule needs a longest-match tournament;
     // the FOLLOW runtime / mask globals only when lowering built a
     // caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    gen_runtime_homogeneous(&mut w, ef, ctx.needs_atn(), options.highlight);
+    gen_runtime(&mut w, ef, ctx.needs_atn(), options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     gen_lexer(&mut w, grammar, &lit_tokens);
-    // The node-kind table and `to_string_tree` come from the homogeneous
+    // The node-kind table and `to_string_tree` come from the CST
     // scaffolding (`cst_gen`).
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
-    // Highlight walks the homogeneous `CstNode` tree directly (one generic
+    // Highlight walks the `CstNode` tree directly (one generic
     // recursive walk, `highlight_walk`), so it works on a partial tree too.
     if options.highlight {
-        gen_highlight_homogeneous(&mut w, grammar, &lit_tokens);
+        gen_highlight(&mut w, grammar, &lit_tokens);
     }
     // The scan emission may intern kind-set helpers (`_gale_kind_set_N`);
     // emit whatever was interned (a no-op when none).
@@ -227,12 +227,12 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 /// relative imports because every fragment is concatenated into the single
 /// generated module (with `lex` first), where such imports are both
 /// redundant and unresolvable.
-/// The runtime for the resilient homogeneous-tree parser: the core lexing
-/// vocabulary, the diagnostics types, and the homogeneous `CstNode` tree +
+/// The runtime for the resilient CST parser: the core lexing
+/// vocabulary, the diagnostics types, and the `CstNode` tree +
 /// `TreeBuilder`. Concatenated in dependency order (`lex` first, then `diag`,
 /// then `tree`, which references both); each fragment's sibling `from "./..."`
 /// imports are stripped by `gen_runtime_fragment`.
-fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight: bool) {
+fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
@@ -249,11 +249,10 @@ fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool, needs_atn: boo
     if needs_atn {
         gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
     }
-    // Highlight: the sink-independent visitor/mapping plus the homogeneous
-    // `CstNode` walk (no typed-CST `Visitor` bridge).
+    // Highlight: the visitor/mapping plus the `CstNode` walk.
     if highlight {
         gen_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));
-        gen_runtime_fragment(w, &#include_str("./runtime/highlight_homog.wado"));
+        gen_runtime_fragment(w, &#include_str("./runtime/highlight_walk.wado"));
     }
 }
 
