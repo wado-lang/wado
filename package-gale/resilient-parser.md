@@ -224,7 +224,25 @@ against its existing expectation; once every non-ATN grammar matches, `cst_gen`
 retires and the ATN grammars pass by reuse.
 
 This supersedes the heavier "sink-branch every emit function" framing below
-(kept for context); only the three sites above actually differ.
+(kept for context); only a small set of structure-building sites actually
+differ.
+
+**Bring-up status (proven).** The realization is wired end-to-end behind a
+temporary `sink_v2` generator option (`codegen` routes the homogeneous parser
+through `parser_gen`'s sink-aware path + `cst_gen`'s node-kind / `to_string_tree`
+scaffolding). It already **generates a runnable parser** for `calc_ll`: the
+homogeneous `Parser` (builder-appending `expect`/`match_*`, `Result` kept), the
+rule wrapper (`start_node`/`finish_node`, `Result<()>`), the public `parse`
+(returns `ParseResult`, `Err` → one diagnostic), `gen_alt_body`'s `Ok(())`, and
+the leaf line (identical for both sinks — `gen_op_leaf` is typed-only again,
+the Parser appends) are all in and green. The remaining work to reach tree
+parity is to give the **typed structure-building sites** a sink branch that
+skips field assembly and just lets the body append: `gen_op_repeat` (drop the
+`List<ItemX>` accumulation — loop the body), `gen_op_group` (drop the group
+struct — dispatch + emit the chosen alt's elements), and the single-token /
+LR-assembly fns. Each is mechanical and verified against the 29 existing
+homogeneous trees, one grammar at a time, until `sink_v2` reaches parity and
+becomes the only path.
 
 **Decision: one emitter, pluggable node sink (not two emitters).** Reaching
 "homogeneous is the only path" by porting the prediction/ATN core into `cst_gen`
