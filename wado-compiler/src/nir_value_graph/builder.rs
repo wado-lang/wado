@@ -512,6 +512,38 @@ impl<'a> Builder<'a> {
                 result_type,
             ));
         }
+        // Logical identities with one constant-bool operand. `&&` / `||`
+        // short-circuit, but both operands reach here as pure values (the
+        // conditional rhs walk above already accounted for any effects), so
+        // dropping the non-taken arm is sound: `false || x → x`,
+        // `true || x → true`, `true && x → x`, `false && x → false` (and the
+        // mirror cases with the constant on the right).
+        if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+            let lb = as_bool(self.pool.kind(lhs));
+            let rb = as_bool(self.pool.kind(rhs));
+            let folded = match op {
+                NirBinaryOp::Or => match (lb, rb) {
+                    (Some(true), _) | (_, Some(true)) => {
+                        Some(self.const_to_value(crate::const_eval::Value::Bool(true), result_type))
+                    }
+                    (Some(false), _) => Some(rhs),
+                    (_, Some(false)) => Some(lhs),
+                    _ => None,
+                },
+                NirBinaryOp::And => match (lb, rb) {
+                    (Some(false), _) | (_, Some(false)) => {
+                        Some(self.const_to_value(crate::const_eval::Value::Bool(false), result_type))
+                    }
+                    (Some(true), _) => Some(rhs),
+                    (_, Some(true)) => Some(lhs),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(v) = folded {
+                return Some(v);
+            }
+        }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = crate::const_eval::eval_binary(lv, op, rv)?;
@@ -1958,6 +1990,14 @@ fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::
     }
 }
 
+/// The boolean a constant `Bool` value carries, if any.
+fn as_bool(kind: &super::ValueKind) -> Option<bool> {
+    match kind {
+        super::ValueKind::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2216,11 +2256,13 @@ mod tests {
 
     #[test]
     fn if_merge_builds_select() {
-        // let mut x = 1; if true { x = 2; } else { x = 3; }; x
+        // fn(c: bool) { let mut x = 1; if c { x = 2; } else { x = 3; }; x }
+        // A non-constant (param-Opaque) condition keeps the merge a Select; a
+        // constant condition would fold to the taken arm (see `select`).
         let mut body = empty_body();
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
-        let cond = bool_lit(&mut body, true);
+        let cond = local_ref(&mut body, 1);
         let two = int_lit(&mut body, 2);
         let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
@@ -2238,11 +2280,18 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&mut body, &[]);
+        let cond_param = NirParam {
+            name: "c".to_string(),
+            type_id: TypeTable::BOOL,
+            local_index: 1,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&mut body, &[cond_param]);
         let read_v = r.value_of[&read];
         match body.values.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
+                assert!(matches!(body.values.kind(*cond), ValueKind::Opaque(_)));
                 assert_eq!(
                     body.values.kind(*then),
                     &ValueKind::Int(2, crate::tir::TypeTable::I32)
@@ -2258,11 +2307,12 @@ mod tests {
 
     #[test]
     fn if_without_else_merges_with_pre_value() {
-        // let mut x = 1; if true { x = 2; }; x
+        // fn(c: bool) { let mut x = 1; if c { x = 2; }; x }
+        // Non-constant condition (see `if_merge_builds_select`).
         let mut body = empty_body();
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
-        let cond = bool_lit(&mut body, true);
+        let cond = local_ref(&mut body, 1);
         let two = int_lit(&mut body, 2);
         let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
@@ -2277,10 +2327,17 @@ mod tests {
         let read = local_ref(&mut body, 0);
         let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&mut body, &[]);
+        let cond_param = NirParam {
+            name: "c".to_string(),
+            type_id: TypeTable::BOOL,
+            local_index: 1,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&mut body, &[cond_param]);
         match body.values.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(body.values.kind(*cond), &ValueKind::Bool(true));
+                assert!(matches!(body.values.kind(*cond), ValueKind::Opaque(_)));
                 assert_eq!(
                     body.values.kind(*then),
                     &ValueKind::Int(2, crate::tir::TypeTable::I32)

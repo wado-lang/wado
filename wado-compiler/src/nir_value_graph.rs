@@ -745,6 +745,15 @@ impl ValuePool {
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {
         let t = self.find(then);
         let e = self.find(else_);
+        let c = self.find(cond);
+        // A constant condition selects one arm: `Select(true, a, _) → a`,
+        // `Select(false, _, b) → b`. Recovers `false || x` / `true && x` → `x`,
+        // which lower to a const-condition merge under operand promotion.
+        match self.kind(c) {
+            ValueKind::Bool(true) => return t,
+            ValueKind::Bool(false) => return e,
+            _ => {}
+        }
         // `Select(c, X, X) → X`: a pure-value merge whose arms are equal is that
         // value, regardless of the (side-effect-free) condition.
         if t == e {
