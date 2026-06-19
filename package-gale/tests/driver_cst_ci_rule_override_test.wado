@@ -1,0 +1,6 @@
+//! Stage 2b migration probe: ci_rule_override.
+use ci from "./grammars/ci_rule_override.g4"
+    with { generator: { module: "../src/generator.wado", options: { highlight: false, homogeneous: true }, output_dir: "tests/generated/cst_ci_rule_override" } };
+fn ok(input: &String) { assert ci::parse(input).ok(), `unexpected diagnostics for {*input}`; }
+test "ci-override: lowercase" { ok(&"if foo"); }
+test "ci-override: uppercase" { ok(&"IF foo"); }
