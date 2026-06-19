@@ -1263,9 +1263,20 @@ Two coupled causes, both downstream of the lost value identity:
 
 Route B fixes this structurally: with pure values born as operands and
 `value_of` retired, const-fold reads `value`'s operand directly (always
-`1000`), folds it, and no orphan `value` local reaches WIR build. (A narrow
-WIR-build patch — keep a forwarded struct-literal field's source def live — is
-possible but fragile; route B removes the cause.)
+`1000`), folds it, and no orphan `value` local reaches WIR build.
+
+Resolution (commit `7377aad2d`): the trap was actually a **bounded WIR bug**,
+not a value-graph one — the "no cheap fix" conclusion above was wrong. The RHS
+const struct materialises as `drop(struct.new { low: local.tee value_9(1000),
+high: 0 })`; the `local.tee` assigns `value_9` (read by the comparison) as a
+side effect. `elide_multi_field_struct_locals` elided that struct because
+`is_pure_for_elision` only recursed into children and judged `local.tee` /
+`local.set` / heap writes pure — so the elision dropped the `tee` while the read
+survived. Fix: treat `LocalSet` / `LocalTee` / `GlobalSet` / `StructSet` /
+`ArraySet` as impure there. All three i128 fixtures pass; promotion exposed the
+latent WIR bug (it left the field as a local the skeleton path would have
+folded), but the root and fix are in WIR elision, independent of route B. Route
+B remains the durable direction for criteria 2/3.
 
 ### Route B execution plan (build-once-and-promote, then fold into lower)
 
