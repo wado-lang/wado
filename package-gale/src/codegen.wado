@@ -11,7 +11,7 @@ use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
 use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
 use { gen_visitor } from "./visitor_gen.wado";
-use { gen_cst_parser, gen_node_kinds, gen_string_tree_helper } from "./cst_gen.wado";
+use { gen_node_kinds, gen_string_tree_helper } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
@@ -138,29 +138,25 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // globals are emitted whenever lowering built a caller-FOLLOW gate
         // (`emit_follow`) — a tail-greedy `Repeat` can need them with no
         // tournament present (e.g. an LL(1) grammar like calc).
-        let needs_scan = homogeneous_needs_scan(&lowered);
         let ef = ctx.emit_follow();
         gen_runtime_homogeneous(&mut w, ef);
         gen_token_kind(&mut w, &grammar.lexer_rules);
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
-        if options.sink_v2 || options.homogeneous {
-            // Sink-refactor route: parser_gen's sink-aware emitter drives the
-            // TreeBuilder (full prediction/ATN reuse). cst_gen's scaffolding
-            // (node kinds, to_string_tree) is shared verbatim.
-            gen_node_kinds(&mut w, &lowered.parser_rules);
-            gen_parser(&mut w, grammar, &lowered, &mut ctx);
-            gen_string_tree_helper(&mut w, grammar, &lit_tokens);
-        } else {
-            gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens, &mut ctx, needs_scan);
-        }
-        // `gen_cst_parser` / the scan emission may intern kind-set helpers
-        // (`_gale_kind_set_N`); emit whatever was interned (a no-op when none).
+        // The homogeneous parser is emitted by parser_gen's sink-aware path:
+        // the Parser drives a `TreeBuilder` while every prediction / scan / ATN
+        // decision is reused from the typed emitter unchanged. The node-kind
+        // table and `to_string_tree` come from the homogeneous scaffolding.
+        gen_node_kinds(&mut w, &lowered.parser_rules);
+        gen_parser(&mut w, grammar, &lowered, &mut ctx);
+        gen_string_tree_helper(&mut w, grammar, &lit_tokens);
+        // The scan emission may intern kind-set helpers (`_gale_kind_set_N`);
+        // emit whatever was interned (a no-op when none).
         gen_kind_set_helpers(&mut w, &lowered, &ctx);
         if ef {
             gen_follow_mask_globals(&mut w, &ctx);
         }
-        if options.sink_v2 && ctx.needs_atn() {
+        if ctx.needs_atn() {
             gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
         }
         return GeneratedOutput {
