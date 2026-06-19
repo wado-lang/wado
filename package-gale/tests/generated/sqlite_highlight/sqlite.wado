@@ -935,16 +935,21 @@ impl HighlightVisitor {
     }
 }
 
-impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+/// Inherent visit hooks, sink-independent. The typed walk reaches these
+/// through the `Visitor` trait impl in `highlight_visitor.wado` (a thin
+/// delegate); the homogeneous walk (`highlight_walk` in `highlight_homog.wado`)
+/// calls them directly off the `CstNode` tree. Keeping the trait out of this
+/// fragment means a homogeneous parser carries no typed-CST dependency.
+impl HighlightVisitor {
+    pub fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    pub fn hl_exit(&mut self) {
         self.rule_stack.pop();
     }
 
-    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+    pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let cap = self.classify(toks.triv_kinds[t]);
             if !cap.is_empty() {
@@ -1016,6 +1021,26 @@ pub fn highlight_html(source: &String, captures: &List<HighlightCapture>) -> Str
         escape_html_char(&mut out, c);
     }
     return out;
+}
+//! Typed-CST bridge for the highlighter: a thin `Visitor` impl that delegates
+//! to `HighlightVisitor`'s sink-independent `hl_*` hooks (`highlight.wado`).
+//! Emitted only for the typed-CST highlight path; the generated `walk_<rule>`
+//! functions drive it through the `Visitor` trait. The homogeneous path walks
+//! the `CstNode` tree directly (`highlight_homog.wado`) and never needs this.
+
+
+impl Visitor for HighlightVisitor {
+    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.hl_enter(rule_id);
+    }
+
+    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+        self.hl_exit();
+    }
+
+    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        self.hl_visit_token(toks, idx);
+    }
 }
 pub enum TokenKind {
     SCOL,

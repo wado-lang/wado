@@ -9,6 +9,46 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<Li
     gen_highlight_run(w);
 }
 
+/// Homogeneous-sink `highlight`: reuse the (sink-independent) token/rule
+/// mapping, then drive the generic `highlight_walk` over the parsed `CstNode`
+/// tree. The homogeneous `parse` always returns a tree (partial on broken
+/// input), so there is no parse-failure / tokenize-only branch — a broken
+/// input still highlights from its partial tree.
+pub fn gen_highlight_homogeneous(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+    gen_highlight_mapping(w, &grammar.lexer_rules, &grammar.parser_rules, lit_tokens);
+    let mut f = FnSpec::new("highlight");
+    f.set_pub();
+    f.add_param(&"input", &"&String");
+    f.set_return_type(&"String");
+    f.emit_begin(w);
+    w.line(&"let mapping = highlight_mapping();");
+    w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
+    if grammar.parser_rules.len() > 0 {
+        w.line(&"let result = parse(input);");
+        // A clean parse walks the tree (rule-context overrides apply); a broken
+        // parse leaves a partial tree that need not cover every token, so fall
+        // back to a flat token pass (default classes only), matching the typed
+        // path's parse-failure behaviour.
+        w.begin(&"if result.diagnostics.is_empty()");
+        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.root);");
+        w.else_begin(&"else");
+        w.begin(&"for let mut _i = 0; _i < result.tokens.len(); _i += 1");
+        w.line(&"visitor.hl_visit_token(&result.tokens, _i);");
+        w.end();
+        w.end();
+    } else {
+        // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
+        w.line(&"let tokens = tokenize(input);");
+        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
+        w.line(&"visitor.hl_visit_token(&tokens, _i);");
+        w.end();
+    }
+    w.line(&"return highlight_html(input, &visitor.captures);");
+    w.end();
+    w.blank();
+    gen_highlight_run(w);
+}
+
 fn gen_highlight_mapping(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,

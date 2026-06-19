@@ -3,8 +3,7 @@
 //! parser only when the `highlight` generator option is on. The
 //! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
 
-use { Span, TokenStream } from "./lex.wado";
-use { Visitor } from "./cst.wado";
+use { TokenStream } from "./lex.wado";
 
 /// Highlight override: when inside a specific rule, override the capture for a token kind.
 pub struct HighlightOverride {
@@ -95,16 +94,21 @@ impl HighlightVisitor {
     }
 }
 
-impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+/// Inherent visit hooks, sink-independent. The typed walk reaches these
+/// through the `Visitor` trait impl in `highlight_visitor.wado` (a thin
+/// delegate); the homogeneous walk (`highlight_walk` in `highlight_homog.wado`)
+/// calls them directly off the `CstNode` tree. Keeping the trait out of this
+/// fragment means a homogeneous parser carries no typed-CST dependency.
+impl HighlightVisitor {
+    pub fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    pub fn hl_exit(&mut self) {
         self.rule_stack.pop();
     }
 
-    fn visit_token(&mut self, toks: &TokenStream, idx: i32) {
+    pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
         for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
             let cap = self.classify(toks.triv_kinds[t]);
             if !cap.is_empty() {
