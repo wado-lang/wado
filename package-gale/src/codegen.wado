@@ -274,6 +274,7 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/cst.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
+    gen_runtime_fragment(w, &#include_str("./runtime/tools_typed.wado"));
     if ctx.emit_follow() {
         gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
     }
@@ -298,6 +299,8 @@ fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool, needs_atn: boo
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
+    // Sink-independent consumer tools (`normalize_tree`, `to_lexer_string`).
+    gen_runtime_fragment(w, &#include_str("./runtime/tools.wado"));
     // Reused scan functions reference `follow_yields` / `EMPTY_FOLLOW` when the
     // grammar has a caller-FOLLOW gate.
     if emit_follow {

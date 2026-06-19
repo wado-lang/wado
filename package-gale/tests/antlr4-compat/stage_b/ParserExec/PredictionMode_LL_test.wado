@@ -8,7 +8,7 @@ use t from "../../grammars/ParserExec/PredictionMode_LL.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_b/ParserExec/PredictionMode_LL",
         },
     };
@@ -17,8 +17,8 @@ use { normalize_tree } from "../../grammars/ParserExec/PredictionMode_LL.g4";
 test "stage_b: ParserExec/PredictionMode_LL" {
     let input = "X Y";
     let expected = "(r (a X) (b Y))";
-    let root = t::parse_r(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_r(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

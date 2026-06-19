@@ -11,7 +11,7 @@ use t from "../../grammars/Performance/DropLoopEntryBranchInLRRule_5.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_a/Performance/DropLoopEntryBranchInLRRule_5",
         },
     };
@@ -49,7 +49,8 @@ X ? Y : Z
 ;
 ";
     let result = t::parse_stat(&input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);
     }
 }

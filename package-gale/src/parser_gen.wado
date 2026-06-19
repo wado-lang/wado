@@ -2968,6 +2968,7 @@ fn gen_lr_fn_homog(
         w.blank();
         return;
     }
+    let scan_fn = `scan_{rule.snake_name}`;
     w.begin(&"loop");
     w.line(&"let _sk = p.peek_kind();");
     let mut nc: List<[String, i32]> = [];
@@ -2990,9 +2991,9 @@ fn gen_lr_fn_homog(
             w.else_begin(&`else if {cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, ctx, &mut nc);
+            emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, ctx, &mut nc);
         } else {
-            emit_lr_overlap_homog(w, rule, lr_alts, lr_dispatch, group, &rk, ctx, &mut nc);
+            emit_lr_overlap_homog(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
         }
     }
     if first {
@@ -3054,9 +3055,18 @@ fn gen_lr_fn_homog_atn(
 }
 
 /// One LR continuation (homogeneous): precedence gate, left-associative wrap,
-/// suffix ops. Below `min_prec` the climb stops.
-fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+/// suffix ops. Below `min_prec` the climb stops. First-token dispatch alone
+/// can mis-predict an LR continuation when the suffix's first token is shared
+/// with the atom (`statement: letterA | statement letterA 'b'` on `aa`): the
+/// suffix begins to match then fails on a later element, corrupting the tree.
+/// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
+/// commit to the (mutating) suffix parse when the scan confirms it matches —
+/// mirroring the typed `gen_lr_call_with_prec`.
+fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, scan_fn: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     w.begin(&`if {lr.own_prec} >= min_prec`);
+    w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
+    w.line(&"break;");
+    w.end();
     emit_lr_branch_homog_body(w, lr, rk, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
@@ -3082,6 +3092,7 @@ fn emit_lr_overlap_homog(
     lr_dispatch: &LrDispatchData,
     group: &List<i32>,
     rk: &String,
+    scan_fn: &String,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
@@ -3109,7 +3120,7 @@ fn emit_lr_overlap_homog(
                 } else {
                     w.else_begin(&`else if _sk == {*tk}`);
                 }
-                emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, ctx, nc);
+                emit_lr_branch_homog(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, ctx, nc);
                 emitted.push(*tk);
             }
         }
@@ -3144,10 +3155,10 @@ fn emit_lr_overlap_homog(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch_homog(w, lr, rk, ctx, nc);
+                    emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch_homog(w, lr, rk, ctx, nc);
+                    emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
                     w.end();
                 }
             } else {
@@ -3160,7 +3171,7 @@ fn emit_lr_overlap_homog(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch_homog(w, lr, rk, ctx, nc);
+                emit_lr_branch_homog(w, lr, rk, scan_fn, ctx, nc);
             }
         }
         emitted.push(*shared_tk);

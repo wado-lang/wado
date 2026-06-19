@@ -12,7 +12,7 @@ use t from "../../grammars/ParserErrors/LL3.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_a/ParserErrors/LL3",
         },
     };
@@ -20,5 +20,5 @@ use t from "../../grammars/ParserErrors/LL3.g4"
 test "stage_a_err: ParserErrors/LL3" {
     let input = "abe";
     let result = t::parse_a(&input);
-    assert result matches { Err(_) }, `expected parse to fail but it succeeded`;
+    assert !result.ok(), `expected parse to fail but it succeeded`;
 }

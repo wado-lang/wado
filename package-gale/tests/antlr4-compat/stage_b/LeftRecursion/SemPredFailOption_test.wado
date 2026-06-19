@@ -8,20 +8,19 @@ use t from "../../grammars/LeftRecursion/SemPredFailOption.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_b/LeftRecursion/SemPredFailOption",
         },
     };
 use { normalize_tree } from "../../grammars/LeftRecursion/SemPredFailOption.g4";
-
 
 // triage: Stage B parse-tree shape diverges because action bodies are skipped (the predicate guard is dropped) — Stage C territory
 #[TODO]
 test "stage_b: LeftRecursion/SemPredFailOption" {
     let input = "x y z";
     let expected = "(s (a (a x) y z))";
-    let root = t::parse_s(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_s(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

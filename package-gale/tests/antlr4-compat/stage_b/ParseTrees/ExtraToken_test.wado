@@ -11,22 +11,19 @@ use t from "../../grammars/ParseTrees/ExtraToken.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_b/ParseTrees/ExtraToken",
         },
     };
 use { normalize_tree } from "../../grammars/ParseTrees/ExtraToken.g4";
-
 
 // triage: sub-tree: expected [output] is ANTLR4's error-recovered sub-tree (single-token deletion / insertion). Gale does not yet implement error recovery, so `parse()` returns `Err` on the bad token and the sub-tree navigation never runs. Gap: implement ANTLR4-style error recovery in the generated parser. (Stage C-independent)
 #[TODO]
 test "stage_b_sub: ParseTrees/ExtraToken" {
     let input = "xzy";
     let expected = "(a x z y)";
-    let root = t::parse_s(&input).unwrap();
-    let tree = t::to_tree(&root);
-    let sub = t::find_first_child_node(&tree, &"a").unwrap();
-    let actual = sub.to_string_tree();
+    let result = t::parse_s(&input);
+    let actual = t::to_string_subtree(&result, &"a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

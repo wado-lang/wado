@@ -11,7 +11,7 @@ use t from "../../grammars/LeftRecursion/AmbigLR_4.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_a/LeftRecursion/AmbigLR_4",
         },
     };
@@ -20,7 +20,8 @@ test "stage_a_parse: LeftRecursion/AmbigLR_4" {
     let input = "a+b*2
 ";
     let result = t::parse_prog(&input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);
     }
 }

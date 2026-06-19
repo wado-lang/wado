@@ -8,7 +8,7 @@ use t from "../../grammars/LeftRecursion/Declarations_8.g4"
     with {
         generator: {
             module: "../../../../src/generator.wado",
-            options: { highlight: false },
+            options: { highlight: false, homogeneous: true },
             output_dir: "tests/generated/antlr4_compat_b/LeftRecursion/Declarations_8",
         },
     };
@@ -17,8 +17,8 @@ use { normalize_tree } from "../../grammars/LeftRecursion/Declarations_8.g4";
 test "stage_b: LeftRecursion/Declarations_8" {
     let input = "a[][]";
     let expected = "(s (declarator (declarator (declarator a) [ ]) [ ]))";
-    let root = t::parse_s(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_s(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }
