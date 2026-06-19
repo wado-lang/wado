@@ -155,14 +155,28 @@ loud `panic` rather than a silently-wrong static dispatch.
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Non-ATN real grammars already migrate cleanly, each with the same one-node-
-per-rule tree the typed emitter produces (so migrating a driver test is just
-swapping the API, not the expectations): the grammars-v4 `calculator.g4`
-(nested precedence rules, token groups, `*` repeats, multi-alt Direct dispatch,
-prefix recursion, `func_` calls), `label_gaps.g4` (element + list labels, all
-transparent), and `at_end_alt_gaps.g4` (a shared-prefix tournament resolved by
-the second token, nested in Direct dispatch) all parse through the homogeneous
-emitter unchanged (`tests/driver_cst_{calculator,labels,at_end_alt_gaps}_test.wado`).
+**Corpus migration status.** Every driver grammar that does **not** need the
+runtime ATN simulator is migrated to the homogeneous emitter — 29 homogeneous
+driver tests (107 cases), each with the same one-node-per-rule tree the typed
+emitter produces (so migrating a driver test is just swapping the API, not the
+expectations). The migrated set spans precedence climbing with left/right
+associativity (`calculator`, `right_assoc_gaps`), labels (`label_gaps`,
+`label_list_collision`), shared-prefix tournaments (`at_end_alt_gaps`,
+`overlap_tournament`, `alt_shared_ident_prefix`), caller-FOLLOW gates
+(`ll_multi_token_tail`, `ll_k_prefix_cascade`), set/consume groups
+(`parser_set_group_dispatch`, `ll_consume_group`, `parser_gaps`), non-greedy
+spans (`non_greedy_gaps`), case-insensitive lexing (`ci_sql`, `ci_rule_override`),
+and the lexer fixtures (`recursive_lexer`, `unicode_props`, `lexer_command_gaps`,
+`lexer_greedy_suffix`, `mode_gaps`, `sexpression`).
+
+The driver grammars that remain on the typed path fall into exactly three
+buckets, none migratable by hand: **(a) ATN-class** prediction (the big
+real-world grammars — Rust / TypeScript / SQLite / CSS3 / HTML — and the
+`ll_*` prediction fixtures and the `lr_*` overlap fixtures), which hit the
+`needs_atn` boundary and need the prediction reuse below; **(b) typed-API
+tests** (`sexpression_ast` reads typed CST struct fields — these are deleted in
+step 3, not migrated); **(c) later stages** (recovery: `error_recovery` /
+`tie_recovery` / `diagnostics` → Stage 3; highlight: `*_highlight` → Stage 4).
 
 **Architectural limit of the GIR-only emitter (proven).** `cst_gen` consumes
 the lowered GIR, whose `MultiAltDispatch` has only `Direct` (disjoint first
