@@ -605,6 +605,30 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
       passes grow the graph at splice points. Once no pass calls `engine.value`,
       `builder::build` stops running inside `optimize`.
+
+      Started — cse subsumption (commit `ef5646034`): under operand promotion,
+      pure-value CSE is just hash-consing (identical values already share a
+      `ValueId`), so the `cse` pass (and its `store_load_forward` session) is
+      **skipped** when promotion is active. `WADO_MEASURE_VG` on zlib -O2:
+      **`rebuilds` 861 → 283** (`builds` 1077 → 499) under `WADO_PROMOTE_EARLY` —
+      the first time criterion 1 moves; flag-off unchanged (861, cse runs). The
+      remaining 283 are **all `licm`** (`by pass licm: rebuilds=283`): licm
+      re-enters each fixpoint iteration with a fresh `Engine` and rebuilds.
+      cse-skip is correctness-safe (an optimization): the 29 e2e diffs under
+      EARLY-only are all `wir_expect` WIR-pattern / optimization-loss
+      (`array_bounds_elim_*_wir`, `opt_*`, `tir_*`, `tmpl_*`) — no miscompiles.
+      The EARLY-only loss (FieldAccess CSE / store-load-forward) is recovered once
+      FieldAccess promotes **in the loop** (its `heap_ver` values subsume
+      store-load-forward), which also makes the cse-skip regression-free.
+
+      Remaining for `rebuilds = 0`: eliminate licm's per-iteration rebuilds. Two
+      routes — (a) subsume licm's loop-invariant motion into the extractor's
+      placement (hoist an invariant value to the pre-header once), or (b) the
+      build-once persist+maintain: keep `Body::value_graph` across passes/iterations
+      (drop the `Engine::new` reset + config-drops + licm `invalidate`), maintained
+      through every edit, `WADO_VERIFY_VG`-checked. With cse skipped, the only
+      maintainer left in the value-pass set is licm + the structural passes, a
+      smaller surface than before.
 - [ ] **P4 — retire `value_of` + per-pass build; flip the default.** The graph is
       built once (at lower / first promotion) and never re-derived. Verify
       `WADO_MEASURE_VG` reports `rebuilds = 0`, measure `optimize` CPU halved,
