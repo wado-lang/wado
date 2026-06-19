@@ -629,6 +629,20 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       through every edit, `WADO_VERIFY_VG`-checked. With cse skipped, the only
       maintainer left in the value-pass set is licm + the structural passes, a
       smaller surface than before.
+
+      Route (b) probed (reverted): gating the four drops (`Engine::new` reset, the
+      three `set_*` config-drops, `invalidate`) on `promote_active` persists the
+      graph and dropped `rebuilds` further, **283 → 218** on zlib. But
+      `WADO_VERIFY_VG` flagged an **over-merge** (`expr5 ≡ expr17` in the
+      maintained graph, split by a fresh build), so the persist is unsound — a
+      structural pass's edit is not propagated, leaving a stale merge (count_prime
+      happened to stay correct (78498), but a program that reads the stale value
+      would miscompile). So route (b) is gated on **completing per-edit
+      maintenance** for every structural pass (peephole / inline / sroa / licm),
+      with `partition_refines` clean across the corpus — the same maintenance the
+      keystone always required, now the single remaining blocker for `rebuilds = 0`
+      and isolated to a concrete over-merge to chase. Route (a) (subsume licm into
+      the extractor) sidesteps maintenance and may be the shorter path.
 - [ ] **P4 — retire `value_of` + per-pass build; flip the default.** The graph is
       built once (at lower / first promotion) and never re-derived. Verify
       `WADO_MEASURE_VG` reports `rebuilds = 0`, measure `optimize` CPU halved,
