@@ -1236,6 +1236,37 @@ splice-point graph maintenance (route A, which the WEP already judged a
 dead-end that never retires `value_of`) or **operand promotion born at lower so
 there is no `value_of` side-table to go stale** (route B). Route B is chosen.
 
+Exact mechanism (pinned to WIR build, not any pass — skipping every `wir/*`
+pass still traps): the final NIR of `coerce_int_literal_comparison_i128` is
+correct — `let cond = { let other = &{ let value = 1000; u128 { low: value } };
+(obj0.low == other.low) && … }; if %96 { panic }` where `%96 = !cond`. But the
+emitted WIR drops the RHS field's source:
+
+```
+value_2 = 1000;                                      // LHS const: emitted
+global:__const_obj_0 = struct.new u128 { low: value_2 };
+cond_5 = (if global:__const_obj_0.low == value_9 …); // RHS: reads value_9
+…                                                    // value_9 = 1000 NEVER emitted
+```
+
+Two coupled causes, both downstream of the lost value identity:
+
+1. Under promotion const-fold leaves the RHS field as `low: value` (a local)
+   instead of folding it to `low: 1000` (it can no longer see `value ≡ 1000`),
+   so a `value` local survives that folding would have removed.
+2. WIR build flattens `(&{ block returning a struct literal }).low` — forwarding
+   the field access to the literal's source `value` (→ `value_9`) but dropping
+   the `let value = 1000` def when the enclosing block/struct is not
+   materialised. The skeleton (`if !cond`) path keeps `cond` live through a real
+   read so the block materialises and the def survives; the promoted (`if %96`)
+   path reads `cond` only through `Opaque(Local cond)`, and the flatten loses it.
+
+Route B fixes this structurally: with pure values born as operands and
+`value_of` retired, const-fold reads `value`'s operand directly (always
+`1000`), folds it, and no orphan `value` local reaches WIR build. (A narrow
+WIR-build patch — keep a forwarded struct-literal field's source def live — is
+possible but fragile; route B removes the cause.)
+
 ### Route B execution plan (build-once-and-promote, then fold into lower)
 
 Touchpoints confirmed this session: `lower::translate::convert_operand`
