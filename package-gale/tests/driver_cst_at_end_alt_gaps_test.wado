@@ -1,0 +1,32 @@
+//! Stage 2 corpus migration: `typespec : ID | ID '[' ']'` is a shared-prefix
+//! tournament resolved by the second token, nested inside `entry`'s disjoint
+//! Direct dispatch (`'(' ...` vs `'new' ...`). Exercises the homogeneous
+//! tournament + Direct paths on a real prediction-edge grammar.
+
+use g from "./grammars/at_end_alt_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_at_end_alt_gaps",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "at-end: paren entry with a bare typespec" {
+    assert_tree(&"( A )", &"(prog (entry ( (typespec A) )))");
+}
+
+test "at-end: `new` entry, typespec stops before the array suffix" {
+    assert_tree(&"new A [ 5 ]", &"(prog (entry new (typespec A) [ 5 ]))");
+}
+
+test "at-end: typespec takes its own array suffix" {
+    assert_tree(&"( A [ ] )", &"(prog (entry ( (typespec A [ ]) )))");
+}
