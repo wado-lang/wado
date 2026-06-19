@@ -1,0 +1,36 @@
+//! Stage 2 non-greedy repetition: `.*?` / `.+?` consume tokens only until the
+//! closing delimiter can fire. The homogeneous emitter loops on the lowered
+//! static exit condition (`compute_non_greedy_condition`) instead of the greedy
+//! first-set gate, so the wildcard yields the delimiter to the continuation.
+
+use ng from "./grammars/non_greedy.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_non_greedy",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = ng::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = ng::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "non-greedy: `.*?` stops at the first close paren" {
+    assert_tree(&"( a 1 b )", &"(start (seg ( a 1 b )))");
+}
+
+test "non-greedy: `.*?` matches zero inner tokens" {
+    assert_tree(&"( )", &"(start (seg ( )))");
+}
+
+test "non-greedy: `.+?` requires one inner token then stops" {
+    assert_tree(&"[ z ]", &"(start (seg [ z ]))");
+}
+
+test "non-greedy: a sequence of segments mixes both forms" {
+    assert_tree(&"( a ) [ b ]", &"(start (seg ( a )) (seg [ b ]))");
+}

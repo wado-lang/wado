@@ -137,9 +137,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
         gen_cst_parser(&mut w, grammar, &lowered, &lit_tokens, &mut ctx, needs_scan);
-        if needs_scan {
-            gen_kind_set_helpers(&mut w, &lowered, &ctx);
-        }
+        // `gen_cst_parser` may intern kind-set helpers (`_gale_kind_set_N`) for
+        // scan dispatch and for non-greedy / multi-token lookahead conditions;
+        // emit whatever it interned (a no-op when nothing was).
+        gen_kind_set_helpers(&mut w, &lowered, &ctx);
         if ef {
             gen_follow_mask_globals(&mut w, &ctx);
         }

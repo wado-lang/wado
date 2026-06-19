@@ -142,15 +142,23 @@ so the old typed path stays the default and the corpus stays green. Runtime is
   and per-call-site `FollowArg` exactly as lowering computed them (so the
   soundness invariants are reused, not re-derived) (`tests/grammars/follow_gate.g4`,
   `tests/driver_cst_follow_test.wado`).
+- **Non-greedy `*?` / `+?`** — the loop runs only while the lowered static exit
+  condition holds (`compute_non_greedy_condition` over the per-position follow
+  sets, the same gate the typed emitter computes), so the inner yields the
+  closing delimiter to the continuation (`tests/grammars/non_greedy.g4`,
+  `tests/driver_cst_non_greedy_test.wado`).
 
-Non-greedy repetition raises a codegen-time panic (still out of scope).
+Grammars whose prediction needs the runtime ATN simulator — a non-greedy `??`
+(lowered as `Plain` + `mark_needs_atn`) or any ATN-class LR / scan decision —
+are rejected up front by a `needs_atn` boundary check, so the scope edge is a
+loud `panic` rather than a silently-wrong static dispatch.
 
 #### Stage 2b — broaden coverage, retire the old path (remaining)
 
-Cover non-greedy repetition (reuse `parser_gen`'s ATN simulator / prediction),
-migrate the full driver + ANTLR4-compat corpus to the homogeneous parser, then
-delete the typed-CST emitter (`gen_cst_types`, `visitor_gen`) and make
-`homogeneous` the only path.
+Wire the runtime ATN simulator into the homogeneous `Parser` (non-greedy `??`,
+ATN-class prediction), migrate the full driver + ANTLR4-compat corpus to the
+homogeneous parser, then delete the typed-CST emitter (`gen_cst_types`,
+`visitor_gen`) and make `homogeneous` the only path.
 
 ### Stage 3 — Recovery
 
