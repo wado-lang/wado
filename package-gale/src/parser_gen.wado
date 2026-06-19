@@ -2927,7 +2927,14 @@ fn gen_op_repeat_homog(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, n
     if let NonGreedy(_) = r.strategy {
         panic("gen_op_repeat_homog: non-greedy repeat not yet on the sink_v2 path");
     }
-    let cond = ctx.first_check_str(&r.body_first_set);
+    // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
+    // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
+    let gate = if ctx.emit_follow() && r.gate_caller_follow {
+        " && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
+    } else {
+        "";
+    };
+    let cond = `{ctx.first_check_str(&r.body_first_set)}{gate}`;
     match r.kind {
         Optional => {
             w.begin(&`if {cond}`);
