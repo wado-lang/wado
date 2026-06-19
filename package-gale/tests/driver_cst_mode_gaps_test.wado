@@ -1,6 +1,6 @@
 //! Stage 2b migration probe: mode_gaps (lexer modes — default vs string mode).
 use g from "./grammars/mode_gaps.g4"
-    with { generator: { module: "../src/generator.wado", options: { highlight: false, homogeneous: true }, output_dir: "tests/generated/cst_mode_gaps" } };
+    with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/cst_mode_gaps" } };
 fn ok(input: &String) { assert g::parse(input).ok(), `unexpected diagnostics for {*input}`; }
 test "mode-gaps: bare word" { ok(&"foo"); }
 test "mode-gaps: string" { ok(&"\"hello\""); }

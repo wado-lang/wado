@@ -1,6 +1,6 @@
 //! Stage 2b migration: unicode_props parses through the homogeneous emitter.
 use g from "./grammars/unicode_props.g4"
-    with { generator: { module: "../src/generator.wado", options: { highlight: false, homogeneous: true }, output_dir: "tests/generated/cst_unicode_props" } };
+    with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/cst_unicode_props" } };
 fn ok(input: &String) { assert g::parse(input).ok(), `unexpected diagnostics for {*input}`; }
 test "unicode: ascii word" { ok(&"hello"); }
 test "unicode: digits" { ok(&"12345"); }

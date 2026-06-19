@@ -42,15 +42,6 @@ pub struct GenerateOptions {
     /// decisions. Off by default; enabled by `gale gen --trace` or the
     /// `trace: true` Kiln generator option.
     pub trace: bool = false,
-    /// Emit the resilient homogeneous-tree parser (`resilient-parser.md`)
-    /// instead of the typed-CST parser: an infallible recursive-descent parser
-    /// that builds one `CstNode` tree via `TreeBuilder` and returns a
-    /// `ParseResult` with diagnostics. The Parser drives the `TreeBuilder`
-    /// while every prediction / scan / ATN decision is reused from the typed
-    /// emitter unchanged, so the full parse/tree corpus — including the
-    /// ATN-class grammars — is covered. Recovery and highlight land in later
-    /// stages.
-    pub homogeneous: bool = false,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus the
@@ -101,7 +92,6 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
     let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
     ctx.set_trace(options.trace);
-    ctx.set_homogeneous(true);
     let lowered = lower(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)

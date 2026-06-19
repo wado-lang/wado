@@ -127,12 +127,6 @@ pub struct GenContext {
     /// multi-alt scan/pick/try decisions) — the `trace: true` generator
     /// option. Off by default.
     trace: bool,
-    /// Node sink: when set, the parser emitter drives the homogeneous
-    /// `TreeBuilder` (one untyped `CstNode` per rule, infallible) instead of
-    /// building typed CST structs with `Result`/`?`. The `homogeneous: true`
-    /// generator option. Off by default — the typed path stays the default
-    /// while the sink refactor (resilient-parser.md Stage 2b) is built out.
-    homogeneous: bool,
 }
 
 impl GenContext {
@@ -163,7 +157,6 @@ impl GenContext {
             scan_group_counter: 0,
             lr_loop_entry_decisions: [],
             trace: false,
-            homogeneous: false,
         };
     }
 
@@ -285,17 +278,6 @@ impl GenContext {
     /// Whether trace instrumentation should be emitted.
     pub fn is_trace(&self) -> bool {
         return self.trace;
-    }
-
-    /// Select the homogeneous node sink (the `homogeneous: true` generator
-    /// option). Read at every leaf / rule-shape emit site that differs between
-    /// the typed-struct path and the `TreeBuilder` path.
-    pub fn set_homogeneous(&mut self, on: bool) {
-        self.homogeneous = on;
-    }
-
-    pub fn is_homogeneous(&self) -> bool {
-        return self.homogeneous;
     }
 
     /// Record a prediction-strategy diagnostic for `rule`, deduped on

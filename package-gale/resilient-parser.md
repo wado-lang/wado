@@ -118,8 +118,8 @@ ignoring the typed-struct machinery entirely — there are no typed structs,
 
 #### Stage 2a — new emitter behind a flag ✅ (done)
 
-Gated by `GenerateOptions.homogeneous` (Kiln `options: { homogeneous: true }`),
-so the old typed path stays the default and the corpus stays green. Runtime is
+Originally gated by a temporary `GenerateOptions.homogeneous` flag (since
+removed — homogeneous is now the sole path; see step 3). Runtime is
 `lex` + `diag` + `tree`. Covered shapes, each proven end-to-end:
 
 - **LL(1) `Direct` dispatch** — tokens, literals, rule refs, sequences,
@@ -219,9 +219,8 @@ is deleted, not merely unselected:
   `driver_cst_<x>` tests cover the same grammars), and `codegen_test.wado` is
   migrated to the homogeneous output.
 - The ANTLR4-compat **stage_b** corpus (83 parse tests) flipped to homogeneous
-  in one extractor change (`homogeneous: true` + `to_string_tree` /
-  `to_string_subtree` per-rule rendering); stage_a's tokenize tests are
-  sink-independent.
+  in one extractor change (`to_string_tree` / `to_string_subtree` per-rule
+  rendering); stage_a's tokenize tests are sink-independent.
 
 The full suite is green on the homogeneous-only emitter: 622 src + `driver_cst`
 tests, stage_a 264, stage_b 77, all 0 failed.
