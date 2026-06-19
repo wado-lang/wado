@@ -573,6 +573,21 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       - **`Select` materialisation** at the merge point closes the 3 fixtures the
         over-conservative `elide_local` fix currently carries (it keeps them
         correct but is a stand-in).
+
+      Done so far for FieldAccess: `extract_value` handles it (`ad2e1f7ba`), and
+      the extraction half is complete for **every** value kind. Scouting promotion
+      (briefly enabled flag-on) showed it opens a **pass-migration surface** like
+      P1's: the 122 `as_expr().expect("skeleton operand")` sites across 20 optimize
+      passes. Most are structural invariants (a `Ref`/`Deref` inner is always a
+      skeleton place — never promoted), but FieldAccess reaches **value-read /
+      receiver** positions, so a subset needs per-site judgment: guard with
+      `as_expr()?` where a promoted value can now appear (`string_push:141`,
+      `copy_prop:175` done — behavior-neutral), and semantic handling where the
+      site reasons about a place vs value (`copy_prop:372`, a receiver-mutation
+      check). `is_ref_place` (extract.rs) already excludes `&mut obj.field` places
+      from promotion at the source, shrinking the surface. The grind is bounded
+      (a handful of receiver-position sites, found by re-enabling promotion and
+      fixing each benchmark/e2e crash) and is the FieldAccess analogue of P1.
 - [ ] **P3 — migrate the value passes to operands.** `cse` / `licm` /
       `const_fold` / `condition_implication` / `store_load_forward` read
       `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
