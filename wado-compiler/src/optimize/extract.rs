@@ -215,10 +215,28 @@ pub(super) fn freeze_pure_arith(
                 let reemittable = match engine.body.values.kind(rep) {
                     ValueKind::FieldAccess { receiver, .. } => {
                         let recv = *receiver;
-                        engine
-                            .body
-                            .values
-                            .value_fully_reemittable_locally(recv, &mut_locals)
+                        // Conservative placement soundness: only materialise over a
+                        // **parameter** receiver. A param is valid (non-null,
+                        // available) at every program point, so the hoisted
+                        // `let _av = param.field` at the use's enclosing statement
+                        // cannot deref a value control flow had not yet validated
+                        // (e.g. a loop/`if let` item). Broaden via a dominance check
+                        // in P3 to cover local receivers.
+                        let recv_src = match engine.body.values.kind(recv) {
+                            ValueKind::Opaque(o) => Some(*o),
+                            _ => None,
+                        }
+                        .and_then(|o| engine.body.values.opaque_source(o));
+                        let recv_param = matches!(
+                            recv_src,
+                            Some(crate::nir_value_graph::OpaqueSource::Local(i))
+                                if param_set.contains(&i)
+                        );
+                        recv_param
+                            && engine
+                                .body
+                                .values
+                                .value_fully_reemittable_locally(recv, &mut_locals)
                     }
                     _ => engine
                         .body
