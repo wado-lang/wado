@@ -6,12 +6,14 @@
 //! groups, alternatives, and repetitions are control flow only. Diagnostics
 //! accumulate on the `Parser`; `parse` returns a `ParseResult`.
 //!
-//! Stage 2 scope: LL(1) `Direct`-dispatch grammars (tokens, literals, rule
-//! refs, sequences, `*`/`+`/`?`, transparent/`Direct` groups, wildcard, set
-//! complement). On the first mismatch the parser fails soft — records one
+//! Covered: LL(1) `Direct` dispatch (tokens, literals, rule refs, sequences,
+//! `*`/`+`/`?`, transparent/token-only groups, wildcard, set complement), left
+//! recursion (precedence climbing via the builder's `checkpoint`/`start_node_at`
+//! wrap), and longest-match tournament dispatch (reusing `parser_gen`'s scan
+//! functions). On the first mismatch the parser fails soft — records one
 //! diagnostic and folds the tree closed (no recovery yet; that is Stage 3).
-//! Unsupported shapes (Tournament dispatch, left recursion, non-greedy) raise
-//! a codegen-time panic so a grammar that exceeds the scope is caught loudly.
+//! Non-greedy repetition and overlapping LR suffixes raise a codegen-time panic
+//! so a grammar that exceeds the scope is caught loudly.
 
 use { Grammar, ParserRule, LexerRule } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
