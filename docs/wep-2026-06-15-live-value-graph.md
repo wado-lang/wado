@@ -544,6 +544,35 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       re-emitting an `if`/recompute. This is the one genuinely new analysis and the
       main code-quality risk; it is also what makes full promotion sound. Gates
       `Select` promotion on it.
+
+      Done so far: the materialisation primitive for the base case — a shared value
+      whose leaves are all non-`mut` params, materialised at function entry
+      (commit `b71ecb8ec`, flag-on), plus `promoted_value_use_counts` for the
+      share decision.
+
+      Concrete implementation map for the rest (scouted this session):
+      - **General source-point materialisation.** Entry insertion only covers
+        param leaves. For a value over a non-param local (or a `FieldAccess` /
+        `Select`), insert the `let` at a point that **dominates all uses** and
+        where every input is available — its source/definition point, not entry.
+        Needs a dominance check (MVP: all uses in one block, insert before the
+        first; general: nearest common dominator).
+      - **`FieldAccess` extraction** (`extract_value` has no arm yet). Soundness:
+        the value's `heap_ver` already guarantees the field is unchanged across all
+        uses that share the value (same `(receiver, field, heap_ver)` key), so
+        sharing is sound — but re-emitting the load *inline* is not, because a pass
+        can move the operand to a different heap point; it must be pinned in a
+        materialised `let` at the source point. Mechanics: `ValueKind::FieldAccess`
+        deliberately carries only `field_index` (the receiver `ValueId` pins the
+        type), so extraction must derive the field **name** from the receiver
+        value's type (`type_of(receiver)` → struct def → `fields[field_index].name`,
+        `tir.rs` `TirField`) and emit the `StructGet` via `struct_field_wir_type`,
+        reusing the `translate_expr_inner` `FieldAccess` path. The single builder
+        call site (`builder.rs:1007`) already has the name in hand if threading it
+        proves simpler than deriving.
+      - **`Select` materialisation** at the merge point closes the 3 fixtures the
+        over-conservative `elide_local` fix currently carries (it keeps them
+        correct but is a stand-in).
 - [ ] **P3 — migrate the value passes to operands.** `cse` / `licm` /
       `const_fold` / `condition_implication` / `store_load_forward` read
       `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
