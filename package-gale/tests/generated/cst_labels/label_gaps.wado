@@ -1340,7 +1340,17 @@ fn scan_mix_stmt(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_program__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    while _gale_kind_set_0(p.peek_kind()) {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_stmt(tokens, pos, 0);
+            if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let stmt = _parse_stmt(p)?;
     }
     let eof = p.expect(TK_EOF)?;
@@ -1458,7 +1468,25 @@ fn _parse_mix_stmt__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let list = p.expect(TK_LIST)?;
     let head = p.expect(TK_ID)?;
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_1_done: {
+                sg_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_1; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
+                    pos += 1;
+                    break sg_1_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let id = p.expect(TK_ID)?;
     }

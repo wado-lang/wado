@@ -1254,9 +1254,30 @@ fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let n = p.expect(TK_N)?;
-    let x = p.expect(TK_X)?;
-    let y = p.expect(TK_Y)?;
-    while p.peek_kind() == TK_X && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_2_done: {
+                    sg_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_X { break sg_2; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_2; }
+                        pos += 1;
+                        break sg_2_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
         let x = p.expect(TK_X)?;
         let y = p.expect(TK_Y)?;
     }

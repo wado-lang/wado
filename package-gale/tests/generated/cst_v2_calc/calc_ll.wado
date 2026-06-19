@@ -1355,8 +1355,41 @@ fn _parse_prog(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
 fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let term = _parse_term(p, follow)?;
-    while _gale_kind_set_0(p.peek_kind()) {
-        let _ = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
+    loop {
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_4_done: {
+                sg_4: {
+                    let gp_5 = pos;
+                    sg_5: {
+                        pos = gp_5;
+                        sg_5_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_5_0; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        pos = gp_5;
+                        sg_5_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_5_1; }
+                            pos += 1;
+                            break sg_5;
+                        }
+                        break sg_4;
+                    }
+                    pos = scan_term(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_4; }
+                    break sg_4_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
         let term = _parse_term(p, follow)?;
     }
     return Result::Ok(());
@@ -1377,8 +1410,41 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
 fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let factor = _parse_factor(p, follow)?;
-    while _gale_kind_set_1(p.peek_kind()) {
-        let _ = p.match_set([TK_LIT_STAR, TK_LIT_SLASH])?;
+    loop {
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_6_done: {
+                sg_6: {
+                    let gp_7 = pos;
+                    sg_7: {
+                        pos = gp_7;
+                        sg_7_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_7_0; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        pos = gp_7;
+                        sg_7_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_7_1; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        break sg_6;
+                    }
+                    pos = scan_factor(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_6; }
+                    break sg_6_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let star_or_slash = p.match_set([TK_LIT_STAR, TK_LIT_SLASH])?;
         let factor = _parse_factor(p, follow)?;
     }
     return Result::Ok(());

@@ -1244,8 +1244,21 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_prog__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    let entry = _parse_entry(p)?;
-    while _gale_kind_set_0(p.peek_kind()) {
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_entry(tokens, pos, 0);
+                if pos < 0 { break rep_scan; }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
         let entry = _parse_entry(p)?;
     }
     let eof = p.expect(TK_EOF)?;

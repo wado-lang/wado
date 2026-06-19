@@ -1184,9 +1184,42 @@ fn scan_line(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_line__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    let _ = p.match_set([TK_KEYWORD, TK_IDENT, TK_EXACT])?;
-    while _gale_kind_set_0(p.peek_kind()) {
-        let _ = p.match_set([TK_KEYWORD, TK_IDENT, TK_EXACT])?;
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                let gp_2 = pos;
+                sg_2: {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_KEYWORD { break sg_2_0; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_2_1; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_EXACT { break sg_2_2; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let keyword_or_ident_or_exact = p.match_set([TK_KEYWORD, TK_IDENT, TK_EXACT])?;
     }
     let eof = p.expect(TK_EOF)?;
     return Result::Ok(());

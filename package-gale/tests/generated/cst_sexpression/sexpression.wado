@@ -1533,7 +1533,17 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_sexpr__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    while _gale_kind_set_0(p.peek_kind()) {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos, 0);
+            if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = _parse_item(p)?;
     }
     let eof = p.expect(TK_EOF)?;
@@ -1644,7 +1654,17 @@ fn _parse_item(p: &mut Parser) -> Result<(), ParseError> {
 fn _parse_list___inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let lparen = p.expect(TK_LPAREN)?;
-    while _gale_kind_set_0(p.peek_kind()) {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_item(tokens, pos, 0);
+            if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let item = _parse_item(p)?;
     }
     let rparen = p.expect(TK_RPAREN)?;

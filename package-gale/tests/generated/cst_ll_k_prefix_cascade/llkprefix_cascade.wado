@@ -1332,9 +1332,30 @@ fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
 fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let k = p.expect(TK_K)?;
-    let x = p.expect(TK_X)?;
-    let y = p.expect(TK_Y)?;
-    while p.peek_kind() == TK_X && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_2_done: {
+                    sg_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_X { break sg_2; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_2; }
+                        pos += 1;
+                        break sg_2_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
         let x = p.expect(TK_X)?;
         let y = p.expect(TK_Y)?;
     }
@@ -1345,25 +1366,25 @@ fn _parse_m__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K { return -1; }
     pos += 1;
-    sg_2_done: {
-        sg_2: {
-            if pos >= tokens.len() || tokens[pos] != TK_X { break sg_2; }
+    sg_3_done: {
+        sg_3: {
+            if pos >= tokens.len() || tokens[pos] != TK_X { break sg_3; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_2; }
+            if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_3; }
             pos += 1;
-            break sg_2_done;
+            break sg_3_done;
         }
         return -1;
     }
     while pos < tokens.len() && tokens[pos] == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
-        sg_3_done: {
-            sg_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_X { break sg_3; }
+        sg_4_done: {
+            sg_4: {
+                if pos >= tokens.len() || tokens[pos] != TK_X { break sg_4; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_4; }
                 pos += 1;
-                break sg_3_done;
+                break sg_4_done;
             }
             pos = -1;
         }

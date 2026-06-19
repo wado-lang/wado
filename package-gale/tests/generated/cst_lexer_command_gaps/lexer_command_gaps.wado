@@ -1290,8 +1290,38 @@ fn scan_text(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_text__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    while _gale_kind_set_0(p.peek_kind()) {
-        let _ = p.match_set([TK_WORD, TK_NUMBER, TK_PRAGMA])?;
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            let gp_1 = pos;
+            sg_1: {
+                pos = gp_1;
+                sg_1_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_WORD { break sg_1_0; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_NUMBER { break sg_1_1; }
+                    pos += 1;
+                    break sg_1;
+                }
+                pos = gp_1;
+                sg_1_2: {
+                    if pos >= tokens.len() || tokens[pos] != TK_PRAGMA { break sg_1_2; }
+                    pos += 1;
+                    break sg_1;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let word_or_number_or_pragma = p.match_set([TK_WORD, TK_NUMBER, TK_PRAGMA])?;
     }
     let eof = p.expect(TK_EOF)?;
     return Result::Ok(());

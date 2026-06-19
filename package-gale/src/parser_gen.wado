@@ -1488,6 +1488,19 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
     panic("gen_scan_op_element_assign: unreachable ScanElement shape — every variant is handled");
 }
 
+/// Scan a non-greedy wildcard repeat (`.*?` / `.+?`): advance past tokens
+/// until the exit set (the repeat's follow) or EOF. Mirrors the parse-side
+/// `compute_non_greedy_condition` so the longest-match scan tournament and
+/// the parse stay in lockstep. With an empty exit set, skips to EOF.
+fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: &mut GenContext) {
+    if exit_first.is_empty() {
+        w.line(&"while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }");
+        return;
+    }
+    let exit_check = ctx.kind_check_str(exit_first, &"tokens[pos]");
+    w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !({exit_check}) \{ pos += 1; \}`);
+}
+
 fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: &String) {
     let loop_first = re.inner_first;
 
@@ -1541,6 +1554,13 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     }
     if let Star = re.kind {
         if loop_first.is_empty() {
+            // Non-greedy wildcard `.*?`: the body matches any token, so a
+            // first-set guard can never fire. Skip tokens until the exit
+            // set (the repeat's follow) or EOF, mirroring the parse-side
+            // `compute_non_greedy_condition`.
+            if re.non_greedy {
+                gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
+            }
             return;
         }
         let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
@@ -1561,6 +1581,11 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
         // First iteration is mandatory: failure goes through fail_stmt.
         gen_scan_op_element(w, &re.body, ctx, fail_stmt);
         if loop_first.is_empty() {
+            // Non-greedy wildcard `.+?`: mandatory iter ran above; skip the
+            // rest until the exit set or EOF (see the Star arm).
+            if re.non_greedy {
+                gen_scan_non_greedy_skip(w, &re.caller_follow_first, ctx);
+            }
             return;
         }
         let check = ctx.kind_check_str(&loop_first, &"tokens[pos]");
@@ -2552,12 +2577,12 @@ fn gen_alt_elements(w: &mut CodeWriter, elements: &List<Element>, ops: &List<Op>
     // arm is defensive — see `peel_scalar_label` for the contract).
     assert ops.len() == elements.len(), "gen_alt_elements: ops / elements length mismatch — LR-suffix bodies are emitted by gen_lr_suffix_helpers";
     let mut name_counts: List<[String, i32]> = [];
-    // Homogeneous sink: emit the body from the lowered ops alone — leaves
-    // append via the Parser, groups / repeats dispatch on their GIR shape.
-    if ctx.is_homogeneous() {
-        gen_ops_homog(w, ops, ctx, &mut name_counts);
-        return;
-    }
+    // Both sinks walk the surface elements + lowered ops in parallel. The
+    // typed sink binds CST fields and assembles structs; the homogeneous
+    // sink's leaves/groups/repeats append to the `TreeBuilder` and skip the
+    // struct assembly (each emitter branches on `ctx.is_homogeneous`). The
+    // surface elements are required so group dispatch can reuse the shared
+    // prediction (`build_prediction` / scan tournament).
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let op = &ops[i];
@@ -3506,6 +3531,15 @@ fn gen_op_storable_optional_with_first(
     inner_field: &String,
     cond: &String,
 ) {
+    // Homogeneous sink: the inner body appends to the builder, so the
+    // `Option<T>` wrapper collapses to a present/absent statement.
+    if ctx.is_homogeneous() {
+        w.begin(&`if {*cond}`);
+        let mut nch: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nch, &([] as List<String>));
+        w.end();
+        return;
+    }
     w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {*cond}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(w, rep_op, inner_elem, ctx, &mut nc, &([] as List<String>));
@@ -3897,6 +3931,10 @@ fn gen_consume_single_alt_group_op(
     // / `alt_struct_names` baked by `lower_single_alt_group` under
     // `sa.owner_rule`, so no walker-field swap is needed here.
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, outer_follow);
+    // Homogeneous sink: the inner elements already appended; no struct.
+    if ctx.is_homogeneous() {
+        return;
+    }
     w.line(&`let {sa.field} = {sa.struct_name} \{`);
     w.indent();
     gen_field_assignments_from_fields(w, &body.fields);
@@ -3931,12 +3969,19 @@ fn gen_op_list_label(
         // (which emits `let <shape.field> = ...;`), then push.
         // Mirrors the leaf path's structure but routes inner emit
         // through GIR rather than surface `gen_element`.
+        // Homogeneous sink: the inner Group appends to the builder; drop
+        // the `List<T>` container and its `.push`.
+        let homog = ctx.is_homogeneous();
         sync_name_counts_for_op_list_label(ll, name_counts);
         let inner_type = op_field_type(&ll.inner);
-        w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
+        if !homog {
+            w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
+        }
         let inner_field = op_field(&ll.inner);
         gen_op_group(w, g_op, &lab.element, ctx, name_counts);
-        w.line(&`{ll.field}.push({inner_field});`);
+        if !homog {
+            w.line(&`{ll.field}.push({inner_field});`);
+        }
         return;
     }
     if !op_is_leaf(&ll.inner) {
@@ -3946,9 +3991,12 @@ fn gen_op_list_label(
         gen_element(w, elem, ctx, name_counts);
         return;
     }
+    let homog = ctx.is_homogeneous();
     sync_name_counts_for_op_list_label(ll, name_counts);
     let inner_type = op_field_type(&ll.inner);
-    w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
+    if !homog {
+        w.line(&`let mut {ll.field}: List<{inner_type}> = [];`);
+    }
     // Non-Repeat list label emits both lines in the alt's outer
     // scope, so the per-iter binding must differ from the container.
     // When lower already chose the same name for both (e.g. `if+=IF`
@@ -3963,7 +4011,9 @@ fn gen_op_list_label(
     };
     let inner_field = op_field(&leaf);
     gen_op_leaf(w, &leaf, ctx, name_counts);
-    w.line(&`{ll.field}.push({inner_field});`);
+    if !homog {
+        w.line(&`{ll.field}.push({inner_field});`);
+    }
 }
 
 /// Mirror `gen_element`'s Label arm side-effects on `name_counts`:
@@ -4225,24 +4275,35 @@ fn gen_op_repeat_non_greedy_storable(
     let inner_type = op_field_type(&rep_op.body);
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
+    // Homogeneous sink: the body appends to the builder, so drop the
+    // `List<T>` accumulation; the `while` exit condition is sink-uniform.
+    let homog = ctx.is_homogeneous();
     if is_plus {
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-        w.line(&`let mut {list_field}: List<{inner_type}> = [{inner_field}];`);
+        if !homog {
+            w.line(&`let mut {list_field}: List<{inner_type}> = [{inner_field}];`);
+        }
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
             let mut nc2: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         }
     } else {
-        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        if !homog {
+            w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        }
         if *while_cond != "false" {
             w.begin(&`while {*while_cond}`);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         }
     }
@@ -4370,13 +4431,17 @@ fn gen_op_repeat_optional_rulecall(
     let inner_type = op_field_type(&rep_op.body);
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
+    let homog = ctx.is_homogeneous();
 
     if first.is_empty() {
         // RuleCall always has a field — `body_shape == LeafRuleCall`
         // implies `body_has_field == true`, so the defensive
         // `if body_has_field` guard the cascade-dispatch version
         // carried is now redundant; always emit the null binding.
-        w.line(&`let {opt_field}: Option<{inner_type}> = null;`);
+        // Homogeneous: the optional can never match, so emit nothing.
+        if !homog {
+            w.line(&`let {opt_field}: Option<{inner_type}> = null;`);
+        }
         return;
     }
 
@@ -4390,6 +4455,12 @@ fn gen_op_repeat_optional_rulecall(
     } else {
         "";
     };
+    if homog {
+        // Homogeneous: the if-expression collapses to a present/absent
+        // statement — the body appends when taken, nothing otherwise.
+        gen_optional_present_homog(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&first), ctx);
+        return;
+    }
     if !caller_follow_gate.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {caller_follow_gate}`);
         w.line(&"null");
@@ -4409,6 +4480,27 @@ fn gen_op_repeat_optional_rulecall(
     w.else_begin(&"else");
     w.line(&"null");
     w.end_with(&";");
+}
+
+/// Homogeneous greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
+/// The body appends to the builder when present; an absent optional emits
+/// nothing. `gate_expr` is the caller-FOLLOW yield check (empty = none).
+fn gen_optional_present_homog(
+    w: &mut CodeWriter,
+    body: &Op,
+    gate_expr: &String,
+    cond: &String,
+    ctx: &mut GenContext,
+) {
+    let guard = if gate_expr.is_empty() {
+        *cond;
+    } else {
+        `!({*gate_expr}) && ({*cond})`;
+    };
+    w.begin(&`if {guard}`);
+    let mut nc: List<[String, i32]> = [];
+    gen_op_leaf(w, body, ctx, &mut nc);
+    w.end();
 }
 
 /// Greedy Optional whose body is a non-RuleCall leaf (Token / Literal /
@@ -4435,6 +4527,10 @@ fn gen_op_repeat_optional_leaf(
     } else {
         "";
     };
+    if ctx.is_homogeneous() {
+        gen_optional_present_homog(w, &rep_op.body, &caller_follow_gate, &ctx.first_check_str(&loop_first), ctx);
+        return;
+    }
     if !caller_follow_gate.is_empty() {
         w.begin(&`let {opt_field}: Option<{inner_type}> = if {caller_follow_gate}`);
         w.line(&"null");
@@ -4678,9 +4774,16 @@ fn gen_op_repeat_star_plus_storable(
     let inner_field = op_field(&rep_op.body);
     let list_field = rep_op.field;
     let _ = dedup_name(&list_field, name_counts);
+    // Homogeneous sink: the iteration body appends to the builder via the
+    // Parser, so there is no `List<T>` to accumulate — skip the list decl
+    // and the per-iteration `.push`. The loop / scan-guard / caller-FOLLOW
+    // gate structure is identical (sink-uniform).
+    let homog = ctx.is_homogeneous();
 
     if let Star = rep.kind {
-        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        if !homog {
+            w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        }
         if rep_op.body_scannable {
             w.begin(&"loop");
             // Caller-FOLLOW yield gate: when the upcoming tokens match
@@ -4689,10 +4792,12 @@ fn gen_op_repeat_star_plus_storable(
             // `follow` is empty.
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
+            gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         } else {
             w.begin(&`while {ctx.first_check_str(&loop_first)}`);
@@ -4700,14 +4805,18 @@ fn gen_op_repeat_star_plus_storable(
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         }
         return;
     }
 
     if let Plus = rep.kind {
-        w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        if !homog {
+            w.line(&`let mut {list_field}: List<{inner_type}> = [];`);
+        }
         if rep_op.body_scannable {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut {plus_flag} = true;`);
@@ -4717,12 +4826,14 @@ fn gen_op_repeat_star_plus_storable(
             // continuation. Inert when the runtime `follow` is empty.
             gen_caller_follow_gate(w, rep_op);
             let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
-            gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx, &loop_first);
+            gen_rep_break(w, &scan_pos, rep_op, ctx, &loop_first);
             w.end();
             w.line(&`{plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
@@ -4740,10 +4851,27 @@ fn gen_op_repeat_star_plus_storable(
             w.line(&`{plus_flag} = false;`);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
-            w.line(&`{list_field}.push({inner_field});`);
+            if !homog {
+                w.line(&`{list_field}.push({inner_field});`);
+            }
             w.end();
         }
     }
+}
+
+/// Loop-exit guard for a scan-gated Repeat. The typed sink augments the
+/// plain `if scan_pos < 0 { break }` with a speculative re-parse of a
+/// RuleRef inner for a precise deep error (`gen_rep_break_with_recovery`);
+/// the homogeneous sink must NOT speculate — a re-parse would append the
+/// rewound tokens to the `TreeBuilder` and corrupt the tree — so it emits
+/// the plain break. (Recovery diagnostics are reintroduced at Stage 3 with
+/// a builder checkpoint.)
+fn gen_rep_break(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
+    if ctx.is_homogeneous() {
+        w.line(&`if {*scan_pos} < 0 \{ break; \}`);
+        return;
+    }
+    gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
 }
 
 
@@ -5088,7 +5216,9 @@ fn gen_rule_ref_group_scan_dispatch(
         }
         let case_name = group_case_name(&alts[alt_index]);
         let val = gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx, type_name, &case_name);
-        w.line(&`{*opt_var} = Option::Some({val});`);
+        if !ctx.is_homogeneous() {
+            w.line(&`{*opt_var} = Option::Some({val});`);
+        }
     }
     w.end();
 }
@@ -5107,7 +5237,12 @@ fn gen_simplecst_overlap_loop(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+    // Homogeneous sink: each alt's RuleRef appends, so no accumulator; a
+    // final `else` fails soft when no alt matched.
+    let homog = ctx.is_homogeneous();
+    if !homog {
+        w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+    }
 
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let {grp_var} = p.peek_kind();`);
@@ -5131,7 +5266,9 @@ fn gen_simplecst_overlap_loop(
             let alt_index = group[0];
             let body = &g_op_alts[alt_index];
             let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, type_name, &body.case_name);
-            w.line(&`{*acc_var} = Option::Some({val});`);
+            if !homog {
+                w.line(&`{*acc_var} = Option::Some({val});`);
+            }
         } else {
             let mut sorted_group = group.sorted();
             sort_group_by_mandatory_count_desc(&mut sorted_group, alts, ctx);
@@ -5149,6 +5286,12 @@ fn gen_simplecst_overlap_loop(
                 name_counts,
             );
         }
+    }
+    if homog {
+        w.else_begin(&"else");
+        let first_alt_name = group_case_name(&alts[0]);
+        w.line(&`p.fail("{first_alt_name}")?;`);
+        w.end();
     }
     w.end();
 }
@@ -5174,12 +5317,19 @@ fn gen_consume_group_store_op(
 
     let groups = compute_overlap_groups(&first_sets);
     let has_overlaps = has_multi_alt_groups(&groups);
+    // Homogeneous sink: each alt is a single RuleRef whose `_parse_X`
+    // appends its subtree, so the `let {var}: {type} = if … ` binding
+    // collapses to a plain `if … ` statement (the RuleRef parse line is
+    // emitted by `gen_simplecst_rulecall_value`; the returned variant
+    // value is discarded).
+    let homog = ctx.is_homogeneous();
 
     if !has_overlaps {
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_index = groups[g][0];
+            let prefix = if homog { "" } else { `let {var_name}: {type_name} = ` };
             if g == 0 {
-                w.begin(&`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_index])}`);
+                w.begin(&`{prefix}if {ctx.first_check_str(&first_sets[alt_index])}`);
             } else if g < groups.len() - 1 {
                 w.else_begin(&`else if {ctx.first_check_str(&first_sets[alt_index])}`);
             } else {
@@ -5187,9 +5337,15 @@ fn gen_consume_group_store_op(
             }
             let body = &g_op_alts[alt_index];
             let val = gen_simplecst_rulecall_value(w, &body.ops[0], ctx, &type_name, &body.case_name);
-            w.line(&val);
+            if !homog {
+                w.line(&val);
+            }
         }
-        w.end_with(&";");
+        if homog {
+            w.end();
+        } else {
+            w.end_with(&";");
+        }
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
         gen_simplecst_overlap_loop(
@@ -5204,7 +5360,9 @@ fn gen_consume_group_store_op(
             ctx,
             name_counts,
         );
-
+        if homog {
+            return;
+        }
         w.begin(&`if let None = {opt_var}`);
         let first_alt_name = group_case_name(&alts[0]);
         w.line(&`p.fail("{first_alt_name}")?;`);
@@ -5254,7 +5412,9 @@ fn gen_consume_group_store_optional_op(
         ctx,
         name_counts,
     );
-
+    if ctx.is_homogeneous() {
+        return;
+    }
     w.line(&`let {var_name} = {inner_var};`);
 }
 
@@ -5285,7 +5445,13 @@ fn gen_general_overlap_loop(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+    // Homogeneous sink: the chosen alt appends to the builder, so there is
+    // no `Option<type>` accumulator. A final `else` fails soft when no group
+    // matched (the typed sink does this via a post-loop `if None` check).
+    let homog = ctx.is_homogeneous();
+    if !homog {
+        w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
+    }
 
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let {grp_var} = p.peek_kind();`);
@@ -5352,6 +5518,11 @@ fn gen_general_overlap_loop(
             );
         }
     }
+    if homog {
+        w.else_begin(&"else");
+        w.line(&`p.fail("group alternative")?;`);
+        w.end();
+    }
     w.end();
 }
 
@@ -5383,12 +5554,17 @@ fn gen_general_group_store_op(
 
     let groups = compute_overlap_groups_with_wildcard(alts, &first_sets);
     let has_overlaps = has_multi_alt_groups(&groups);
+    // Homogeneous sink: the chosen alt's elements append to the builder, so
+    // the `let {var}: {type} = if … ` value-binding collapses to a plain
+    // `if … ` statement and the overlap loop needs no accumulator.
+    let homog = ctx.is_homogeneous();
 
     if !has_overlaps {
         for let mut g = 0; g < groups.len(); g += 1 {
             let alt_index = groups[g][0];
+            let prefix = if homog { "" } else { `let {var_name}: {type_name} = ` };
             if g == 0 {
-                w.begin(&`let {var_name}: {type_name} = if {ctx.first_check_str(&first_sets[alt_index])}`);
+                w.begin(&`{prefix}if {ctx.first_check_str(&first_sets[alt_index])}`);
             } else if g < groups.len() - 1 {
                 w.else_begin(&`else if {ctx.first_check_str(&first_sets[alt_index])}`);
             } else {
@@ -5405,7 +5581,11 @@ fn gen_general_group_store_op(
                 name_counts,
             );
         }
-        w.end_with(&";");
+        if homog {
+            w.end();
+        } else {
+            w.end_with(&";");
+        }
     } else {
         let opt_var = dedup_name(&`{var_name}_opt`, name_counts);
         gen_general_overlap_loop(
@@ -5421,7 +5601,9 @@ fn gen_general_group_store_op(
             ctx,
             name_counts,
         );
-
+        if homog {
+            return;
+        }
         w.begin(&`if let None = {opt_var}`);
         w.line(&`p.fail("group alternative")?;`);
         w.end();
@@ -5473,7 +5655,11 @@ fn gen_general_group_store_optional_op(
         ctx,
         name_counts,
     );
-
+    // Homogeneous sink: no accumulator to forward — the optional group's
+    // alt (if any matched) already appended.
+    if ctx.is_homogeneous() {
+        return;
+    }
     w.line(&`let {var_name} = {inner_var};`);
 }
 
@@ -5494,6 +5680,11 @@ fn gen_general_alt_parse_and_store(
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
+    // Homogeneous sink: the chosen alt's elements already appended; no
+    // variant value to store.
+    if ctx.is_homogeneous() {
+        return;
+    }
     w.line(&`{inner_var} = Option::Some({type_name}::Alt{alt_index}({struct_name} \{`);
     w.indent();
     gen_field_assignments_from_fields(w, &body.fields);
@@ -5517,6 +5708,11 @@ fn gen_general_alt_construct(
 
     let mut nc: List<[String, i32]> = [];
     gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>));
+    // Homogeneous sink: caller emitted this as a plain `{ … }` statement
+    // block (not an `if`-expression arm), so just append — no variant value.
+    if ctx.is_homogeneous() {
+        return;
+    }
     w.line(&`{type_name}::Alt{alt_index}({struct_name} \{`);
     w.indent();
     gen_field_assignments_from_fields(w, &body.fields);

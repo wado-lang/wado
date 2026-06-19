@@ -1211,10 +1211,12 @@ impl Parser {
 
 fn scan_file(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
+    while pos < tokens.len() && tokens[pos] != TK_EOF && !(tokens[pos] == TK_LIT_PUBLIC) { pos += 1; }
     sg_0_done: {
         sg_0: {
             pos = scan_constant(tokens, pos, 0);
             if pos < 0 { break sg_0; }
+            while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }
             break sg_0_done;
         }
         return -1;
@@ -1225,6 +1227,7 @@ fn scan_file(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             sg_1: {
                 pos = scan_constant(tokens, pos, 0);
                 if pos < 0 { break sg_1; }
+                while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }
                 break sg_1_done;
             }
             pos = -1;
@@ -1254,16 +1257,33 @@ fn scan_constant(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_file__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    while (!_gale_kind_set_0(p.peek_kind())) {
+    while !_gale_kind_set_0(p.peek_kind()) {
         let wildcard = p.match_any()?;
     }
-    let constant = _parse_constant(p)?;
-    while (p.peek_kind() != TK_EOF) {
-        let wildcard = p.match_any()?;
-    }
-    while p.peek_kind() == TK_LIT_PUBLIC {
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_2_done: {
+                    sg_2: {
+                        pos = scan_constant(tokens, pos, 0);
+                        if pos < 0 { break sg_2; }
+                        while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }
+                        break sg_2_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
         let constant = _parse_constant(p)?;
-        while (p.peek_kind() != TK_EOF) {
+        while !_gale_kind_set_0(p.peek_kind()) {
             let wildcard = p.match_any()?;
         }
     }

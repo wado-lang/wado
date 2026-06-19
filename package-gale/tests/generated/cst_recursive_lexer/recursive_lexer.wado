@@ -1180,9 +1180,36 @@ fn scan_file(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_file__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    let _ = p.match_set([TK_BLOCK, TK_IDENT])?;
-    while _gale_kind_set_0(p.peek_kind()) {
-        let _ = p.match_set([TK_BLOCK, TK_IDENT])?;
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                let gp_2 = pos;
+                sg_2: {
+                    pos = gp_2;
+                    sg_2_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_BLOCK { break sg_2_0; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    pos = gp_2;
+                    sg_2_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_2_1; }
+                        pos += 1;
+                        break sg_2;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
+        let block_or_ident = p.match_set([TK_BLOCK, TK_IDENT])?;
     }
     let eof = p.expect(TK_EOF)?;
     return Result::Ok(());

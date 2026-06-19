@@ -1114,7 +1114,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_prog__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let lit_a = p.expect(TK_LIT_A)?;
-    let _ = p.match_set([TK_LIT_B, TK_LIT_C])?;
+    let lit_b_or_lit_c = p.match_set([TK_LIT_B, TK_LIT_C])?;
     let lit_d = p.expect(TK_LIT_D)?;
     let eof = p.expect(TK_EOF)?;
     return Result::Ok(());

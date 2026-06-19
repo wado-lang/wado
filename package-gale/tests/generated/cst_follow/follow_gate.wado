@@ -1193,7 +1193,7 @@ fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<
 fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let x = p.expect(TK_X)?;
-    if p.peek_kind() == TK_Y && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Y) {
         let y = p.expect(TK_Y)?;
     }
     return Result::Ok(());

@@ -2000,8 +2000,41 @@ fn _parse_equation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let multiplying_expression = _parse_multiplying_expression(p, follow)?;
-    while _gale_kind_set_0(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-        let _ = p.match_set([TK_PLUS, TK_MINUS])?;
+    loop {
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_6_done: {
+                sg_6: {
+                    let gp_7 = pos;
+                    sg_7: {
+                        pos = gp_7;
+                        sg_7_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_7_0; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        pos = gp_7;
+                        sg_7_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_7_1; }
+                            pos += 1;
+                            break sg_7;
+                        }
+                        break sg_6;
+                    }
+                    pos = scan_multiplying_expression(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_6; }
+                    break sg_6_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let plus_or_minus = p.match_set([TK_PLUS, TK_MINUS])?;
         let multiplying_expression = _parse_multiplying_expression(p, follow)?;
     }
     return Result::Ok(());
@@ -2022,8 +2055,41 @@ fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 fn _parse_multiplying_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let pow_expression = _parse_pow_expression(p, follow)?;
-    while _gale_kind_set_1(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-        let _ = p.match_set([TK_TIMES, TK_DIV])?;
+    loop {
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_8_done: {
+                sg_8: {
+                    let gp_9 = pos;
+                    sg_9: {
+                        pos = gp_9;
+                        sg_9_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_TIMES { break sg_9_0; }
+                            pos += 1;
+                            break sg_9;
+                        }
+                        pos = gp_9;
+                        sg_9_1: {
+                            if pos >= tokens.len() || tokens[pos] != TK_DIV { break sg_9_1; }
+                            pos += 1;
+                            break sg_9;
+                        }
+                        break sg_8;
+                    }
+                    pos = scan_pow_expression(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_8; }
+                    break sg_8_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
+        let times_or_div = p.match_set([TK_TIMES, TK_DIV])?;
         let pow_expression = _parse_pow_expression(p, follow)?;
     }
     return Result::Ok(());
@@ -2044,7 +2110,26 @@ fn _parse_multiplying_expression(p: &mut Parser, follow: &List<List<i32>> = &EMP
 fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let signed_atom = _parse_signed_atom(p, follow)?;
-    while p.peek_kind() == TK_POW && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+    loop {
+        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_10_done: {
+                sg_10: {
+                    if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_10; }
+                    pos += 1;
+                    pos = scan_signed_atom(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_10; }
+                    break sg_10_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let pow = p.expect(TK_POW)?;
         let signed_atom = _parse_signed_atom(p, follow)?;
     }
@@ -2210,7 +2295,25 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let funcname = _parse_funcname(p, &FOLLOW_MASK_4)?;
     let lparen = p.expect(TK_LPAREN)?;
     let expression = _parse_expression(p, &FOLLOW_MASK_5)?;
-    while p.peek_kind() == TK_COMMA {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            sg_11_done: {
+                sg_11: {
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_11; }
+                    pos += 1;
+                    pos = scan_expression(tokens, pos, follow, 0);
+                    if pos < 0 { break sg_11; }
+                    break sg_11_done;
+                }
+                break rep_scan;
+            }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_COMMA)?;
         let expression = _parse_expression(p, follow)?;
     }

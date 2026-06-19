@@ -1228,8 +1228,22 @@ fn scan_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_text__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
-    let letters = p.expect(TK_LETTERS)?;
-    while p.peek_kind() == TK_LETTERS && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
+    let mut _plus_first = true;
+    loop {
+        if !_plus_first {
+            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_LETTERS { break rep_scan; }
+                pos += 1;
+                if pos <= p.pos { break rep_scan; }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
+        }
+        _plus_first = false;
         let letters = p.expect(TK_LETTERS)?;
     }
     return Result::Ok(());

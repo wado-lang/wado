@@ -917,6 +917,13 @@ pub struct ScanRepeatElement {
     /// entry so the longest-match tournament yields to the caller in
     /// lockstep with the parse side.
     pub gate_caller_follow: bool,
+    /// True for a non-greedy `*?` / `+?`. When the body has an empty
+    /// `inner_first` (a wildcard `.`), the plain `while peek ∈ inner_first`
+    /// guard can never fire, so the scan would undershoot (match zero
+    /// inner tokens). For non-greedy wildcards the scan instead skips
+    /// tokens until the exit set (`caller_follow_first`) or EOF, mirroring
+    /// the parse-side `compute_non_greedy_condition`.
+    pub non_greedy: bool,
 }
 
 pub struct ScanGroupElement {

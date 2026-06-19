@@ -1175,6 +1175,7 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
+                while pos < tokens.len() && tokens[pos] != TK_EOF && !(tokens[pos] == TK_LIT_RPAREN) { pos += 1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
                 pos += 1;
                 break scan_alts;
@@ -1187,6 +1188,7 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] == TK_EOF { break try_1; }
                 pos += 1;
+                while pos < tokens.len() && tokens[pos] != TK_EOF && !(tokens[pos] == TK_LIT_RBRACKET) { pos += 1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
                 pos += 1;
                 break scan_alts;
@@ -1201,7 +1203,17 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_start__inner(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
-    while _gale_kind_set_0(p.peek_kind()) {
+    loop {
+        let mut rep_scan_pos: i32 = -1;
+        rep_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_seg(tokens, pos, 0);
+            if pos < 0 { break rep_scan; }
+            if pos <= p.pos { break rep_scan; }
+            rep_scan_pos = pos;
+        }
+        if rep_scan_pos < 0 { break; }
         let seg = _parse_seg(p)?;
     }
     let eof = p.expect(TK_EOF)?;
@@ -1225,7 +1237,7 @@ fn _parse_seg__inner(p: &mut Parser) -> Result<(), ParseError> {
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN)?;
-        while (!_gale_kind_set_1(p.peek_kind())) {
+        while !_gale_kind_set_1(p.peek_kind()) {
             let wildcard = p.match_any()?;
         }
         let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -1234,7 +1246,7 @@ fn _parse_seg__inner(p: &mut Parser) -> Result<(), ParseError> {
     if kind == TK_LIT_LBRACKET {
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let wildcard = p.match_any()?;
-        while (!_gale_kind_set_2(p.peek_kind())) {
+        while !_gale_kind_set_2(p.peek_kind()) {
             let wildcard = p.match_any()?;
         }
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
