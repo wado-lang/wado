@@ -1,9 +1,29 @@
 //! Stage 2b migration: lexer_command_gaps parses through the emitter.
 use g from "./grammars/lexer_command_gaps.g4"
-    with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/cst_lexer_command_gaps" } };
-fn ok(input: &String) { assert g::parse(input).ok(), `unexpected diagnostics for {*input}`; }
-test "lexer-cmd: words" { ok(&"hello world"); }
-test "lexer-cmd: numbers" { ok(&"42 100"); }
-test "lexer-cmd: zero keyword" { ok(&"zero 42"); ok(&"zero foo zero bar"); }
-test "lexer-cmd: line comment skip" { ok(&"hello // a comment\nworld"); }
-test "lexer-cmd: pragma channel" { ok(&"hello #pragma once\nworld 42"); ok(&"#pragma foo\nx"); }
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_lexer_command_gaps",
+        },
+    };
+fn ok(input: &String) {
+    assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;
+}
+test "lexer-cmd: words" {
+    ok(&"hello world");
+}
+test "lexer-cmd: numbers" {
+    ok(&"42 100");
+}
+test "lexer-cmd: zero keyword" {
+    ok(&"zero 42");
+    ok(&"zero foo zero bar");
+}
+test "lexer-cmd: line comment skip" {
+    ok(&"hello // a comment\nworld");
+}
+test "lexer-cmd: pragma channel" {
+    ok(&"hello #pragma once\nworld 42");
+    ok(&"#pragma foo\nx");
+}

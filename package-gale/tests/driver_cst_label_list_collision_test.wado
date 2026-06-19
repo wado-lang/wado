@@ -17,6 +17,12 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "label-list: single mandatory label" { assert_tree(&"tag", &"(stream tag)"); }
-test "label-list: first label + one Repeat iter" { assert_tree(&"tag tag", &"(stream tag tag)"); }
-test "label-list: many iters" { assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)"); }
+test "label-list: single mandatory label" {
+    assert_tree(&"tag", &"(stream tag)");
+}
+test "label-list: first label + one Repeat iter" {
+    assert_tree(&"tag tag", &"(stream tag tag)");
+}
+test "label-list: many iters" {
+    assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)");
+}

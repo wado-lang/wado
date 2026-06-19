@@ -14,6 +14,5 @@ use tie from "./grammars/tie_recovery.g4"
 test "tie prefers the malformed element over the next construct" {
     let r = tie::parse(&"x");
     assert !r.ok(), "expected a diagnostic";
-    assert r.diagnostics[0].message.contains("ID"),
-        `expected the malformed-element error ('expected ID'), got: {r.diagnostics[0].message}`;
+    assert r.diagnostics[0].message.contains("ID"), `expected the malformed-element error ('expected ID'), got: {r.diagnostics[0].message}`;
 }

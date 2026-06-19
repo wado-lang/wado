@@ -18,8 +18,18 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "right-assoc: single atom" { assert_tree(&"42", &"(expr 42)"); }
-test "right-assoc: left-associative +" { assert_tree(&"1 + 2 + 3", &"(expr (expr (expr 1) + (expr 2)) + (expr 3))"); }
-test "right-assoc: ^ nests right" { assert_tree(&"2 ^ 3 ^ 4", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr 4)))"); }
-test "right-assoc: four-level ^ chain" { assert_tree(&"2 ^ 3 ^ 4 ^ 5", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr (expr 4) ^ (expr 5))))"); }
-test "right-assoc: mixed + and ^" { assert_tree(&"1 + 2 ^ 3 ^ 4", &"(expr (expr 1) + (expr (expr 2) ^ (expr (expr 3) ^ (expr 4))))"); }
+test "right-assoc: single atom" {
+    assert_tree(&"42", &"(expr 42)");
+}
+test "right-assoc: left-associative +" {
+    assert_tree(&"1 + 2 + 3", &"(expr (expr (expr 1) + (expr 2)) + (expr 3))");
+}
+test "right-assoc: ^ nests right" {
+    assert_tree(&"2 ^ 3 ^ 4", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr 4)))");
+}
+test "right-assoc: four-level ^ chain" {
+    assert_tree(&"2 ^ 3 ^ 4 ^ 5", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr (expr 4) ^ (expr 5))))");
+}
+test "right-assoc: mixed + and ^" {
+    assert_tree(&"1 + 2 ^ 3 ^ 4", &"(expr (expr 1) + (expr (expr 2) ^ (expr (expr 3) ^ (expr 4))))");
+}

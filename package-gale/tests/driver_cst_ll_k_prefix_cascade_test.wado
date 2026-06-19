@@ -1,6 +1,18 @@
 //! Stage 2b migration probe: ll_k_prefix_cascade.
 use g from "./grammars/ll_k_prefix_cascade.g4"
-    with { generator: { module: "../src/generator.wado", options: { highlight: false }, output_dir: "tests/generated/cst_ll_k_prefix_cascade" } };
-fn ok(input: &String) { assert g::parse(input).ok(), `unexpected diagnostics for {*input}`; }
-test "k-prefix: cascade yields prefix" { ok(&"N K X Y X Y W"); }
-test "k-prefix: gate fires on exposing iter" { ok(&"N K X Y X Y X Y W"); }
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_ll_k_prefix_cascade",
+        },
+    };
+fn ok(input: &String) {
+    assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;
+}
+test "k-prefix: cascade yields prefix" {
+    ok(&"N K X Y X Y W");
+}
+test "k-prefix: gate fires on exposing iter" {
+    ok(&"N K X Y X Y X Y W");
+}

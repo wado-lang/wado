@@ -11,7 +11,15 @@ use g from "./grammars/parser_set_group_dispatch.g4"
         },
     };
 
-test "set-group: accepts 'a b d'" { assert g::parse(&"a b d").ok(); }
-test "set-group: accepts 'a c d'" { assert g::parse(&"a c d").ok(); }
-test "set-group: rejects a non-member token" { assert g::parse(&"a x d").has_errors(); }
-test "set-group: rejects EOF in place of the set" { assert g::parse(&"a").has_errors(); }
+test "set-group: accepts 'a b d'" {
+    assert g::parse(&"a b d").ok();
+}
+test "set-group: accepts 'a c d'" {
+    assert g::parse(&"a c d").ok();
+}
+test "set-group: rejects a non-member token" {
+    assert g::parse(&"a x d").has_errors();
+}
+test "set-group: rejects EOF in place of the set" {
+    assert g::parse(&"a").has_errors();
+}

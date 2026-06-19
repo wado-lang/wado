@@ -17,5 +17,9 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "multi-token-tail: yields the caller prefix" { assert_tree(&"N X Y X Y Z", &"(r (a N X Y) (c X Y Z))"); }
-test "multi-token-tail: yields on the exposing iter" { assert_tree(&"N X Y X Y X Y Z", &"(r (a N X Y X Y) (c X Y Z))"); }
+test "multi-token-tail: yields the caller prefix" {
+    assert_tree(&"N X Y X Y Z", &"(r (a N X Y) (c X Y Z))");
+}
+test "multi-token-tail: yields on the exposing iter" {
+    assert_tree(&"N X Y X Y X Y Z", &"(r (a N X Y X Y) (c X Y Z))");
+}

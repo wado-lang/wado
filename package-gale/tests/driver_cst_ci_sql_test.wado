@@ -17,5 +17,9 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "ci-sql: keyword uppercased input preserved" { assert_tree(&"IF foo", &"(stmt IF foo)"); }
-test "ci-sql: lowercase keyword, uppercase ident" { assert_tree(&"if FOO", &"(stmt if FOO)"); }
+test "ci-sql: keyword uppercased input preserved" {
+    assert_tree(&"IF foo", &"(stmt IF foo)");
+}
+test "ci-sql: lowercase keyword, uppercase ident" {
+    assert_tree(&"if FOO", &"(stmt if FOO)");
+}

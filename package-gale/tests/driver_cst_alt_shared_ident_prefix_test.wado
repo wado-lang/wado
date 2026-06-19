@@ -19,7 +19,24 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
 }
 
-test "alt-shared: bare-ident pattern" { assert_tree(&"match c { a => z }", &"(prog (matchExpr match c { (arm (pattern a) => z) }))"); }
-test "alt-shared: variant pattern (regression)" { assert_tree(&"match c { N ( n ) => z }", &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))"); }
-test "alt-shared: variant then bare-ident arm" { assert_tree(&"match c { N ( n ) => z , a => z }", &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) , (arm (pattern a) => z) }))"); }
-test "alt-shared: nested variant pattern" { assert_tree(&"match c { N ( M ( x ) ) => z }", &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z) }))"); }
+test "alt-shared: bare-ident pattern" {
+    assert_tree(&"match c { a => z }", &"(prog (matchExpr match c { (arm (pattern a) => z) }))");
+}
+test "alt-shared: variant pattern (regression)" {
+    assert_tree(
+        &"match c { N ( n ) => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))",
+    );
+}
+test "alt-shared: variant then bare-ident arm" {
+    assert_tree(
+        &"match c { N ( n ) => z , a => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) , (arm (pattern a) => z) }))",
+    );
+}
+test "alt-shared: nested variant pattern" {
+    assert_tree(
+        &"match c { N ( M ( x ) ) => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z) }))",
+    );
+}

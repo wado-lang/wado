@@ -100,12 +100,12 @@ option for recovery on/off — recovery is always built in.
 ## TODO
 
 Everything above is built: the single-emitter parser, the uniform tree, full
-prediction (LL / tournament / caller-FOLLOW / ATN-class LR), error *reporting*
+prediction (LL / tournament / caller-FOLLOW / ATN-class LR), error _reporting_
 (diagnostics with the deepest error + active rule chain), and highlight. Two
 buckets remain.
 
-**Recovery — error-token edits.** Error *reporting* works; the lossless
-error-token *edits* the design above calls for are not built yet:
+**Recovery — error-token edits.** Error _reporting_ works; the lossless
+error-token _edits_ the design above calls for are not built yet:
 
 - `expect_or_recover` — insert missing / delete extra / sync to FOLLOW.
 - `Missing` / `Skipped` / `K_ERROR` emission into the tree.

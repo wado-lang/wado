@@ -14,7 +14,15 @@ fn assert_parses(input: &String) {
     assert ng::parse(input).ok(), `unexpected diagnostics for {*input}`;
 }
 
-test "non-greedy-gaps: bare constant" { assert_parses(&"public static final int X"); }
-test "non-greedy-gaps: constant after junk" { assert_parses(&"foo bar = 1 ; public static final int Y"); }
-test "non-greedy-gaps: constant then junk" { assert_parses(&"public static final int A ; garbage here"); }
-test "non-greedy-gaps: interleaved" { assert_parses(&"int x ; public static final int A ; x = 1 ; public static final int B ; end"); }
+test "non-greedy-gaps: bare constant" {
+    assert_parses(&"public static final int X");
+}
+test "non-greedy-gaps: constant after junk" {
+    assert_parses(&"foo bar = 1 ; public static final int Y");
+}
+test "non-greedy-gaps: constant then junk" {
+    assert_parses(&"public static final int A ; garbage here");
+}
+test "non-greedy-gaps: interleaved" {
+    assert_parses(&"int x ; public static final int A ; x = 1 ; public static final int B ; end");
+}

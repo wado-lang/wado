@@ -2289,7 +2289,11 @@ fn gen_parse_fn_named(
         };
         let lr_alts = lr_data.0;
         let lr_dispatch = lr_data.1;
-        let h_atn_class = if let LeftRecursive(l) = lowered_rule { l.atn_class } else { false };
+        let h_atn_class = if let LeftRecursive(l) = lowered_rule {
+            l.atn_class;
+        } else {
+            false;
+        };
         let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
         gen_lr_fn(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
         return;
@@ -2901,7 +2905,14 @@ fn gen_lr_fn_atn(
 /// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
 /// commit to the (mutating) suffix parse when the scan confirms it matches —
 /// mirroring the typed `gen_lr_call_with_prec`.
-fn emit_lr_branch(w: &mut CodeWriter, lr: &LrAlt, rk: &String, scan_fn: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn emit_lr_branch(
+    w: &mut CodeWriter,
+    lr: &LrAlt,
+    rk: &String,
+    scan_fn: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
     w.begin(&`if {lr.own_prec} >= min_prec`);
     w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
     w.line(&"break;");
@@ -3061,7 +3072,11 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     // never needs it.
     let overlaps_follow = sets_overlap(&r.body_first_set, &r.caller_follow_first);
     if r.body_scannable && overlaps_follow {
-        let is_opt = if let Optional = r.kind { true } else { false };
+        let is_opt = if let Optional = r.kind {
+            true;
+        } else {
+            false;
+        };
         if !is_opt {
             if let Plus = r.kind {
                 gen_op(w, &r.body, ctx, nc);
@@ -4118,13 +4133,11 @@ fn gen_op_repeat_non_greedy_storable(
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
             w.end();
         }
-    } else {
-        if *while_cond != "false" {
-            w.begin(&`while {*while_cond}`);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
-            w.end();
-        }
+    } else if *while_cond != "false" {
+        w.begin(&`while {*while_cond}`);
+        let mut nc: List<[String, i32]> = [];
+        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
+        w.end();
     }
 }
 
@@ -4274,18 +4287,8 @@ fn gen_op_repeat_optional_rulecall(
 /// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
 /// The body appends to the builder when present; an absent optional emits
 /// nothing. `gate_expr` is the caller-FOLLOW yield check (empty = none).
-fn gen_optional_present(
-    w: &mut CodeWriter,
-    body: &Op,
-    gate_expr: &String,
-    cond: &String,
-    ctx: &mut GenContext,
-) {
-    let guard = if gate_expr.is_empty() {
-        *cond;
-    } else {
-        `!({*gate_expr}) && ({*cond})`;
-    };
+fn gen_optional_present(w: &mut CodeWriter, body: &Op, gate_expr: &String, cond: &String, ctx: &mut GenContext) {
+    let guard = if gate_expr.is_empty() { *cond } else { `!({*gate_expr}) && ({*cond})` };
     w.begin(&`if {guard}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, body, ctx, &mut nc);
@@ -4615,7 +4618,13 @@ fn gen_op_repeat_star_plus_storable(
 /// checkpoint/truncate (the speculation drives the real `TreeBuilder`, so the
 /// throwaway subtree is rolled back along with the cursor — only the recorded
 /// deep error survives).
-fn gen_rep_break(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext, loop_first: &List<String>) {
+fn gen_rep_break(
+    w: &mut CodeWriter,
+    scan_pos: &String,
+    rep_op: &RepeatOp,
+    ctx: &mut GenContext,
+    loop_first: &List<String>,
+) {
     gen_rep_break_with_recovery(w, scan_pos, rep_op, ctx, loop_first);
 }
 
@@ -4910,11 +4919,7 @@ fn gen_scan_winner_tournament(
     return winner_var;
 }
 
-fn gen_simplecst_rulecall_value(
-    w: &mut CodeWriter,
-    op: &Op,
-    ctx: &mut GenContext,
-) {
+fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext) {
     let rc = if let RuleCall(rc) = op {
         rc;
     } else {

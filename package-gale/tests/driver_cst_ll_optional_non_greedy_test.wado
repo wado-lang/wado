@@ -23,5 +23,8 @@ test "tree: single if with trailing else binds" {
 // Dangling-`else`: non-greedy `??` is prefer-skip, so the `else` binds
 // to the OUTER ifStatement.
 test "tree: dangling else binds to the outer if (non-greedy ??)" {
-    assert_tree(&"if y if y x else x", &"(start (statement (ifStatement if y (statement (ifStatement if y (statement x))) else (statement x))))");
+    assert_tree(
+        &"if y if y x else x",
+        &"(start (statement (ifStatement if y (statement (ifStatement if y (statement x))) else (statement x))))",
+    );
 }

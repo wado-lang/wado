@@ -55,8 +55,8 @@ traffic, which keeps run-to-run spread within ~1-2%.
 
 1M f64 conversions to fixed-point string (`%.6f`).
 
-| Implementation   |    Throughput |    ms/iter | vs best |
-| ---------------- | ------------: | ---------: | ------: |
+| Implementation   |     Throughput |    ms/iter | vs best |
+| ---------------- | -------------: | ---------: | ------: |
 | Rust (core::fmt) | 12.70 M conv/s |  78.746 ms |   1.00x |
 | **Wado** (fpfmt) | 10.61 M conv/s |  94.230 ms |   1.20x |
 | C (printf)       |  7.94 M conv/s | 125.921 ms |   1.60x |
@@ -142,11 +142,11 @@ four reference SQL highlighters:
 
 | Implementation               |  Throughput |   ms/iter | vs best |
 | ---------------------------- | ----------: | --------: | ------: |
-| JavaScript (Prism)           | 10.15 MB/s  |  1.317 ms |   1.00x |
-| **Wado** (Gale)              |  3.27 MB/s  |  4.091 ms |   3.10x |
-| JavaScript (Lezer)           |  3.16 MB/s  |  4.236 ms |   3.21x |
-| Rust (tree-sitter)           |  2.61 MB/s  |  5.125 ms |   3.89x |
-| JavaScript (web-tree-sitter) |  1.72 MB/s  |  7.764 ms |   5.90x |
+| JavaScript (Prism)           |  10.15 MB/s |  1.317 ms |   1.00x |
+| **Wado** (Gale)              |   3.27 MB/s |  4.091 ms |   3.10x |
+| JavaScript (Lezer)           |   3.16 MB/s |  4.236 ms |   3.21x |
+| Rust (tree-sitter)           |   2.61 MB/s |  5.125 ms |   3.89x |
+| JavaScript (web-tree-sitter) |   1.72 MB/s |  7.764 ms |   5.90x |
 | JavaScript (Shiki)           | 709.82 KB/s | 18.830 ms |  14.64x |
 
 Notes:
