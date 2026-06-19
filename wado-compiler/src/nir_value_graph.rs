@@ -742,8 +742,22 @@ impl ValuePool {
         self.intern(ValueKind::Cast { operand, target })
     }
 
-    #[inline]
     pub fn select(&mut self, cond: ValueId, then: ValueId, else_: ValueId) -> ValueId {
+        let t = self.find(then);
+        let e = self.find(else_);
+        // `Select(c, X, X) → X`: a pure-value merge whose arms are equal is that
+        // value, regardless of the (side-effect-free) condition.
+        if t == e {
+            return t;
+        }
+        // `Select(c, true, false) → c`: boolean identity (`c` is already a bool
+        // value). Recovers `x || false` / `x && true` → `x`, which lower to this
+        // merge under operand promotion.
+        if matches!(self.kind(t), ValueKind::Bool(true))
+            && matches!(self.kind(e), ValueKind::Bool(false))
+        {
+            return cond;
+        }
         self.intern(ValueKind::Select { cond, then, else_ })
     }
 
