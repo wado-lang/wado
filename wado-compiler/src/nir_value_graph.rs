@@ -620,6 +620,14 @@ impl ValuePool {
                     && self.value_fully_reemittable_locally(then, mut_locals)
                     && self.value_fully_reemittable_locally(else_, mut_locals)
             }
+            // A `FieldAccess` re-emits as a `StructGet` over a re-emittable
+            // receiver; the shared `heap_ver` makes every use see the same field
+            // state. Gated on early promotion while the source-point materialiser
+            // (which pins the load) is wired — flag-off keeps the prior behavior.
+            ValueKind::FieldAccess { receiver, .. } => {
+                std::env::var_os("WADO_PROMOTE_EARLY").is_some()
+                    && self.value_fully_reemittable_locally(receiver, mut_locals)
+            }
             _ => false,
         }
     }

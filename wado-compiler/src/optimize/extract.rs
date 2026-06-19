@@ -79,7 +79,28 @@ fn is_pure_arith(e: &Engine, id: ExprId) -> bool {
                     | crate::nir::NirUnaryOp::BitNot,
                 ..
             }
-    )
+    ) || (promote_early_enabled() && matches!(&e.body.exprs[id].kind, ExprKind::FieldAccess { .. }))
+}
+
+/// The statement that directly encloses `expr`, and that statement's block —
+/// walking up the parent chain to the first `Stmt`. Used to insert a source-point
+/// materialisation `let` just before the use's statement (WEP P2).
+fn enclosing_stmt_and_block(
+    e: &Engine,
+    expr: ExprId,
+) -> Option<(crate::nir_arena::StmtId, crate::nir_arena::BlockId)> {
+    let mut node = NodeRef::Expr(expr);
+    loop {
+        match e.parent_of(node)? {
+            NodeRef::Stmt(s) => {
+                let NodeRef::Block(b) = e.parent_of(NodeRef::Stmt(s))? else {
+                    return None;
+                };
+                return Some((s, b));
+            }
+            other => node = other,
+        }
+    }
 }
 
 /// Stamp `type_id` onto `v` and its arithmetic children so the WIR extractor
@@ -212,6 +233,51 @@ pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) ->
         for (rep, ids) in by_rep {
             let id_ty = engine.body.exprs[ids[0]].type_id;
             if !record_value_tree_types(&mut engine, rep, id_ty) {
+                continue;
+            }
+            // Source-point materialise a `FieldAccess`: pin the load in a
+            // `let _av = <value>` at the use's enclosing statement and rewrite the
+            // use to a **skeleton** `Local _av` read, so receiver-position passes
+            // see an ordinary local (materialiser-first, WEP P2). MVP: single-use
+            // (no dominance needed); shared/Select extend this.
+            let is_field = matches!(
+                engine.body.values.kind(rep),
+                ValueKind::FieldAccess { .. }
+            );
+            if promote_early
+                && is_field
+                && ids.len() == 1
+                && let Some((s, b)) = enclosing_stmt_and_block(&engine, ids[0])
+            {
+                let e = ids[0];
+                let span = engine.body.exprs[e].span;
+                let name = format!("_av_{}", engine.locals().len());
+                let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+                let let_stmt = engine.alloc_stmt(
+                    crate::nir_arena::StmtKind::Let {
+                        name: name.clone(),
+                        local_index: av,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: id_ty,
+                        value: crate::nir_arena::Operand::Value(rep),
+                        skip_value_copy: true,
+                    },
+                    span,
+                );
+                let mut stmts = engine.body.blocks[b].stmts.clone();
+                let pos = stmts.iter().position(|&x| x == s).unwrap_or(0);
+                stmts.insert(pos, let_stmt);
+                engine.set_block_stmts(b, stmts);
+                let lread = engine.alloc_expr(ExprKind::Local { index: av, name }, id_ty, span);
+                changed |= engine.redirect_expr(e, crate::nir_arena::Operand::Expr(lread));
+                continue;
+            }
+            // A `FieldAccess` only promotes via the source-point materialiser
+            // above; never inline (re-emitting a load at an arbitrary slot is
+            // unsound once a pass moves the operand). Multi-use / unplaceable ones
+            // stay skeleton for now (shared materialisation is the next step).
+            if is_field {
                 continue;
             }
             let mut leaves = crate::hashmap::IndexSet::default();
