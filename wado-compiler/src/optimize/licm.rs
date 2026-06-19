@@ -1551,7 +1551,9 @@ fn hoist_invariant_arith(
         // No skeleton arith trees, but operand promotion may have left the
         // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
         // those.
-        return hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+        let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+        c |= cse_loop_body(engine, loop_body);
+        return c;
     }
 
     // Group occurrences by (ValueId, type): equal values of equal type share
@@ -1603,7 +1605,164 @@ fn hoist_invariant_arith(
     }
 
     hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+    cse_loop_body(engine, loop_body);
     true
+}
+
+/// Common-subexpression elimination inside a loop body under operand promotion.
+///
+/// The value graph hash-conses a pure subexpression (`p * p` over a loop-carried
+/// `p`) to one `ValueId`, so the two occurrences in a guard and the body share
+/// an identity — but each is a distinct *skeleton* `Binary` expr the extractor
+/// can not promote to a bare `Operand::Value` (a loop-carried local's value is
+/// not reemittable at an arbitrary slot, so it stays a sourceless `Opaque`).
+/// Each is therefore re-emitted. This restores the one-computation `__cse_N`
+/// shape the standalone `cse` pass produced before hash-consing subsumed the
+/// *deduplication* (but not the materialisation): bind a clone of the
+/// subexpression to a temp placed before the earliest top-level statement that
+/// contains an occurrence, and redirect every occurrence to read the temp.
+///
+/// Soundness — placement and availability:
+/// - The temp lands before the earliest top-level statement of the loop body
+///   that holds an occurrence, so it dominates every (later or equal) occurrence
+///   in the body's linear statement list.
+/// - A value with ≥2 occurrences sharing one `ValueId` reads the *same* leaf
+///   values at each, so those leaves are in scope at all of them — hence bound
+///   before the earliest occurrence's statement (or loop-carried / a param),
+///   available where the temp is inserted. The clone re-emits the original
+///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
+///   value. Trap-prone ops are excluded, so computing it once up front (possibly
+///   on an iteration a conditional occurrence would have skipped) cannot trap.
+fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    // Occurrences of each materialisable value, as (top-level stmt index, expr),
+    // in first-seen order. Nested loops are not descended (their own bodies have
+    // their own dominance / `cse_loop_body` pass).
+    let mut occ: IndexMap<ValueId, Vec<(usize, ExprId)>> = IndexMap::default();
+    for (i, &s) in stmts.iter().enumerate() {
+        let mut exprs = Vec::new();
+        collect_stmt_exprs(engine.body, s, &mut exprs);
+        for e in exprs {
+            let Some(v) = engine.value(e) else { continue };
+            let rep = engine.body.values.find_imm(v);
+            if is_cse_candidate(&engine.body.values, rep) {
+                occ.entry(rep).or_default().push((i, e));
+            }
+        }
+    }
+
+    // (stmt index, let) inserts and per-expr redirects, computed before any
+    // mutation so indices stay stable.
+    let mut inserts: Vec<(usize, StmtId)> = Vec::new();
+    for (rep, occs) in occ {
+        if occs.len() < 2 {
+            continue;
+        }
+        let Some(ty) = engine.body.values.type_of(rep) else {
+            continue;
+        };
+        let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
+        let span = engine.body.exprs[occs[0].1].span;
+        let name = format!("__cse_{}", engine.locals().len());
+        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+        // Clone one occurrence's skeleton subtree for the temp's value (the
+        // value itself is a sourceless-Opaque tree the extractor can not
+        // re-emit; the skeleton can).
+        let cloned = engine.clone_expr(occs[0].1);
+        let let_stmt = engine.alloc_stmt(
+            StmtKind::Let {
+                name: name.clone(),
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value: Operand::Expr(cloned),
+                skip_value_copy: true,
+            },
+            span,
+        );
+        // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
+        // promoted value): the temp is reassigned every iteration, so a value
+        // operand `Opaque(Local(__cse))` would read as loop-invariant to the
+        // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
+        // correctly treated as loop-carried.
+        let mut any = false;
+        for (_, e) in &occs {
+            let lread = engine.alloc_expr(
+                ExprKind::Local {
+                    index: temp,
+                    name: name.clone(),
+                },
+                ty,
+                span,
+            );
+            any |= engine.redirect_expr(*e, Operand::Expr(lread));
+        }
+        if any {
+            inserts.push((min_i, let_stmt));
+        }
+    }
+    if inserts.is_empty() {
+        return false;
+    }
+    // Splice the temps in, each before its target statement.
+    let mut new_stmts: Vec<StmtId> = Vec::new();
+    for (i, &s) in stmts.iter().enumerate() {
+        for (_, let_stmt) in inserts.iter().filter(|(mi, _)| *mi == i) {
+            new_stmts.push(*let_stmt);
+        }
+        new_stmts.push(s);
+    }
+    engine.set_block_stmts(loop_body, new_stmts);
+    true
+}
+
+/// Collect every expression under statement `s`, descending through blocks but
+/// **not** into nested `Loop` bodies (keeping occurrences within one loop's
+/// dominance scope).
+fn collect_stmt_exprs(body: &Body, s: StmtId, out: &mut Vec<ExprId>) {
+    if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+        return;
+    }
+    for child in stmt_child_nodes(body, s) {
+        match child {
+            Child::Expr(e) => collect_expr_exprs(body, e, out),
+            Child::Block(b) => {
+                for &s2 in &body.blocks[b].stmts {
+                    collect_stmt_exprs(body, s2, out);
+                }
+            }
+        }
+    }
+}
+
+fn collect_expr_exprs(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
+    out.push(e);
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => collect_expr_exprs(body, c, out),
+            Child::Block(b) => {
+                for &s2 in &body.blocks[b].stmts {
+                    collect_stmt_exprs(body, s2, out);
+                }
+            }
+        }
+    }
+}
+
+/// Whether `v` is a pure arithmetic compound worth CSE-materialising: a
+/// `Binary` / `Unary` with a non-trap-prone op. The leaves need no availability
+/// check here — see [`cse_loop_body`]'s soundness note (shared scope of ≥2
+/// occurrences) — only the root must be a compound, not a bare leaf.
+fn is_cse_candidate(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    use crate::nir_value_graph::ValueKind;
+    match pool.kind(v) {
+        ValueKind::Binary { op, .. } => is_hoistable_binop(*op),
+        ValueKind::Unary { op, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+        }
+        _ => false,
+    }
 }
 
 /// Hoist loop-invariant promoted *value* operands into a pre-header
