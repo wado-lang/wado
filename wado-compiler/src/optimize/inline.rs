@@ -720,11 +720,7 @@ pub fn inline_functions(
                 // `Operand::Value` slots still resolve. Recovering the lost
                 // identity for the spliced region (grow the graph at the splice
                 // point) is the follow-up that restores the missed optimizations.
-                if let Some(vg) = func
-                    .body
-                    .as_mut()
-                    .and_then(|b| b.value_graph.as_mut())
-                {
+                if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
                     vg.value_of.clear();
                     vg.loop_entry_values.clear();
                 }

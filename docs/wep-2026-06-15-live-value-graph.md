@@ -32,7 +32,7 @@ each is a static or measured fact, not a "byte-identical and X% faster" proxy.
       `first_builds`) under `WADO_PROMOTE_EARLY`. Baseline was `builds=4474`,
       `first_builds=1678`, `rebuilds=2796` — 2.67 builds per function. Achieved by
       persisting the per-function graph on `Body` across passes (the freeze builds
-      it once; the value passes reuse it) and counting *actual* `builder::build`
+      it once; the value passes reuse it) and counting _actual_ `builder::build`
       calls rather than pass entries. zlib -O2 under promotion: `builds=139,
       first_builds=139, rebuilds=0`. See the P3 milestone below for the mechanism
       (persist gates + honest measurement + config-aware verify oracle).
@@ -1162,6 +1162,109 @@ verify harness (`partitions_agree`) and `maintain_pure_value` are in place.
       points. cse / copy-prop / slf collapse into graph identity.
 - [ ] **WIR build + unparser + niri + type-repr.** Consume `Operand`: a `Value`
       extracts from the graph (the extractor), an `Expr` lowers the subtree.
+
+## Build-once made invariant; promotion is the default; route B chosen
+
+This session committed to operand promotion as the production path and removed
+the rebuild machinery outright, then root-caused why the remaining redness is
+the keystone, not a patch.
+
+### What landed
+
+- `promote_early_enabled()` / `promote_active()` are unconditionally `true`
+  (commit `b6bb675a9`): promotion + build-once is the default; the
+  `WADO_PROMOTE_EARLY` flag and the flag-off dual path are retired.
+- The rebuild path is **gone** (commit `c5de23321`): `Engine::new` no longer
+  resets `value_graph`; `set_param_locals` / `set_alias_sets` /
+  `set_value_graph_type_table` no longer drop it; `invalidate_value_graph` is
+  removed (its address-taken rescan survives as `invalidate_address_taken`,
+  which licm calls). `rebuilds = 0` is now a structural invariant — there is no
+  code that drops a built graph. zlib -O2: `builds=139 first_builds=139
+  rebuilds=0`.
+- The config-aware verify oracle (`ValueGraphBuild::config`, commit `8bcdfffb2`)
+  stands: a persisted graph is read by sessions that configure differently, so
+  `WADO_VERIFY_VG` rebuilds the comparison graph with the _build_ config.
+
+### Acceptance-criteria status
+
+- Criterion 1 (`rebuilds = 0`): met, structurally, under promotion-default.
+- Criterion 2 (`optimize` CPU halved): on package-gale the optimize phase is
+  13.6s → 8.3s (~1.65×), short of 2×, and with a +12% code-size regression
+  (740254 → 828871 B) from the cse-skip + FieldAccess-not-yet-in-loop loss.
+- Criterion 3 (`value_of` retired): not yet — the side-table still backs the
+  per-function build.
+
+### Promotion-default redness (fix-forward, accepted)
+
+50 O2 e2e fixtures regressed at the default flip; the inline coarsening fix
+(below) cleared 13, leaving 37: ~24 lost-optimization `wir_expect` + 11
+`tmpl_hoist` + misc — all optimization-recovery, no miscompiles. The 3 Select
+miscompiles the WEP tracked are gone (the over-conservative `elide_local` path
+is always active now).
+
+### The i128 miscompile: root cause and four ruled-out cheap fixes
+
+`coerce_int_3`, `static_1`, `match_literal_i128_guarded` trapped: a u128 const
+compared equal to itself read `false`. Root cause is the freeze-as-a-pass
+**freeze-then-mutate window** (the shortcut flaw this WEP already named):
+
+1. the early freeze promotes a pure value in a callee where its leaf is a
+   parameter (valid, available);
+2. `inline` splices that callee into the caller, where the param becomes a
+   local bound to the argument; the promoted value now reads that local;
+3. a downstream pass (const-object globalization / the late freeze) consumes a
+   stale `value_of` / produces a body where the leaf's def is dropped while a
+   read survives → WIR build emits an uninitialized read → trap.
+
+Confirmed by `WADO_SKIP_PASS`: skipping `nir/inline` or
+`nir/promote_pure_values_early` fixes it; a value-pool NIR diff shows the const
+field read as non-constant under promotion. **Four cheap fixes were tried and
+ruled out** — record them so they are not re-attempted:
+
+- Inline dropping the graph (`value_graph = None`, commit `f9871c624`): fixed
+  it, but reintroduced rebuilds (0 → 50) — rejected (build-once invariant).
+- Inline coarsening (`value_of.clear()`): keeps rebuilds=0 but does **not** fix
+  it — the corruption is at WIR-build extraction, not in `value_of`.
+- Conservative freeze (only promote param-leaf values): does not fix it —
+  param-ness is judged in the callee where the leaf _is_ a param.
+- Materialiser enable + single-use source-point materialise for all kinds:
+  does not fix it — materialising at the use's enclosing statement reads the
+  leaves at the same point; the leaf's _def_ is already gone.
+
+Conclusion: there is no cheap fix. Correctness here requires either precise
+splice-point graph maintenance (route A, which the WEP already judged a
+dead-end that never retires `value_of`) or **operand promotion born at lower so
+there is no `value_of` side-table to go stale** (route B). Route B is chosen.
+
+### Route B execution plan (build-once-and-promote, then fold into lower)
+
+Touchpoints confirmed this session: `lower::translate::convert_operand`
+(translate.rs:874–912) already births scalar literals as `Operand::Value` and
+holds `arena: RefCell<Body>` (so the pool is reachable at lower); the builder's
+flow walk (`compute_value`, builder.rs:759–1106; `current_value` / heap state /
+`Select` at merges / `LoopPhi` at loops) is the piece to relocate; WIR build
+(`translate_operand` / `extract_value`) and niri (`operand_to_lattice_a`)
+already consume `Operand::Value`.
+
+Recommended sequencing (reuse the tested builder first to limit risk):
+
+1. Run the builder once after lower and **fully promote** every re-emittable
+   pure value to `Operand::Value`, before the optimize loop.
+2. **Availability-aware extraction (the one new analysis, where i128 is fixed):**
+   materialise shared / flow-dependent values (`Select` at the merge,
+   `FieldAccess` at its heap version, a value whose leaf a later pass may drop)
+   into a `let _av = <value>` at a point dominating all uses, and keep leaves
+   live (`locals_read_via_promotion`). The single-use enclosing-statement
+   materialiser is insufficient — the leaf's def must be guaranteed, which is a
+   liveness + placement obligation, not just an emission-point choice.
+3. Migrate the value passes (`const_fold` / `cse` / `copy_prop` / `licm` /
+   `condition_implication` / `select_lowering`) off `value_of` to operand /
+   pool queries.
+4. Fold `current_value` into `lower::translate` so pure values are born as
+   `Operand::Value` directly; delete `value_of` and `nir_value_graph::builder`
+   (criterion 3).
+5. Recover the +12% / 37 `wir_expect` by promoting `FieldAccess` in-loop (its
+   `heap_ver` values subsume store-load-forward) and measure criterion 2.
 
 ## See also
 
