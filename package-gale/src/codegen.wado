@@ -139,7 +139,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         // (`emit_follow`) — a tail-greedy `Repeat` can need them with no
         // tournament present (e.g. an LL(1) grammar like calc).
         let ef = ctx.emit_follow();
-        gen_runtime_homogeneous(&mut w, ef);
+        gen_runtime_homogeneous(&mut w, ef, ctx.needs_atn());
         gen_token_kind(&mut w, &grammar.lexer_rules);
         gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
         gen_lexer(&mut w, grammar, &lit_tokens);
@@ -289,7 +289,7 @@ fn gen_runtime(w: &mut CodeWriter, ctx: &GenContext, highlight: bool) {
 /// `TreeBuilder`. Concatenated in dependency order (`lex` first, then `diag`,
 /// then `tree`, which references both); each fragment's sibling `from "./..."`
 /// imports are stripped by `gen_runtime_fragment`.
-fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool) {
+fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
@@ -297,6 +297,12 @@ fn gen_runtime_homogeneous(w: &mut CodeWriter, emit_follow: bool) {
     // grammar has a caller-FOLLOW gate.
     if emit_follow {
         gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
+    }
+    // The reused prediction emits ATN-simulator calls (`AtnSim`, `atn_decode`,
+    // `atn_predict_with_stack`, …) for ATN-class decisions; inline the runtime
+    // so the generated parser resolves them, exactly as the typed path does.
+    if needs_atn {
+        gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
     }
 }
 

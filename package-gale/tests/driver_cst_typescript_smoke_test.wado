@@ -1,0 +1,15 @@
+//! Stage 2b: the TypeScript ATN-class grammar parses homogeneously end-to-end.
+use ts from "./grammars/TypeScriptLexer.g4"
+    with { generator: { module: "../src/generator.wado",
+        inputs: ["./grammars/TypeScriptParser.g4"],
+        options: { highlight: false, homogeneous: true },
+        output_dir: "tests/generated/cst_typescript" } };
+
+test "ts: arithmetic expression parses clean" {
+    let r = ts::parse(&"= 1 + 2 * 3");
+    assert r.ok(), `unexpected diagnostics`;
+}
+test "ts: ternary parses clean" {
+    let r = ts::parse(&"= 1 ? 2 : 3");
+    assert r.ok(), `unexpected diagnostics`;
+}

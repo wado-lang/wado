@@ -1,0 +1,25 @@
+use g from "./grammars/ll_lr_atom.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_ll_lr_atom",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "tree: X Y picks (a b) when a is left-recursive" {
+    assert_tree(&"X Y", &"(r (a X) (b Y))");
+}
+
+// LR rule's binary form should still work: `X + X` parses into a
+// nested `a` tree.
+test "tree: X + X parses through LR suffix" {
+    assert_tree(&"X+X", &"(r (a (a X) + (a X)))");
+}

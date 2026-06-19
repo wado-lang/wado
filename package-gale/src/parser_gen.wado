@@ -2346,7 +2346,9 @@ fn gen_parse_fn_named(
         let lr_alts = lr_data.0;
         let lr_dispatch = lr_data.1;
         if ctx.is_homogeneous() {
-            gen_lr_fn_homog(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
+            let h_atn_class = if let LeftRecursive(l) = lowered_rule { l.atn_class } else { false };
+            let h_loop_dec = if h_atn_class { ctx.lr_loop_entry_decision(ctx.rule_index_of(&rule.name)) } else { -1 };
+            gen_lr_fn_homog(w, rule, lr_alts, lr_dispatch, ctx, fn_name, h_atn_class, h_loop_dec);
             return;
         }
         gen_lr_suffix_helpers(w, rule, &type_name, lr_alts, ctx, fn_name);
@@ -2906,6 +2908,8 @@ fn gen_lr_fn_homog(
     lr_dispatch: &LrDispatchData,
     ctx: &mut GenContext,
     fn_name: &String,
+    atn_class: bool,
+    loop_dec: i32,
 ) {
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
@@ -2926,6 +2930,19 @@ fn gen_lr_fn_homog(
     w.line(&`p.b.start_node({rk}, _start);`);
     w.line(&`{*fn_name}_atom(p{fsep})?;`);
     w.line(&"p.b.finish_node(p.last_end());");
+    // ATN-class LR: the suffix loop-entry can't be resolved by static
+    // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
+    // runtime ATN simulator picks the continuation with full context, exactly
+    // as the typed `gen_lr_suffix_dispatch_atn` does. The chosen suffix's body
+    // appends to the builder; precedence is already accounted for by
+    // `atn_lr_loop_decision`, so the per-branch precedence gate is dropped.
+    if atn_class && loop_dec >= 0 {
+        gen_lr_fn_homog_atn(w, rule, lr_alts, lr_dispatch, ctx, &rk, loop_dec);
+        w.line(&"return Result::Ok(());");
+        w.end();
+        w.blank();
+        return;
+    }
     w.begin(&"loop");
     w.line(&"let _sk = p.peek_kind();");
     let mut nc: List<[String, i32]> = [];
@@ -2966,16 +2983,68 @@ fn gen_lr_fn_homog(
     w.blank();
 }
 
+/// ATN-class LR loop (homogeneous): the runtime simulator picks the suffix
+/// continuation (`atn_lr_loop_decision`) with full context and the chosen
+/// suffix's ops append to the builder, wrapping the tree so far in a new
+/// same-rule node. Mirrors `gen_lr_suffix_dispatch_atn` on the homogeneous
+/// sink. `min_prec` is consumed by the simulator, so the per-branch
+/// precedence gate is dropped.
+fn gen_lr_fn_homog_atn(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    ctx: &mut GenContext,
+    rk: &String,
+    decision: i32,
+) {
+    let valid = &lr_dispatch.valid_lr_alts;
+    let mut nc: List<[String, i32]> = [];
+    w.begin(&"loop");
+    w.line(
+        &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+    );
+    w.line(&"let _lr_pos0 = p.pos;");
+    let mut is_first = true;
+    for let mut i = 0; i < valid.len(); i += 1 {
+        if is_first {
+            w.begin(&`if _atn_alt == {i}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if _atn_alt == {i}`);
+        }
+        emit_lr_branch_homog_body(w, &lr_alts[valid[i]], rk, ctx, &mut nc);
+    }
+    if !is_first {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    } else {
+        w.line(&"break;");
+    }
+    w.begin(&"if p.pos == _lr_pos0");
+    w.line(&"break;");
+    w.end();
+    w.end();
+}
+
 /// One LR continuation (homogeneous): precedence gate, left-associative wrap,
 /// suffix ops. Below `min_prec` the climb stops.
 fn emit_lr_branch_homog(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     w.begin(&`if {lr.own_prec} >= min_prec`);
-    w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
-    gen_ops_homog(w, &lr.suffix.ops, ctx, nc);
-    w.line(&"p.b.finish_node(p.last_end());");
+    emit_lr_branch_homog_body(w, lr, rk, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
+}
+
+/// The left-associative wrap + suffix ops shared by the static and ATN LR
+/// loops: open a new same-rule node spanning the tree built so far, append
+/// the suffix, close it.
+fn emit_lr_branch_homog_body(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
+    gen_ops_homog(w, &lr.suffix.ops, ctx, nc);
+    w.line(&"p.b.finish_node(p.last_end());");
 }
 
 /// Overlap group (suffixes sharing a first token), homogeneous: unique first
@@ -3669,6 +3738,10 @@ fn gen_op_optional_with_shape_lookahead_storable(
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
     let elements = &alt.elements;
+    // Homogeneous sink: the present elements append to the builder, so the
+    // `Option<T>` shape selection collapses to a plain `if cond { … } else if
+    // … ` statement — no struct, no absent-field decls, no `null` else.
+    let homog = ctx.is_homogeneous();
     let mut is_first = true;
     for let entry of &s.shapes {
         // K-prefix gate: every shape's entry condition must yield to
@@ -3677,7 +3750,8 @@ fn gen_op_optional_with_shape_lookahead_storable(
         let cond = gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &entry.sig), gate_caller_follow);
 
         if is_first {
-            w.begin(&`let {*opt_field}: Option<{*inner_type}> = if {cond}`);
+            let prefix = if homog { "" } else { `let {*opt_field}: Option<{*inner_type}> = ` };
+            w.begin(&`{prefix}if {cond}`);
             is_first = false;
         } else {
             w.else_begin(&`else if {cond}`);
@@ -3693,22 +3767,28 @@ fn gen_op_optional_with_shape_lookahead_storable(
             }
             if in_shape {
                 gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
-            } else {
+            } else if !homog {
                 gen_op_absent_optional_field(w, &body.ops[i], &mut nc);
             }
         }
 
-        w.line(&`let {sa.field} = {sa.struct_name} \{`);
-        w.indent();
-        gen_field_assignments_from_fields(w, &body.fields);
-        w.dedent();
-        w.line(&"};");
-        w.line(&`Option::Some({*inner_field})`);
+        if !homog {
+            w.line(&`let {sa.field} = {sa.struct_name} \{`);
+            w.indent();
+            gen_field_assignments_from_fields(w, &body.fields);
+            w.dedent();
+            w.line(&"};");
+            w.line(&`Option::Some({*inner_field})`);
+        }
     }
     if !is_first {
-        w.else_begin(&"else");
-        w.line(&"null");
-        w.end_with(&";");
+        if homog {
+            w.end();
+        } else {
+            w.else_begin(&"else");
+            w.line(&"null");
+            w.end_with(&";");
+        }
     }
 }
 
@@ -5255,8 +5335,9 @@ fn gen_simplecst_overlap_loop(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    // Homogeneous sink: each alt's RuleRef appends, so no accumulator; a
-    // final `else` fails soft when no alt matched.
+    // Homogeneous sink: each alt's RuleRef appends, so no accumulator and no
+    // fail on no-match — the dispatch simply takes no arm (matching the typed
+    // standalone-group path, which yields `null` rather than erroring).
     let homog = ctx.is_homogeneous();
     if !homog {
         w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
@@ -5304,11 +5385,6 @@ fn gen_simplecst_overlap_loop(
                 name_counts,
             );
         }
-    }
-    if homog {
-        w.else_begin(&"else");
-        let first_alt_name = group_case_name(&alts[0]);
-        w.line(&`p.fail("{first_alt_name}")?;`);
     }
     w.end();
 }
@@ -5463,8 +5539,12 @@ fn gen_general_overlap_loop(
     name_counts: &mut List<[String, i32]>,
 ) {
     // Homogeneous sink: the chosen alt appends to the builder, so there is
-    // no `Option<type>` accumulator. A final `else` fails soft when no group
-    // matched (the typed sink does this via a post-loop `if None` check).
+    // no `Option<type>` accumulator. A no-match leaves the dispatch with no
+    // arm taken and appends nothing — matching the typed standalone-group
+    // (`_optional_op`) path, which yields `null` rather than failing. (The
+    // required `store_op` caller adds its own post-loop check on the typed
+    // side; the homogeneous repeat-guard already verified a match before
+    // entry, so no fail is emitted here.)
     let homog = ctx.is_homogeneous();
     if !homog {
         w.line(&`let mut {*acc_var}: Option<{*type_name}> = null;`);
@@ -5534,10 +5614,6 @@ fn gen_general_overlap_loop(
                 name_counts,
             );
         }
-    }
-    if homog {
-        w.else_begin(&"else");
-        w.line(&`p.fail("group alternative")?;`);
     }
     w.end();
 }

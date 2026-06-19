@@ -1,0 +1,37 @@
+use g from "./grammars/ll_wildcard_alt.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, homogeneous: true },
+            output_dir: "tests/generated/cst_ll_wildcard_alt",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+// Hit case: ID followed by `=` matches `assign`; ID followed by `;`
+// must fall through to the wildcard alt.
+test "wildcard alt: assign hits on ID '=' INT ';', wildcard hits on bare ID" {
+    assert_tree(&"x=10; abc;", &"(a (assign x = 10 ;) abc ;)");
+}
+
+// Rejection case: when the assign scan can match, prediction must
+// commit to `assign` rather than the wildcard.
+test "wildcard alt: assign wins when its full pattern is present" {
+    assert_tree(&"y=99;", &"(a (assign y = 99 ;))");
+}
+
+// Two assigns back to back.
+test "wildcard alt: two consecutive assigns" {
+    assert_tree(&"p=1; q=2;", &"(a (assign p = 1 ;) (assign q = 2 ;))");
+}
+
+// Only wildcard alt matches: a single bare ID.
+test "wildcard alt: bare ID falls through to wildcard" {
+    assert_tree(&"foo", &"(a foo)");
+}
