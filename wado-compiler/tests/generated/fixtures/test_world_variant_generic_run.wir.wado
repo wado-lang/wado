@@ -6,7 +6,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<CstChild> {  // TypeId(1)
+struct core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild> {  // TypeId(1)
     mut value: ref "./sub/test_world_variant_generic_helper.wado//CstChild",
 }
 
@@ -158,7 +158,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
 
-type "functype//core:prelude/slice.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>") -> ref null "core:prelude/types.wado//Box<CstChild>";  // TypeId(54)
+type "functype//core:prelude/slice.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next" = fn(ref "core:prelude/slice.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>") -> ref null "core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild>";  // TypeId(54)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
@@ -364,9 +364,9 @@ fn "./sub/test_world_variant_generic_helper.wado/make_test_tree"() {
 
 fn "./sub/test_world_variant_generic_helper.wado/./sub/test_world_variant_generic_helper.wado/walk_node<./sub/test_world_variant_generic_helper.wado/Recorder>"(v, node) {
     let __iter_2: ref "core:prelude/slice.wado//ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>";
-    let child: ref "core:prelude/types.wado//Box<CstChild>";
+    let child: ref "core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let n: ref "./sub/test_world_variant_generic_helper.wado//NodeData";
-    let __match_6: ref null "core:prelude/types.wado//Box<CstChild>";
+    let __match_6: ref null "core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let self_9: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let repr: ref "Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let end: i32;
@@ -724,11 +724,11 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 }
 
 fn "core:prelude/slice.wado/ArrayRefIter<./sub/test_world_variant_generic_helper.wado/CstChild>^Iterator::next"(self) {
-    let val: ref "core:prelude/types.wado//Box<CstChild>";
+    let val: ref "core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild>";
     if self.index >= self.end {
         return ref.null none;
     }
-    val = struct.new "core:prelude/types.wado//Box<CstChild>" { value: builtin::array_get<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(self.repr, self.index) };
+    val = struct.new "core:prelude/types.wado//Box<./sub/test_world_variant_generic_helper.wado/CstChild>" { value: builtin::array_get<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(self.repr, self.index) };
     self.index = self.index + 1;
     return val;
 }

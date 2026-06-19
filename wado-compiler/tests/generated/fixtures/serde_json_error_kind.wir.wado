@@ -6,7 +6,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<DeserializeErrorKind> {  // TypeId(1)
+struct core:prelude/types.wado//Box<core:serde/DeserializeErrorKind> {  // TypeId(1)
     mut value: i32,
 }
 
@@ -171,7 +171,7 @@ type "functype//core:serde/DeserializeError::trailing" = fn(i64) -> ref "core:se
 
 type "functype//core:serde/DeserializeError::overflow" = fn(ref "core:prelude/string.wado//String", i64) -> ref "core:serde//DeserializeError";  // TypeId(57)
 
-type "functype//core:serde/DeserializeErrorKind^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<DeserializeErrorKind>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:serde/DeserializeErrorKind^Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<core:serde/DeserializeErrorKind>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
 type "functype//core:json/JsonDeserializer::skip_whitespace" = fn(ref "core:json//JsonDeserializer");  // TypeId(59)
 
@@ -230,7 +230,7 @@ fn "wado-compiler/tests/fixtures/serde_json_error_kind.wado/__test_1_enum_field_
             cold_path;
             "core:internal/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(212); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_1_enum_field_compared_directly"), used: 37 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/serde_json_error_kind.wado"), used: 55 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, __local_6); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: e.kind == DeserializeErrorKind::UnexpectedType
-"), used: 59 }); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 107); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:serde/DeserializeErrorKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<DeserializeErrorKind>" { value: __v0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType: "), used: 38 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:serde/DeserializeErrorKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<DeserializeErrorKind>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+"), used: 59 }); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 46); "core:prelude/string.wado/String::push"(__local_5, 107); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:serde/DeserializeErrorKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:serde/DeserializeErrorKind>" { value: __v0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind::UnexpectedType: "), used: 38 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:serde/DeserializeErrorKind^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:serde/DeserializeErrorKind>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
             unreachable;
         }
     } else {
