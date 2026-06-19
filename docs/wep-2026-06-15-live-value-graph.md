@@ -519,20 +519,24 @@ default-off keeps the committed late-freeze behavior, so the branch stays green
 and continuously validated while the keystone is built up. Flip the default when
 flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
 
-- [ ] **P1 — flag-on e2e green** (the pass migration). Flag-on is at **5** O2
-      failures (down from 347 → 10 → 5; `2955/2960`). The 3 `Select`/`elide_local`
-      miscompiles are fixed (`7b5a8dd59`: `elide_local` uses the over-conservative
-      `opaque_local_sources` under early promotion — sound, default unchanged) and
-      the ICE earlier. The remaining 5: **4 `wir_expect` WIR-shape tests**
-      (`array_bounds_elim_le_guard_wir`, `array_bounds_elim_offset_chain`,
-      `opt_licm_invariant_arith`, `tir_optimize_bool_identity` — these _should_
-      change under promotion; fixture updates, not miscompiles) and **1 real
-      miscompile**, `assert_fail_call_arg` (the power-assert temp capturing
-      `double(x+y)` reads `0` not `14`). The latter is a multi-pass interaction —
-      `WADO_SKIP_PASS` shows skipping any of promote-early / `peephole` /
-      `copy_prop` / `inline` fixes it, so a promoted call-arg value threads wrong
-      through inline + copy-prop + a peephole rule into the diagnostic temp. Last
-      real flag-on bug; the 4 `wir_expect` are deferred fixture churn.
+- [x] **P1 — flag-on correctness complete** (the pass migration). Flag-on e2e is
+      **2956 / 2960** (347 → 10 → 5 → 4), and **every real miscompile is fixed**.
+      The class was a single liveness gap: a still-read local invisible to the
+      precise `locals_read_via_promotion` walk, which let `elide_local` /
+      `copy_prop` drop it. Both now use the over-conservative pool-wide
+      `opaque_local_sources` under early promotion (`7b5a8dd59`, `9a3f43482`) —
+      sound (keeps more locals, never drops a read one); flag-off keeps the precise
+      walk, so the default is byte-identical. This closed the 3 `Select` miscompiles
+      and `assert_fail_call_arg` (a promoted inlined call-arg binding whose only
+      read was a power-assert's promoted temp). The remaining **4 are `wir_expect`
+      WIR-shape tests** (`array_bounds_elim_le_guard_wir`,
+      `array_bounds_elim_offset_chain`, `opt_licm_invariant_arith`,
+      `tir_optimize_bool_identity`) that _should_ change under promotion — fixture
+      updates done at the P4 default-flip, not bugs. Still measurement-neutral (the
+      builder still runs); promotion now threads correctly through the whole pass
+      pipeline, which was P1's goal. Recoverable later: the precise-walk gap itself
+      (over-conservation costs a few elisions/copies) — a code-quality item, not
+      correctness.
 - [ ] **P2 — availability-aware extraction.** Extend promotion past the
       re-emittable subset to _every_ pure value, materialising a shared or
       flow-dependent value (`Select`, shared `Binary`, `FieldAccess`) into a `let`
