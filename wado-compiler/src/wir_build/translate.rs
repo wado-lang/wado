@@ -1949,7 +1949,6 @@ impl FunctionTranslator<'_, '_> {
                     .values
                     .type_of(receiver)
                     .expect("promoted FieldAccess receiver has no recorded type");
-                let recv = self.extract_value(receiver);
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, recv_nir_ty);
                 let WirType::Ref {
                     type_id: struct_tid,
@@ -1966,6 +1965,22 @@ impl FunctionTranslator<'_, '_> {
                         .expect("FieldAccess field_index out of range"),
                     _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
                 };
+                // Multi-value-return split: if the receiver is a local that was
+                // split into per-field scalars (the aggregate was never
+                // materialised), read the split local directly — a `StructGet`
+                // would read an uninitialised slot. Mirrors `translate_expr_inner`.
+                if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
+                    && let Some(crate::nir_value_graph::OpaqueSource::Local(idx)) =
+                        self.body.values.opaque_source(*oid)
+                    && let Some(splits) = self.multi_value_split_locals.get(&idx)
+                    && let Some((name, ty)) = splits.get(&field_name)
+                {
+                    return WirInstr::LocalGet {
+                        name: name.clone(),
+                        result_ty: ty.clone(),
+                    };
+                }
+                let recv = self.extract_value(receiver);
                 let result_ty = self.struct_field_wir_type(&struct_tid, &field_name);
                 WirInstr::StructGet {
                     type_id: struct_tid,

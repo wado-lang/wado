@@ -68,7 +68,7 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
 /// freeze candidate. Under early promotion, `FieldAccess` reads also qualify
 /// (their value re-emits as a `StructGet`; reemittability + the shared `heap_ver`
 /// keep it sound), extending promotion toward every pure value (WEP P2).
-fn is_pure_arith(e: &Engine, id: ExprId) -> bool {
+fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
     matches!(
         &e.body.exprs[id].kind,
         ExprKind::Binary { .. }
@@ -79,7 +79,7 @@ fn is_pure_arith(e: &Engine, id: ExprId) -> bool {
                     | crate::nir::NirUnaryOp::BitNot,
                 ..
             }
-    ) || (promote_early_enabled() && matches!(&e.body.exprs[id].kind, ExprKind::FieldAccess { .. }))
+    ) || (include_fields && matches!(&e.body.exprs[id].kind, ExprKind::FieldAccess { .. }))
 }
 
 /// The statement that directly encloses `expr`, and that statement's block —
@@ -140,7 +140,10 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
 /// build (the extractor) ever sees the promoted form; the orphaned arith /
 /// local-read skeleton nodes become unreachable from the root and are not
 /// emitted.
-pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) -> bool {
+pub(super) fn freeze_pure_arith(
+    project: &mut crate::nir_package::NirPackage,
+    include_fields: bool,
+) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
@@ -198,7 +201,7 @@ pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) ->
         for id in candidates {
             if is_assign_target(&engine, id)
                 || is_let_value(&engine, id)
-                || !is_pure_arith(&engine, id)
+                || !is_pure_arith(&engine, id, include_fields)
             {
                 continue;
             }
@@ -244,8 +247,7 @@ pub(super) fn freeze_pure_arith(project: &mut crate::nir_package::NirPackage) ->
                 engine.body.values.kind(rep),
                 ValueKind::FieldAccess { .. }
             );
-            if promote_early
-                && is_field
+            if is_field
                 && ids.len() == 1
                 && let Some((s, b)) = enclosing_stmt_and_block(&engine, ids[0])
             {

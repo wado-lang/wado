@@ -321,13 +321,14 @@ pub fn optimize(
     // extractor. Runs last so no binary-walking pass sees the promoted form;
     // orphaned arith / local-read nodes become unreachable from the skeleton
     // root and are simply not emitted.
-    // The late freeze is subsumed by the early promotion when the keystone flag
-    // is on (promoting before the passes covers everything the late pass would).
-    if !promote_early_enabled() {
-        run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(p)
-        });
-    }
+    // Late freeze. Flag-off: the committed arith-only freeze (default). Flag-on:
+    // promote `FieldAccess` here — after every pass incl. SROA, so the struct
+    // shape is final and the materialised `let _av = obj.field` re-emits a valid
+    // load. (Early arith promotion already ran before the loop.)
+    let include_fields = std::env::var_os("WADO_PROMOTE_FIELDS").is_some();
+    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(p, include_fields)
+    });
 
     project
 }
@@ -529,8 +530,11 @@ fn run_optimization_passes(
     // Default off: the committed branch keeps the late-freeze behavior (green),
     // so this flag is the multi-session development harness, not a behavior change.
     if promote_early_enabled() {
+        // Arith only here (before the loop); `FieldAccess` promotion runs late
+        // (after the SROA passes), since SROA scalarizes the structs a promoted
+        // `FieldAccess` would reference. See the late call in `optimize`.
         run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-            extract::freeze_pure_arith(p)
+            extract::freeze_pure_arith(p, /* include_fields */ false)
         });
     }
     for i in 0..config.iterations {

@@ -625,7 +625,7 @@ impl ValuePool {
             // state. Gated on early promotion while the source-point materialiser
             // (which pins the load) is wired — flag-off keeps the prior behavior.
             ValueKind::FieldAccess { receiver, .. } => {
-                std::env::var_os("WADO_PROMOTE_EARLY").is_some()
+                std::env::var_os("WADO_PROMOTE_FIELDS").is_some()
                     && self.value_fully_reemittable_locally(receiver, mut_locals)
             }
             _ => false,
