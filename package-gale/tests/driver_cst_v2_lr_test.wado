@@ -1,0 +1,16 @@
+//! sink_v2 parity on left recursion (precedence climbing): the parser_gen
+//! homogeneous LR path wraps each level via the builder's start_node_at, same
+//! tree as cst_gen.
+
+use lr from "./grammars/arith_lr.g4"
+    with { generator: { module: "../src/generator.wado", options: { highlight: false, homogeneous: true, sink_v2: true }, output_dir: "tests/generated/cst_v2_lr" } };
+fn assert_tree(input: &String, expected: &String) {
+    let result = lr::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = lr::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+test "v2-lr: single atom" { assert_tree(&"1", &"(expr 1)"); }
+test "v2-lr: left-associative addition" { assert_tree(&"1 + 2 + 3", &"(expr (expr (expr 1) + (expr 2)) + (expr 3))"); }
+test "v2-lr: precedence * over +" { assert_tree(&"1 + 2 * 3", &"(expr (expr 1) + (expr (expr 2) * (expr 3)))"); }
+test "v2-lr: left operand is a product" { assert_tree(&"1 * 2 + 3", &"(expr (expr (expr 1) * (expr 2)) + (expr 3))"); }

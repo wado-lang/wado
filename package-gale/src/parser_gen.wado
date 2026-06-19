@@ -1988,10 +1988,18 @@ fn gen_rule_entry_wrapper(
         if needs_atn {
             emit_atn_enter(w);
         }
-        w.line(&`let _start = p.peek_start();`);
-        w.line(&`p.b.start_node({rk}, _start);`);
+        // LR rules manage their own nodes (precedence climbing wraps each
+        // level via `start_node_at`), so the wrapper must NOT open an outer
+        // node — it would nest one extra same-rule level. Non-LR rules get the
+        // single `start_node` / `finish_node` pair here.
+        if !takes_min_prec {
+            w.line(&`let _start = p.peek_start();`);
+            w.line(&`p.b.start_node({rk}, _start);`);
+        }
         w.line(&`let r = {call};`);
-        w.line(&"p.b.finish_node(p.last_end());");
+        if !takes_min_prec {
+            w.line(&"p.b.finish_node(p.last_end());");
+        }
         if needs_atn {
             w.line(&"p.atn_stack.pop();");
         }
@@ -2306,6 +2314,10 @@ fn gen_parse_fn_named(
         };
         let lr_alts = lr_data.0;
         let lr_dispatch = lr_data.1;
+        if ctx.is_homogeneous() {
+            gen_lr_fn_homog(w, rule, lr_alts, lr_dispatch, ctx, fn_name);
+            return;
+        }
         gen_lr_suffix_helpers(w, rule, &type_name, lr_alts, ctx, fn_name);
 
         // Generate parse_rule(p, min_prec = 0) — precedence-aware parser.
@@ -2830,6 +2842,76 @@ fn gen_alt_dispatch_homog(
     w.else_begin(&"else");
     w.line(&`let _ = p.match_set([{join_kinds(&all_first)}])?;`);
     w.end();
+}
+
+/// Left-recursive rule under the homogeneous sink: precedence climbing via the
+/// builder's `checkpoint` / `start_node_at` left-associative wrap (mirrors
+/// cst_gen). The atom opens one rule node; each LR continuation wraps the tree
+/// so far in a new same-rule node. Suffix ops append via `gen_ops_homog`; a
+/// self-ref carries its baked `min_prec`. Overlapping suffix groups (needing a
+/// second-token sub-dispatch) reuse the typed dispatch in a later slice.
+fn gen_lr_fn_homog(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    ctx: &mut GenContext,
+    fn_name: &String,
+) {
+    let rk = rule_kind_const(&rule.name);
+    let mut f = FnSpec::new(fn_name);
+    f.add_param(&"p", &"&mut Parser");
+    if ctx.emit_follow() {
+        add_follow_param(&mut f);
+    }
+    f.add_param_spec(ParamSpec {
+        name: "min_prec",
+        type_str: "i32",
+        default_value: Option::Some("0"),
+    });
+    f.set_return_type(&"Result<(), ParseError>");
+    f.emit_begin(w);
+    let fsep = follow_sep(ctx.emit_follow());
+    w.line(&"let _cp = p.b.checkpoint();");
+    w.line(&"let _start = p.peek_start();");
+    w.line(&`p.b.start_node({rk}, _start);`);
+    w.line(&`{*fn_name}_atom(p{fsep})?;`);
+    w.line(&"p.b.finish_node(p.last_end());");
+    w.begin(&"loop");
+    w.line(&"let _sk = p.peek_kind();");
+    let mut nc: List<[String, i32]> = [];
+    let mut first = true;
+    for let group of &lr_dispatch.groups {
+        if group.len() != 1 {
+            panic("gen_lr_fn_homog: overlapping LR suffix groups not yet on the sink_v2 path");
+        }
+        let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
+        let cond = ctx.kind_check_str(&lr.suffix_first, &"_sk");
+        if first {
+            w.begin(&`if {cond}`);
+            first = false;
+        } else {
+            w.else_begin(&`else if {cond}`);
+        }
+        w.begin(&`if {lr.own_prec} >= min_prec`);
+        w.line(&`p.b.start_node_at(_cp, {rk}, _start);`);
+        gen_ops_homog(w, &lr.suffix.ops, ctx, &mut nc);
+        w.line(&"p.b.finish_node(p.last_end());");
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    }
+    if first {
+        w.line(&"break;");
+    } else {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    }
+    w.end();
+    w.line(&"return Result::Ok(());");
+    w.end();
+    w.blank();
 }
 
 /// Greedy `*` / `+` / `?` under the homogeneous sink: loop the body (which
