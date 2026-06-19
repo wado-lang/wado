@@ -28,9 +28,14 @@ is measured and capped — it shaves a few percent and leaves the graph rebuilt
 The work is done only when all three hold. None is satisfiable by a band-aid;
 each is a static or measured fact, not a "byte-identical and X% faster" proxy.
 
-- [ ] **One build per function.** `WADO_MEASURE_VG` reports `rebuilds = 0` (only
-      `first_builds`). Baseline today: `builds=4474`, `first_builds=1678`,
-      `rebuilds=2796` — 2.67 builds per function.
+- [x] **One build per function.** `WADO_MEASURE_VG` reports `rebuilds = 0` (only
+      `first_builds`) under `WADO_PROMOTE_EARLY`. Baseline was `builds=4474`,
+      `first_builds=1678`, `rebuilds=2796` — 2.67 builds per function. Achieved by
+      persisting the per-function graph on `Body` across passes (the freeze builds
+      it once; the value passes reuse it) and counting *actual* `builder::build`
+      calls rather than pass entries. zlib -O2 under promotion: `builds=139,
+      first_builds=139, rebuilds=0`. See the P3 milestone below for the mechanism
+      (persist gates + honest measurement + config-aware verify oracle).
 - [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s), measured by the
       sampling profile and wall time.
 - [ ] **The cache is deleted.** `vg_cache`, `carry_vg_cache`, `CachedAnalysis`,
@@ -630,19 +635,36 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       maintainer left in the value-pass set is licm + the structural passes, a
       smaller surface than before.
 
-      Route (b) probed (reverted): gating the four drops (`Engine::new` reset, the
-      three `set_*` config-drops, `invalidate`) on `promote_active` persists the
-      graph and dropped `rebuilds` further, **283 → 218** on zlib. But
-      `WADO_VERIFY_VG` flagged an **over-merge** (`expr5 ≡ expr17` in the
-      maintained graph, split by a fresh build), so the persist is unsound — a
-      structural pass's edit is not propagated, leaving a stale merge (count_prime
-      happened to stay correct (78498), but a program that reads the stale value
-      would miscompile). So route (b) is gated on **completing per-edit
-      maintenance** for every structural pass (peephole / inline / sroa / licm),
-      with `partition_refines` clean across the corpus — the same maintenance the
-      keystone always required, now the single remaining blocker for `rebuilds = 0`
-      and isolated to a concrete over-merge to chase. Route (a) (subsume licm into
-      the extractor) sidesteps maintenance and may be the shorter path.
+      Route (b) **landed (commit `8bcdfffb2`): `rebuilds = 0`.** Gating the five
+      drops (`Engine::new` reset, the three `set_*` config-drops, `invalidate`) on
+      `promote_active` persists the graph across passes; under promotion the freeze
+      builds each function's graph once and the value passes reuse it. zlib -O2:
+      `builds=139, first_builds=139, rebuilds=0`.
+
+      Two things made it land where the earlier probe stalled:
+
+      - **Honest measurement.** `record_build` was at the pass-entry sites, so it
+        counted pass *entries*, not builds — a persisted graph reused at a later
+        pass still counted. It now fires inside `Engine::ensure_value_graph` exactly
+        when `builder::build` runs, attributed to the active pass via a `BuildScope`
+        guard (freeze / cse / licm). Reuse records nothing; only real builds count.
+        This also makes the meter measure what the criterion means (one build per
+        function across the phase), not a per-pass proxy.
+      - **Config-aware verify oracle (the over-merge was a false positive).** The
+        probed `expr5 ≡ expr17` over-merge was **not** a stale maintained merge: a
+        persisted graph is read by sessions that configure their engine differently
+        (e.g. `select_lowering` does not seed params), and `verify_maintained_graph`
+        was rebuilding the comparison graph with the *consuming* session's config —
+        an unseeded fresh build splits two param reads the seeded build legitimately
+        merges, read as a spurious over-merge. `ValueGraphBuild` now retains the
+        `BuildConfig` (param seeding + alias sets) it was built with, and the oracle
+        rebuilds with *that* config. count_prime / mandelbrot / sieve / zlib / fts
+        are `WADO_VERIFY_VG`-clean under promotion; the maintained graph is sound.
+        (The config is for the verify oracle only — never a reuse key, so it is not
+        the rejected config-keyed cache.)
+
+      Flag-off is byte-identical (the gates reduce to the original drops under
+      `!promote_active()`); lib 770/770, flag-off e2e 2960/0.
 - [ ] **P4 — retire `value_of` + per-pass build; flip the default.** The graph is
       built once (at lower / first promotion) and never re-derived. Verify
       `WADO_MEASURE_VG` reports `rebuilds = 0`, measure `optimize` CPU halved,
