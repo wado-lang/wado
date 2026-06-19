@@ -172,7 +172,8 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if place_root_local(body, inner.as_expr().expect("skeleton operand")) == Some(local)
+                if let Some(ie) = inner.as_expr()
+                    && place_root_local(body, ie) == Some(local)
                 {
                     return true;
                 }

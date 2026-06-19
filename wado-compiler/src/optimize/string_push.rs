@@ -138,7 +138,10 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         (*receiver, args[0].expr)
     };
 
-    if !is_duplicable_receiver(&*engine.body, receiver.as_expr().expect("skeleton operand")) {
+    let Some(receiver_expr) = receiver.as_expr() else {
+        return None;
+    };
+    if !is_duplicable_receiver(&*engine.body, receiver_expr) {
         return None;
     }
 

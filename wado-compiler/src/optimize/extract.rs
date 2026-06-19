@@ -65,7 +65,9 @@ fn is_let_value(e: &Engine, id: ExprId) -> bool {
 }
 
 /// True if `id` is a pure-arith node (`Binary` / `Cast` / pure `Unary`) — a
-/// freeze candidate.
+/// freeze candidate. Under early promotion, `FieldAccess` reads also qualify
+/// (their value re-emits as a `StructGet`; reemittability + the shared `heap_ver`
+/// keep it sound), extending promotion toward every pure value (WEP P2).
 fn is_pure_arith(e: &Engine, id: ExprId) -> bool {
     matches!(
         &e.body.exprs[id].kind,
@@ -281,6 +283,25 @@ pub(super) fn extract_const(
         .value_graph_type_table()
         .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
     crate::nir_value_graph::value_kind_to_const(&vk, prim)
+}
+
+/// True when `expr` is a **place**, not a value read: the inner of a
+/// `Ref` / `MutRef` / `Deref`. A `FieldAccess` here (`&mut obj.field`) addresses
+/// the slot, so promoting it to a value would lose the place — exclude it. (The
+/// direct `Assign` target is handled by [`is_assign_target`].)
+fn is_ref_place(e: &Engine, expr: ExprId) -> bool {
+    let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
+        return false;
+    };
+    matches!(
+        &e.body.exprs[parent].kind,
+        ExprKind::Unary {
+            op: crate::nir::NirUnaryOp::Ref
+                | crate::nir::NirUnaryOp::MutRef
+                | crate::nir::NirUnaryOp::Deref,
+            ..
+        }
+    )
 }
 
 /// True when `expr`'s immediate parent is an `Assign` and `expr` is its target.
