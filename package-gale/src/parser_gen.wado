@@ -175,6 +175,9 @@ fn gen_parse_entry_homogeneous(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx
     w.line(
         &"let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);",
     );
+    // Carry the active rule chain (innermost-first, as each rule wrapper pushed
+    // it on the way up) so tooling can report the context that failed.
+    w.line(&"d.rule_stack = e.rule_stack;");
     w.line(&"p.diagnostics.push(d);");
     w.end();
     w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
