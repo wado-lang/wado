@@ -1,0 +1,128 @@
+#!/usr/bin/env wado run
+// Injected leaf-emitter idiom (see issue #1377).
+//
+// `walk` is a single traversal *skeleton*. The parts that differ per output
+// format are injected as `fn(&mut Writer, ...)` callbacks. The skeleton threads
+// `&mut Writer` into each callback, so there is no `if format == ...` branch at
+// every leaf — the shared shape stays in one place and only the leaf strings
+// vary. Passed directly as arguments (not stored in a field), these closures
+// are inlined at -O2: the emitted Wasm contains no `call_indirect`.
+//
+//   wado run example/closure_emit.wado
+
+use { println, Stdout } from "core:cli";
+
+variant Node {
+    Leaf(String),
+    Branch([String, List<Node>]),
+}
+
+struct Writer {
+    out: String,
+}
+
+impl Writer {
+    fn put(&mut self, s: &String) {
+        self.out.push_str(s);
+    }
+
+    fn indent(&mut self, depth: i32) {
+        for let mut i = 0; i < depth; i += 1 {
+            self.out.push_str(&"  ");
+        }
+    }
+}
+
+// Shared traversal. `open` / `leaf` / `close` are the only per-format pieces;
+// the skeleton hands each one the `&mut Writer` plus the current depth.
+fn walk(
+    node: &Node,
+    w: &mut Writer,
+    depth: i32,
+    open: fn(&mut Writer, i32, &String),
+    leaf: fn(&mut Writer, i32, &String),
+    close: fn(&mut Writer, i32, &String),
+) {
+    match node {
+        Leaf(s) => leaf(w, depth, s),
+        Branch([name, kids]) => {
+            open(w, depth, name);
+            for let k of kids {
+                walk(k, w, depth + 1, open, leaf, close);
+            }
+            close(w, depth, name);
+        },
+    }
+}
+
+// Format 1: a Lisp-style S-expression on one line.
+fn to_sexpr(node: &Node) -> String {
+    let mut w = Writer { out: "" };
+    walk(
+        node,
+        &mut w,
+        0,
+        |w: &mut Writer, _d: i32, name: &String| {
+            w.put(&`({name} `);
+        },
+        |w: &mut Writer, _d: i32, s: &String| {
+            w.put(&`{s} `);
+        },
+        |w: &mut Writer, _d: i32, _name: &String| {
+            w.put(&")");
+        },
+    );
+    return w.out;
+}
+
+// Format 2: an indented outline. Same skeleton, different leaf strings.
+fn to_outline(node: &Node) -> String {
+    let mut w = Writer { out: "" };
+    walk(
+        node,
+        &mut w,
+        0,
+        |w: &mut Writer, d: i32, name: &String| {
+            w.indent(d);
+            w.put(&`{name}:\n`);
+        },
+        |w: &mut Writer, d: i32, s: &String| {
+            w.indent(d);
+            w.put(&`- {s}\n`);
+        },
+        |w: &mut Writer, _d: i32, _name: &String| {
+        },
+    );
+    return w.out;
+}
+
+fn sample() -> Node {
+    return Node::Branch([
+        "menu", [
+            Node::Branch([
+                "file", [
+                    Node::Leaf("open"),
+                    Node::Leaf("save"),
+                ] as List<Node>,
+            ]),
+            Node::Leaf("quit"),
+        ] as List<Node>,
+    ]);
+}
+
+test "s-expression rendering" {
+    assert to_sexpr(&sample()) == "(menu (file open save )quit )";
+}
+
+test "outline rendering" {
+    assert to_outline(&sample()) == "menu:\n  file:\n    - open\n    - save\n  - quit\n";
+}
+
+export fn run() with Stdout {
+    let tree = sample();
+    println("S-expression:");
+    println(to_sexpr(&tree));
+    println("");
+    println("Outline:");
+    println(to_outline(&tree));
+}
