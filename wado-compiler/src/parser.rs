@@ -5642,6 +5642,8 @@ impl Parser {
         let mut in_string = false;
         let mut backtick_depth = 0u32;
         let mut brace_depth = 0u32;
+        let mut paren_depth = 0u32;
+        let mut bracket_depth = 0u32;
         let mut escape_next = false;
 
         let chars: Vec<char> = raw.chars().collect();
@@ -5674,7 +5676,24 @@ impl Parser {
                 '}' if !in_string && backtick_depth == 0 => {
                     brace_depth -= 1;
                 }
-                ':' if !in_string && backtick_depth == 0 && brace_depth == 0 => {
+                '(' if !in_string && backtick_depth == 0 => {
+                    paren_depth += 1;
+                }
+                ')' if !in_string && backtick_depth == 0 => {
+                    paren_depth = paren_depth.saturating_sub(1);
+                }
+                '[' if !in_string && backtick_depth == 0 => {
+                    bracket_depth += 1;
+                }
+                ']' if !in_string && backtick_depth == 0 => {
+                    bracket_depth = bracket_depth.saturating_sub(1);
+                }
+                ':' if !in_string
+                    && backtick_depth == 0
+                    && brace_depth == 0
+                    && paren_depth == 0
+                    && bracket_depth == 0 =>
+                {
                     // Check for :: (scope resolution)
                     if i + 1 < chars.len() && chars[i + 1] == ':' {
                         i += 2;
