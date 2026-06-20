@@ -1347,14 +1347,34 @@ cheap retain is sound. Measured on the full `-O2` corpus under `WADO_VERIFY_VG`:
   unsound `Local`-read case), so coarsening cannot recover them. clear-all stays
   the sound coarsening.
 
+Two decisive experiments pin it to the node-creation half and rule out Method A:
+
+- **Fresh rebuild at the inline splice** (force `value_graph = None` so the next
+  query rebuilds) recovers them: `compound_assign_basic` folds to
+  `fmt_decimal(15/12/24/6/2)`, `store_to_load_forwarding` drops all panics. So
+  the values *are* derivable — build-once plus incomplete maintenance loses them.
+  But this is a rebuild (what the WEP forbids), and it works only because the
+  rebuilt graph is taken *after* `sroa` has scalarized: the recovery is downstream
+  of the splice, not at it.
+- **Completing Method A's seeding** (seed `build_scoped`'s scratch heap with the
+  call-site struct-literal field values, so a `param.f` read in the spliced body
+  forwards — `compound_assign`'s `Box<i32>{value: x}.Display::fmt` makes
+  `self.value = 15` a constant in the inlined region) lands the value in
+  `value_of` but recovers **0** of the 21: `inline` runs *before* `sroa`, only
+  `peephole` sits between them and does not forward field reads, so `sroa`
+  restructures `self.value` into a fresh scalar local and the entry is lost before
+  any forwarder runs. Reverted — correct but inert against these regressions.
+
 Remaining piece (the node-creation half): when a structural pass creates a local
 def with a known value and reads of it, maintenance must propagate the def's
 value to those reads — either by re-deriving the affected local's reaching defs
-pointwise, or by having the creating pass seed `value_of` for the new reads. This
-is the precise obligation Route B discharges by construction (flow frozen into
-`Operand::Value` at the def, a read of a promoted local is the value itself), so
-the durable fix is Route B, not a `Local`-read case in `maintain_pure_value` or a
-retain at the inline splice.
+pointwise (which is the rejected incremental rebuild), or by having the value be
+born frozen so a read of it cannot stale. This is the precise obligation Route B
+discharges by construction (flow frozen into `Operand::Value` at the def, a read
+of a promoted local is the value itself), so the durable fix is Route B — not a
+`Local`-read case in `maintain_pure_value`, not field-seeding the regrow, not a
+retain at the inline splice. Method A is proven insufficient for the 21 by the
+four sound coarsening/regrow variants all landing on the same set.
 
 The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
 config-aware fresh rebuild per query, off by default) is reinstated as the guard
