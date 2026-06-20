@@ -29,6 +29,35 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
     }
 }
 
+/// Rebuild `func` to point at the monomorphized instance named `mangled`,
+/// preserving the call's `method_info`. The new `monomorph_info` records the
+/// pre-mono `generic_name` and the type args the instance was keyed with.
+///
+/// `func` is overwritten in full here, so move `method_info` out instead of
+/// cloning it.
+fn apply_instantiation(
+    func: &mut FunctionRef,
+    module_source: ModuleSource,
+    mangled: String,
+    generic_name: String,
+    impl_type_args: Vec<TypeId>,
+    method_type_args: Vec<TypeId>,
+    is_blanket: bool,
+) {
+    let method_info = std::mem::take(&mut func.method_info);
+    *func = FunctionRef {
+        module_source,
+        name: mangled,
+        monomorph_info: Some(MonomorphInfo {
+            generic_name,
+            impl_type_args,
+            method_type_args,
+            is_blanket,
+        }),
+        method_info,
+    };
+}
+
 impl Monomorphizer {
     /// Try to find a queued instantiation, allowing `key.module_source` to be
     /// an approximate hint. Mirrors `lookup_template_with_trait_fallback` in
@@ -211,7 +240,6 @@ impl Monomorphizer {
         } = &mut expr.kind
         {
             let original_func_name = func.name.clone();
-            let original_method_info = func.method_info.clone();
             let qualified_func_key =
                 generic_function_key(func.is_method(), &func.module_source, &func.name);
             let qualified_func_name = qualified_func_key.1;
@@ -224,7 +252,7 @@ impl Monomorphizer {
             } else if func.method_info.is_none() && func.monomorph_info.is_none() {
                 self.infer_instantiated_type_args(
                     &qualified_func_name,
-                    &original_method_info,
+                    &func.method_info,
                     args,
                     type_table,
                 )
@@ -238,20 +266,19 @@ impl Monomorphizer {
                     module_source: func.module_source.clone(),
                     impl_type_args: vec![],
                     method_type_args: inferred_args,
-                    method_info: original_method_info.clone(),
+                    method_info: func.method_info.clone(),
                 };
                 if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                    *func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled.clone(),
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: original_func_name,
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args.clone(),
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    let mangled = mangled.clone();
+                    apply_instantiation(
+                        func,
+                        key.module_source.clone(),
+                        mangled,
+                        original_func_name,
+                        key.impl_type_args.clone(),
+                        key.method_type_args.clone(),
+                        false,
+                    );
 
                     if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
                         && let Some(&concrete) = key.method_type_args.get(*index as usize)
@@ -262,7 +289,7 @@ impl Monomorphizer {
                     type_args.clear();
                 }
             }
-            // Also handle static method calls (formerly StaticCall) that need rewriting
+            // Also handle static method calls that need rewriting
             if let FunctionRef {
                 monomorph_info: Some(monomorph),
                 method_info: Some(info),
@@ -294,18 +321,15 @@ impl Monomorphizer {
                     if let Some((key, mangled)) =
                         self.lookup_instantiation_with_trait_fallback(key, &candidates, None)
                     {
-                        let original_method_info = func.method_info.clone();
-                        *func = FunctionRef {
-                            module_source: key.module_source.clone(),
-                            name: mangled,
-                            monomorph_info: Some(MonomorphInfo {
-                                generic_name: generic_method_name,
-                                impl_type_args: key.impl_type_args.clone(),
-                                method_type_args: key.method_type_args,
-                                is_blanket: false,
-                            }),
-                            method_info: original_method_info,
-                        };
+                        apply_instantiation(
+                            func,
+                            key.module_source.clone(),
+                            mangled,
+                            generic_method_name,
+                            key.impl_type_args.clone(),
+                            key.method_type_args,
+                            false,
+                        );
                         break;
                     }
                 }
@@ -327,8 +351,8 @@ impl Monomorphizer {
         // Extract method name from method_info or fall back to function name
         let method_name = method_func
             .method_info
-            .clone()
-            .map(|info| info.method_name)
+            .as_ref()
+            .map(|info| info.method_name.clone())
             .unwrap_or_else(|| method_func.name.clone());
         // If this is a generic method call, rewrite to monomorphized name
         if !type_args.is_empty()
@@ -340,8 +364,8 @@ impl Monomorphizer {
             // base (`List<u8>^…`). Mirrors the collect path in `func_inst.rs`.
             let trait_name_opt = method_func
                 .method_info
-                .clone()
-                .and_then(|info| info.trait_name);
+                .as_ref()
+                .and_then(|info| info.trait_name.clone());
             let (own_name, names_to_try) = self.newtype_aware_method_names(
                 receiver.type_id,
                 type_table,
@@ -368,18 +392,15 @@ impl Monomorphizer {
                     &candidates,
                     receiver_module.as_ref(),
                 ) {
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: full_method_name.clone(),
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args,
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source.clone(),
+                        mangled,
+                        full_method_name.clone(),
+                        key.impl_type_args.clone(),
+                        key.method_type_args,
+                        false,
+                    );
                     type_args.clear();
                     rewritten = true;
                     break;
@@ -433,18 +454,15 @@ impl Monomorphizer {
                                 dg_receiver_module.as_ref(),
                             )
                         {
-                            let original_method_info = method_func.method_info.clone();
-                            *method_func = FunctionRef {
-                                module_source: combined_key.module_source.clone(),
-                                name: mangled,
-                                monomorph_info: Some(MonomorphInfo {
-                                    generic_name: generic_method_name.clone(),
-                                    impl_type_args: combined_key.impl_type_args.clone(),
-                                    method_type_args: combined_key.method_type_args.clone(),
-                                    is_blanket: false,
-                                }),
-                                method_info: original_method_info,
-                            };
+                            apply_instantiation(
+                                method_func,
+                                combined_key.module_source.clone(),
+                                mangled,
+                                generic_method_name.clone(),
+                                combined_key.impl_type_args.clone(),
+                                combined_key.method_type_args.clone(),
+                                false,
+                            );
                             type_args.clear();
 
                             if let ResolvedType::TypeParam { index, .. } =
@@ -495,7 +513,7 @@ impl Monomorphizer {
         {
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
-            if let Some(ref info) = method_func.method_info.clone()
+            if let Some(info) = method_func.method_info.as_ref()
                 && let Some(ref trait_name) = info.trait_name
             {
                 // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
@@ -551,19 +569,15 @@ impl Monomorphizer {
                     &pk_candidates,
                     pk_receiver_module.as_ref(),
                 ) {
-                    // Preserve original method_info
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: key.name.clone(),
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args,
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source.clone(),
+                        mangled,
+                        key.name.clone(),
+                        key.impl_type_args.clone(),
+                        key.method_type_args,
+                        false,
+                    );
                     break;
                 }
             }
@@ -608,18 +622,15 @@ impl Monomorphizer {
                 None
             };
             if let Some((mangled, generic_name, impl_ta, method_ta, ms)) = blanket_lookup {
-                let original_method_info = method_func.method_info.clone();
-                *method_func = FunctionRef {
-                    module_source: ms,
-                    name: mangled,
-                    monomorph_info: Some(MonomorphInfo {
-                        generic_name,
-                        impl_type_args: impl_ta,
-                        method_type_args: method_ta,
-                        is_blanket: true,
-                    }),
-                    method_info: original_method_info,
-                };
+                apply_instantiation(
+                    method_func,
+                    ms,
+                    mangled,
+                    generic_name,
+                    impl_ta,
+                    method_ta,
+                    true,
+                );
             }
         }
         // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
@@ -638,12 +649,7 @@ impl Monomorphizer {
                 )
             });
             let impl_type_args = mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
-                let mut receiver_type = receiver.type_id;
-                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    type_table.get(receiver_type).clone()
-                {
-                    receiver_type = inner;
-                }
+                let receiver_type = type_table.peel_refs(receiver.type_id);
                 type_table.as_tuple(receiver_type).unwrap_or_default()
             });
             {
@@ -662,18 +668,15 @@ impl Monomorphizer {
                     &candidates,
                     tuple_receiver_module.as_ref(),
                 ) {
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source,
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name,
-                            impl_type_args,
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source,
+                        mangled,
+                        generic_name,
+                        impl_type_args,
+                        vec![],
+                        false,
+                    );
                 }
             }
         }
