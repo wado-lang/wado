@@ -33,8 +33,8 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
 /// preserving the call's `method_info`. The new `monomorph_info` records the
 /// pre-mono `generic_name` and the type args the instance was keyed with.
 ///
-/// `func.method_info` is unchanged until the reassignment, so cloning it here
-/// matches the previous per-site `let original_method_info = …` capture.
+/// `func` is overwritten in full here, so move `method_info` out instead of
+/// cloning it.
 fn apply_instantiation(
     func: &mut FunctionRef,
     module_source: ModuleSource,
@@ -44,7 +44,7 @@ fn apply_instantiation(
     method_type_args: Vec<TypeId>,
     is_blanket: bool,
 ) {
-    let method_info = func.method_info.clone();
+    let method_info = std::mem::take(&mut func.method_info);
     *func = FunctionRef {
         module_source,
         name: mangled,
