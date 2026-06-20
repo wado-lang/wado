@@ -240,7 +240,6 @@ impl Monomorphizer {
         } = &mut expr.kind
         {
             let original_func_name = func.name.clone();
-            let original_method_info = func.method_info.clone();
             let qualified_func_key =
                 generic_function_key(func.is_method(), &func.module_source, &func.name);
             let qualified_func_name = qualified_func_key.1;
@@ -253,7 +252,7 @@ impl Monomorphizer {
             } else if func.method_info.is_none() && func.monomorph_info.is_none() {
                 self.infer_instantiated_type_args(
                     &qualified_func_name,
-                    &original_method_info,
+                    &func.method_info,
                     args,
                     type_table,
                 )
@@ -267,7 +266,7 @@ impl Monomorphizer {
                     module_source: func.module_source.clone(),
                     impl_type_args: vec![],
                     method_type_args: inferred_args,
-                    method_info: original_method_info.clone(),
+                    method_info: func.method_info.clone(),
                 };
                 if let Some(mangled) = self.lookup_function_instantiation(&key) {
                     let mangled = mangled.clone();
@@ -352,8 +351,8 @@ impl Monomorphizer {
         // Extract method name from method_info or fall back to function name
         let method_name = method_func
             .method_info
-            .clone()
-            .map(|info| info.method_name)
+            .as_ref()
+            .map(|info| info.method_name.clone())
             .unwrap_or_else(|| method_func.name.clone());
         // If this is a generic method call, rewrite to monomorphized name
         if !type_args.is_empty()
@@ -365,8 +364,8 @@ impl Monomorphizer {
             // base (`List<u8>^…`). Mirrors the collect path in `func_inst.rs`.
             let trait_name_opt = method_func
                 .method_info
-                .clone()
-                .and_then(|info| info.trait_name);
+                .as_ref()
+                .and_then(|info| info.trait_name.clone());
             let (own_name, names_to_try) = self.newtype_aware_method_names(
                 receiver.type_id,
                 type_table,
@@ -514,7 +513,7 @@ impl Monomorphizer {
         {
             // Try trait method name format first (e.g., Triple^IndexValue::index_value)
             let mut possible_keys = Vec::new();
-            if let Some(ref info) = method_func.method_info.clone()
+            if let Some(info) = method_func.method_info.as_ref()
                 && let Some(ref trait_name) = info.trait_name
             {
                 // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
