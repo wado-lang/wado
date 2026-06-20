@@ -85,7 +85,6 @@ impl Monomorphizer {
             })
             .collect();
 
-        // Create the monomorphized struct
         let concrete = TirStruct {
             name: mangled_name,
             module_source: key.module_source.clone(),

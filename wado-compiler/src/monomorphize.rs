@@ -242,7 +242,6 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs.clone_from(&generic_structs);
 
-        // Build set of valid struct names for collection
         let valid_struct_names: IndexSet<String> = generic_structs
             .keys()
             .map(|(name, _)| name.clone())
@@ -254,8 +253,6 @@ impl Monomorphizer {
         // that also need to be instantiated.
         let new_structs =
             self.drain_pending_structs(&module.type_table, &generic_structs, &valid_struct_names);
-
-        // Add monomorphized structs to module
         module.structs.extend(new_structs);
 
         // Phase 5: Remove generic structs from the concrete struct list

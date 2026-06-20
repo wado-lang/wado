@@ -454,8 +454,8 @@ impl Monomorphizer {
                     let mangled = self.function_instantiation_name(&key, type_table);
                     self.try_queue_function(key, mangled);
                 }
-                // Also check if this is a static method call on a monomorphized struct
-                // (formerly StaticCall). Use method_info metadata to get struct/method name.
+                // Also check if this is a static method call on a monomorphized struct.
+                // Use method_info metadata to get struct/method name.
                 if let FunctionRef {
                     method_info: Some(info),
                     monomorph_info: Some(monomorph),
@@ -1496,7 +1496,6 @@ impl Monomorphizer {
         // Substitute the expression's own type
         expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
 
-        // Recurse into sub-expressions
         match &mut expr.kind {
             TirExprKind::Call {
                 func: call_func,
@@ -1504,15 +1503,13 @@ impl Monomorphizer {
                 args,
                 ..
             } => {
-                // Substitute type args themselves
                 for type_arg in type_args.iter_mut() {
                     *type_arg = self.substitute_type(*type_arg, substitution, type_table);
                 }
-                // For static method calls (formerly StaticCall), also update the func name
-                // by delegating to the StaticCall substitution logic below via a flag.
+                // A static method call carries method_info; substitute the type
+                // args embedded in its mangled name too.
                 let is_static_method = call_func.method_info.is_some();
                 if is_static_method {
-                    // Inline the StaticCall substitution logic
                     if !substitution.is_empty()
                         && let Some(info) = call_func.method_info.clone()
                     {

@@ -289,7 +289,7 @@ impl Monomorphizer {
                     type_args.clear();
                 }
             }
-            // Also handle static method calls (formerly StaticCall) that need rewriting
+            // Also handle static method calls that need rewriting
             if let FunctionRef {
                 monomorph_info: Some(monomorph),
                 method_info: Some(info),
