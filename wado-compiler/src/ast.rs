@@ -1020,6 +1020,34 @@ pub struct TestDecl {
     pub span: Span,
 }
 
+/// Test attributes resolved from a `TestDecl`'s `#[...]` annotations (plus the
+/// enclosing module's `#[TODO]`). Shared by the annotate and reify walks so the
+/// attribute semantics live in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct TestMetadata {
+    pub expect_trap: bool,
+    pub is_todo: bool,
+    pub timeout_ms: Option<u64>,
+}
+
+impl TestDecl {
+    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]`
+    /// attributes. `module_is_todo` folds in a module-level `#[TODO]`.
+    pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
+        TestMetadata {
+            expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
+            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
+            timeout_ms: self.attributes.iter().find_map(|a| {
+                if a.name == "timeout_ms" {
+                    a.args.first().and_then(|arg| arg.as_str().parse::<u64>().ok())
+                } else {
+                    None
+                }
+            }),
+        }
+    }
+}
+
 /// Global variable declaration: `global name: Type = expr;`
 /// or `pub global mut name: Type = expr;`
 #[derive(Debug, Clone)]

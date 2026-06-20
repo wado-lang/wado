@@ -1272,6 +1272,32 @@ pub fn test_name_to_snake(name: &str) -> String {
         .to_lowercase()
 }
 
+/// Build the exported function name for a test block. The prefix encodes the
+/// test's attributes, the index disambiguates anonymous tests, and `name` (when
+/// present) is appended as an ASCII snake-case segment via [`test_name_to_snake`].
+///
+/// - `__test_{index}` / `__test_{index}_{snake}` — plain
+/// - `__test_trap_…` — `#[expect_trap]`
+/// - `__test_todo_…` — `#[TODO]` (or module-level `#[TODO]`)
+/// - `__test_tm{ms}_…` — `#[timeout_ms(ms)]` (combines: `__test_trap_tm{ms}_…`)
+///
+/// The single source of this format: both the annotate walk and reify call here
+/// so the two never drift.
+pub fn test_function_name(meta: &crate::ast::TestMetadata, test_index: usize, name: Option<&str>) -> String {
+    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
+        (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
+        (true, _, None) => "__test_todo".to_string(),
+        (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
+        (_, true, None) => "__test_trap".to_string(),
+        (_, _, Some(ms)) => format!("__test_tm{ms}"),
+        (_, _, None) => "__test".to_string(),
+    };
+    match name {
+        Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
+        None => format!("{prefix}_{test_index}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

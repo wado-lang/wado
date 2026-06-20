@@ -1232,41 +1232,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         test_index: usize,
         module_is_todo: bool,
     ) -> Option<(TirFunction, TirTest)> {
-        let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
-        let is_todo = module_is_todo || test_decl.attributes.iter().any(|a| a.name == "TODO");
-        let timeout_ms = test_decl.attributes.iter().find_map(|a| {
-            if a.name == "timeout_ms" {
-                a.args
-                    .first()
-                    .and_then(|arg| arg.as_str().parse::<u64>().ok())
-            } else {
-                None
-            }
-        });
-
-        // Generate function name: __test_{index} or __test_{name_snake_case}
-        // For expect_trap tests: __test_trap_{index} or __test_trap_{index}_{name_snake_case}
-        // For TODO tests:        __test_todo_{index} or __test_todo_{index}_{name_snake_case}
-        // For custom timeout:    __test_tm{ms}_{index} or __test_trap_tm{ms}_{index}_{name}
-        let prefix = match (is_todo, expect_trap, timeout_ms) {
-            (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
-            (true, _, None) => "__test_todo".to_string(),
-            (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
-            (_, true, None) => "__test_trap".to_string(),
-            (_, _, Some(ms)) => format!("__test_tm{ms}"),
-            (_, _, None) => "__test".to_string(),
-        };
-        let function_name = match &test_decl.name {
-            Some(name) => {
-                // Convert the test name to an ASCII snake_case segment. Non-ASCII
-                // characters collapse to `_` so the derived CM kebab export name
-                // stays valid; the lossless original name is preserved on
-                // `TirTest::name` for display and `--test-name` filtering.
-                let snake_name = crate::name::test_name_to_snake(name);
-                format!("{prefix}_{test_index}_{snake_name}")
-            }
-            None => format!("{prefix}_{test_index}"),
-        };
+        let meta = test_decl.metadata(module_is_todo);
+        let ast::TestMetadata {
+            expect_trap,
+            is_todo,
+            timeout_ms,
+        } = meta;
+        let function_name =
+            crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         // Create function context - tests have no parameters and return unit
         let return_type = TypeTable::UNIT;

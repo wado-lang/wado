@@ -1478,38 +1478,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<(TirFunction, TirTest)> {
         use crate::tir::{FunctionKind, InlineHint, ReturnAbi, TypeTable};
 
-        let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
-        let is_todo = module_is_todo || test_decl.attributes.iter().any(|a| a.name == "TODO");
-        let timeout_ms = test_decl.attributes.iter().find_map(|a| {
-            if a.name == "timeout_ms" {
-                a.args
-                    .first()
-                    .and_then(|arg| arg.as_str().parse::<u64>().ok())
-            } else {
-                None
-            }
-        });
-
-        let prefix = match (is_todo, expect_trap, timeout_ms) {
-            (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
-            (true, _, None) => "__test_todo".to_string(),
-            (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
-            (_, true, None) => "__test_trap".to_string(),
-            (_, _, Some(ms)) => format!("__test_tm{ms}"),
-            (_, _, None) => "__test".to_string(),
-        };
-        let function_name = match &test_decl.name {
-            // Use the shared ASCII-only snake conversion: non-ASCII letters
-            // must collapse to `_` so the segment downgrades losslessly into
-            // a Component Model kebab-case export name. A Unicode-aware
-            // `is_alphanumeric` here would leak multibyte letters into the
-            // export name and crash Wasm validation (matches item.rs).
-            Some(name) => {
-                let snake_name = crate::name::test_name_to_snake(name);
-                format!("{prefix}_{test_index}_{snake_name}")
-            }
-            None => format!("{prefix}_{test_index}"),
-        };
+        let meta = test_decl.metadata(module_is_todo);
+        let ast::TestMetadata {
+            expect_trap,
+            is_todo,
+            timeout_ms,
+        } = meta;
+        let function_name =
+            crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
