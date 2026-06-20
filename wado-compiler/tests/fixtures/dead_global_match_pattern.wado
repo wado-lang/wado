@@ -1,0 +1,22 @@
+// False-positive guard: an immutable global used as a constant-value pattern in
+// a `match` arm is a real use, so it must not be reported as dead code. The
+// pattern path records the use→def edge just like an expression read does.
+global MAJOR_TAG: u8 = 6;
+
+fn classify(b: u8) -> i32 {
+    return match b >> 5 {
+        MAJOR_TAG => 600,
+        _ => -1,
+    };
+}
+
+export fn run() {
+    assert classify(0xc0) == 600;
+    assert classify(0x20) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_not_contains": ["global `MAJOR_TAG` is never used"]
+}
