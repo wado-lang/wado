@@ -268,7 +268,7 @@ const WIDE_OPS: [&str; 4] = [
 
 #[test]
 fn default_emits_wide_arithmetic() {
-    let wat = wasmprinter::print_bytes(&compile_wide_arith(Vec::new())).expect("disassemble");
+    let wat = wasmprinter::print_bytes(compile_wide_arith(Vec::new())).expect("disassemble");
     for op in WIDE_OPS {
         assert!(wat.contains(op), "default codegen must emit `{op}`");
     }
@@ -276,7 +276,7 @@ fn default_emits_wide_arithmetic() {
 
 #[test]
 fn no_wide_arithmetic_flag_lowers_to_plain_i64() {
-    let wat = wasmprinter::print_bytes(&compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
+    let wat = wasmprinter::print_bytes(compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
         .expect("disassemble");
     for op in WIDE_OPS {
         assert!(

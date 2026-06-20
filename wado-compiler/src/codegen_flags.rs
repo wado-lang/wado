@@ -60,17 +60,10 @@ pub struct CodegenFlags {
     /// diagnostic, `-f bare-asserts` forces it at any level.
     pub bare_asserts: bool,
 
-    /// Emit the native Wasm wide-arithmetic instructions (`i64.mul_wide_u/s`,
-    /// `i64.add128`, `i64.sub128`) — the default. Pass `-f no-wide-arithmetic`
-    /// to lower them to plain 64-bit integer sequences instead.
-    ///
-    /// wasmtime implements the wide-arithmetic proposal, so the native
-    /// instructions are best there. V8 (Node, browsers) does not implement it
-    /// at all, so a component containing those opcodes fails to compile under
-    /// jco-transpiled execution. `-f no-wide-arithmetic` open-codes each op with
-    /// 32-bit-limb arithmetic in `codegen/emit.rs`, producing portable output at
-    /// some runtime cost. The lowering is in codegen, so the WIR still shows the
-    /// wide ops; only the final Wasm changes.
+    /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
+    /// `i64.sub128`) — the default, best on wasmtime. `-f no-wide-arithmetic`
+    /// open-codes them as 32-bit-limb i64 sequences
+    /// (`codegen/emit/wide_arith_downlevel.rs`) for V8, which lacks the proposal.
     pub wide_arithmetic: bool,
 }
 

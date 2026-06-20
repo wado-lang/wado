@@ -18,9 +18,7 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-/// Downlevel lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
-/// Adds the `WirEmitter` helpers the wide-op match arms call; delete with the
-/// flag once V8 supports the proposal.
+/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
 mod wide_arith_downlevel;
 
 /// Emit a core Wasm module from a `WirPackage`.
@@ -2608,10 +2606,8 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit integer multi-value operations. Each pushes [low, high]
-            // (high on top), matching `MultiValueLocalBind`'s reverse local.set.
-            // `-f no-wide-arithmetic` open-codes them with plain i64 ops for
-            // runtimes (V8) that lack the wide-arithmetic proposal.
+            // 128-bit ops push [low, high]; `-f no-wide-arithmetic` open-codes
+            // them as plain i64 for V8 (see wide_arith_downlevel.rs).
             WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
                 if self.codegen_flags.wide_arithmetic {
                     self.emit_instr(f, a_lo);

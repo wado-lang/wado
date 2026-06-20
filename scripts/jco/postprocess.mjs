@@ -1,32 +1,6 @@
-// Post-process a jco-transpiled component module to supply the P3 runtime that
-// released jco (1.24.3) fails to emit for Wado components. Two transforms,
-// mirroring the Wado fork's runtime-affecting patches (see vendor/jco.patch):
-//
-//   1. Inject the future-end intrinsic classes (patch: missing intrinsic deps).
-//      Released jco references `FutureReadableEnd` / `FutureWritableEnd` from
-//      `InternalFuture` but does not emit their definitions on the future-drop
-//      path. We splice the harvested classes in at module scope, right before
-//      `InternalFuture`, so they share scope with `NESTED_FUTURE_SYMBOL`,
-//      `getOrCreateAsyncState`, `FUTURES`, etc. (globalThis injection cannot,
-//      because the classes reference those module-scoped bindings).
-//
-//   2. Insert the stream-write hook (patch: stream write hook). Lets a WASI shim
-//      receive bulk stream data via `globalThis._jcoStreamWriteHook`, bypassing
-//      jco's byte-at-a-time rendezvous. Required for the example/jco-shim cli.js
-//      stdout path. The hook must go inside `streamWrite`, NOT at the first
-//      `streamEnd.copy` in the file — `streamRead` is emitted first and has its
-//      own `streamEnd.copy`, so anchoring on the first one would hook the read
-//      path (a no-op, guarded by `isWritable()`) and leave stdout unhooked.
-//
-// Each transform throws if it is needed (its precondition is present) but its
-// anchor is missing — a silent no-op would yield a clean-looking component that
-// produces no output or crashes at runtime with no pointer back to here.
-//
-// Not handled: the async-non-void-export return fix (patch #3 in the fork). It
-// rewrites emitted code jco shapes differently per export, so it is left to the
-// fork. Void exports (CLI `run`, `test` blocks) do not need it; result-returning
-// async exports (HTTP `handle`) do — but those do not transpile through released
-// jco yet anyway (a separate WIT-representation error).
+// Supply the P3 runtime released jco (1.24.3) fails to emit, mirroring the fork
+// patches (vendor/jco.patch). Each transform throws if it is needed but its
+// anchor is missing, rather than silently producing a no-output component.
 
 const INTERNAL_FUTURE = /class InternalFuture\s*\{/;
 const STREAM_WRITE_FN = /async function streamWrite\s*\(/;

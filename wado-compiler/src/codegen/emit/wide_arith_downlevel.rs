@@ -1,16 +1,8 @@
-//! Downlevel lowering of the Wasm wide-arithmetic ops for `-f no-wide-arithmetic`.
-//!
-//! Wado emits the wide-arithmetic proposal (`i64.mul_wide_u/s`, `i64.add128`,
-//! `i64.sub128`); wasmtime runs it natively, but V8 (Node, browsers) does not
-//! implement the proposal, so jco-transpiled components carrying those opcodes
-//! fail to compile under V8. The helpers here open-code each op with plain
-//! 32-bit-limb i64 arithmetic.
-//!
-//! This module is deliberately self-contained: it adds only `WirEmitter`
-//! methods that `emit.rs` calls from the wide-op match arms (gated on
-//! `codegen_flags.wide_arithmetic`). Once V8 ships wide-arithmetic, delete this
-//! file, its `mod` line, and the `else` branches in `emit.rs` — nothing else
-//! depends on it.
+//! Open-codes the Wasm wide-arithmetic ops (`i64.mul_wide_u/s`, `i64.add128`,
+//! `i64.sub128`) as 32-bit-limb i64 arithmetic for `-f no-wide-arithmetic`,
+//! since V8 (Node, browsers) does not implement the proposal that wasmtime runs
+//! natively. Self-contained: `emit.rs` calls these from the wide-op match arms.
+//! Delete this file, its `mod` line, and those `else` branches once V8 ships it.
 
 use wasm_encoder::{Function, Instruction, ValType};
 
@@ -23,13 +15,10 @@ use super::WirEmitter;
 const WIDE_ARITH_SCRATCH_COUNT: usize = 10;
 
 impl WirEmitter<'_> {
-    /// Pool of scratch i64 locals for the software lowering of the 128-bit ops.
-    /// A single pool is shared across every wide-arith site in a function: each
-    /// expansion evaluates its operands into these slots and consumes them
-    /// before control leaves the op, so the slots are never simultaneously live
-    /// across sites (the ops never nest — a multi-value 128-bit result is never
-    /// an operand of another). Declared once per function, deduped on the first
-    /// slot name.
+    /// Scratch i64 pool shared by every wide-arith site in a function. Safe to
+    /// share: each expansion fills and consumes the slots before returning, and
+    /// the ops never nest (a 128-bit result is never an operand). Declared once,
+    /// deduped on the first slot name.
     pub(super) fn declare_wide_arith_scratch(&mut self, locals: &mut Vec<(String, ValType)>) {
         if self.scratch_local_names.insert(Self::wide_scratch_name(0)) {
             locals.push((Self::wide_scratch_name(0), ValType::I64));

@@ -1,12 +1,8 @@
-// Harvest the future-end runtime classes from *released* jco's own output.
+// Extract the FutureEnd / FutureWritableEnd / FutureReadableEnd classes from a
+// future-using component (future-trigger.wado) transpiled by released jco, so
+// they stay version-matched. Re-run after a jco bump to refresh.
 //
 // Usage: node harvest-intrinsics.mjs <component.wasm> [out.js]
-//
-// Transpiles a future-using component (see future-trigger.wado) with the
-// released jco library, then extracts the `FutureEnd` / `FutureWritableEnd` /
-// `FutureReadableEnd` class definitions verbatim. Sourcing them from the same
-// jco build that transpiles production components keeps them version-matched:
-// after a jco bump, just re-run this to refresh missing-intrinsics.js.
 
 import { transpile } from "@bytecodealliance/jco";
 import { readFile, writeFile } from "node:fs/promises";
