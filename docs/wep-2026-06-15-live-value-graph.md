@@ -1410,6 +1410,20 @@ localized-maintenance variants were measured under `WADO_VERIFY_VG`:
 7. precise inline retain alone (drop spliced-region exprs, keep *caller*
    constants) — **still unsound**: `opt_container_sroa_nondup_idx` over-merges
    `__v3`/`__v1`, two caller locals both kept a constant that a fresh build splits.
+8. pre-`sroa` field forward (promote `obj.f` constants to frozen operands before
+   `sroa`) — ineffective: the *field* read `p2.a` does not forward at the value
+   graph (it gets an opaque `FieldAccess(recv, field, ver)`, a heap-version/root
+   gap), so there is no constant to freeze; the recovery the fresh rebuild gets is
+   the post-`sroa` *scalar* (`__sroa_p2_a = 42; read → 42`), not the field.
+9. pre-`inline` constant forward (freeze constants before inline empties the
+   graph) — **unsound and net-negative**: recovers 1 (`inline_cold_path_cost`) but
+   14 over-merges and 13 newly broken. Building the graph early and then letting
+   inline/`sroa` restructure re-introduces the same stale-context over-merge.
+
+Variants 8–9 confirm the recovery is the post-`sroa` *scalar* local read, which
+build-once leaves unvalued (a fresh rebuild over the scalarized body is the only
+thing that values it), and that pre-emptively building/forwarding to dodge that
+just relocates the same stale-context over-merge.
 
 Variant 7 is the clinching proof. The hope was that a *caller* constant is safe
 because its reaching def is caller-side; it is not, because `inline` restructures
