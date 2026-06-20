@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781959735177,
+  "lastUpdate": 1781963713873,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34289,6 +34289,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d9d7c30cb4c166992c5a330ae85b99171cff86f5"
         },
         "date": 1781959734577,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1a0a75676bef5f1765ace3e4a624e91e69eee0b2",
+          "message": "Merge pull request #1411 from wado-lang/claude/turbofish-cleanup-8z9tro\n\nfix(compiler): drop inferable turbofish in core:json/serde and close the inference gaps it exposed",
+          "timestamp": "2026-06-20T22:44:47+09:00",
+          "tree_id": "23a7375503607083a6babbe89465ff8cad318bc5",
+          "url": "https://github.com/wado-lang/wado/commit/1a0a75676bef5f1765ace3e4a624e91e69eee0b2"
+        },
+        "date": 1781963713260,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
