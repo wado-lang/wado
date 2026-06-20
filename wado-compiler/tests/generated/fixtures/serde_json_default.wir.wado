@@ -442,9 +442,9 @@ type "functype//core:json/JsonDeserializer^Deserializer::deserialize_bool" = fn(
 
 type "functype//core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests/fixtures/serde_json_default.wado/Config>" = fn(ref "core:json//JsonStructAccess") -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(143)
 
-type "functype//core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//List<core:prelude/string.wado/String>", ref null "core:serde//DeserializeError"];  // TypeId(144)
+type "functype//core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//List<core:prelude/string.wado/String>", ref null "core:serde//DeserializeError"];  // TypeId(144)
 
-type "functype//core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(145)
+type "functype//core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(145)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -3286,7 +3286,7 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                             let __sroa___local_18_discriminant: i32;
                             let __sroa___local_18_case0_payload_0: ref null "core:prelude//List<core:prelude/string.wado/String>";
                             let __sroa___local_18_case1_payload_0: ref null "core:serde//DeserializeError";
-                            multivalue_bind [__sroa___local_18_discriminant, __sroa___local_18_case0_payload_0, __sroa___local_18_case1_payload_0] = "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(__local_2.de);
+                            multivalue_bind [__sroa___local_18_discriminant, __sroa___local_18_case0_payload_0, __sroa___local_18_case1_payload_0] = "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(__local_2.de);
                             if __sroa___local_18_discriminant == 0 {
                                 __local_19 = ref.as_non_null(__sroa___local_18_case0_payload_0);
                                 __local_6 = __local_19;
@@ -3297,7 +3297,7 @@ fn "wado-compiler/tests/fixtures/serde_json_default.wado/Config^Deserialize::des
                             let __sroa___local_20_discriminant: i32;
                             let __sroa___local_20_case0_payload_0: ref null "core:prelude/string.wado//String";
                             let __sroa___local_20_case1_payload_0: ref null "core:serde//DeserializeError";
-                            multivalue_bind [__sroa___local_20_discriminant, __sroa___local_20_case0_payload_0, __sroa___local_20_case1_payload_0] = "core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(__local_2.de);
+                            multivalue_bind [__sroa___local_20_discriminant, __sroa___local_20_case0_payload_0, __sroa___local_20_case1_payload_0] = "core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(__local_2.de);
                             if __sroa___local_20_discriminant == 0 {
                                 __local_7 = __sroa___local_20_case0_payload_0;
                             } else {
@@ -3466,7 +3466,7 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     return 0, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: idx_16 }, ref.null none;
 }
 
-fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
     let __qm_v_1: ref "core:json//JsonSeqAccess";
     let __qm_e_2: ref "core:serde//DeserializeError";
     let seq: ref "core:json//JsonSeqAccess";
@@ -3557,7 +3557,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<co
     }
 }
 
-fn "core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<core:json/JsonDeserializer>"(d) {
+fn "core:serde/Option<core:prelude/string.wado/String>^Deserialize::deserialize<&mut core:json/JsonDeserializer>"(d) {
     let __qm_v_1: bool;
     let __qm_e_2: ref "core:serde//DeserializeError";
     let is_null: bool;

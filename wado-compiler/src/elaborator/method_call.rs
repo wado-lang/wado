@@ -559,7 +559,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check each argument against expected parameter type
-        for (i, (arg, &expected_type)) in args.iter_mut().zip(expected_param_types.iter()).enumerate()
+        for (i, (arg, &expected_type)) in
+            args.iter_mut().zip(expected_param_types.iter()).enumerate()
         {
             // Pin a deferred hole that rode a prior binding into this argument
             // (`let v = gen()?; out.push(v)`) against the parameter type.
