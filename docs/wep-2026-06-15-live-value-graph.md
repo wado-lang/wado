@@ -1375,6 +1375,19 @@ Two decisive experiments pin it to the node-creation half and rule out Method A:
   rebuild over the current body values them. No localized seed reaches them; that
   is precisely why the fresh rebuild is the only thing that recovers, and why the
   fix must be *born-frozen values* (Route B), not post-hoc maintenance. Reverted.
+- **The combination** (precise inline coarsening — drop the spliced *region's*
+  exprs plus every *non*-constant caller entry, keeping caller constants so
+  `p2.a = 42` survives the inline that wiped `run()`'s graph — *plus* the `sroa`
+  const-transfer above, now with a value to transfer) **does** light up `__sroa_*`
+  reads (`p2.a → 42`), but is **unsound**: 20 over-merges, 22 fixtures miscompiled.
+  `WADO_VERIFY_VG` pins it: `__sroa_p_x` maintained→`Int(0)` but fresh→`ValueId(45)`.
+  The forwarded constant a field read carried is **context-dependent** — it is the
+  value at one heap version / reaching def, not a property of the scalar's def. A
+  fresh post-`sroa` build re-derives the scalar from *its* def and splits, so
+  transferring the constant onto the new node over-merges. This is the same lesson
+  as constant-retain (a constant on a `Local`/scalar read is only as stable as its
+  reaching def) and the deepest reason the value cannot be *maintained* across
+  restructuring — it must be *born* in the operand slot, which is Route B.
 
 Remaining piece (the node-creation half): when a structural pass creates a local
 def with a known value and reads of it, maintenance must propagate the def's
@@ -1384,11 +1397,16 @@ born frozen so a read of it cannot stale. This is the precise obligation Route B
 discharges by construction (flow frozen into `Operand::Value` at the def, a read
 of a promoted local is the value itself), so the durable fix is Route B — not a
 `Local`-read case in `maintain_pure_value`, not field-seeding the regrow, not a
-retain at the inline splice, not seeding at `sroa`. Method A is proven
-insufficient for the 21 by five sound variants (clear-all, keep-all-sound-subset,
-constant-retain, field-seed-regrow, sroa-const-seed) all landing on the same set;
-the one thing that recovers — a fresh rebuild over the post-`sroa` body — is the
-rebuild build-once forbids. Recovery is therefore Route B or nothing.
+retain at the inline splice, not seeding at `sroa`, not the two combined. Six
+localized-maintenance variants were measured: clear-all (sound, 21), keep-all
+(unsound), constant-retain (unsound), field-seed-regrow (sound, 0 recovered),
+sroa-const-seed (0, nothing to transfer), and precise-retain+sroa-seed (unsound,
+22 miscompiled). The one thing that recovers — a fresh rebuild over the post-`sroa`
+body — is the rebuild build-once forbids. The invariant under all six: a value the
+graph forwarded is tied to the build context (heap version, reaching def) it was
+derived in; carrying it across a structural pass that re-derives that context
+over-merges. Only a value *born* in the operand slot is context-free. Recovery is
+therefore Route B or nothing.
 
 The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
 config-aware fresh rebuild per query, off by default) is reinstated as the guard
