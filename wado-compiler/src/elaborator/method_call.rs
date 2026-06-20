@@ -563,13 +563,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // A deferred inference hole that rode a prior binding into this
             // argument (`let v = gen()?; ... out.push(v)`) is pinned by the
-            // parameter type. `expected_type` is the receiver method's already
-            // receiver-substituted parameter type, so an outer generic target
-            // (`List<T>::push` expects the enclosing `T`) is authoritative; it
-            // must only be hole-free.
-            if self.type_has_infer_hole(arg.type_id)
-                && !self.type_has_infer_hole(expected_type)
-            {
+            // parameter type when that type is an outer-scope generic
+            // (`List<T>::push` expects the enclosing `T`) or concrete. A target
+            // that is the called method's own type parameter is left to the
+            // normal inference path, so the hole is not fused to it.
+            if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
                 self.solve_infer_holes_against(arg.type_id, expected_type);
                 arg.type_id = self.apply_infer_holes(arg.type_id);
             }

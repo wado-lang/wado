@@ -2086,10 +2086,55 @@ impl TypeTable {
             | ResolvedType::GenericResource { type_args, .. } => type_args
                 .iter()
                 .any(|t| self.contains_type_param_index(*t, index)),
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
                 self.contains_type_param_index(*param_id, index)
+                    || assoc_type_bindings
+                        .iter()
+                        .any(|(_, t)| self.contains_type_param_index(*t, index))
             }
             _ => false,
+        }
+    }
+
+    /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
+    /// `allowed` (by `TypeId`). A type with no type parameters trivially holds.
+    /// Used to decide whether an inference hole may be solved against an
+    /// expected type: only when that type's parameters are outer-scope generics
+    /// (not a callee's own, still-being-inferred method parameters).
+    pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeId]) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.type_params_all_in(*inner, allowed),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().all(|p| self.type_params_all_in(*p, allowed))
+                    && self.type_params_all_in(*return_type, allowed)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .all(|t| self.type_params_all_in(*t, allowed)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
+                self.type_params_all_in(*param_id, allowed)
+                    && assoc_type_bindings
+                        .iter()
+                        .all(|(_, t)| self.type_params_all_in(*t, allowed))
+            }
+            _ => true,
         }
     }
 

@@ -83,6 +83,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .contains_infer_hole(ty, HOLE_INDEX_BASE)
     }
 
+    /// Whether a deferred inference hole may be solved against `expected`.
+    ///
+    /// `expected` must be hole-free and mention only outer-scope type parameters
+    /// (the enclosing impl / fn generics). Pinning a hole to a callee's *own*
+    /// method type parameter — still being inferred at this call site — would
+    /// fuse the hole to a dangling id instead of deferring it to a real sink.
+    pub(super) fn hole_pinnable_against(&self, expected: TypeId) -> bool {
+        if self.type_has_infer_hole(expected) {
+            return false;
+        }
+        let scope: Vec<TypeId> = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .values()
+            .map(|&(_, tid)| tid)
+            .collect();
+        self.tysys
+            .type_table
+            .borrow()
+            .type_params_all_in(expected, &scope)
+    }
+
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
     /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
@@ -256,6 +279,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for gi in types.generic_instantiations.values_mut() {
             sub_vec(tt, &mut gi.type_args);
             gi.instance_type = sub(tt, gi.instance_type);
+            // A struct-literal mangled name (`Wrapper<?hole>`) is frozen onto the
+            // `GenericInstantiation` before the hole is solved, and reify emits
+            // it verbatim as the struct name. Rebuild it from the swept instance
+            // type so `Wrapper<?hole>` becomes `Wrapper<i32>` (a no-op once the
+            // type args are already concrete).
+            if let Some(name) = gi.mangled_name.as_mut()
+                && let ResolvedType::GenericInstance {
+                    name: base,
+                    type_args,
+                    ..
+                } = tt.get(gi.instance_type).clone()
+            {
+                let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
+                *name = crate::name::mangle_generic_name(&base, &arg_names);
+            }
         }
         for md in types.method_dispatch.values_mut() {
             md.return_type = sub(tt, md.return_type);

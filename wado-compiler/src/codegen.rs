@@ -120,28 +120,35 @@ fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
     let name = names.get(&idx).map_or("<anonymous>", String::as_str);
     let rel = offset.saturating_sub(body_start);
 
-    // The validator points at the failing operator's start; pick the last
-    // operator at or before the error offset as the pivot and show a window.
+    // The validator points at the failing operator's start; the pivot is the
+    // last operator at or before the error offset. `None` means the offset is
+    // in the locals / prologue before the first operator — show leading context
+    // without a misleading `>>` marker.
     let mut disasm = String::new();
     if ops.is_empty() {
         disasm.push_str("    (no operators decoded)\n");
     } else {
-        let pivot = ops
-            .iter()
-            .rposition(|(off, _)| *off <= offset)
-            .unwrap_or(0);
-        let start = pivot.saturating_sub(4);
-        let end = (pivot + 3).min(ops.len());
+        let pivot = ops.iter().rposition(|(off, _)| *off <= offset);
+        let center = pivot.unwrap_or(0);
+        let start = center.saturating_sub(4);
+        let end = (center + 3).min(ops.len());
         for (i, (off, text)) in ops.iter().enumerate().take(end).skip(start) {
-            let marker = if i == pivot { ">>" } else { "  " };
+            let marker = if pivot == Some(i) { ">>" } else { "  " };
             let rel_off = off.saturating_sub(body_start);
             disasm.push_str(&format!("    {marker} +0x{rel_off:04x}  {text}\n"));
         }
     }
 
+    let note = if ops.is_empty() {
+        ""
+    } else if ops.iter().any(|(off, _)| *off <= offset) {
+        " (`>>` marks the failing operator)"
+    } else {
+        " (failure is in the function prologue, before the first operator below)"
+    };
     Some(format!(
         "Offending function: func #{idx} {name}\n\
-         Failure at body offset +0x{rel:04x} (`>>` marks the failing operator):\n\
+         Failure at body offset +0x{rel:04x}{note}:\n\
          {disasm}"
     ))
 }

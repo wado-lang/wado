@@ -434,7 +434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (i, arg) in args.iter_mut().enumerate() {
                 if let Some(&expected) = param_types.get(i)
                     && self.type_has_infer_hole(arg.type_id)
-                    && !self.type_has_infer_hole(expected)
+                    && self.hole_pinnable_against(expected)
                 {
                     self.solve_infer_holes_against(arg.type_id, expected);
                     arg.type_id = self.apply_infer_holes(arg.type_id);
@@ -1225,13 +1225,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(&expected) = check_param_types.get(i) {
                 // Pin a deferred inference hole carried into this argument by a
                 // prior binding (`let v = gen()?; foo(v)`) against the parameter
-                // type when it is fully concrete, mirroring Rust's whole-body
-                // inference. A parametric parameter (the callee's own type
-                // params) is left to the normal inference path.
-                if self.type_has_infer_hole(arg.type_id)
-                    && !self.tysys.type_table.borrow().contains_type_param(expected)
-                    && !self.type_has_infer_hole(expected)
-                {
+                // type when it is concrete or an outer-scope generic, mirroring
+                // Rust's whole-body inference. A parameter that is the callee's
+                // own type param is left to the normal inference path.
+                if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected) {
                     self.solve_infer_holes_against(arg.type_id, expected);
                     arg.type_id = self.apply_infer_holes(arg.type_id);
                 }
