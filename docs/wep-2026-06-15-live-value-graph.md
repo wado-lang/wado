@@ -1397,16 +1397,31 @@ born frozen so a read of it cannot stale. This is the precise obligation Route B
 discharges by construction (flow frozen into `Operand::Value` at the def, a read
 of a promoted local is the value itself), so the durable fix is Route B — not a
 `Local`-read case in `maintain_pure_value`, not field-seeding the regrow, not a
-retain at the inline splice, not seeding at `sroa`, not the two combined. Six
-localized-maintenance variants were measured: clear-all (sound, 21), keep-all
-(unsound), constant-retain (unsound), field-seed-regrow (sound, 0 recovered),
-sroa-const-seed (0, nothing to transfer), and precise-retain+sroa-seed (unsound,
-22 miscompiled). The one thing that recovers — a fresh rebuild over the post-`sroa`
-body — is the rebuild build-once forbids. The invariant under all six: a value the
-graph forwarded is tied to the build context (heap version, reaching def) it was
-derived in; carrying it across a structural pass that re-derives that context
-over-merges. Only a value *born* in the operand slot is context-free. Recovery is
-therefore Route B or nothing.
+retain at the inline splice, not seeding at `sroa`, not the two combined. Seven
+localized-maintenance variants were measured under `WADO_VERIFY_VG`:
+
+1. clear-all — sound, 21.
+2. keep-all caller entries — unsound (opaque call results inlining splits).
+3. constant-retain (all constant entries) — unsound (inlined-region loop vars).
+4. field-seed-regrow (`build_scoped` seeds call-site struct fields) — sound, 0.
+5. sroa-const-seed (transfer field read's constant to the scalar) — sound, 0
+   (the field reads postdate the freeze; nothing to transfer).
+6. precise-retain + sroa-seed — unsound (20 over-merges, 22 miscompiled).
+7. precise inline retain alone (drop spliced-region exprs, keep *caller*
+   constants) — **still unsound**: `opt_container_sroa_nondup_idx` over-merges
+   `__v3`/`__v1`, two caller locals both kept a constant that a fresh build splits.
+
+Variant 7 is the clinching proof. The hope was that a *caller* constant is safe
+because its reaching def is caller-side; it is not, because `inline` restructures
+the caller's own control flow (a spliced loop/branch puts the read on a back-edge),
+so a fresh build re-derives the caller read as loop-variant. The invariant under
+all seven: **a value the graph forwarded is bound to the flow context it was
+derived in, and any structural pass can change that context for any read** — so no
+retained or transferred value is safe, and `clear-all` is the *unique* sound
+coarsening. The one thing that recovers — a fresh rebuild over the post-`sroa`
+body — is the rebuild build-once forbids. Only a value *born* in the operand slot
+(frozen at the def, never re-derived) is context-free. Recovery is therefore Route
+B or nothing — this is now demonstrated, not argued.
 
 The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
 config-aware fresh rebuild per query, off by default) is reinstated as the guard
