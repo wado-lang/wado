@@ -307,7 +307,7 @@ pub fn optimize(
     // WIR-shaped forms the value-graph build would misread.
     if opt_level != OptLevel::O0 && std::env::var_os("WADO_PROMOTE_FIELDS").is_some() {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ true)
+            extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
         });
     }
 
@@ -341,7 +341,7 @@ pub fn optimize(
     // shape is final and the materialised `let _av = obj.field` re-emits a valid
     // load. (Early arith promotion already ran before the loop.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false)
+        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
     });
 
     project
@@ -548,7 +548,7 @@ fn run_optimization_passes(
         // (after the SROA passes), since SROA scalarizes the structs a promoted
         // `FieldAccess` would reference. See the late call in `optimize`.
         run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ false)
+            extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
         });
     }
     for i in 0..config.iterations {

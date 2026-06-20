@@ -143,6 +143,14 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
 pub(super) fn freeze_pure_arith(
     project: &mut crate::nir_package::NirPackage,
     include_fields: bool,
+    // `early`: this runs before the optimize loop, on each function's
+    // freshly-built (clean, un-restructured) graph. Only then is it sound to
+    // freeze a *constant leaf read* (`Local` / `FieldAccess`) into its literal:
+    // born here, the `Operand::Value` survives `inline` / `sroa` (both copy
+    // operands), so no later pass re-contextualizes the read into a position the
+    // frozen literal is wrong for. The late freeze (post-loop) must not — its
+    // graph carries the loop's structural-edit staleness.
+    early: bool,
 ) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
@@ -200,12 +208,46 @@ pub(super) fn freeze_pure_arith(
         // spurious over-merge; deciding up front avoids that — and the
         // post-edit graph is not consumed, this being the last pass.)
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
+        // Address-taken locals (`&x` / `&mut x`): a write through the reference
+        // makes their constant value point-specific in a way the build-once graph
+        // cannot keep across the structural passes — freezing a constant read of
+        // one over-merges a later (post-mutation) read a fresh build splits
+        // (`ref_1`'s `&mut c`). A direct-assignment-only local (`x = v`) is tracked
+        // precisely, so its constant read freezes soundly (`compound_assign`'s `x`).
+        let addr_taken: crate::hashmap::IndexSet<u32> =
+            if early { engine.body_address_taken().clone() } else { Default::default() };
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
-            if is_assign_target(&engine, id)
-                || is_let_value(&engine, id)
-                || !is_pure_arith(&engine, id, include_fields)
+            if is_assign_target(&engine, id) || is_let_value(&engine, id) {
+                continue;
+            }
+            // Constant-leaf promotion (early only, clean graph). A value-position
+            // `Local` / `FieldAccess` read whose graph value is a constant literal
+            // is frozen to that literal: context-free, width-correct (the kind
+            // carries its own `TypeId`), and — born before any pass — never
+            // re-contextualized. `is_place_read` excludes lvalue positions
+            // (`&mut x`, a `.field` / method receiver, an assign target) where the
+            // storage, not the value, is needed.
+            // `Local` reads only: a `FieldAccess` constant can be a *reference*
+            // field (`.value` of a `Box<&mut T>`) whose pointee a later write
+            // changes, so its early-freeze constant is not stable (`ref_1`).
+            // The recovery cases (`compound_assign`) need only the `Local` read.
+            let leaf_root_stable = match &engine.body.exprs[id].kind {
+                ExprKind::Local { index, .. } => !addr_taken.contains(index),
+                _ => false,
+            };
+            if early
+                && leaf_root_stable
+                && !is_place_read(&engine, id)
+                && let Some(vid) = engine.value(id)
             {
+                let rep = engine.value_find(vid);
+                if crate::nir_value_graph::builder::is_const_value(&engine.body.values, rep) {
+                    to_freeze.push((id, rep));
+                    continue;
+                }
+            }
+            if !is_pure_arith(&engine, id, include_fields) {
                 continue;
             }
             if let Some(vid) = engine.value(id) {
@@ -412,6 +454,31 @@ fn is_assign_target(e: &Engine, expr: ExprId) -> bool {
         &e.body.exprs[parent].kind,
         ExprKind::Assign { target, .. } if *target == expr
     )
+}
+
+/// Whether `expr` sits in a **place** (lvalue / reference) position, where its
+/// storage location — not its value — is what's used: a constant-leaf read here
+/// must not be frozen. Covers the `&` / `&mut` / deref referent, a `.field` /
+/// `[index]` / method receiver, and an `Assign` LHS. Conservative (a by-value
+/// receiver is also rejected), which only forgoes a promotion, never miscompiles.
+fn is_place_read(e: &Engine, expr: ExprId) -> bool {
+    let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
+        return false;
+    };
+    use crate::nir::NirUnaryOp;
+    let op = crate::nir_arena::Operand::Expr(expr);
+    match &e.body.exprs[parent].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
+            expr: inner,
+        } => *inner == op,
+        ExprKind::Assign { target, .. } => *target == expr,
+        ExprKind::FieldAccess { expr: recv, .. } | ExprKind::Index { expr: recv, .. } => {
+            *recv == op
+        }
+        ExprKind::MethodCall { receiver, .. } => *receiver == op,
+        _ => false,
+    }
 }
 
 #[cfg(test)]

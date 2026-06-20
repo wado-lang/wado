@@ -339,6 +339,13 @@ pub fn build_scoped(
     out
 }
 
+/// Whether `id`'s value (resolved through its e-class) is a constant literal — a
+/// build-context-free value safe to freeze into an operand at the early freeze
+/// (see `extract::freeze_pure_arith`'s constant-leaf promotion).
+pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
+    is_const_kind(pool.kind(pool.find_imm(id)))
+}
+
 /// Whether a `ValueKind` is a constant literal (carries no build-local context).
 fn is_const_kind(k: &ValueKind) -> bool {
     matches!(
@@ -692,6 +699,14 @@ impl<'a> Builder<'a> {
     fn bump_call_effects(&mut self) {
         for &l in &self.mut_escaped {
             self.heap_state.bump_local(l);
+            // A `&mut`-escaped local's *scalar* value can also be overwritten by
+            // the callee (`set_bool(&mut c, false)`), not only its heap fields, so
+            // drop its tracked `current_value` to a fresh opaque. Without this the
+            // graph keeps the pre-call constant (`c = true`) for reads after the
+            // call — a stale value the WIR codegen ignores (it reads the slot) but
+            // that over-merges with the call result a fresh build splits.
+            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(l));
+            self.current_value.insert(l, opaque);
         }
     }
 
