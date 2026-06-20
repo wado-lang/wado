@@ -75,6 +75,13 @@ fn generator_attr() -> String {
     return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
 }
 
+/// The `// Triage data: …status.toml ([<axis>_*]).` provenance comment
+/// shared by every emitter's `doc_lines`. `axis` is the bucket prefix
+/// (`stage_a` / `stage_b` / `stage_b_oracle`).
+fn triage_doc_line(axis: &String) -> String {
+    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([{*axis}_*]).`;
+}
+
 // ===== Descriptor format =====
 
 fn is_known_section(name: &String) -> bool {
@@ -712,7 +719,7 @@ fn emit_stage_b_test_file(
         category: *category,
         name: *name,
         attr: generator_attr(),
-        doc_lines: ["// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*])."],
+        doc_lines: [triage_doc_line(&"stage_b")],
         output_subdir: "antlr4_compat_b",
         import_names: ["normalize_tree"],
         test_label: "stage_b",
@@ -754,7 +761,7 @@ fn emit_stage_sub_b_test_file(
         name: *name,
         attr: generator_attr(),
         doc_lines: [
-            "// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).", "//",
+            triage_doc_line(&"stage_b"), "//",
             `// Stage B sub-tree: [output] is the labelled child '{*sub_rule}' subtree,`,
             "// not the start rule's full tree. Navigate via find_first_child_node.",
         ],
@@ -797,8 +804,7 @@ fn emit_stage_a_parse_test_file(
         name: *name,
         attr: generator_attr(),
         doc_lines: [
-            "// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).", "//",
-            "// Stage A claim (b): the generated parser must accept the descriptor's",
+            triage_doc_line(&"stage_a"), "//", "// Stage A claim (b): the generated parser must accept the descriptor's",
             "// [input] without returning an error. No parse-tree shape comparison.",
         ],
         output_subdir: "antlr4_compat_a",
@@ -933,7 +939,7 @@ fn emit_stage_a_err_test_file(
         name: *name,
         attr: generator_attr(),
         doc_lines: [
-            "// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).", "//",
+            triage_doc_line(&"stage_a"), "//",
             "// Stage A claim (c): the generated parser/lexer must report an error for [input].",
             "//   - Parser-type: t::parse(&input) must return Err.",
             "//   - Lexer-type:  t::tokenize(&input) must produce at least one TK_ERROR.",
@@ -986,7 +992,7 @@ fn emit_stage_a_tokens_test_file(
         name: *name,
         attr: generator_attr(),
         doc_lines: [
-            "// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).", "//",
+            triage_doc_line(&"stage_a"), "//",
             "// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format",
             "// dump as the descriptor's [output] block.",
         ],
@@ -1897,7 +1903,7 @@ fn emit_stage_b_oracle_test_file(
         attr: "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]",
         doc_lines: [
             `// Expected tree: antlr-{*oracle_version}-complete.jar on the action-body-stripped grammar.`,
-            "// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).",
+            triage_doc_line(&"stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
         import_names: ["normalize_tree"],

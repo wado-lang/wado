@@ -41,7 +41,7 @@ use {
     ConsumeNode,
     AmbiguousNode,
     AmbiguityReason,
-    build_group_prediction_tree,
+    build_group_prediction_tree_from_order,
     group_prediction_order,
 } from "./prediction.wado";
 use { compute_overlap_groups } from "./alt_grouping.wado";
@@ -274,10 +274,11 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         if group.len() < 2 {
             continue;
         }
-        // Same canonical pipeline codegen uses (`build_group_prediction_tree`),
-        // so the dump shows exactly the tree the emitter builds.
+        // Same canonical pipeline codegen uses, so the dump shows exactly
+        // the tree the emitter builds. The order feeds both the tree and
+        // the group header below, so compute it once.
         let real_indices = group_prediction_order(group, &first_sets, &non_lr_indices);
-        let tree = build_group_prediction_tree(&surface.alternatives, group, &first_sets, &non_lr_indices, ctx);
+        let tree = build_group_prediction_tree_from_order(&surface.alternatives, &real_indices, ctx);
 
         if !printed_header {
             out.push_str(&"  prediction:\n");

@@ -166,6 +166,22 @@ pub fn group_prediction_order(
     return real;
 }
 
+/// Build the prediction tree for an overlap group already projected to
+/// surface alt indices in canonical order (`group_prediction_order`).
+/// Lets a caller that needs the order anyway (e.g. `gale dump`, for its
+/// header) reuse it instead of re-sorting.
+pub fn build_group_prediction_tree_from_order(
+    alts: &List<Alternative>,
+    real_indices: &List<i32>,
+    ctx: &mut GenContext,
+) -> PredictionNode {
+    let mut pred_elements: List<List<Element>> = [];
+    for let ri of real_indices {
+        pred_elements.push(alts[*ri].elements);
+    }
+    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+}
+
 /// Build the prediction tree for one overlap group: order via
 /// `group_prediction_order`, then `build_prediction`. The single source
 /// of truth shared by codegen (`gen_multi_alt_body_alt`, the scan-helper
@@ -178,11 +194,7 @@ pub fn build_group_prediction_tree(
     ctx: &mut GenContext,
 ) -> PredictionNode {
     let real_indices = group_prediction_order(group, first_sets, non_lr_indices);
-    let mut pred_elements: List<List<Element>> = [];
-    for let ri of &real_indices {
-        pred_elements.push(alts[*ri].elements);
-    }
-    return build_prediction(&real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+    return build_group_prediction_tree_from_order(alts, &real_indices, ctx);
 }
 
 /// Strip Consume nodes whose child contains any Ambiguous — fall back to
