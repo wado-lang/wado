@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781963713873,
+  "lastUpdate": 1781989571208,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34333,6 +34333,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1a0a75676bef5f1765ace3e4a624e91e69eee0b2"
         },
         "date": 1781963713260,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a6c61ad243e4eb492e2f0a62ca76d2a0b84b58a",
+          "message": "Merge pull request #1412 from wado-lang/claude/code-health-logic-duplication-88mcyt\n\nrefactor(gale): dedupe prediction tree/dispatch builders and antlr4 extractor emitters",
+          "timestamp": "2026-06-21T05:55:36+09:00",
+          "tree_id": "4a92a54f316c577ae2f0f982e01ff01d054cea2c",
+          "url": "https://github.com/wado-lang/wado/commit/6a6c61ad243e4eb492e2f0a62ca76d2a0b84b58a"
+        },
+        "date": 1781989570836,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
