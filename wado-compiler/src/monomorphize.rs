@@ -285,7 +285,7 @@ impl Monomorphizer {
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);
 
-        // Phase 9: Process function instantiations and generate concrete functions
+        // Phase 9: Process function instantiations and generate concrete functions.
         // Use iterative approach: each newly instantiated function may have method calls
         // that need to be instantiated too (e.g., a generic method calling another generic
         // method on self, like sort() -> sort_by())
@@ -299,11 +299,12 @@ impl Monomorphizer {
                 .map(|(k, v)| (k.clone(), Rc::clone(v)))
                 .collect();
 
-        // Phase 9: Unified instantiation loop
+        // Unified instantiation loop.
         // Process functions and structs together until fixpoint. Function instantiation
         // may create new GenericInstance types that require struct instantiation, which
         // in turn may create new function instantiation sites. Processing them in a
-        // single loop eliminates the need for the separate "Phase 13" second pass.
+        // single loop removes the second function-instantiation pass the pipeline
+        // previously needed.
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         loop {
             let mut made_progress = false;
