@@ -1330,10 +1330,22 @@ input.len()` is a _call_ at the build-once freeze, so `input_len` is valued as t
 call result, not `input.used`. Only when `len()` inlines (`return self.used`) does
 `input_len ≡ input.used` hold — an equivalence the build-once graph never captures
 (inline coarsens, and the inlined `input.used` is itself an unvalued post-freeze
-node). BCE then cannot prove `i < input_len` ⟹ `i < input.used`. Recovering it
-needs inline to value the inlined return and union it with the call-result value
-(sound: a call's result _is_ its return) — non-constant inline-time maintenance,
-the remaining piece for `optimize_bce_*` / `array_bounds_elim_*`.
+node). BCE then cannot prove `i < input_len` ⟹ `i < input.used`.
+
+Empirical finding (this session): inline maintenance **alone is insufficient**.
+`build_scoped` was extended to keep _splice-safe_ values — not just constants, but
+`Binary`/`FieldAccess` over seeded caller values, so the inlined `pos < self.used`
+re-interns to `Binary(V_i, Ge, FieldAccess(V_arr, used, INITIAL))` and the two
+inlined `self.used` reads hash-cons. It recovered **zero** BCE fixtures and was
+reverted. The reason: `condition_implication`'s actual operands are not the
+inline-created nodes but `input_len` and `_licm_used_12` — bindings **`licm` and
+`copy_prop` mint after inline**, themselves unvalued post-freeze nodes. So BCE
+needs node-creation maintenance through `inline` **and** `licm` **and**
+`copy_prop` — the full "maintain the graph through every structural pass," the
+WEP's largest deferred core — not an inline-only `build_scoped` change. (Contrast
+the recovered `licm_immut_ref` cluster, whose `config.threshold = 100` is forwarded
+_at the freeze_ — once the loop-heap-effects fix stops bumping the immutable
+receiver — and frozen by promotion _before_ any pass restructures it.)
 
 ### The 21 `-O2` regressions are node-creation, not coarsening (this session)
 
