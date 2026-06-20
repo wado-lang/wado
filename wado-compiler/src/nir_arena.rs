@@ -793,23 +793,6 @@ impl Body {
         }
     }
 
-    /// How many live operand slots reference each promoted value (keyed by class
-    /// representative, so structurally-equal values count together — exactly the
-    /// sharing the extractor sees). The basis of the availability extractor's
-    /// share-vs-duplicate decision (WEP P2): a value used by >1 slot is worth
-    /// materialising into one `let` rather than re-emitting at each use. Empty
-    /// until promotion runs.
-    pub fn promoted_value_use_counts(&self) -> crate::hashmap::IndexMap<ValueId, usize> {
-        let mut counts: crate::hashmap::IndexMap<ValueId, usize> =
-            crate::hashmap::IndexMap::default();
-        self.for_each_operand(|op| {
-            if let Operand::Value(v) = op {
-                *counts.entry(self.values.find_imm(v)).or_insert(0) += 1;
-            }
-        });
-        counts
-    }
-
     /// The locals read **only through a promoted `Operand::Value`** — i.e. the
     /// `Opaque(Local)` sources of every value sitting in a live operand slot.
     /// A liveness-based pass (`elide_local`, `dae`) must treat these as reads:

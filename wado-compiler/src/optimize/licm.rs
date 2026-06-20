@@ -1806,7 +1806,10 @@ fn hoist_invariant_value_operands(
     for op in &ops {
         if let Operand::Value(v) = *op {
             let rep = engine.body.values.find_imm(v);
-            engine.body.values.collect_opaque_locals(rep, &mut leaf_locals);
+            engine
+                .body
+                .values
+                .collect_opaque_locals(rep, &mut leaf_locals);
         }
     }
     let mut entry_locals: IndexSet<u32> = IndexSet::default();

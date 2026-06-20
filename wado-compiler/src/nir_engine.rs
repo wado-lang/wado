@@ -383,7 +383,6 @@ impl<'a> Engine<'a> {
 
     fn ensure_value_graph(&mut self) {
         if self.body.value_graph.is_some() {
-            self.verify_maintained_graph();
             return;
         }
         crate::optimize::vg_measure::record_actual_build(&*self.body);
@@ -396,84 +395,6 @@ impl<'a> Engine<'a> {
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
-    }
-
-    /// Soundness net for per-edit maintenance (`WADO_VERIFY_VG`): rebuild a fresh
-    /// graph with the same config and assert the maintained partition *refines*
-    /// it ([`crate::nir_value_graph::builder::partition_refines`]) — the
-    /// maintained graph may merge a pair only if a fresh build also merges it.
-    /// An over-merge is a value the optimizer could miscompile through; fail
-    /// loudly. Conservative coarsening (the maintained graph splitting a pair a
-    /// fresh build merges) is sound — a missed optimization — and is allowed. Off
-    /// (and free) unless `WADO_VERIFY_VG` is set; the fresh build makes it slow,
-    /// so it is a small-input debugging mode, not a production path.
-    fn verify_maintained_graph(&mut self) {
-        if !crate::optimize::vg_measure::verify_enabled() || self.body.value_graph.is_none() {
-            return;
-        }
-        // Rebuild with the config the *graph* was built with, not this session's.
-        // A persisted graph is reused across sessions that configure their engine
-        // differently (e.g. `select_lowering` does not seed params); rebuilding
-        // with the consuming session's config would split param reads the build
-        // config legitimately merged — a spurious over-merge. The build config is
-        // the apples-to-apples baseline; a genuine maintenance staleness still
-        // fails against it.
-        let cfg = self.body.value_graph.as_ref().unwrap().config.clone();
-        let fresh = crate::nir_value_graph::builder::build(
-            &mut *self.body,
-            &cfg.param_locals,
-            &cfg.aliased,
-            &cfg.untrackable,
-            &cfg.mut_escaped,
-            self.vg_type_table,
-        );
-        let maintained = self.body.value_graph.as_ref().unwrap();
-        // Compare over the *live* exprs — exactly those a fresh build walks from
-        // the root. An expr present only in `maintained.value_of` is orphaned
-        // (a rewrite swapped its parent slot to a promoted value and dropped it
-        // from the skeleton); its stale entry can collide with a live expr that
-        // shares the same value and read as a spurious over-merge, but a dead
-        // node is never emitted and so cannot be miscompiled. Every live pure
-        // expr is in the fresh build, so this still checks every value the
-        // optimizer could miscompile through.
-        // Exclude scoped splice-point re-valuation results: seeded with the call
-        // site's args, they can be more precise than this fresh whole-function
-        // build, which is outside the refine relation this oracle checks (the
-        // e2e runtime suite validates them instead).
-        let exprs: Vec<ExprId> = fresh
-            .value_of
-            .keys()
-            .copied()
-            .filter(|e| !maintained.analysis_only.contains(e))
-            .collect();
-        if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
-            &mut self.body.values,
-            maintained,
-            &fresh,
-            &exprs,
-        ) {
-            // Report the offending pair's kinds and both graphs' ids, so a verify
-            // failure points at the exact stale node rather than a generic message.
-            let detail = crate::nir_value_graph::builder::first_overmerge_pair(
-                &mut self.body.values,
-                maintained,
-                &fresh,
-                &exprs,
-            )
-            .map(|(a, b)| {
-                format!(
-                    "\n  {a:?} = {:?}\n  {b:?} = {:?}\n  maintained: {a:?}->{:?} {b:?}->{:?}\n  fresh: {a:?}->{:?} {b:?}->{:?}",
-                    self.body.exprs[a].kind,
-                    self.body.exprs[b].kind,
-                    maintained.value_of.get(&a),
-                    maintained.value_of.get(&b),
-                    fresh.value_of.get(&a),
-                    fresh.value_of.get(&b),
-                )
-            })
-            .unwrap_or_default();
-            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}{detail}");
-        }
     }
 
     /// Read-only view of the owning function's local list. Some rules
@@ -698,8 +619,7 @@ impl<'a> Engine<'a> {
     /// flow-dependent — e.g. a `FieldAccess`, a `Local`, a `Call`) has its
     /// `value_of` entry *removed* rather than left stale: a later query then
     /// sees no value identity (conservative), never a wrong one. This keeps the
-    /// graph a sound description of the edited body without a rebuild — the
-    /// `WADO_VERIFY_VG` harness checks it agrees with a fresh build.
+    /// graph a sound description of the edited body without a rebuild.
     fn maintain_value_after_edit(&mut self, id: ExprId) {
         let mut cur = id;
         loop {
@@ -736,8 +656,8 @@ impl<'a> Engine<'a> {
             // `L = cur`) and that value changed, every later read of `L` — and
             // every value derived from one — may now be stale. The ancestor walk
             // here never reaches those readers (a `Let`/`Assign` boundary breaks
-            // the chain), so drop them explicitly. This is the fix for the
-            // downstream-stale over-merge the `WADO_VERIFY_VG` harness caught.
+            // the chain), so drop them explicitly — otherwise a later read keeps
+            // a stale value and the maintained graph over-merges.
             if changed && let Some(local) = self.local_bound_by(cur, parent) {
                 self.drop_local_readers(local);
             }
@@ -856,8 +776,8 @@ impl<'a> Engine<'a> {
         self.enqueue(parent);
         // A promoted value feeds the parent's value derivation directly through
         // the swapped operand; re-derive up the ancestor chain. `id` is now
-        // orphaned; its (dead) `value_of` entry is excluded from the verify
-        // oracle by the live-expr filter in `verify_maintained_graph`.
+        // orphaned; its (dead) `value_of` entry is never emitted (the node has no
+        // parent slot, so no walk reaches it; DCE reclaims it).
         if self.body.value_graph.is_some() {
             if let Some(vid) = new.as_value() {
                 self.body

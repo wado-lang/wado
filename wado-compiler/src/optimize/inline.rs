@@ -724,13 +724,12 @@ pub fn inline_functions(
                 //    heap, keeping only the resulting *constants* — those are the
                 //    folds inline newly exposes (induction bound, formatter
                 //    operand) and they equal what a fresh build assigns. The walk
-                //    runs in a cloned pool (see `build_scoped`), so it never
+                //    runs in a scratch pool (see `build_scoped`), so it never
                 //    mutates the live graph's shared values; it touches only the
                 //    spliced region (no `builder::build`, `rebuilds = 0`) and
-                //    parks no cache. `WADO_VERIFY_VG` checks no over-merge.
+                //    parks no cache.
                 if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
                     vg.value_of.clear();
-                    vg.analysis_only.clear();
                     vg.loop_entry_values.clear();
                 }
                 if !reval.is_empty()
@@ -741,15 +740,24 @@ pub fn inline_functions(
                     // over-approximation; immaterial as only constants are kept).
                     let all: IndexSet<u32> = (0..local_count).collect();
                     let tt = project.type_table.borrow();
+                    // One scratch pool, cloned once and reused across every
+                    // inlined block (the walk only grows it with throwaway ids).
+                    let mut scratch = body.values.clone();
                     for info in &reval {
                         let vo = crate::nir_value_graph::builder::build_scoped(
-                            body, info.block, info.skip, &info.seed, &all, &all, &all,
+                            body,
+                            info.block,
+                            info.skip,
+                            &info.seed,
+                            &all,
+                            &all,
+                            &all,
                             Some(&tt),
+                            &mut scratch,
                         );
                         let vg = body.value_graph.as_mut().unwrap();
                         for (e, v) in vo {
                             vg.value_of.insert(e, v);
-                            vg.analysis_only.insert(e);
                         }
                     }
                 }

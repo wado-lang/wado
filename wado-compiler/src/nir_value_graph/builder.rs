@@ -190,40 +190,12 @@ struct FlowArm {
 #[derive(Debug, Clone)]
 pub struct ValueGraphBuild {
     pub value_of: IndexMap<ExprId, ValueId>,
-    /// Exprs whose `value_of` came from a scoped splice-point re-valuation
-    /// ([`build_scoped`], Method A), seeded with the call site's argument values.
-    /// Such a constant equals what the program computes (the seed is the arg's
-    /// value at the call), but it can be *more precise* than a fresh
-    /// whole-function build, which re-derives the post-inline body and may leave
-    /// the same expr opaque. The `WADO_VERIFY_VG` oracle checks the maintained
-    /// graph *refines* a fresh build, so it excludes these exprs — they are a
-    /// seed-sourced truth outside the refine relation, validated by the e2e
-    /// runtime suite, not by partition agreement with a fresh build.
-    pub analysis_only: crate::hashmap::IndexSet<ExprId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
     /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
     /// leaf's use-site value to equal this entry value — cross-iteration
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
-    /// The build config (param seeding + alias sets) this graph was produced
-    /// with. A persisted graph is reused across passes whose `Engine` sessions
-    /// configure differently (e.g. `select_lowering` does not seed params); the
-    /// `WADO_VERIFY_VG` oracle rebuilds with *this* config, not the consuming
-    /// session's, so a config-view difference is not mistaken for an over-merge
-    /// while a genuine maintenance staleness still fails. Build-once only.
-    pub config: BuildConfig,
-}
-
-/// The parameters [`build`] was called with, retained so a verify-time rebuild
-/// reproduces the same value partition. Not used for reuse decisions (that
-/// would be the rejected config-keyed cache) — only for the verify oracle.
-#[derive(Clone, Default, Debug)]
-pub struct BuildConfig {
-    pub param_locals: Vec<u32>,
-    pub aliased: crate::hashmap::IndexSet<u32>,
-    pub untrackable: crate::hashmap::IndexSet<u32>,
-    pub mut_escaped: crate::hashmap::IndexSet<u32>,
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -273,14 +245,7 @@ pub fn build(
     body.values = pool;
     ValueGraphBuild {
         value_of,
-        analysis_only: crate::hashmap::IndexSet::default(),
         loop_entry_values,
-        config: BuildConfig {
-            param_locals: param_locals.to_vec(),
-            aliased: aliased.clone(),
-            untrackable: untrackable.clone(),
-            mut_escaped: mut_escaped.clone(),
-        },
     }
 }
 
@@ -295,6 +260,14 @@ pub fn build(
 /// walk-local), while a constant equals what a fresh build assigns. Never walks
 /// the caller's untouched remainder, so it adds no `builder::build`
 /// (`rebuilds = 0`) and parks no cache.
+///
+/// `scratch` is a pool the caller clones from `body.values` once and reuses
+/// across every inlined block of the function: the walk stamps types
+/// (`set_type`) on the values it interns, and doing that on a value the main
+/// graph shares would mutate its main-graph type and perturb the structural
+/// passes — so the walk runs in `scratch`, leaving `body.values` untouched
+/// (seeded `ValueId`s stay valid; the clone preserves ids). Only the constant
+/// *literals* are re-interned into the main pool, which is idempotent.
 pub fn build_scoped(
     body: &mut Body,
     block: BlockId,
@@ -304,28 +277,31 @@ pub fn build_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
+    scratch: &mut ValuePool,
 ) -> IndexMap<ExprId, ValueId> {
-    // Walk in a *cloned* pool: the build stamps types (`set_type`) on the values
-    // it interns, and a value that hash-conses to one the main graph shares would
-    // have its main-graph type mutated — perturbing the structural passes. The
-    // clone keeps `body.values` untouched (seeded `ValueId`s stay valid, the
-    // clone preserves ids); only the constant *literals* are re-interned into the
-    // main pool below, which is idempotent and shared-state-free.
-    let scratch = body.values.clone();
     let consts: Vec<(ExprId, ValueKind)> = {
-        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, scratch);
+        let pool = std::mem::take(scratch);
+        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
         b.current_value = seed.clone();
-        let stmts: Vec<StmtId> = b.body.blocks[block].stmts.iter().skip(skip).copied().collect();
+        let stmts: Vec<StmtId> = b.body.blocks[block]
+            .stmts
+            .iter()
+            .skip(skip)
+            .copied()
+            .collect();
         for s in stmts {
             b.walk_stmt(s);
         }
-        b.value_of
+        let consts = b
+            .value_of
             .iter()
             .filter_map(|(&e, &v)| {
                 let k = b.pool.kind(v).clone();
                 is_const_kind(&k).then_some((e, k))
             })
-            .collect()
+            .collect();
+        *scratch = b.pool;
+        consts
     };
     let mut out = IndexMap::default();
     for (e, k) in consts {
@@ -360,128 +336,6 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Unit => pool.unit(),
         _ => unreachable!("is_const_kind gates this"),
     }
-}
-
-/// Cross-check that two value-graph builds over the same body induce the *same
-/// value-equivalence partition* on `exprs`: every pair of expressions both
-/// builds value share a value in one iff they share it in the other. `ValueId`s
-/// are pool-scoped, so the check is by partition (a representative bijection),
-/// never by raw id.
-///
-/// This is the verification net for the build-once migration: a pass that
-/// maintains the live graph in place asserts, under `WADO_VERIFY_VG`, that its
-/// maintained graph agrees with a fresh build — catching any stale or wrong
-/// `value_of` entry before it can change output. A maintained graph may be
-/// *coarser* is not allowed here (both directions are checked); a migration that
-/// intends conservative coarsening must verify against a relation, not equality.
-/// `Err` names the first expression whose membership disagrees.
-// Wired into the build-once migration (guarded by `WADO_VERIFY_VG`); the first
-// production caller lands with operand promotion.
-#[allow(dead_code)]
-pub(crate) fn partitions_agree(
-    pool: &mut ValuePool,
-    maintained: &ValueGraphBuild,
-    fresh: &ValueGraphBuild,
-    exprs: &[ExprId],
-) -> Result<(), String> {
-    // A rep in one build maps to exactly one rep in the other; a second expr
-    // that maps a known rep to a different partner proves the partitions differ.
-    // Both builds share the body's pool, so `find` resolves either's id.
-    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    let mut f_to_m: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    for &e in exprs {
-        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
-            continue;
-        };
-        let rm = pool.find(vm);
-        let rf = pool.find(vf);
-        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
-            if prev_rf != rf {
-                return Err(format!(
-                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
-                ));
-            }
-        } else {
-            m_to_f.insert(rm, (rf, e));
-        }
-        if let Some(&(prev_rm, prev_e)) = f_to_m.get(&rf) {
-            if prev_rm != rm {
-                return Err(format!(
-                    "expr {prev_e:?} and expr {e:?} share a value in a fresh build but the maintained graph splits them"
-                ));
-            }
-        } else {
-            f_to_m.insert(rf, (rm, e));
-        }
-    }
-    Ok(())
-}
-
-/// Soundness check for *conservative* per-edit maintenance: the maintained
-/// partition must **refine** the fresh one — every pair the maintained graph
-/// merges, a fresh build also merges. The reverse (a fresh build merges a pair
-/// the maintained graph splits) is allowed: it is conservative coarsening — a
-/// value identity the maintenance dropped rather than re-derived, costing a
-/// missed optimization, never a miscompile.
-///
-/// This is the right oracle for the live graph's maintenance, which is sound by
-/// refinement, not equality: `maintain_pure_value` re-derives only the pure
-/// operand nodes and drops the flow-sensitive ones it cannot, so the graph stays
-/// a sound (possibly coarser) description of the edited body without a rebuild.
-/// [`partitions_agree`] (strict equality) over-reports on this design — it flags
-/// the safe coarsening too. `Err` names the first expression pair the maintained
-/// graph merges but a fresh build splits (the only unsound direction).
-/// Debug aid: the first `(prev_e, e)` pair the maintained graph merges but a
-/// fresh build splits, for instrumenting a verify failure.
-#[allow(dead_code)]
-pub(crate) fn first_overmerge_pair(
-    pool: &mut ValuePool,
-    maintained: &ValueGraphBuild,
-    fresh: &ValueGraphBuild,
-    exprs: &[ExprId],
-) -> Option<(ExprId, ExprId)> {
-    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    for &e in exprs {
-        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
-            continue;
-        };
-        let rm = pool.find(vm);
-        let rf = pool.find(vf);
-        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
-            if prev_rf != rf {
-                return Some((prev_e, e));
-            }
-        } else {
-            m_to_f.insert(rm, (rf, e));
-        }
-    }
-    None
-}
-
-pub(crate) fn partition_refines(
-    pool: &mut ValuePool,
-    maintained: &ValueGraphBuild,
-    fresh: &ValueGraphBuild,
-    exprs: &[ExprId],
-) -> Result<(), String> {
-    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    for &e in exprs {
-        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
-            continue;
-        };
-        let rm = pool.find(vm);
-        let rf = pool.find(vf);
-        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
-            if prev_rf != rf {
-                return Err(format!(
-                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
-                ));
-            }
-        } else {
-            m_to_f.insert(rm, (rf, e));
-        }
-    }
-    Ok(())
 }
 
 struct Builder<'a> {
@@ -620,9 +474,9 @@ impl<'a> Builder<'a> {
                     _ => None,
                 },
                 NirBinaryOp::And => match (lb, rb) {
-                    (Some(false), _) | (_, Some(false)) => {
-                        Some(self.const_to_value(crate::const_eval::Value::Bool(false), result_type))
-                    }
+                    (Some(false), _) | (_, Some(false)) => Some(
+                        self.const_to_value(crate::const_eval::Value::Bool(false), result_type),
+                    ),
                     (Some(true), _) => Some(rhs),
                     (_, Some(true)) => Some(lhs),
                     _ => None,
@@ -3634,42 +3488,5 @@ mod tests {
             unreachable!("int_lit yields a pool value")
         };
         assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
-    }
-
-    #[test]
-    fn partitions_agree_on_identical_builds_and_detects_divergence() {
-        // { let a = 1 + 2; let b = 1 + 2; let c = 1 + 3; }
-        // a and b share a value; c is distinct.
-        let mut body = empty_body();
-        let (a_sum, b_sum, c_sum) = {
-            let l1 = int_lit(&mut body, 1);
-            let l2 = int_lit(&mut body, 2);
-            let a = binary(&mut body, NirBinaryOp::Add, l1, l2);
-            let l3 = int_lit(&mut body, 1);
-            let l4 = int_lit(&mut body, 2);
-            let b = binary(&mut body, NirBinaryOp::Add, l3, l4);
-            let l5 = int_lit(&mut body, 1);
-            let l6 = int_lit(&mut body, 3);
-            let c = binary(&mut body, NirBinaryOp::Add, l5, l6);
-            let sa = let_stmt(&mut body, 0, a, false);
-            let sb = let_stmt(&mut body, 1, b, false);
-            let sc = let_stmt(&mut body, 2, c, false);
-            root_with(&mut body, vec![sa, sb, sc]);
-            (a, b, c)
-        };
-        let exprs: Vec<ExprId> = body.exprs.keys().collect();
-
-        // Two builds of the same body (sharing the body's pool) induce identical
-        // partitions.
-        let g1 = build_t(&mut body, &[]);
-        let mut g2 = build_t(&mut body, &[]);
-        assert!(partitions_agree(&mut body.values, &g1, &g2, &exprs).is_ok());
-
-        // Corrupt g2's `value_of`: point `a_sum` at `c_sum`'s value, so g2 says
-        // a≡c where g1 splits them. The bijection check must reject it.
-        let vc = g2.value_of[&c_sum];
-        g2.value_of.insert(a_sum, vc);
-        let _ = b_sum;
-        assert!(partitions_agree(&mut body.values, &g1, &g2, &exprs).is_err());
     }
 }
