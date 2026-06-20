@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781948931284,
+  "lastUpdate": 1781953962077,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34201,6 +34201,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6d3e59e49169be3c090c41c4ad3887680f87bc87"
         },
         "date": 1781948930677,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ee15ab76fbf2710cc6c30a1e8b0ee197b156a820",
+          "message": "Merge pull request #1409 from wado-lang/claude/wado-compiler-core-wasm-6oa4zc\n\nfeat(jco): run and benchmark Wado on Node.js via jco",
+          "timestamp": "2026-06-20T20:03:03+09:00",
+          "tree_id": "2cdd40987e3e758d3952baef06826326aa319433",
+          "url": "https://github.com/wado-lang/wado/commit/ee15ab76fbf2710cc6c30a1e8b0ee197b156a820"
+        },
+        "date": 1781953961466,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
