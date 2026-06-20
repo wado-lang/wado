@@ -1487,18 +1487,39 @@ exposes the real soundness boundary:
   the unsound case (`!aliased` / `!mut`) also removes the recovery. There is no
   sound subset of _mid-pipeline_ freeze promotion that recovers these.
 
-Conclusion: born-frozen constant promotion **recovers** the constant-forwarding
-regressions and is the right mechanism, but soundness requires promoting at
-**lower** — before any pass runs, so no read is ever re-contextualized — which is
-Route B step 1 proper (`lower::translate::convert_operand` births the operand;
-the value passes then only union). The width-preservation blocker is **fixed**
-(`extract_value` takes a constant's width from the literal's own carried `TypeId`,
-not the shared `type_of(v)`). So the path is now "width fixed; recovery
-demonstrated; the residual `flow_fold` gap identified; the remaining work is
-promote-at-lower (so promotion precedes re-contextualization) plus the bounded
-pass-migration." The migration guards and the width fix are committed as neutral
-groundwork; the leaf-promotion switch and residual fold are reverted (unsound
-mid-pipeline) pending the promote-at-lower move.
+Landed (commits `556e3e4bd`, `4c2f90a9b`). The mid-pipeline hazard above is
+resolved by restricting the freeze to the **early** (pre-loop) call, on each
+function's clean freshly-built graph, plus three guards that make the promotion
+sound by construction:
+
+- `early`-only: the late (post-loop) freeze never leaf-promotes — only the
+  pre-`inline`/`sroa` one does, so the frozen literal is born before any
+  re-contextualization.
+- `is_place_read`: never freeze an lvalue read (`&mut x`, a `.field`/method/index
+  receiver, an assign target) — the storage, not the value, is used there.
+- Address-taken / `Local`-only: a `&`/`&mut`-escaped local's constant is
+  point-specific, and a `FieldAccess` constant can be a reference field whose
+  pointee changes; both are excluded.
+
+A real builder gap surfaced and is fixed alongside: `bump_call_effects` now drops
+a `mut_escaped` local's scalar `current_value` (not only its heap fields), since a
+`&mut` call (`set_bool(&mut c, false)`) overwrites the scalar — coarsening-only,
+sound. With the `const_fold` env-local fold (`flow_fold_value_a` now routes a
+`Local` read through `expr_to_lattice_a`), this recovers `compound_assign_basic`
+and `inline_cold_path_cost`: **21 → 19** on the `-O2` corpus, **0 newly broken**,
+lib green, runtime-correct. The width-preservation blocker was already fixed
+(`extract_value` takes a constant's width from the literal's own carried `TypeId`).
+
+The earlier "no sound subset of mid-pipeline promotion" applied to the broad,
+unguarded variant; the `early`-only + guarded form is the sound one. Under
+`WADO_VERIFY_VG`, `ref_1` reports one **false positive**: maintained correctly
+forwards `Box{value:c}.value → c` (a valid equality at that read — the box just
+captured `c`), but the post-promotion *fresh* build fails to re-derive that
+field-forward, so the oracle flags a merge the runtime confirms correct (`ref_1`
+prints `true`/`false`). The durable resolution is the lower-phase graph (step 4
+below), where there is no separate build-once graph to diverge; widening
+promotion past constants to in-loop `FieldAccess` is the remaining recovery lever
+for the BCE / `licm_immut_ref` clusters (non-constant forwarded field values).
 
 ## See also
 
