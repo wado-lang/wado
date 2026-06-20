@@ -638,12 +638,7 @@ impl Monomorphizer {
                 )
             });
             let impl_type_args = mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
-                let mut receiver_type = receiver.type_id;
-                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    type_table.get(receiver_type).clone()
-                {
-                    receiver_type = inner;
-                }
+                let receiver_type = type_table.peel_refs(receiver.type_id);
                 type_table.as_tuple(receiver_type).unwrap_or_default()
             });
             {

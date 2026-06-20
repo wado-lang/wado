@@ -360,12 +360,7 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
         // Infer T from the first non-self argument's inner type. For
         // `element<T: Serialize>(&mut self, value: &T)` the first arg is `&T`,
         // so unwrap references (and an auto-boxed `Box<T>`) to reach T.
-        let mut arg_type = first_arg.expr.type_id;
-        while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-            self.type_table.get(arg_type).clone()
-        {
-            arg_type = t;
-        }
+        let mut arg_type = self.type_table.peel_refs(first_arg.expr.type_id);
         if let ResolvedType::GenericInstance {
             name,
             type_args: ta,
@@ -384,12 +379,7 @@ impl TirMutVisitor for MethodTypeArgInferer<'_> {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } | ResolvedType::Unknown
         );
         let receiver_impl_type_args = {
-            let mut base = receiver.type_id;
-            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                self.type_table.get(base).clone()
-            {
-                base = t;
-            }
+            let base = self.type_table.peel_refs(receiver.type_id);
             match self.type_table.get(base) {
                 ResolvedType::GenericInstance { type_args: ta, .. } => ta.clone(),
                 ResolvedType::BuiltinArray(elem) => vec![*elem],
@@ -999,12 +989,7 @@ impl Monomorphizer {
                                 {
                                     let arg_idx = pi - 1;
                                     if let Some(arg) = args.get(arg_idx) {
-                                        let mut arg_type = arg.expr.type_id;
-                                        while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                                            type_table.get(arg_type).clone()
-                                        {
-                                            arg_type = t;
-                                        }
+                                        let mut arg_type = type_table.peel_refs(arg.expr.type_id);
                                         if let ResolvedType::GenericInstance {
                                             name,
                                             type_args: ta,
@@ -1061,12 +1046,7 @@ impl Monomorphizer {
                 // auto-derived impl. `is_tuple_type` checks the receiver's
                 // `ResolvedType` + defining module, which disambiguates.
                 let receiver_is_builtin_tuple = {
-                    let mut inner = receiver.type_id;
-                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                        type_table.get(inner).clone()
-                    {
-                        inner = t;
-                    }
+                    let inner = type_table.peel_refs(receiver.type_id);
                     match type_table.get(inner) {
                         ResolvedType::GenericInstance {
                             name,
@@ -1090,12 +1070,7 @@ impl Monomorphizer {
                     });
                     let impl_type_args =
                         mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
-                            let mut receiver_type = receiver.type_id;
-                            while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                                type_table.get(receiver_type).clone()
-                            {
-                                receiver_type = inner;
-                            }
+                            let receiver_type = type_table.peel_refs(receiver.type_id);
                             type_table.as_tuple(receiver_type).unwrap_or_default()
                         });
                     {
@@ -1859,12 +1834,7 @@ impl Monomorphizer {
                 // Primitives use direct Wasm instructions, not trait methods.
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
-                    let mut recv_inner = receiver.type_id;
-                    while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                        type_table.get(recv_inner).clone()
-                    {
-                        recv_inner = t;
-                    }
+                    let recv_inner = type_table.peel_refs(receiver.type_id);
                     if type_table.is_primitive_like(recv_inner)
                         && let Some(binary_op) = trait_method_to_binary_op(
                             trait_name_before.as_deref(),
@@ -2489,12 +2459,7 @@ impl Monomorphizer {
         // that happen to appear inside a generic impl block.
         let has_explicit_type_params = info.struct_name != info.base_struct_name;
         let receiver_is_generic = {
-            let mut base = receiver_type_id;
-            while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                type_table.get(base).clone()
-            {
-                base = inner;
-            }
+            let base = type_table.peel_refs(receiver_type_id);
             // Unwrap Newtype to check if the underlying base type is generic
             let effective = match type_table.get(base) {
                 ResolvedType::Newtype { base_type, .. } => *base_type,
@@ -2553,11 +2518,7 @@ impl Monomorphizer {
         // name directly instead of adding type args.
         let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
-            let mut inner = receiver_type_id;
-            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) = type_table.get(inner).clone()
-            {
-                inner = t;
-            }
+            let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
             let own_mangled = type_table.mangle_type_name(inner);
@@ -2580,12 +2541,7 @@ impl Monomorphizer {
         } else if needs_struct_type_args {
             // Derive the struct name from the already-substituted receiver type.
             // Resolve through newtypes so that e.g. MyArray<i32>::len → List<i32>::len.
-            let mut recv_inner = receiver_type_id;
-            while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                type_table.get(recv_inner).clone()
-            {
-                recv_inner = t;
-            }
+            let recv_inner = type_table.peel_refs(receiver_type_id);
             let recv_mangled = type_table.mangle_type_name_resolving_newtypes(recv_inner);
             // `base_type_name(Newtype)` returns the newtype's own name (e.g.
             // "MyBytes"), but the post-substitution body actually targets the
@@ -2616,12 +2572,7 @@ impl Monomorphizer {
         if info.is_type_param_receiver {
             // Type param receiver: redirect to a concrete method (e.g., T^Ord::cmp → i32^Ord::cmp)
             let receiver_module = {
-                let mut inner = receiver_type_id;
-                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                    type_table.get(inner).clone()
-                {
-                    inner = t;
-                }
+                let inner = type_table.peel_refs(receiver_type_id);
                 module_source_for_trait_impl(type_table, inner)
             };
             // Per the inspect_ref_array_field.wado contract, this path must
@@ -2666,12 +2617,7 @@ impl Monomorphizer {
             // - Generic impl method: receiver has type_args (peeling newtypes) → handled by receiver scan → None
             // - Blanket impl method: neither → is_blanket = true
             let receiver_has_type_args = {
-                let mut inner = receiver_type_id;
-                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                    type_table.get(inner).clone()
-                {
-                    inner = t;
-                }
+                let inner = type_table.peel_refs(receiver_type_id);
                 // Peel newtypes: `type FieldValue = List<u8>` inherits
                 // List's generic-impl dispatch, so the call must not be
                 // marked blanket even though FieldValue itself has no impl.
@@ -2768,12 +2714,7 @@ impl Monomorphizer {
             // under "&"), routing a `&List<i32>` call to `&Array`'s template.
             // The receiver's module disambiguates them.
             let receiver_hint = {
-                let mut inner = receiver_type_id;
-                while let ResolvedType::Ref(t) | ResolvedType::MutRef(t) =
-                    type_table.get(inner).clone()
-                {
-                    inner = t;
-                }
+                let inner = type_table.peel_refs(receiver_type_id);
                 super::module_source_for_trait_impl(type_table, inner)
             };
             let resolved_module = self
