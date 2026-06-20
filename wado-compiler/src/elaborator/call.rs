@@ -358,6 +358,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let mut param_types = self.lookup_function_param_types(effective_name);
 
+        // Whether `param_types` holds a variant payload (vs. declared function
+        // params): used below to decide if an inference-hole argument may be
+        // pinned against an outer type-param payload (e.g. `Result::Ok(v)` whose
+        // payload is `Self`).
+        let mut is_variant_payload = false;
+
         // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty()
@@ -403,6 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                     param_types.push(payload_type);
+                    is_variant_payload = true;
                 }
             }
         }
@@ -417,6 +424,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
+
+        // Pin a deferred inference hole carried into a variant payload by a
+        // prior binding (`let v = gen()?; return Result::Ok(v)`) against the
+        // payload type. The payload comes from the expected type, so an outer
+        // type-param target (e.g. `Self`) is authoritative. Regular function
+        // params are handled post-inference below, where they are concrete.
+        if is_variant_payload {
+            for (i, arg) in args.iter_mut().enumerate() {
+                if let Some(&expected) = param_types.get(i)
+                    && self.type_has_infer_hole(arg.type_id)
+                    && !self.type_has_infer_hole(expected)
+                {
+                    self.solve_infer_holes_against(arg.type_id, expected);
+                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                }
+            }
+        }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
         // both the defining module and the name-as-defined; `None` means the
@@ -1197,8 +1221,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !type_args.is_empty() {
             self.recoerce_literal_args(&call.args, &mut args, &check_param_types);
         }
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
+                // Pin a deferred inference hole carried into this argument by a
+                // prior binding (`let v = gen()?; foo(v)`) against the parameter
+                // type when it is fully concrete, mirroring Rust's whole-body
+                // inference. A parametric parameter (the callee's own type
+                // params) is left to the normal inference path.
+                if self.type_has_infer_hole(arg.type_id)
+                    && !self.tysys.type_table.borrow().contains_type_param(expected)
+                    && !self.type_has_infer_hole(expected)
+                {
+                    self.solve_infer_holes_against(arg.type_id, expected);
+                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                }
                 self.typecheck(
                     arg.type_id,
                     expected,

@@ -1,0 +1,51 @@
+// A deferred inference hole (a generic call whose type param appears only in
+// its return type) that flows through an `if let` binding into a typed sink
+// must be pinned by that sink, mirroring Rust's whole-body inference. The two
+// sinks below — a push into a concrete `List<u8>` and a `return Result::Ok(v)`
+// position — previously left the hole unresolved and demanded an explicit
+// turbofish.
+
+trait Producer {
+    fn get<T: Default>(&self) -> Option<T>;
+}
+
+struct P {}
+impl Producer for P {
+    fn get<T: Default>(&self) -> Option<T> {
+        return Option::Some(T::default());
+    }
+}
+
+// Hole pinned by `out.push(b)` where `out: List<u8>` (concrete-typed sink).
+fn collect_byte(p: &P) -> List<u8> {
+    let mut out: List<u8> = [];
+    let o = p.get();
+    if let Some(b) = o {
+        out.push(b);
+    }
+    return out;
+}
+
+// Hole pinned by `return Result::Ok(v)` (return position through a constructor).
+fn first(p: &P) -> Result<i32, ()> {
+    let o = p.get();
+    if let Some(v) = o {
+        return Result::Ok(v);
+    }
+    return Result::Err(());
+}
+
+test "hole pinned by a concrete list-push sink" {
+    let p = P {};
+    let bytes = collect_byte(&p);
+    assert bytes.len() == 1;
+    assert bytes[0] == 0;
+}
+
+test "hole pinned by a return Result::Ok position" {
+    let p = P {};
+    assert first(&p) matches { Ok(0) };
+}
+
+__DATA__
+{"test": {}}

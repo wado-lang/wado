@@ -348,7 +348,7 @@ pub trait Deserializer {
         let seq = self.begin_seq()?;
         let mut out: ByteList = [];
         loop {
-            let opt = seq.next_element::<u8>()?;
+            let opt = seq.next_element()?;
             if let Some(b) = opt {
                 out.push(b);
             } else {
@@ -381,7 +381,7 @@ pub trait Deserialize {
     /// Deserialize the next element from a sequence access.
     /// Used by variadic tuple deserialization via type pack expansion.
     fn deserialize_next_element_from_seq<S: DeserializeSeq>(seq: &mut S) -> Result<Self, DeserializeError> {
-        let opt = seq.next_element::<Self>()?;
+        let opt = seq.next_element()?;
         if let Some(v) = opt {
             return Result::Ok(v);
         }
@@ -709,11 +709,11 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         let va = d.begin_variant(&"Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
-            let val = va.payload()?;
+            let val = va.payload::<T>()?;
             va.end()?;
             return Result::Ok(Result::Ok(val));
         } else if name == "Err" {
-            let val = va.payload()?;
+            let val = va.payload::<E>()?;
             va.end()?;
             return Result::Ok(Result::Err(val));
         }
