@@ -3,9 +3,8 @@
 //
 // Usage: node transpile-released.mjs <component.wasm> [output-dir]
 //
-// Run the result with Node 24+ and JSPI:
-//   node --experimental-wasm-jspi -e \
-//     "import('<dir>/<name>.js').then(m => m.run.run())"
+// Run the result on Node 26+ (stable JSPI, no flag needed):
+//   node -e "import('<dir>/<name>.js').then(m => m.run.run())"
 
 import { transpile } from "@bytecodealliance/jco";
 import { readFile, writeFile, mkdir } from "node:fs/promises";

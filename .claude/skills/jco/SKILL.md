@@ -10,10 +10,22 @@ jco (`vendor/jco`) is bytecodealliance's tool for transpiling Wasm Components to
 The pinned submodule points at a clean upstream commit; the Wado patches live
 in `vendor/jco.patch` and are applied to the working tree before building.
 
-> **Node 24+ required.** The runtime uses JSPI (`WebAssembly.Suspending`). Node
-> 22 ships an older JSPI where `WebAssembly.Suspending` is not a constructor and
-> fails. The repo pins Node 24 via `mise.toml`; make sure `node` resolves to it
-> (paths outside the repo, e.g. `/tmp`, may pick up a system Node 22).
+> **Node 26+ recommended.** The runtime uses JSPI (`WebAssembly.Suspending`).
+> Node 26 (V8 14.6) ships **stable JSPI**, so no flag is needed and the repo pins
+> Node 26 via `mise.toml`. Node 24 needs `--experimental-wasm-jspi`; Node 22's
+> older JSPI fails (`WebAssembly.Suspending` is not a constructor). Make sure
+> `node` resolves to the pinned version — paths outside the repo (e.g. `/tmp`)
+> may pick up a system Node.
+>
+> **Wide-arithmetic is unsupported by V8 (all versions, incl. Node 26).** Wado
+> emits the Wasm wide-arithmetic proposal (`i64.mul_wide_u`, `i64.add128`) — e.g.
+> float formatting in `core:prelude/fpfmt.wado`. jco passes those opcodes through
+> unchanged, so any component containing them fails at
+> `WebAssembly.compile` with `invalid numeric opcode: 0xfc16`. To run on Node,
+> the component must avoid wide-arithmetic. In practice that means keeping float
+> formatting (and anything that lowers to 128-bit math) out of the guest: e.g.
+> for benchmarks, export the pure work as a `--lib` function and do the timing /
+> rate formatting on the JS host instead of via `core:benchmark`.
 
 ## Two paths: fork vs. released + runtime shim
 
@@ -30,9 +42,16 @@ There are two ways to transpile a Wado component:
 
 Verified against `example/hello.wado`:
 
-- ✅ Transpile succeeds; the old `WasmFeatures` gaps (GC, wide-arithmetic) are gone.
-- ✅ JSPI works natively on Node 24 (`--experimental-wasm-jspi`) — the
+- ✅ Transpile succeeds; the GC `WasmFeatures` gap is gone (hello uses GC).
+- ✅ JSPI works natively (Node 26 stable, no flag; Node 24 needs the flag) — the
   `WebAssembly.Suspending` fork patch is no longer needed.
+- ❌ Wide-arithmetic is still gated: a component using `i64.mul_wide_u` etc.
+  (e.g. anything that formats floats via `core:prelude/fpfmt.wado`) fails
+  `transpile` with `wide arithmetic support is not enabled` (released jco's
+  `core.rs` validates with `WasmFeatures::default()`). hello slipped through only
+  because it has no float formatting. Even if transpiled (via a fork that enables
+  the feature), V8 then rejects the opcode at runtime — see the wide-arithmetic
+  note above. Avoid wide-arithmetic in the guest rather than chasing this.
 - ❌ Still emits code referencing `FutureReadableEnd` / `FutureWritableEnd`
   without defining them on the future-_drop_ path (the stdout write path). This
   is the one runtime-blocking gap; it maps to the fork's "missing intrinsic deps"

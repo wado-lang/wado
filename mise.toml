@@ -9,8 +9,10 @@
 # embeds the dprint markdown plugin as a Cargo dependency. No external
 # dprint CLI is required.
 
-# Node.js - required for VS Code extension development
-node = "24"
+# Node.js - required for VS Code extension development and the jco runtime.
+# Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
+# `--experimental-wasm-jspi` (which Node 26 no longer accepts).
+node = "26"
 
 [settings]
 auto_install = true
@@ -612,8 +614,8 @@ WASM="$(mktemp -d)/hello.wasm"
 OUT="$(mktemp -d)/hello-released"
 cargo run -q -p wado-cli -- compile -O2 -o "$WASM" example/hello.wado
 node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
-# Node 24+ and JSPI are required (WebAssembly.Suspending). mise pins Node 24.
-node --experimental-wasm-jspi -e "
+# Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
+node -e "
   process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
   import('$OUT/hello.js').then(m => m.run.run()).then(() => process.exit(0))
     .catch(e => { console.error(e); process.exit(1); });
