@@ -1021,6 +1021,17 @@ impl<'a> Interpreter<'a> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
             return Some(v);
         }
+        // A bare `Local` read bound to a constant in the flow env (the "env-bound
+        // locals" this doc promises). `try_fold_a` only folds arith; consult the
+        // env here so a `let x = <const>; … x …` that store→load forwarding missed
+        // — a post-`inline` binding the build-once graph never valued — still
+        // folds. Mutable locals are recorded `NonConst` (sound by flow), so this
+        // is immutable-only and cannot stale.
+        if matches!(&body.exprs[e].kind, ExprKind::Local { .. })
+            && let Lattice::Const(v) = self.expr_to_lattice_a(body, e)
+        {
+            return Some(v);
+        }
         if let ExprKind::GlobalVarGet {
             module_source,
             name,
