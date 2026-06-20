@@ -1752,7 +1752,12 @@ impl<'a> Builder<'a> {
     /// local's `per_slot` (or `field_global` when the local is aliased); a
     /// `&mut`/method/mut-arg borrow bumps the local's `per_local`; an external
     /// write (non-builtin call, indirect call, opaque store) invalidates every
-    /// reference-aliased local's fields. Non-touched fields survive.
+    /// `mut_escaped` local's fields. Non-touched fields survive — and an
+    /// *immutably*-`&`-escaped local (`&config` passed to `fn process(&Config)`)
+    /// is **not** `mut_escaped`, so its fields survive the call, matching the
+    /// per-call [`Builder::bump_call_effects`] (which the loop path must agree
+    /// with — using the wider `aliased` here lost the forward for an immutable
+    /// reference field read across a loop call: `opt_licm_immut_ref`).
     fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
         for &(local, field) in &eff.written_fields {
             if self.aliased.contains(&local) {
@@ -1765,7 +1770,7 @@ impl<'a> Builder<'a> {
             self.heap_state.bump_local(local);
         }
         if eff.has_external_writes {
-            for &local in &self.aliased {
+            for &local in &self.mut_escaped {
                 self.heap_state.bump_local(local);
             }
         }

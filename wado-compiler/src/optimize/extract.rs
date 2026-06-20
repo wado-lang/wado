@@ -195,6 +195,12 @@ pub(super) fn freeze_pure_arith(
             .map(|(i, _)| i as u32)
             .collect();
         let param_set: crate::hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
+        // Locals a call may mutate through a `&mut` escape (ref_1's
+        // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
+        // build-once graph cannot keep it across the structural passes; an
+        // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
+        // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
+        let mut_escaped_leaf = mut_escaped.clone();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
@@ -208,14 +214,6 @@ pub(super) fn freeze_pure_arith(
         // spurious over-merge; deciding up front avoids that — and the
         // post-edit graph is not consumed, this being the last pass.)
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
-        // Address-taken locals (`&x` / `&mut x`): a write through the reference
-        // makes their constant value point-specific in a way the build-once graph
-        // cannot keep across the structural passes — freezing a constant read of
-        // one over-merges a later (post-mutation) read a fresh build splits
-        // (`ref_1`'s `&mut c`). A direct-assignment-only local (`x = v`) is tracked
-        // precisely, so its constant read freezes soundly (`compound_assign`'s `x`).
-        let addr_taken: crate::hashmap::IndexSet<u32> =
-            if early { engine.body_address_taken().clone() } else { Default::default() };
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
             if is_assign_target(&engine, id) || is_let_value(&engine, id) {
@@ -227,13 +225,19 @@ pub(super) fn freeze_pure_arith(
             // carries its own `TypeId`), and — born before any pass — never
             // re-contextualized. `is_place_read` excludes lvalue positions
             // (`&mut x`, a `.field` / method receiver, an assign target) where the
-            // storage, not the value, is needed.
-            // `Local` reads only: a `FieldAccess` constant can be a *reference*
-            // field (`.value` of a `Box<&mut T>`) whose pointee a later write
-            // changes, so its early-freeze constant is not stable (`ref_1`).
-            // The recovery cases (`compound_assign`) need only the `Local` read.
+            // storage, not the value, is needed. The root local must not be
+            // `mut_escaped`: a write through a retained `&mut` (ref_1's
+            // `set_bool(&mut c, …)`) makes the constant point-specific in a way the
+            // build-once graph cannot keep across the structural passes (over-merge
+            // vs a fresh build). An *immutable*-`&`-escaped root (licm's `&config`)
+            // is stable — the callee cannot write through `&Config` — so its field
+            // constant freezes soundly; that is the in-loop `FieldAccess` recovery.
             let leaf_root_stable = match &engine.body.exprs[id].kind {
-                ExprKind::Local { index, .. } => !addr_taken.contains(index),
+                ExprKind::Local { index, .. } => !mut_escaped_leaf.contains(index),
+                ExprKind::FieldAccess { .. } => {
+                    super::arena_query::projection_root_local(engine.body, id)
+                        .is_none_or(|root| !mut_escaped_leaf.contains(&root))
+                }
                 _ => false,
             };
             if early
