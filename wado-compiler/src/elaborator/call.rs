@@ -31,11 +31,17 @@ fn is_turbofish_hole(holes: &[bool], i: usize) -> bool {
     holes.get(i).copied().unwrap_or(true)
 }
 
+/// Whether a turbofish carries an explicit `_` placeholder. Non-allocating, so
+/// callers gate the (allocating) [`turbofish_holes`] mask on it.
+pub(super) fn turbofish_has_hole(ast_args: &[Type]) -> bool {
+    ast_args.iter().any(|t| matches!(t, Type::Infer(_)))
+}
+
 /// True when a turbofish needs inference to fill some type-argument slot: it
 /// supplies fewer args than the generic has parameters (omitted trailing args)
 /// or it contains an explicit `_` placeholder.
-pub(super) fn turbofish_needs_inference(holes: &[bool], param_count: usize) -> bool {
-    holes.len() < param_count || holes.iter().any(|&h| h)
+pub(super) fn turbofish_needs_inference(ast_args: &[Type], param_count: usize) -> bool {
+    ast_args.len() < param_count || turbofish_has_hole(ast_args)
 }
 
 /// Merge inferred type args into the explicitly-resolved ones in place. A slot
@@ -474,19 +480,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // If no explicit type args, try to infer from argument types.
-                // This is an exploratory probe: the `suffix` may match a
-                // builtin-registry entry (e.g. `builtin::foo`) keyed by bare
-                // name; otherwise the local-module lookup almost never
-                // succeeds and `infer_static_method_type_args` below runs.
                 let mangled_name = MethodName::format_local(prefix, None, suffix);
+                // Omitted turbofish infers both levels; an explicit `_` fills
+                // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
-                    let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
-                    method_type_args =
-                        self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
-                }
-                if method_type_args.is_empty() {
-                    let (impl_args, method_args) = self.infer_static_method_type_args(
+                    let (impl_args, method_args) = self.infer_static_call_type_args(
                         prefix,
                         suffix,
                         &call.args,
@@ -495,28 +493,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
-                }
-                // Partial method-level turbofish (`Type::m::<_, U>(..)`): fill
-                // the `_` slots from inference while the explicit args stay put.
-                let method_holes = turbofish_holes(&call.type_args);
-                if !method_type_args.is_empty() && method_holes.iter().any(|&h| h) {
-                    let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
-                    let mut inferred =
-                        self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
-                    if inferred.is_empty() {
-                        let (impl_args, method_args) = self.infer_static_method_type_args(
-                            prefix,
-                            suffix,
-                            &call.args,
-                            &args,
-                            expected_type,
-                        );
-                        if impl_type_args_inferred.is_empty() {
-                            impl_type_args_inferred = impl_args;
-                        }
-                        inferred = method_args;
+                } else if turbofish_has_hole(&call.type_args) {
+                    // Partial method-level turbofish (`Type::m::<_, U>(..)`):
+                    // fill the `_` slots from inference, explicit args stay put.
+                    let (impl_args, method_args) = self.infer_static_call_type_args(
+                        prefix,
+                        suffix,
+                        &call.args,
+                        &args,
+                        expected_type,
+                    );
+                    if impl_type_args_inferred.is_empty() {
+                        impl_type_args_inferred = impl_args;
                     }
-                    merge_turbofish_type_args(&mut method_type_args, &method_holes, &inferred);
+                    let holes = turbofish_holes(&call.type_args);
+                    merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
                 // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
                 // `(impl_args, method_args)` for the static-method call
@@ -1135,8 +1126,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .filter(|p| !p.is_effect)
                 .count();
-            let holes = turbofish_holes(&call.type_args);
-            if turbofish_needs_inference(&holes, type_param_count) {
+            if turbofish_needs_inference(&call.type_args, type_param_count) {
+                let holes = turbofish_holes(&call.type_args);
                 let inferred = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
                 merge_turbofish_type_args(&mut type_args, &holes, &inferred);
             }
@@ -2201,6 +2192,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             _ => false,
         }
+    }
+
+    /// Infer the type args of a `Type::method(...)` static call whose
+    /// method-level turbofish is omitted or carries `_`. Probes `suffix` as a
+    /// local free function first — covering builtin-registry entries keyed by
+    /// bare name — then falls back to full static-method inference, which also
+    /// yields the impl-level args. Returns `(impl_args, method_args)`.
+    fn infer_static_call_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        raw_args: &[Expr],
+        args: &[TirExpr],
+        expected_type: Option<TypeId>,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
+        let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type);
+        if !method_args.is_empty() {
+            return (Vec::new(), method_args);
+        }
+        self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type)
     }
 
     /// Infer impl-level and method-level type arguments for a generic static method

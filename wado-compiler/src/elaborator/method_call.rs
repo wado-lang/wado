@@ -79,7 +79,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        let type_arg_holes = super::call::turbofish_holes(&method_call.type_args);
+        // Only the `_` case needs the mask; an empty vec (no allocation) marks
+        // "no holes" for the fully-explicit common path.
+        let type_arg_holes = if super::call::turbofish_has_hole(&method_call.type_args) {
+            super::call::turbofish_holes(&method_call.type_args)
+        } else {
+            Vec::new()
+        };
 
         self.resolve_method_call_with(
             MethodCallInput {
@@ -1284,11 +1290,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // MyErr>::Ok(7)`): infer the hole slots from the payload
                     // while the explicit args stay pinned. Without holes the
                     // explicitly-resolved `target_type_id` is already complete.
-                    let target_holes = match &static_call.target_type {
-                        ast::Type::Generic(g) => super::call::turbofish_holes(&g.args),
-                        _ => vec![],
-                    };
-                    let result_type = if target_holes.iter().any(|&h| h) {
+                    let has_target_hole = matches!(
+                        &static_call.target_type,
+                        ast::Type::Generic(g) if super::call::turbofish_has_hole(&g.args)
+                    );
+                    let result_type = if has_target_hole {
+                        let target_holes = match &static_call.target_type {
+                            ast::Type::Generic(g) => super::call::turbofish_holes(&g.args),
+                            _ => Vec::new(),
+                        };
                         let explicit_args = match self.tysys.type_table.borrow().get(target_type_id)
                         {
                             ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
