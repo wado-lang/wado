@@ -25,8 +25,7 @@ pub struct DumpOptions {
     pub opt_iterations: Option<u32>,
     /// Generic codegen feature flags from `-f <flag>` (e.g. `["no-branch-hinting"]`).
     pub codegen_flags: Vec<String>,
-    /// `--world <name>` override. Takes precedence over the `__DATA__` section;
-    /// when `None`, the world is auto-detected from the source's `__DATA__`.
+    /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
 }
 

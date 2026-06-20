@@ -57,10 +57,9 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
 }
 
 /// Describe where a core-Wasm validation error landed: the containing function
-/// (index + demangled name), the byte offset relative to that function's body,
-/// and a disassembled window of operators around the failure. Pinpointing the
-/// failing instruction — `struct.new $T`, `ref.cast`, `call`, … — turns an
-/// opaque module-level byte offset into an actionable codegen lead.
+/// (index + demangled name), the body-relative byte offset, and a disassembled
+/// window of operators around the failure so the failing instruction is named
+/// rather than left as a raw module offset.
 fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
     use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};

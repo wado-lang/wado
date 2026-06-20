@@ -899,9 +899,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // etc.) and check the value type against the function return type.
         if let Some(expr) = ret_stmt.value.as_ref() {
             let mut value_type = self.resolve_expr(expr, ctx, Some(return_type));
-            // A deferred inference hole that rode a prior binding into this
-            // returned value (`let v = gen()?; ... return Ok(v)`) is pinned by
-            // the declared return type, mirroring Rust's whole-body inference.
+            // Pin a deferred hole that rode a prior binding into the returned
+            // value (`let v = gen()?; return Ok(v)`) against the return type.
             if self.type_has_infer_hole(value_type) {
                 self.solve_infer_holes_against(value_type, return_type);
                 value_type = self.apply_infer_holes(value_type);
