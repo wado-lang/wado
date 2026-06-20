@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781935261493,
+  "lastUpdate": 1781935993489,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33981,6 +33981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/865932faef755871609683d1e2525a7715fabcf6"
         },
         "date": 1781935260890,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaeb2b8f1e4843fad89b5262f55c6d5c90fa428c",
+          "message": "Merge pull request #1403 from wado-lang/claude/generic-type-wildcard-underscore-wvx9q5\n\nfeat: accept `_` inference placeholder in turbofish type arguments",
+          "timestamp": "2026-06-20T14:59:48+09:00",
+          "tree_id": "9fce660bdc548a708daefe18b7d5cd4d6eb56319",
+          "url": "https://github.com/wado-lang/wado/commit/aaeb2b8f1e4843fad89b5262f55c6d5c90fa428c"
+        },
+        "date": 1781935993014,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
