@@ -26,11 +26,9 @@ export fn run() with Stdout {
     let total = passing.iter().fold(0, |acc: i32, s: i32| acc + s);
     println(`{passing.len()} passed, average {total / passing.len()}`);
 
-    // any / all take a predicate closure.
-    let all_passed = players.iter().all(|p: Player| p.score >= 70);
-    let any_perfect = players.iter().any(|p: Player| p.score == 100);
-    println(`all passed? {all_passed}`);
-    println(`any perfect? {any_perfect}`);
+    // any / all take a predicate closure, here written inline in the template.
+    println(`all passed? {players.iter().all(|p: Player| p.score >= 70)}`);
+    println(`any perfect? {players.iter().any(|p: Player| p.score == 100)}`);
 
     // sort_by takes a comparator closure: rank by score, descending.
     let mut ranked = players;
