@@ -1907,11 +1907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params = self.lookup_function_type_params(callee);
         let inferable: Vec<&ast::GenericParam> = params
             .iter()
-            .filter(|p| {
-                !p.is_effect
-                    && p.default.is_none()
-                    && !p.bounds.iter().any(|b| b.fn_signature.is_some())
-            })
+            .filter(|p| !p.is_effect && p.default.is_none() && !p.has_fn_bound())
             .collect();
         if inferable.is_empty() {
             return;
@@ -1936,7 +1932,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter(|&(p, &tid)| {
                     !p.is_effect
                         && p.default.is_none()
-                        && !p.bounds.iter().any(|b| b.fn_signature.is_some())
+                        && !p.has_fn_bound()
                         && self.is_unbound_type_param(tid)
                         && !scope_params.contains(&tid)
                 })
@@ -1981,10 +1977,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params = self.lookup_function_type_params(callee);
         // Dense type-argument index space (matches `populate_generic_function_cache`):
         // non-effect, non-`fn`-bound params in declaration order.
-        let space: Vec<&ast::GenericParam> = params
-            .iter()
-            .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
-            .collect();
+        let space: Vec<&ast::GenericParam> =
+            params.iter().filter(|p| p.is_real_type_param()).collect();
         let n = space.len();
         if n == 0 || space.iter().any(|p| p.default.is_some()) {
             self.report_uninferred_fn_type_args(callee, type_args, span);

@@ -677,8 +677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let real_type_param_count = func
             .type_params
             .iter()
-            .filter(|p| !p.is_effect)
-            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .count();
         if type_args.is_empty() && real_type_param_count != 0 {
             return None;
@@ -775,8 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let real_type_param_count = func_ast
             .type_params
             .iter()
-            .filter(|p| !p.is_effect)
-            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .count();
 
         // (a) Turbofish on the identifier: `name::<T, ...>`.
