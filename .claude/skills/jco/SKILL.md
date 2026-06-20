@@ -15,6 +15,74 @@ in `vendor/jco.patch` and are applied to the working tree before building.
 > fails. The repo pins Node 24 via `mise.toml`; make sure `node` resolves to it
 > (paths outside the repo, e.g. `/tmp`, may pick up a system Node 22).
 
+## Two paths: fork vs. released + runtime shim
+
+There are two ways to transpile a Wado component:
+
+1. **Patched fork** (`vendor/jco`) — the original path; build the Rust fork and
+   use its CLI. Documented in the rest of this file.
+2. **Released jco + post-process** (`scripts/jco`, `mise run jco-transpile-released`)
+   — use the unmodified npm `@bytecodealliance/jco` as a _library_ and supply the
+   missing P3 runtime as a thin JS layer, no Rust fork build. Prefer this for the
+   CLI/test worlds; fall back to the fork for cases it can't yet cover (below).
+
+### Released jco status (as of 1.24.3)
+
+Verified against `example/hello.wado`:
+
+- ✅ Transpile succeeds; the old `WasmFeatures` gaps (GC, wide-arithmetic) are gone.
+- ✅ JSPI works natively on Node 24 (`--experimental-wasm-jspi`) — the
+  `WebAssembly.Suspending` fork patch is no longer needed.
+- ❌ Still emits code referencing `FutureReadableEnd` / `FutureWritableEnd`
+  without defining them on the future-_drop_ path (the stdout write path). This
+  is the one runtime-blocking gap; it maps to the fork's "missing intrinsic deps"
+  patch (`vendor/jco.patch`, mod.rs).
+
+### How the vendor-free path supplies the runtime
+
+`scripts/jco/postprocess.mjs` applies two string transforms to the transpiled JS,
+mirroring the runtime-affecting fork patches:
+
+| Fork patch (vendor/jco.patch)               | Post-process equivalent                                                                                  | Needed for hello |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------- |
+| missing intrinsic deps (mod.rs)             | inject `FutureEnd`/`FutureReadableEnd`/`FutureWritableEnd` at module scope before `class InternalFuture` | ✅               |
+| stream write hook (async_stream.rs)         | insert the `_jcoStreamWriteHook` fast-path before `streamEnd.copy(...)`                                  | ✅ (stdout)      |
+| async non-void export (function_bindgen.rs) | not replicated — left to the fork                                                                        | ❌ (void `run`)  |
+
+Key facts that make this work:
+
+- The injected classes **must go at module scope**, not `globalThis` — they
+  reference module-scoped bindings (`NESTED_FUTURE_SYMBOL`, `getOrCreateAsyncState`,
+  `FUTURES`). A bare undeclared identifier read still resolves through global
+  scope, but the classes' own dependencies would not.
+- The class source is **harvested from released jco itself**, version-matched: a
+  trigger component that exercises `future.new` (`scripts/jco/future-trigger.wado`,
+  a one-line `Future::<i32>::new()`) makes released jco emit the classes, which we
+  extract. Released-harvested vs fork-built classes were byte-identical. Re-run
+  `mise run jco-harvest-intrinsics` after a jco bump to refresh
+  `scripts/jco/missing-intrinsics.js`.
+
+### Vendor-free workflow
+
+```sh
+mise run jco-deps                       # install released jco under scripts/jco
+mise run jco-harvest-intrinsics         # (re)generate scripts/jco/missing-intrinsics.js
+mise run jco-transpile-released foo.wasm [out-dir]
+mise run jco-hello-released             # compile+transpile+run hello end to end
+```
+
+The post-process layer is a stopgap: once the dep-edge fix lands upstream, drop
+the class injection; the stream hook / async-export pieces may need separate
+upstreaming. Delete `scripts/jco` transforms as upstream catches up.
+
+### Known gaps (released path)
+
+- HTTP service (`wasi:http/service`, async `handle` returning `Result`) does **not**
+  transpile through released jco — it fails with `cannot represent this component
+  in WIT: the type 'request' appears more than once`. Separate Wado↔jco WIT-interop
+  issue; use the fork for HTTP until resolved. (This is also why the harvest
+  trigger is a minimal CLI future program, not the HTTP example.)
+
 ## Setup
 
 ```sh
