@@ -906,7 +906,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // fn-bound params are realised eagerly and do not need
         // monomorphisation, so a function whose only non-effect params are
         // fn-bound has nothing to cache.
-        let has_real_type_params = func.type_params.iter().any(|p| p.is_real_type_param());
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(super::super::ast::GenericParam::is_real_type_param);
         if !has_real_type_params {
             return;
         }
@@ -1026,7 +1029,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `<F: fn(...)>` bounds are eagerly realised to the bound's function
         // type and do not consume a `TypeParam` slot — they're not generic
         // parameters that need monomorphisation.
-        let has_real_type_params = func.type_params.iter().any(|p| p.is_real_type_param());
+        let has_real_type_params = func
+            .type_params
+            .iter()
+            .any(super::super::ast::GenericParam::is_real_type_param);
         let declared_return_type = if has_real_type_params {
             scope.populate_generic_function_cache(func)
         } else {
