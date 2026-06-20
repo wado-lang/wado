@@ -1039,7 +1039,9 @@ impl TestDecl {
             is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
             timeout_ms: self.attributes.iter().find_map(|a| {
                 if a.name == "timeout_ms" {
-                    a.args.first().and_then(|arg| arg.as_str().parse::<u64>().ok())
+                    a.args
+                        .first()
+                        .and_then(|arg| arg.as_str().parse::<u64>().ok())
                 } else {
                     None
                 }

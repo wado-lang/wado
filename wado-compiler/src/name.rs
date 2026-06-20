@@ -1283,7 +1283,11 @@ pub fn test_name_to_snake(name: &str) -> String {
 ///
 /// The single source of this format: both the annotate walk and reify call here
 /// so the two never drift.
-pub fn test_function_name(meta: &crate::ast::TestMetadata, test_index: usize, name: Option<&str>) -> String {
+pub fn test_function_name(
+    meta: &crate::ast::TestMetadata,
+    test_index: usize,
+    name: Option<&str>,
+) -> String {
     let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
         (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
         (true, _, None) => "__test_todo".to_string(),
