@@ -196,6 +196,28 @@ let y = match opt {
 
 This is consistent with `if` expressions and other block constructs in Wado.
 
+#### Constant Patterns
+
+A bare identifier in pattern position that is neither a variant/enum case nor a
+new binding resolves to a **constant value** when it names an immutable `global`
+or an associated constant (`i32::MAX`, `Type::SOME_CONST`). The pattern matches
+when the scrutinee equals that constant; it introduces no binding. This lets
+named constants stand in for magic numbers in a `match`:
+
+```wado
+global MAJOR_TAG: u8 = 6;
+
+match byte >> 5 {
+    MAJOR_TAG => decode_tag(),   // matches when the value equals MAJOR_TAG (6)
+    _ => decode_other(),
+}
+```
+
+Only immutable globals qualify; a `global mut` is never a constant pattern.
+Constant patterns combine with `|` (or-patterns) and `&&` (guards) like any
+other refutable pattern, and a constant read here counts as a use of the global
+(it is not reported as dead code).
+
 #### Exhaustiveness
 
 Match must be exhaustive:

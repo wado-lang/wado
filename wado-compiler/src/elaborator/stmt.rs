@@ -1128,7 +1128,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
                         && !mutable
                     {
-                        // Constant-value pattern: introduces no binding.
+                        // Constant-value pattern: introduces no binding, but the
+                        // global is read here — record the use→def edge so it is
+                        // not flagged as dead code (mirrors the expression path).
+                        self.record_item_reference_by_name(*id, name);
                         return Vec::new();
                     }
                     if let Some((_source_module, _original_name, _ty, mutable)) =
@@ -1136,6 +1139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && !*mutable
                     {
                         // Constant-value pattern: introduces no binding.
+                        self.record_item_reference_by_name(*id, name);
                         return Vec::new();
                     }
                 }
