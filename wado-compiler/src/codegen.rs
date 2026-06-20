@@ -43,27 +43,32 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
     if let Err(e) = validator.validate_all(wasm) {
         // Save invalid Wasm for debugging
         let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
-        let loc = locate_offset_function(wasm, e.offset())
-            .map(|(idx, name)| format!("func #{idx} {}", name.unwrap_or_default()))
-            .unwrap_or_else(|| "<unknown function>".to_string());
+        let location = describe_offending_location(wasm, e.offset())
+            .unwrap_or_else(|| "  (could not locate the offending function)".to_string());
         panic!(
             "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
              Entry module: {entry_module}\n\
-             Offending function: {loc}\n\
-             Validation error: {e}"
+             Validation error: {e}\n\
+             {location}\n\
+             The full invalid module was written to /tmp/invalid_core.wasm \
+             (inspect with `wasm-tools print`)."
         );
     }
 }
 
-/// Find the function whose body byte range contains `offset`, with its name
-/// from the custom `name` section. Debug aid for validation ICEs.
-fn locate_offset_function(wasm: &[u8], offset: usize) -> Option<(u32, Option<String>)> {
+/// Describe where a core-Wasm validation error landed: the containing function
+/// (index + demangled name), the byte offset relative to that function's body,
+/// and a disassembled window of operators around the failure. Pinpointing the
+/// failing instruction — `struct.new $T`, `ref.cast`, `call`, … — turns an
+/// opaque module-level byte offset into an actionable codegen lead.
+fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
     use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};
     let mut import_funcs = 0u32;
     let mut defined = 0u32;
-    let mut bodies: Vec<(u32, std::ops::Range<usize>)> = Vec::new();
     let mut names: IndexMap<u32, String> = IndexMap::default();
+    // The function whose body contains `offset`, as (index, body start, ops).
+    let mut hit: Option<(u32, usize, Vec<(usize, String)>)> = None;
     for payload in Parser::new(0).parse_all(wasm) {
         match payload.ok()? {
             Payload::ImportSection(reader) => {
@@ -78,8 +83,21 @@ fn locate_offset_function(wasm: &[u8], offset: usize) -> Option<(u32, Option<Str
                 }
             }
             Payload::CodeSectionEntry(body) => {
-                bodies.push((import_funcs + defined, body.range()));
+                let idx = import_funcs + defined;
                 defined += 1;
+                let range = body.range();
+                if hit.is_none() && range.contains(&offset) {
+                    let mut ops = Vec::new();
+                    if let Ok(reader) = body.get_operators_reader() {
+                        for item in reader.into_iter_with_offsets() {
+                            match item {
+                                Ok((op, off)) => ops.push((off, format!("{op:?}"))),
+                                Err(_) => break,
+                            }
+                        }
+                    }
+                    hit = Some((idx, range.start, ops));
+                }
             }
             Payload::CustomSection(c) if c.name() == "name" => {
                 let reader = wasmparser::NameSectionReader::new(wasmparser::BinaryReader::new(
@@ -97,10 +115,35 @@ fn locate_offset_function(wasm: &[u8], offset: usize) -> Option<(u32, Option<Str
             _ => {}
         }
     }
-    bodies
-        .into_iter()
-        .find(|(_, range)| range.contains(&offset))
-        .map(|(idx, _)| (idx, names.get(&idx).cloned()))
+
+    let (idx, body_start, ops) = hit?;
+    let name = names.get(&idx).map_or("<anonymous>", String::as_str);
+    let rel = offset.saturating_sub(body_start);
+
+    // The validator points at the failing operator's start; pick the last
+    // operator at or before the error offset as the pivot and show a window.
+    let mut disasm = String::new();
+    if ops.is_empty() {
+        disasm.push_str("    (no operators decoded)\n");
+    } else {
+        let pivot = ops
+            .iter()
+            .rposition(|(off, _)| *off <= offset)
+            .unwrap_or(0);
+        let start = pivot.saturating_sub(4);
+        let end = (pivot + 3).min(ops.len());
+        for (i, (off, text)) in ops.iter().enumerate().take(end).skip(start) {
+            let marker = if i == pivot { ">>" } else { "  " };
+            let rel_off = off.saturating_sub(body_start);
+            disasm.push_str(&format!("    {marker} +0x{rel_off:04x}  {text}\n"));
+        }
+    }
+
+    Some(format!(
+        "Offending function: func #{idx} {name}\n\
+         Failure at body offset +0x{rel:04x} (`>>` marks the failing operator):\n\
+         {disasm}"
+    ))
 }
 
 /// Validate generated Wasm binary using wasmparser.
