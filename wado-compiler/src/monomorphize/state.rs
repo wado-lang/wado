@@ -274,21 +274,19 @@ impl Monomorphizer {
 
     /// Generate instantiated method name
     /// Format: `StructWithImplArgs::methodWithMethodArgs`
-    /// e.g., `Container::transform` with `[i32, i64]` and `impl_type_params_count=1` -> `"Container<i32>::transform<i64>"`
+    /// e.g., `Container::transform` with `[i32, i64]` -> `"Container<i32>::transform<i64>"`
     pub fn method_instantiation_name(
         &self,
         key: &InstantiationKey,
         type_table: &TypeTable,
-        impl_type_params_count: usize,
     ) -> String {
-        self.method_instantiation_name_inner(key, type_table, impl_type_params_count, &[])
+        self.method_instantiation_name_inner(key, type_table, &[])
     }
 
     pub fn method_instantiation_name_inner(
         &self,
         key: &InstantiationKey,
         type_table: &TypeTable,
-        impl_type_params_count: usize,
         impl_type_params: &[crate::tir::TirTypeParam],
     ) -> String {
         // Use method_info metadata instead of parsing key.name
@@ -296,9 +294,6 @@ impl Monomorphizer {
             // Fallback to regular function naming if no method_info
             return self.function_instantiation_name(key, type_table);
         };
-
-        // impl_type_args and method_type_args are now separate in InstantiationKey
-        let _ = impl_type_params_count; // no longer needed for split
 
         let impl_arg_names: Vec<String> = key
             .impl_type_args

@@ -45,14 +45,9 @@ impl Monomorphizer {
                 && type_args == &key.impl_type_args
             {
                 self.structs.type_substitutions.insert(id, concrete_type_id);
-                self.structs.type_to_mangled_name.insert(
-                    id,
-                    self.structs
-                        .instantiated
-                        .get(key)
-                        .cloned()
-                        .unwrap_or_default(),
-                );
+                self.structs
+                    .type_to_mangled_name
+                    .insert(id, mangled_name.clone());
             }
         }
 

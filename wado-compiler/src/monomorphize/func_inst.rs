@@ -522,11 +522,7 @@ impl Monomorphizer {
                                     method_type_args,
                                     method_info,
                                 };
-                                let mangled = self.method_instantiation_name(
-                                    &key,
-                                    type_table,
-                                    impl_type_args.len(),
-                                );
+                                let mangled = self.method_instantiation_name(&key, type_table);
                                 self.try_queue_function(key, mangled);
                             }
                             break;
@@ -611,10 +607,7 @@ impl Monomorphizer {
                                     method_type_args: type_args.clone(),
                                     method_info: Some(method_info),
                                 };
-                                let mangled = self.method_instantiation_name(
-                                    &key, type_table,
-                                    0, // non-generic struct: no impl type params
-                                );
+                                let mangled = self.method_instantiation_name(&key, type_table);
                                 self.try_queue_function(key, mangled);
                                 found = true;
                                 break;
@@ -705,11 +698,8 @@ impl Monomorphizer {
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
                                             };
-                                            let mangled = self.method_instantiation_name(
-                                                &key,
-                                                type_table,
-                                                impl_type_args.len(),
-                                            );
+                                            let mangled =
+                                                self.method_instantiation_name(&key, type_table);
                                             self.try_queue_function(key, mangled);
                                             break;
                                         }
@@ -857,11 +847,7 @@ impl Monomorphizer {
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
-                                let mangled = self.method_instantiation_name(
-                                    &key,
-                                    type_table,
-                                    effective_impl_type_args.len(),
-                                );
+                                let mangled = self.method_instantiation_name(&key, type_table);
                                 self.try_queue_function(key, mangled);
                                 break;
                             }
@@ -940,11 +926,7 @@ impl Monomorphizer {
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
-                                let mangled = self.method_instantiation_name(
-                                    &key,
-                                    type_table,
-                                    impl_type_args.len(),
-                                );
+                                let mangled = self.method_instantiation_name(&key, type_table);
                                 self.try_queue_function(key, mangled);
                                 break;
                             }
@@ -1054,11 +1036,9 @@ impl Monomorphizer {
                         method_type_args: method_ta,
                         method_info,
                     };
-                    let impl_type_params_count = generic_func.impl_type_params.len();
                     let mangled = self.method_instantiation_name_inner(
                         &key,
                         type_table,
-                        impl_type_params_count,
                         &generic_func.impl_type_params,
                     );
                     self.try_queue_function(key, mangled);
@@ -1137,7 +1117,6 @@ impl Monomorphizer {
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
-                            let impl_type_params_count = generic_func.impl_type_params.len();
                             let impl_type_params: Vec<crate::tir::TirTypeParam> =
                                 generic_func.impl_type_params.clone();
                             let template_module = generic_func.module_source.clone();
@@ -1152,7 +1131,6 @@ impl Monomorphizer {
                             let mangled = self.method_instantiation_name_inner(
                                 &key,
                                 type_table,
-                                impl_type_params_count,
                                 &impl_type_params,
                             );
                             self.try_queue_function(key, mangled);
