@@ -1107,6 +1107,1277 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
     }
     return true;
 }
+//! Runtime ATN simulator (hybrid ALL(*)) — full-context SLL prediction.
+//!
+//! Emitted into a generated parser only when lowering saw a construct that
+//! needs it (`GenContext::needs_atn`, today a non-greedy `??`). The
+//! compiled fast path handles everything else, so this never runs on the
+//! hot path.
+//!
+//! Full context without a per-call-site GIR<->ATN mapping: the caller passes
+//! its current *rule-invocation stack* (a list of rule indices, cheaply
+//! maintained by the rule-entry wrapper). When a config exhausts a rule it
+//! branches into every ATN return-state where the caller rule invokes the
+//! callee (rule-context precision). The bottom of a real stack is the start
+//! rule, whose follow is EOF — so a config that returns past it accepts only
+//! EOF (`ATN_ACCEPT_EOF`), not any token. An empty stack falls back to plain
+//! SLL (rule-stop = wildcard follow).
+//!
+//! Clean-room: follows the published ALL(*) description, not ANTLR4 sources
+//! (License hygiene, AGENTS.md). The wire-format constants below are the
+//! single source of truth; the builder/serializer in `src/atn.wado` `use`s
+//! them. The blob carries a version word `atn_decode` asserts.
+//!
+//! Prediction reads token kinds only, so the simulator takes the flat
+//! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
+//! `List` wrapper) — this keeps scan frames a slot smaller, which matters
+//! for deeply recursive grammars.
+
+use { TreeMap } from "core:collections";
+
+// ATN wire-format constants — the single source of truth for the serialized
+// blob layout, shared by the builder/serializer in `src/atn.wado` (which
+// `use`s these) and the decoder/simulator below. They live here, not in
+// `atn.wado`, because this runtime is `#include_str`'d verbatim into every
+// generated parser and so cannot import from the compiler crate — whereas
+// the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
+// on any layout change so a stale committed blob fails loudly.
+pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
+pub global ATN_BLOB_VERSION: i32 = 2;
+
+// State kinds. `atn_decode` copies every state's kind through verbatim and
+// the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
+// but the builder writes the full enumeration, so the whole set lives here
+// to keep one numbering authority (no split-numbering hazard across files).
+pub global ATN_BASIC: i32 = 1;
+pub global ATN_RULE_START: i32 = 2;
+pub global ATN_RULE_STOP: i32 = 3;
+pub global ATN_BLOCK_START: i32 = 4;
+pub global ATN_BLOCK_END: i32 = 5;
+pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
+pub global ATN_STAR_LOOP_BACK: i32 = 7;
+pub global ATN_PLUS_LOOP_BACK: i32 = 8;
+pub global ATN_LOOP_END: i32 = 9;
+
+// Transition kinds. `label`/`follow`/`prec` carry kind-specific data
+// (see `AtnTransition` in `atn.wado`).
+pub global ATN_TR_EPSILON: i32 = 0;
+pub global ATN_TR_ATOM: i32 = 1;
+pub global ATN_TR_NOT_ATOM: i32 = 2;
+pub global ATN_TR_WILDCARD: i32 = 3;
+pub global ATN_TR_RULE: i32 = 4;
+// Precedence-predicate edge `{prec_i >= pr}?`, emitted on a
+// left-recursive rule's loop-entry decision (one per LR alt). `prec`
+// carries the alt's own precedence (`prec_i`); the simulator compares it
+// against the current min-prec context `pr` and prunes the edge when the
+// predicate is false. Traversed like epsilon otherwise. Precedence
+// evaluation itself lands in P4.3; until then closure walks it
+// unconditionally (no LR grammar routes through the simulator yet).
+pub global ATN_TR_PRECEDENCE: i32 = 5;
+
+/// Sentinel "state": a config that has returned past the real stack bottom
+/// and is viable only if the next token is EOF (the start rule's follow).
+#[allow(dead_code)]
+global ATN_ACCEPT_EOF: i32 = -2;
+
+/// Safety caps for the merged closure. With graph-merged contexts the work is
+/// polynomial for any finite input, so these are only tripped by pathological
+/// epsilon-cycle grammars; on overflow the predictor bails to the lowest
+/// viable alt (the same conservative answer as a true conflict). Generous so
+/// realistic deep recursion never approximates.
+#[allow(dead_code)]
+global ATN_CLOSURE_GUARD: i32 = 2000000;
+#[allow(dead_code)]
+global ATN_ARENA_CAP: i32 = 400000;
+
+/// Stride for `CtxArena::merge`'s pair-key packing (`lo * stride + hi`).
+/// Must exceed `ATN_ARENA_CAP` so two distinct arena ids can never alias
+/// onto the same key; kept comfortably above it.
+global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
+
+/// The decoded ATN, in struct-of-arrays form. Decoded once from the
+/// serialized blob (into the module-level `ATN_SIM` in a generated
+/// parser) and read (never mutated) during prediction.
+pub struct AtnSim {
+    pub state_kind: List<i32>,
+    pub state_rule: List<i32>,
+    pub state_decision: List<i32>,
+    pub state_tr_start: List<i32>,
+    pub state_tr_count: List<i32>,
+    pub tr_kind: List<i32>,
+    pub tr_target: List<i32>,
+    pub tr_label: List<i32>,
+    pub tr_follow: List<i32>,
+    pub tr_prec: List<i32>,
+    pub decision_state: List<i32>,
+    pub rule_start: List<i32>,
+    pub rule_stop: List<i32>,
+    pub num_tokens: i32,
+    /// Per-rule FIRST / nullability, computed once from the decoded ATN (not
+    /// from the blob). `rule_nullable[r]` — can rule `r` derive empty;
+    /// `rule_first[r]` — the explicit token kinds rule `r` can start with;
+    /// `rule_first_neg[r]` — labels EXCLUDED by `~X` edges in rule `r`'s FIRST
+    /// (a `~X` start admits any token but `X`); `rule_first_open[r]` — rule
+    /// `r`'s FIRST admits a true wildcard `.`. Together these answer
+    /// `atn_first_admits`. They drive the LR loop-entry decision's
+    /// caller-mandatory check (`atn_lr_loop_decision`).
+    pub rule_nullable: List<bool>,
+    pub rule_first: List<List<i32>>,
+    pub rule_first_neg: List<List<i32>>,
+    pub rule_first_open: List<bool>,
+}
+
+/// Sentinel return state inside a `PredictionContext`: this branch's
+/// during-prediction stack is empty, so a rule-stop reaching it falls back to
+/// the caller stack (`rs` / `rule_stack`). Distinct from real ATN state ids
+/// (>= 0) and from the -1 start-frame / -2 EOF markers used on `rule_stack`.
+#[allow(dead_code)]
+global CTX_BOUNDARY: i32 = -3;
+
+/// The empty during-prediction context (no frames entered yet). A config with
+/// `pctx == CTX_EMPTY` pops straight to the caller stack.
+#[allow(dead_code)]
+global CTX_EMPTY: i32 = 0;
+
+/// Graph-structured during-prediction stack ("PredictionContext" DAG). Each
+/// node is a *set* of edges `[return_state, restore_pr, parent]`; identical
+/// edge-sets are hash-consed to one id, and configs reaching the same
+/// `(state, alt, rs, pr)` via different stacks are merged by unioning their
+/// contexts here. This collapses what would otherwise be an exponential number
+/// of distinct list-stacks under deep left recursion into a polynomial DAG —
+/// the core of the ALL(*) tractability guarantee. Built fresh per prediction.
+///
+/// `edges[id]` is the node's edge list; `edges[CTX_EMPTY]` is empty. `intern`
+/// maps a canonical edge-set key to its id; `merge_cache` memoizes `merge`.
+struct CtxArena {
+    edges: List<List<[i32, i32, i32]>>,
+    // Hash -> candidate node ids (collision buckets; edges compared on lookup).
+    intern: TreeMap<i64, List<i32>>,
+    merge_cache: TreeMap<i64, i32>,
+}
+
+/// One ATN configuration. `pctx` is the graph-structured during-prediction
+/// stack (a `CtxArena` node id); `rs` indexes the caller's pre-existing parse
+/// stack (the next outer frame to return into once `pctx` empties, or -1 for
+/// SLL / exhausted). `pr` is the current min-precedence context.
+struct AtnConfig {
+    state: i32,
+    alt: i32,
+    pctx: i32,
+    rs: i32,
+    pr: i32,
+}
+
+
+impl CtxArena {
+    fn new() -> CtxArena {
+        // Node 0 = CTX_EMPTY (no edges).
+        let empty: List<[i32, i32, i32]> = [];
+        return CtxArena {
+            edges: [empty],
+            intern: TreeMap::<i64, List<i32>>::new(),
+            merge_cache: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    /// FNV-style hash of a sorted edge set (the interning key).
+    fn hash_of(edges: &List<[i32, i32, i32]>) -> i64 {
+        let mut h: i64 = 1469598103934665603;
+        for let e of edges {
+            h = (h ^ e.0 as i64 + 1) * 1099511628211;
+            h = (h ^ e.1 as i64 + 1) * 1099511628211;
+            h = (h ^ e.2 as i64 + 1) * 1099511628211;
+        }
+        return h & 4611686018427387903;
+    }
+
+    /// Intern a (already sorted, deduped) edge set, returning its node id.
+    /// Collisions on the i64 hash are resolved by comparing edge lists.
+    fn intern_edges(&mut self, sorted: &List<[i32, i32, i32]>) -> i32 {
+        if sorted.is_empty() {
+            return CTX_EMPTY;
+        }
+        let h = CtxArena::hash_of(sorted);
+        if let Some(cands) = self.intern.get(h) {
+            for let id of &cands {
+                if edge_lists_eq(&self.edges[*id], sorted) {
+                    return *id;
+                }
+            }
+        }
+        let id = self.edges.len();
+        self.edges.push(*sorted);
+        let mut cands = if let Some(c) = self.intern.get(h) {
+            c;
+        } else {
+            [] as List<i32>;
+        };
+        cands.push(id);
+        self.intern[h] = cands;
+        return id;
+    }
+
+    /// Push a frame: a context with the single edge `(return_state, restore_pr,
+    /// parent)`.
+    fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
+        let one: List<[i32, i32, i32]> = [
+            [return_state, restore_pr, parent],
+        ];
+        return self.intern_edges(&one);
+    }
+
+    /// The edge view of a node, treating `CTX_EMPTY` as a single boundary edge
+    /// so it can be unioned with real frames during a merge.
+    fn edges_view(&self, id: i32) -> List<[i32, i32, i32]> {
+        if id == CTX_EMPTY {
+            return [
+                [CTX_BOUNDARY, 0, CTX_EMPTY],
+            ];
+        }
+        return self.edges[id];
+    }
+
+    /// Merge two contexts into one whose branch-set is their union. Edges with
+    /// the same `(return_state, restore_pr)` collapse, their parents merged
+    /// recursively; memoized so the whole operation stays polynomial.
+    fn merge(&mut self, a: i32, b: i32) -> i32 {
+        if a == b {
+            return a;
+        }
+        let lo = if a < b { a } else { b };
+        let hi = if a < b { b } else { a };
+        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
+        if let Some(id) = self.merge_cache.get(ck) {
+            return id;
+        }
+        let ea = self.edges_view(a);
+        let eb = self.edges_view(b);
+        // Group edges by (return_state, restore_pr), merging parents.
+        let mut keys: List<[i32, i32]> = [];
+        let mut parents: List<i32> = [];
+        for let src of [&ea, &eb] {
+            for let e of *src {
+                let rk = [e.0, e.1];
+                let mut found = -1;
+                for let mut i = 0; i < keys.len(); i += 1 {
+                    if keys[i].0 == rk.0 && keys[i].1 == rk.1 {
+                        found = i;
+                        break;
+                    }
+                }
+                if found < 0 {
+                    keys.push(rk);
+                    parents.push(e.2);
+                } else {
+                    parents[found] = self.merge(parents[found], e.2);
+                }
+            }
+        }
+        let mut merged: List<[i32, i32, i32]> = [];
+        for let mut i = 0; i < keys.len(); i += 1 {
+            merged.push([keys[i].0, keys[i].1, parents[i]]);
+        }
+        sort_ctx_edges(&mut merged);
+        let id = self.intern_edges(&merged);
+        self.merge_cache[ck] = id;
+        return id;
+    }
+}
+
+/// Sort an edge list by (return_state, restore_pr, parent) so interning keys
+/// are canonical regardless of insertion order.
+#[allow(dead_code)]
+fn sort_ctx_edges(edges: &mut List<[i32, i32, i32]>) {
+    let n = edges.len();
+    for let mut i = 1; i < n; i += 1 {
+        let cur = edges[i];
+        let mut j = i - 1;
+        while j >= 0 && ctx_edge_gt(&edges[j], &cur) {
+            edges[j + 1] = edges[j];
+            j -= 1;
+        }
+        edges[j + 1] = cur;
+    }
+}
+
+#[allow(dead_code)]
+fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
+    if a.0 != b.0 {
+        return a.0 > b.0;
+    }
+    if a.1 != b.1 {
+        return a.1 > b.1;
+    }
+    return a.2 > b.2;
+}
+
+/// Structural equality of two (sorted) edge lists, for interning-collision
+/// disambiguation.
+#[allow(dead_code)]
+fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i].0 != b[i].0 || a[i].1 != b[i].1 || a[i].2 != b[i].2 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Decode the serialized ATN blob into `AtnSim`. Mirrors the layout of
+/// `atn.wado::serialize_atn`.
+#[allow(dead_code)]
+pub fn atn_decode(data: &List<i32>) -> AtnSim {
+    let mut p = 0;
+    let magic = data[p];
+    p += 1;
+    let version = data[p];
+    p += 1;
+    assert magic == ATN_BLOB_MAGIC, `ATN blob magic mismatch: {magic}`;
+    assert version == ATN_BLOB_VERSION, `ATN blob version mismatch: {version}`;
+    let num_tokens = data[p];
+    p += 1;
+
+    let nrules = data[p];
+    p += 1;
+    let mut rule_start: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_start.push(data[p]);
+        p += 1;
+    }
+    let mut rule_stop: List<i32> = [];
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_stop.push(data[p]);
+        p += 1;
+    }
+    let ndec = data[p];
+    p += 1;
+    let mut decision_state: List<i32> = [];
+    for let mut i = 0; i < ndec; i += 1 {
+        decision_state.push(data[p]);
+        p += 1;
+    }
+
+    let nstates = data[p];
+    p += 1;
+    let mut state_kind: List<i32> = [];
+    let mut state_rule: List<i32> = [];
+    let mut state_decision: List<i32> = [];
+    let mut state_tr_start: List<i32> = [];
+    let mut state_tr_count: List<i32> = [];
+    let mut tr_kind: List<i32> = [];
+    let mut tr_target: List<i32> = [];
+    let mut tr_label: List<i32> = [];
+    let mut tr_follow: List<i32> = [];
+    let mut tr_prec: List<i32> = [];
+    for let mut i = 0; i < nstates; i += 1 {
+        let kind = data[p];
+        p += 1;
+        let rule = data[p];
+        p += 1;
+        let decision = data[p];
+        p += 1;
+        let ntrans = data[p];
+        p += 1;
+        state_kind.push(kind);
+        state_rule.push(rule);
+        state_decision.push(decision);
+        state_tr_start.push(tr_kind.len());
+        state_tr_count.push(ntrans);
+        for let mut j = 0; j < ntrans; j += 1 {
+            tr_kind.push(data[p]);
+            p += 1;
+            tr_target.push(data[p]);
+            p += 1;
+            tr_label.push(data[p]);
+            p += 1;
+            tr_follow.push(data[p]);
+            p += 1;
+            tr_prec.push(data[p]);
+            p += 1;
+        }
+    }
+    let nrules_count = rule_start.len();
+    let mut sim = AtnSim {
+        state_kind,
+        state_rule,
+        state_decision,
+        state_tr_start,
+        state_tr_count,
+        tr_kind,
+        tr_target,
+        tr_label,
+        tr_follow,
+        tr_prec,
+        decision_state,
+        rule_start,
+        rule_stop,
+        num_tokens,
+        rule_nullable: [],
+        rule_first: [],
+        rule_first_neg: [],
+        rule_first_open: [],
+    };
+    for let mut r = 0; r < nrules_count; r += 1 {
+        sim.rule_nullable.push(false);
+        sim.rule_first.push([]);
+        sim.rule_first_neg.push([]);
+        sim.rule_first_open.push(false);
+    }
+    // The FIRST/nullable fixpoint feeds only the LR loop-entry decision
+    // (`atn_lr_loop_decision` / `atn_caller_mandates`), which exists solely
+    // for rules with precedence edges. A grammar without any precedence edge
+    // (e.g. one that needs the simulator only for a non-greedy `??`) never
+    // reads this data, so skip the whole fixpoint there.
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if has_precedence {
+        atn_compute_first_nullable(&mut sim);
+    }
+    return sim;
+}
+
+/// Fill `rule_nullable` / `rule_first` / `rule_first_open` by a monotone
+/// fixpoint over the ATN: each pass recomputes every rule's FIRST/nullable
+/// from the current values (used for rule-ref edges), stopping when nothing
+/// grows. Runs once at decode, and only when the ATN has precedence edges
+/// (see `atn_decode`); the grammar (ATN) is constant so this is O(1) w.r.t.
+/// input.
+#[allow(dead_code)]
+fn atn_compute_first_nullable(sim: &mut AtnSim) {
+    let nrules = sim.rule_start.len();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < nrules; r += 1 {
+            let mut v1: List<i32> = [];
+            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+                sim.rule_nullable[r] = true;
+                changed = true;
+            }
+            let mut v2: List<i32> = [];
+            let mut f: List<i32> = [];
+            let mut fneg: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg) && !sim.rule_first_open[r] {
+                sim.rule_first_open[r] = true;
+                changed = true;
+            }
+            for let t of &f {
+                if !sim.rule_first[r].contains(t) {
+                    sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+            for let x of &fneg {
+                if !sim.rule_first_neg[r].contains(x) {
+                    sim.rule_first_neg[r].push(*x);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+/// True iff the continuation from `state` to its rule's `RULE_STOP` can be
+/// empty (derive no token). Uses `sim.rule_nullable` for rule-ref edges;
+/// `visited` breaks within-rule cycles (a re-entered state adds no new
+/// nullability).
+#[allow(dead_code)]
+fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return true;
+    }
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+                return true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Collect the explicit FIRST token kinds of the continuation from `state`
+/// into `out`, and the labels EXCLUDED by `~X` (`NOT_ATOM`) edges into `neg`
+/// (a `~X` edge matches any token except `X`). Returns `open` (true only for
+/// a true wildcard `.`, which matches any token). A token `t` is admitted by
+/// this FIRST iff `atn_first_admits(out, open, neg, t, eof)`.
+/// Stops at consuming atoms (their label is the FIRST; no walk past them).
+/// Uses `sim.rule_first` / `rule_first_open` / `rule_first_neg` /
+/// `rule_nullable` for rule-ref edges; `visited` breaks within-rule cycles.
+///
+/// Precedence edges (an LR rule's loop entry) are walked like epsilon: when
+/// the rule's atom prefix is nullable the rule can begin with a loop operator,
+/// so those operator tokens belong in the rule's FIRST. (For the common
+/// non-nullable atom the walk stops at the atom before ever reaching the loop
+/// entry, so no operator enters FIRST.)
+#[allow(dead_code)]
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return false;
+    }
+    let mut open = false;
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_ATOM {
+            if !out.contains(&sim.tr_label[s + j]) {
+                out.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_WILDCARD {
+            open = true;
+        } else if k == ATN_TR_NOT_ATOM {
+            if !neg.contains(&sim.tr_label[s + j]) {
+                neg.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg) {
+                open = true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 {
+                for let t of &sim.rule_first[callee] {
+                    if !out.contains(t) {
+                        out.push(*t);
+                    }
+                }
+                for let x of &sim.rule_first_neg[callee] {
+                    if !neg.contains(x) {
+                        neg.push(*x);
+                    }
+                }
+                if sim.rule_first_open[callee] {
+                    open = true;
+                }
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                    open = true;
+                }
+            }
+        }
+    }
+    return open;
+}
+
+/// Whether the FIRST set described by (`out`, `open`, `neg`) admits token `t`:
+/// an explicit atom match, a true wildcard, or a `~X` exclusion whose excluded
+/// label is not `t` (matching `atn_move`'s `token != label && token != eof`).
+#[allow(dead_code)]
+fn atn_first_admits(out: &List<i32>, open: bool, neg: &List<i32>, t: i32, eof: i32) -> bool {
+    if open && t != eof {
+        return true;
+    }
+    if out.contains(&t) {
+        return true;
+    }
+    if t != eof {
+        for let x of neg {
+            if *x != t {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// True when `state`'s outgoing edges consume a token (atom / wildcard /
+/// not-atom). Such a state is a resting point: closure stops there and
+/// `atn_move` reads the edge. Epsilon / rule states are expanded instead.
+#[allow(dead_code)]
+fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
+    let cnt = sim.state_tr_count[state];
+    if cnt == 0 {
+        return false;
+    }
+    let k = sim.tr_kind[sim.state_tr_start[state]];
+    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+}
+
+/// A merged configuration set: at most one config per `(state, alt, rs, pr)`,
+/// its `pctx` the merged graph context of every path that reached it. This
+/// collapse is what bounds the closure to polynomial size under deep left
+/// recursion (instead of one config per distinct list-stack). Keyed by a
+/// string for O(log n) lookup.
+struct CfgSet {
+    state: List<i32>,
+    alt: List<i32>,
+    rs: List<i32>,
+    pr: List<i32>,
+    pctx: List<i32>,
+    index: TreeMap<i64, i32>,
+}
+
+
+impl CfgSet {
+    fn new() -> CfgSet {
+        return CfgSet {
+            state: [],
+            alt: [],
+            rs: [],
+            pr: [],
+            pctx: [],
+            index: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    /// Merge `(state, alt, rs, pr, pctx)` in. Returns `[index, changed]` where
+    /// `changed` is true iff the stored pctx grew (a fresh key always counts).
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, pctx: i32) -> [i32, bool] {
+        // Packed i64 key (avoids per-config string allocation on the hot
+        // closure path). Each field gets a power-of-two bit slot, offset by
+        // its -2/-1 sentinel so the value stays non-negative:
+        //   pr    : bits [0,11)  (×1)            — precedence level
+        //   alt   : bits [11,22) (×2^11 = 2048)  — alternative index
+        //   rs    : bits [22,42) (×2^22)         — caller-stack depth
+        //   state : bits [42,62) (×2^42)         — ATN state id
+        // The slots are far wider than anything reachable: `pr`/`alt` admit
+        // ~2046 (a rule never has thousands of precedence levels or alts),
+        // `rs` ~1M caller frames (the wasm stack overflows in the low
+        // thousands first), `state` ~1M states. The asserts document the
+        // encoding capacity and fail loudly rather than let a field overflow
+        // its slot and alias a *different* config onto the same key.
+        assert pr + 2 < 2048, `ATN config precedence {pr} exceeds packed-key slot`;
+        assert alt + 1 < 2048, `ATN config alt {alt} exceeds packed-key slot`;
+        assert rs + 2 < 1048576, `ATN config caller-stack depth {rs} exceeds packed-key slot`;
+        assert state + 2 < 1048576, `ATN config state {state} exceeds packed-key slot`;
+        let k = (state + 2) as i64 * 4398046511104 + (rs + 2) as i64 * 4194304 + (alt + 1) as i64 * 2048 + (pr + 2) as i64;
+        if let Some(i) = self.index.get(k) {
+            let merged = arena.merge(self.pctx[i], pctx);
+            let changed = merged != self.pctx[i];
+            self.pctx[i] = merged;
+            return [i, changed];
+        }
+        let i = self.state.len();
+        self.state.push(state);
+        self.alt.push(alt);
+        self.rs.push(rs);
+        self.pr.push(pr);
+        self.pctx.push(pctx);
+        self.index[k] = i;
+        return [i, true];
+    }
+
+    fn to_list(&self) -> List<AtnConfig> {
+        let mut out: List<AtnConfig> = [];
+        for let mut i = 0; i < self.state.len(); i += 1 {
+            out.push(AtnConfig {
+                state: self.state[i],
+                alt: self.alt[i],
+                pctx: self.pctx[i],
+                rs: self.rs[i],
+                pr: self.pr[i],
+            });
+        }
+        return out;
+    }
+}
+
+/// Closure of a seed set with graph-merged contexts. Resting configs
+/// (consuming states; rule-stop "at-end"; `ATN_ACCEPT_EOF`) are returned;
+/// epsilon / precedence / rule-ref edges are followed, rule-stops pop the
+/// graph context (then the caller stack `rstk` once the context empties).
+/// Configs reaching the same `(state, alt, rs, pr)` are merged, so the work
+/// stays polynomial under deep left recursion (the recursion is input-driven
+/// — an LR operand is only reached after consuming its operator token — so
+/// the context depth is bounded by the input, no cyclic-context handling is
+/// needed; the guards below are a safety net for pathological epsilon cycles).
+#[allow(dead_code)]
+fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
+    let mut cset = CfgSet::new();
+    let mut expanded: List<i32> = [];
+    let mut rset = CfgSet::new();
+    let mut work: List<AtnConfig> = *seeds;
+    let mut guard = 0;
+    while let Some(c) = work.pop() {
+        guard += 1;
+        if guard > ATN_CLOSURE_GUARD {
+            break;
+        }
+        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
+        let idx = res.0;
+        while expanded.len() <= idx {
+            expanded.push(-9);
+        }
+        let merged_pctx = cset.pctx[idx];
+        if expanded[idx] == merged_pctx {
+            continue;
+        }
+        expanded[idx] = merged_pctx;
+        let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, rs: c.rs, pr: c.pr };
+        atn_expand(sim, arena, &cur, rstk, &mut work, &mut rset);
+    }
+    return rset.to_list();
+}
+
+/// Expand one (merged) config: rest it (consuming / at-end / EOF) or push its
+/// epsilon / precedence / rule-ref successors onto `work`.
+#[allow(dead_code)]
+fn atn_expand(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.state == ATN_ACCEPT_EOF {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    if sim.state_kind[cur.state] == ATN_RULE_STOP {
+        atn_pop(sim, arena, cur, rstk, work, rset);
+        return;
+    }
+    if atn_state_consumes(sim, cur.state) {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    let start = sim.state_tr_start[cur.state];
+    let cnt = sim.state_tr_count[cur.state];
+    for let mut j = 0; j < cnt; j += 1 {
+        let k = sim.tr_kind[start + j];
+        let target = sim.tr_target[start + j];
+        if k == ATN_TR_EPSILON {
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+        } else if k == ATN_TR_PRECEDENCE {
+            // Loop-entry predicate `{prec_i >= pr}?`: prune below the context.
+            if sim.tr_prec[start + j] >= cur.pr {
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+            }
+        } else if k == ATN_TR_RULE {
+            if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
+                continue;
+            }
+            // A recursive operand `expr[next_i]` carries its raised floor on
+            // the RuleRef `prec`; push a frame saving the current `pr`.
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
+        }
+    }
+}
+
+/// Pop a rule-stop: follow each graph-context edge back to its caller frame;
+/// a boundary edge (or an empty context) falls through to the pre-existing
+/// caller stack `rstk` via `atn_rs_pop`.
+#[allow(dead_code)]
+fn atn_pop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.pctx == CTX_EMPTY {
+        atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        return;
+    }
+    let edges = arena.edges[cur.pctx];
+    for let e of &edges {
+        if e.0 == CTX_BOUNDARY {
+            atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        } else {
+            work.push(AtnConfig { state: e.0, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
+        }
+    }
+}
+
+/// Return into the pre-existing caller stack once the during-prediction
+/// context is exhausted. Mirrors the exact-return-state semantics: continue
+/// at `rstk[rs]`; the bottom start frame's follow is EOF; an unstamped /
+/// SLL frame matches any follow (the rule-stop stays "at-end").
+#[allow(dead_code)]
+fn atn_rs_pop(
+    arena: &mut CtxArena,
+    stop_state: i32,
+    alt: i32,
+    rs: i32,
+    pr: i32,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if rs >= 0 {
+        let ret = rstk[rs];
+        if ret >= 0 {
+            work.push(AtnConfig { state: ret, alt: alt, pctx: CTX_EMPTY, rs: rs - 1, pr: pr });
+        } else if rs == 0 {
+            rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+        } else {
+            rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+        }
+    } else if rstk.is_empty() {
+        rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+    } else {
+        rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+    }
+}
+
+/// Advance a resting config set by one input token. At-end and accept-EOF
+/// configs carry only when still viable; consuming configs follow whichever
+/// edge matches `token`.
+#[allow(dead_code)]
+fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
+    let mut out: List<AtnConfig> = [];
+    for let c of configs {
+        if c.state == ATN_ACCEPT_EOF {
+            if token == eof {
+                out.push(*c);
+            }
+            continue;
+        }
+        if sim.state_kind[c.state] == ATN_RULE_STOP {
+            out.push(*c);
+            continue;
+        }
+        let start = sim.state_tr_start[c.state];
+        let cnt = sim.state_tr_count[c.state];
+        for let mut j = 0; j < cnt; j += 1 {
+            let k = sim.tr_kind[start + j];
+            let label = sim.tr_label[start + j];
+            let matched = if k == ATN_TR_ATOM {
+                label == token;
+            } else if k == ATN_TR_WILDCARD {
+                token != eof;
+            } else if k == ATN_TR_NOT_ATOM {
+                token != label && token != eof;
+            } else {
+                false;
+            };
+            if matched {
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, rs: c.rs, pr: c.pr });
+            }
+        }
+    }
+    return out;
+}
+
+#[allow(dead_code)]
+fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if !alts.contains(&c.alt) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return alts;
+}
+
+#[allow(dead_code)]
+fn atn_min_alt(alts: &List<i32>) -> i32 {
+    if alts.is_empty() {
+        return -1;
+    }
+    let mut m = alts[0];
+    for let a of alts {
+        if *a < m {
+            m = *a;
+        }
+    }
+    return m;
+}
+
+#[allow(dead_code)]
+fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
+    if configs.is_empty() {
+        return false;
+    }
+    for let c of configs {
+        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_RULE_STOP {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Predict the winning alternative at `decision` against `tokens` from
+/// `start_pos`, with full context: `rule_stack` is the caller's current
+/// chain of ATN return states (outermost — the start-rule frame — first).
+/// Pass an empty `rule_stack` for plain SLL. `min_prec` is the current
+/// precedence context `pr`: a loop-entry edge `{prec_i >= pr}?` whose
+/// `prec_i < min_prec` is pruned (left/right-associative precedence
+/// climbing). Returns the 0-based alternative index (the decision state's
+/// edge order), or -1 if no alternative is viable.
+///
+/// Resolution: simulate until one alt survives (return it), the config set
+/// empties (return the previous step's lowest alt), or all survivors are
+/// at-end together (a genuine conflict — return the lowest alt, matching
+/// ANTLR4's rule-order tie-break; non-greedy repeats order their exit edge
+/// first so this yields the exit).
+#[allow(dead_code)]
+pub fn atn_predict_with_stack(
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let start = sim.state_tr_start[dstate];
+    let cnt = sim.state_tr_count[dstate];
+    let rs_init = rule_stack.len() - 1;
+    // Fresh context arena per prediction: a persistent per-Parser arena
+    // measured slower (it accumulates contexts, growing the intern buckets),
+    // and full-context LR results aren't memoizable (the context encodes the
+    // whole nesting depth).
+    let mut arena = CtxArena::new();
+    let mut seeds: List<AtnConfig> = [];
+    for let mut j = 0; j < cnt; j += 1 {
+        // Prune a precedence-guarded enter edge whose alt precedence is below
+        // the current context (the predicate `{prec_i >= min_prec}?` is false).
+        if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
+            continue;
+        }
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
+    }
+    let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack);
+    let mut pos = start_pos;
+    let mut prev = atn_unique_alts(&configs);
+    let limit = tokens.len() - start_pos + 8;
+    let mut guard = 0;
+    loop {
+        guard += 1;
+        if guard > limit {
+            return atn_min_alt(&prev);
+        }
+        let alts = atn_unique_alts(&configs);
+        if alts.is_empty() {
+            return atn_min_alt(&prev);
+        }
+        if alts.len() == 1 {
+            return alts[0];
+        }
+        if atn_all_at_end(sim, &configs) {
+            return atn_min_alt(&alts);
+        }
+        prev = alts;
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
+        let moved = atn_move(sim, &configs, token, eof);
+        pos += 1;
+        configs = atn_closure(sim, &mut arena, &moved, rule_stack);
+    }
+}
+
+/// Decide an LR rule's loop-entry: ENTER alt `j` (continue the loop with
+/// operator alt `j`) or EXIT (the trailing exit-edge index `c - 1`). This is
+/// the LR loop-entry's true semantics — precedence + yield-to-caller-mandatory
+/// — computed directly, not by general ALL(*) simulation (which is correct but
+/// O(n^2) here because the exit branch re-walks the whole enclosing-loop
+/// caller chain). O(caller-depth + grammar) per decision.
+///
+/// 1. If the current token is MANDATORY in the caller continuation (the first
+///    non-nullable level of the caller return-state stack), EXIT — the caller
+///    needs it (`between`'s mandatory `'and'`).
+/// 2. Else the lowest-index precedence-allowed (`prec >= min_prec`) enter edge
+///    whose suffix can start with the token wins (greedy; left-associativity
+///    falls out of the precedence prune).
+/// 3. Else EXIT.
+#[allow(dead_code)]
+pub fn atn_lr_loop_decision(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    decision: i32,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
+    let s = sim.state_tr_start[dstate];
+    let c = sim.state_tr_count[dstate];
+    let exit_alt = c - 1;
+    if atn_caller_mandates(sim, rule_stack, t, eof) {
+        return exit_alt;
+    }
+    for let mut j = 0; j < c; j += 1 {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+            if sim.tr_prec[s + j] < min_prec {
+                continue;
+            }
+            let mut v: List<i32> = [];
+            let mut f: List<i32> = [];
+            let mut fneg: List<i32> = [];
+            let open = atn_cont_first(sim, sim.tr_target[s + j], &mut v, &mut f, &mut fneg);
+            if atn_first_admits(&f, open, &fneg, t, eof) {
+                return j;
+            }
+        }
+    }
+    return exit_alt;
+}
+
+/// True iff the caller continuation MANDATES token `t`: walking the caller
+/// return-state stack from the top, pop nullable continuations (optional
+/// loops / nullable tails), and at the first non-nullable level test whether
+/// its FIRST admits `t`. The start frame (-1 at index 0) mandates EOF.
+#[allow(dead_code)]
+fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+    let mut i = rule_stack.len() - 1;
+    while i >= 0 {
+        let ret = rule_stack[i];
+        if ret < 0 {
+            return i == 0 && t == eof;
+        }
+        let mut v: List<i32> = [];
+        if atn_cont_nullable(sim, ret, &mut v) {
+            i -= 1;
+            continue;
+        }
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, ret, &mut v2, &mut f, &mut fneg);
+        return atn_first_admits(&f, open, &fneg, t, eof);
+    }
+    return false;
+}
+
+/// SLL convenience wrapper: predict with an empty rule stack. Correct for
+/// top-level decisions; deeper decisions whose disambiguation depends on the
+/// caller's follow need `atn_predict_with_stack` with the real rule stack.
+#[allow(dead_code)]
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
+    let empty: List<i32> = [];
+    return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
+}
+
+/// Decide whether a non-greedy optional (`(...)?? `) should ENTER (consume
+/// its body) or SKIP, using full-context ATN prediction. `current_rule` (a
+/// compile-time constant the emitter passes) names the rule the `??` lives
+/// in; the decision is that rule's unique exit-first BlockStart (an optional
+/// whose edge 0 goes straight to BlockEnd — the non-greedy ordering).
+/// `rule_stack` is the caller stack of ATN return states. Returns true to
+/// ENTER.
+///
+/// Falls back to ENTER (the prior greedy behaviour) when context is absent
+/// or the decision can't be uniquely identified (0 or >1 candidates), so a
+/// mapping miss degrades gracefully instead of mispredicting.
+#[allow(dead_code)]
+pub fn atn_ng_optional_enter(
+    sim: &AtnSim,
+    current_rule: i32,
+    rule_stack: &List<i32>,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+) -> bool {
+    // `current_rule` is the rule the `??` lives in (a compile-time constant
+    // the emitter passes): the caller stack now holds ATN return states, so
+    // the current rule is no longer recoverable from its top.
+    let rule = current_rule;
+    let mut dec = -1;
+    let mut found = 0;
+    for let mut d = 0; d < sim.decision_state.len(); d += 1 {
+        let ds = sim.decision_state[d];
+        if sim.state_kind[ds] != ATN_BLOCK_START || sim.state_rule[ds] != rule {
+            continue;
+        }
+        if sim.state_tr_count[ds] < 1 {
+            continue;
+        }
+        let first_target = sim.tr_target[sim.state_tr_start[ds]];
+        if sim.state_kind[first_target] == ATN_BLOCK_END {
+            dec = d;
+            found += 1;
+        }
+    }
+    if found != 1 {
+        return true;
+    }
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Non-greedy optional edges are ordered [exit=0, enter=1].
+    return alt == 1;
+}
+//! Runtime lexer ATN simulator — Pike-VM (leftmost-first) NFA matching.
+//!
+//! Emitted into a generated lexer only for ATN-class lexer rules: a rule
+//! whose non-greedy repeat body recurses into itself, the nested-comment
+//! pattern `CMT : '/*' (CMT | .)+? '*' '/'`. Static single-pass lexing
+//! cannot decide whether an inner `/*` opens a nested rule or is just
+//! wildcard text — that needs unbounded lookahead. This simulator runs a
+//! Thompson NFA over the input characters with an ordered thread list
+//! (leftmost-first / PCRE priority): no backtracking, linear in the
+//! live thread-set per position.
+//!
+//! Semantics (matches ANTLR4 as a black box, characterized via the
+//! published jar — see License hygiene in AGENTS.md): the winning match
+//! is the one reached by the highest-priority thread, where priority is
+//! the order transitions are laid down at build time — non-greedy loops
+//! put the exit edge first, alternations keep source order. A
+//! higher-priority thread that is still live preempts a lower-priority
+//! thread's earlier accept, so greedy loops yield the longest match and
+//! non-greedy loops the shortest that still lets the rule finish.
+//!
+//! Clean-room: textbook Thompson / Pike VM (ordered thread list, epsilon
+//! closure with a per-step visited set, char-class move), NOT ANTLR4's
+//! lexer ATN simulator. The atom alphabet is Unicode scalars; recursion
+//! into a referenced lexer rule uses a per-thread return stack of ATN
+//! states.
+
+use { TreeSet } from "core:collections";
+
+/// One NFA thread parked at an actionable state: either a consuming state
+/// (its transitions are atom/wildcard, read by the move step) or an accept
+/// marker (the start rule's stop reached with an empty return stack).
+struct LThread {
+    state: i32,
+    stack: List<i32>,
+    accept: bool,
+}
+
+/// Canonical key for the per-step visited set: the state plus its return
+/// stack. `#` separates the state from the stack and `,` separates frames
+/// so distinct (state, stack) pairs never collide (`1#2,3` vs `12#3`).
+fn latn_sig(state: i32, stack: &List<i32>) -> String {
+    let mut s = `{state}#`;
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if i > 0 {
+            s.push_str(&",");
+        }
+        s.push_str(&`{stack[i]}`);
+    }
+    return s;
+}
+
+/// Epsilon-closure of `(state, stack)`, appending every reachable
+/// actionable thread to `out` in priority (transition) order. `visited`
+/// dedups by (state, stack) so epsilon cycles terminate. A `RULE`
+/// transition pushes its return state and jumps to the callee start; a
+/// `RULE_STOP` pops (or accepts when the stack is empty).
+fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<String>, state: i32, stack: &List<i32>) {
+    let key = latn_sig(state, stack);
+    if visited.contains(key) {
+        return;
+    }
+    visited.insert(key);
+
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        if stack.is_empty() {
+            out.push(LThread { state, stack: [], accept: true });
+        } else {
+            let ret = stack[stack.len() - 1];
+            let mut rest: List<i32> = [];
+            for let mut i = 0; i < stack.len() - 1; i += 1 {
+                rest.push(stack[i]);
+            }
+            latn_closure(sim, out, visited, ret, &rest);
+        }
+        return;
+    }
+
+    let ts = sim.state_tr_start[state];
+    let tc = sim.state_tr_count[state];
+    if tc > 0 {
+        let k0 = sim.tr_kind[ts];
+        if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
+            out.push(LThread { state, stack: *stack, accept: false });
+            return;
+        }
+    }
+    for let mut i = 0; i < tc; i += 1 {
+        let idx = ts + i;
+        let target = sim.tr_target[idx];
+        if sim.tr_kind[idx] == ATN_TR_RULE {
+            if target < 0 {
+                // Unresolved rule reference — a dead edge, skip it.
+                continue;
+            }
+            let mut ns: List<i32> = *stack;
+            ns.push(sim.tr_follow[idx]);
+            latn_closure(sim, out, visited, target, &ns);
+        } else {
+            latn_closure(sim, out, visited, target, stack);
+        }
+    }
+}
+
+/// Match lexer rule `start_rule` against `chars` starting at `start`.
+/// Returns the end position (exclusive) of the winning match, or -1 if the
+/// rule does not match. The caller (the generated tokenizer) compares this
+/// length against the other rules' for the cross-rule longest-match.
+pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32) -> i32 {
+    let mut best = -1;
+    let mut clist: List<LThread> = [];
+    let mut seed = TreeSet::<String>::new();
+    let empty: List<i32> = [];
+    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty);
+
+    let mut pos = start;
+    loop {
+        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
+        let mut nlist: List<LThread> = [];
+        let mut nseen = TreeSet::<String>::new();
+        let mut i = 0;
+        let mut stop = false;
+        while i < clist.len() && !stop {
+            let th = &clist[i];
+            if th.accept {
+                // Highest-priority surviving accept at this position wins;
+                // lower-priority threads after it are discarded. Threads
+                // before it (higher priority, still consuming) already fed
+                // `nlist` and may overwrite `best` with a longer match.
+                best = pos;
+                stop = true;
+            } else {
+                let ts = sim.state_tr_start[th.state];
+                let tc = sim.state_tr_count[th.state];
+                for let mut j = 0; j < tc; j += 1 {
+                    let idx = ts + j;
+                    let kind = sim.tr_kind[idx];
+                    let matched = if cur < 0 {
+                        false;
+                    } else if kind == ATN_TR_ATOM {
+                        cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
+                    } else if kind == ATN_TR_WILDCARD {
+                        true;
+                    } else if kind == ATN_TR_NOT_ATOM {
+                        cur != sim.tr_label[idx];
+                    } else {
+                        false;
+                    };
+                    if matched {
+                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack);
+                    }
+                }
+            }
+            i += 1;
+        }
+        clist = nlist;
+        if clist.is_empty() {
+            break;
+        }
+        pos += 1;
+    }
+    return best;
+}
 pub enum TokenKind {
     KW_AS,
     KW_BREAK,
@@ -2662,110 +3933,7 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
 }
 
 fn try_BLOCK_COMMENT(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    let alts_saved_20 = pos;
-    let mut alts_ok_20 = false;
-    alts_20_0: {
-        pos = alts_saved_20;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_20_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '*' { break alts_20_0; }
-        pos += 1;
-        let alts_saved_21 = pos;
-        let mut alts_ok_21 = false;
-        alts_21_0: {
-            pos = alts_saved_21;
-            if pos >= chars.len() { break alts_21_0; }
-            if chars[pos] == '*' || chars[pos] == '!' { break alts_21_0; }
-            pos += 1;
-            alts_ok_21 = true;
-        }
-        if !alts_ok_21 {
-            alts_21_1: {
-                pos = alts_saved_21;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_21_1; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_21_1; }
-                pos += 1;
-                alts_ok_21 = true;
-            }
-            if !alts_ok_21 {
-                alts_21_2: {
-                    pos = alts_saved_21;
-                    pos = try_BLOCK_COMMENT_OR_DOC(chars, pos);
-                    if pos < 0 { break alts_21_2; }
-                    alts_ok_21 = true;
-                }
-            }
-        }
-        if !alts_ok_21 { break alts_20_0; }
-        loop {
-            let ng_saved_22 = pos;
-            let mut ng_exit_22 = false;
-            ng_22: {
-                if pos >= chars.len() || chars[pos] != '*' { break ng_22; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break ng_22; }
-                pos += 1;
-                ng_exit_22 = true;
-            }
-            if ng_exit_22 {
-                break;
-            }
-            pos = ng_saved_22;
-            let alts_saved_23 = pos;
-            let mut alts_ok_23 = false;
-            alts_23_0: {
-                pos = alts_saved_23;
-                pos = try_BLOCK_COMMENT_OR_DOC(chars, pos);
-                if pos < 0 { break alts_23_0; }
-                alts_ok_23 = true;
-            }
-            if !alts_ok_23 {
-                alts_23_1: {
-                    pos = alts_saved_23;
-                    if pos >= chars.len() { break alts_23_1; }
-                    if chars[pos] == '*' { break alts_23_1; }
-                    pos += 1;
-                    alts_ok_23 = true;
-                }
-            }
-            if !alts_ok_23 { break alts_20_0; }
-        }
-        alts_ok_20 = true;
-    }
-    if !alts_ok_20 {
-        alts_20_1: {
-            pos = alts_saved_20;
-            if pos >= chars.len() || chars[pos] != '/' { break alts_20_1; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '*' { break alts_20_1; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '*' { break alts_20_1; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break alts_20_1; }
-            pos += 1;
-            alts_ok_20 = true;
-        }
-        if !alts_ok_20 {
-            alts_20_2: {
-                pos = alts_saved_20;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_20_2; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_20_2; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_20_2; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '*' { break alts_20_2; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_20_2; }
-                pos += 1;
-                alts_ok_20 = true;
-            }
-        }
-    }
-    if !alts_ok_20 { return -1; }
-    return pos;
+    return latn_match(&LATN_SIM, 0, chars, start);
 }
 
 fn try_INNER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
@@ -2777,61 +3945,21 @@ fn try_INNER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '!' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_24 = pos;
-        rep_24: {
-            if pos >= chars.len() { break rep_24; }
-            if chars[pos] == '\n' || chars[pos] == '\r' { break rep_24; }
+        let rep_saved_20 = pos;
+        rep_20: {
+            if pos >= chars.len() { break rep_20; }
+            if chars[pos] == '\n' || chars[pos] == '\r' { break rep_20; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_24;
+        pos = rep_saved_20;
         break;
     }
     return pos;
 }
 
 fn try_INNER_BLOCK_DOC(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
-    pos += 1;
-    loop {
-        let ng_saved_25 = pos;
-        let mut ng_exit_25 = false;
-        ng_25: {
-            if pos >= chars.len() || chars[pos] != '*' { break ng_25; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_25; }
-            pos += 1;
-            ng_exit_25 = true;
-        }
-        if ng_exit_25 {
-            break;
-        }
-        pos = ng_saved_25;
-        let alts_saved_26 = pos;
-        let mut alts_ok_26 = false;
-        alts_26_0: {
-            pos = alts_saved_26;
-            pos = try_BLOCK_COMMENT_OR_DOC(chars, pos);
-            if pos < 0 { break alts_26_0; }
-            alts_ok_26 = true;
-        }
-        if !alts_ok_26 {
-            alts_26_1: {
-                pos = alts_saved_26;
-                if pos >= chars.len() { break alts_26_1; }
-                if chars[pos] == '*' { break alts_26_1; }
-                pos += 1;
-                alts_ok_26 = true;
-            }
-        }
-        if !alts_ok_26 { return -1; }
-    }
-    return pos;
+    return latn_match(&LATN_SIM, 2, chars, start);
 }
 
 fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
@@ -2842,144 +3970,86 @@ fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     if pos >= chars.len() || chars[pos] != '/' { return -1; }
     pos += 1;
-    let opt_saved_27 = pos;
-    let mut opt_ok_27 = false;
-    rep_27: {
-        if pos >= chars.len() { break rep_27; }
-        if chars[pos] == '/' { break rep_27; }
+    let opt_saved_21 = pos;
+    let mut opt_ok_21 = false;
+    rep_21: {
+        if pos >= chars.len() { break rep_21; }
+        if chars[pos] == '/' { break rep_21; }
         pos += 1;
         loop {
-            let rep_saved_28 = pos;
-            rep_28: {
-                if pos >= chars.len() { break rep_28; }
-                if chars[pos] == '\n' || chars[pos] == '\r' { break rep_28; }
+            let rep_saved_22 = pos;
+            rep_22: {
+                if pos >= chars.len() { break rep_22; }
+                if chars[pos] == '\n' || chars[pos] == '\r' { break rep_22; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_28;
+            pos = rep_saved_22;
             break;
         }
-        opt_ok_27 = true;
+        opt_ok_21 = true;
     }
-    if !opt_ok_27 { pos = opt_saved_27; }
+    if !opt_ok_21 { pos = opt_saved_21; }
     return pos;
 }
 
 fn try_OUTER_BLOCK_DOC(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
-    pos += 1;
-    let alts_saved_29 = pos;
-    let mut alts_ok_29 = false;
-    alts_29_0: {
-        pos = alts_saved_29;
-        if pos >= chars.len() { break alts_29_0; }
-        if chars[pos] == '*' { break alts_29_0; }
-        pos += 1;
-        alts_ok_29 = true;
-    }
-    if !alts_ok_29 {
-        alts_29_1: {
-            pos = alts_saved_29;
-            pos = try_BLOCK_COMMENT_OR_DOC(chars, pos);
-            if pos < 0 { break alts_29_1; }
-            alts_ok_29 = true;
-        }
-    }
-    if !alts_ok_29 { return -1; }
-    loop {
-        let ng_saved_30 = pos;
-        let mut ng_exit_30 = false;
-        ng_30: {
-            if pos >= chars.len() || chars[pos] != '*' { break ng_30; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_30; }
-            pos += 1;
-            ng_exit_30 = true;
-        }
-        if ng_exit_30 {
-            break;
-        }
-        pos = ng_saved_30;
-        let alts_saved_31 = pos;
-        let mut alts_ok_31 = false;
-        alts_31_0: {
-            pos = alts_saved_31;
-            pos = try_BLOCK_COMMENT_OR_DOC(chars, pos);
-            if pos < 0 { break alts_31_0; }
-            alts_ok_31 = true;
-        }
-        if !alts_ok_31 {
-            alts_31_1: {
-                pos = alts_saved_31;
-                if pos >= chars.len() { break alts_31_1; }
-                if chars[pos] == '*' { break alts_31_1; }
-                pos += 1;
-                alts_ok_31 = true;
-            }
-        }
-        if !alts_ok_31 { return -1; }
-    }
-    return pos;
+    return latn_match(&LATN_SIM, 3, chars, start);
 }
 
 fn try_BLOCK_COMMENT_OR_DOC(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_32 = pos;
-    let mut alts_ok_32 = false;
-    alts_32_0: {
-        pos = alts_saved_32;
+    let alts_saved_23 = pos;
+    let mut alts_ok_23 = false;
+    alts_23_0: {
+        pos = alts_saved_23;
         pos = try_BLOCK_COMMENT(chars, pos);
-        if pos < 0 { break alts_32_0; }
-        alts_ok_32 = true;
+        if pos < 0 { break alts_23_0; }
+        alts_ok_23 = true;
     }
-    if !alts_ok_32 {
-        alts_32_1: {
-            pos = alts_saved_32;
+    if !alts_ok_23 {
+        alts_23_1: {
+            pos = alts_saved_23;
             pos = try_INNER_BLOCK_DOC(chars, pos);
-            if pos < 0 { break alts_32_1; }
-            alts_ok_32 = true;
+            if pos < 0 { break alts_23_1; }
+            alts_ok_23 = true;
         }
-        if !alts_ok_32 {
-            alts_32_2: {
-                pos = alts_saved_32;
+        if !alts_ok_23 {
+            alts_23_2: {
+                pos = alts_saved_23;
                 pos = try_OUTER_BLOCK_DOC(chars, pos);
-                if pos < 0 { break alts_32_2; }
-                alts_ok_32 = true;
+                if pos < 0 { break alts_23_2; }
+                alts_ok_23 = true;
             }
         }
     }
-    if !alts_ok_32 { return -1; }
+    if !alts_ok_23 { return -1; }
     return pos;
 }
 
 fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let opt_saved_33 = pos;
-    let mut opt_ok_33 = false;
-    rep_33: {
-        if pos >= chars.len() || chars[pos] != '\u{feff}' { break rep_33; }
+    let opt_saved_24 = pos;
+    let mut opt_ok_24 = false;
+    rep_24: {
+        if pos >= chars.len() || chars[pos] != '\u{feff}' { break rep_24; }
         pos += 1;
-        opt_ok_33 = true;
+        opt_ok_24 = true;
     }
-    if !opt_ok_33 { pos = opt_saved_33; }
+    if !opt_ok_24 { pos = opt_saved_24; }
     if pos >= chars.len() || chars[pos] != '#' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != '!' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_34 = pos;
-        rep_34: {
-            if pos >= chars.len() { break rep_34; }
-            if chars[pos] == '\r' || chars[pos] == '\n' { break rep_34; }
+        let rep_saved_25 = pos;
+        rep_25: {
+            if pos >= chars.len() { break rep_25; }
+            if chars[pos] == '\r' || chars[pos] == '\n' { break rep_25; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_34;
+        pos = rep_saved_25;
         break;
     }
     return pos;
@@ -2995,26 +4065,26 @@ fn try_WHITESPACE(chars: &List<char>, start: i32) -> i32 {
 
 fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_35 = pos;
-    let mut alts_ok_35 = false;
-    alts_35_0: {
-        pos = alts_saved_35;
-        if pos >= chars.len() || chars[pos] != '\r' { break alts_35_0; }
+    let alts_saved_26 = pos;
+    let mut alts_ok_26 = false;
+    alts_26_0: {
+        pos = alts_saved_26;
+        if pos >= chars.len() || chars[pos] != '\r' { break alts_26_0; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != '\n' { break alts_35_0; }
+        if pos >= chars.len() || chars[pos] != '\n' { break alts_26_0; }
         pos += 1;
-        alts_ok_35 = true;
+        alts_ok_26 = true;
     }
-    if !alts_ok_35 {
-        alts_35_1: {
-            pos = alts_saved_35;
-            if pos >= chars.len() { break alts_35_1; }
-            if !(chars[pos] == '\r' || chars[pos] == '\n') { break alts_35_1; }
+    if !alts_ok_26 {
+        alts_26_1: {
+            pos = alts_saved_26;
+            if pos >= chars.len() { break alts_26_1; }
+            if !(chars[pos] == '\r' || chars[pos] == '\n') { break alts_26_1; }
             pos += 1;
-            alts_ok_35 = true;
+            alts_ok_26 = true;
         }
     }
-    if !alts_ok_35 { return -1; }
+    if !alts_ok_26 { return -1; }
     return pos;
 }
 
@@ -3022,123 +4092,123 @@ fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
-    let alts_saved_36 = pos;
-    let mut alts_ok_36 = false;
-    alts_36_0: {
-        pos = alts_saved_36;
-        if pos >= chars.len() { break alts_36_0; }
-        if chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\n' || chars[pos] == '\r' || chars[pos] == '\t' { break alts_36_0; }
+    let alts_saved_27 = pos;
+    let mut alts_ok_27 = false;
+    alts_27_0: {
+        pos = alts_saved_27;
+        if pos >= chars.len() { break alts_27_0; }
+        if chars[pos] == '\'' || chars[pos] == '\\' || chars[pos] == '\n' || chars[pos] == '\r' || chars[pos] == '\t' { break alts_27_0; }
         pos += 1;
-        alts_ok_36 = true;
+        alts_ok_27 = true;
     }
-    if !alts_ok_36 {
-        alts_36_1: {
-            pos = alts_saved_36;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_36_1; }
+    if !alts_ok_27 {
+        alts_27_1: {
+            pos = alts_saved_27;
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_27_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_36_1; }
-            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_36_1; }
+            if pos >= chars.len() { break alts_27_1; }
+            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_27_1; }
             pos += 1;
-            alts_ok_36 = true;
+            alts_ok_27 = true;
         }
-        if !alts_ok_36 {
-            alts_36_2: {
-                pos = alts_saved_36;
-                let alts_saved_37 = pos;
-                let mut alts_ok_37 = false;
-                alts_37_0: {
-                    pos = alts_saved_37;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_37_0; }
+        if !alts_ok_27 {
+            alts_27_2: {
+                pos = alts_saved_27;
+                let alts_saved_28 = pos;
+                let mut alts_ok_28 = false;
+                alts_28_0: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_28_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != 'x' { break alts_37_0; }
+                    if pos >= chars.len() || chars[pos] != 'x' { break alts_28_0; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_37_0; }
-                    if !('0' <= chars[pos] <= '7') { break alts_37_0; }
+                    if pos >= chars.len() { break alts_28_0; }
+                    if !('0' <= chars[pos] <= '7') { break alts_28_0; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_37_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_37_0; }
+                    if pos >= chars.len() { break alts_28_0; }
+                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_28_0; }
                     pos += 1;
-                    alts_ok_37 = true;
+                    alts_ok_28 = true;
                 }
-                if !alts_ok_37 {
-                    alts_37_1: {
-                        pos = alts_saved_37;
-                        if pos >= chars.len() || chars[pos] != '\\' { break alts_37_1; }
+                if !alts_ok_28 {
+                    alts_28_1: {
+                        pos = alts_saved_28;
+                        if pos >= chars.len() || chars[pos] != '\\' { break alts_28_1; }
                         pos += 1;
-                        if pos >= chars.len() { break alts_37_1; }
-                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_37_1; }
+                        if pos >= chars.len() { break alts_28_1; }
+                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_28_1; }
                         pos += 1;
-                        alts_ok_37 = true;
+                        alts_ok_28 = true;
                     }
                 }
-                if !alts_ok_37 { break alts_36_2; }
-                alts_ok_36 = true;
+                if !alts_ok_28 { break alts_27_2; }
+                alts_ok_27 = true;
             }
-            if !alts_ok_36 {
-                alts_36_3: {
-                    pos = alts_saved_36;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_36_3; }
+            if !alts_ok_27 {
+                alts_27_3: {
+                    pos = alts_saved_27;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_27_3; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != 'u' { break alts_36_3; }
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_27_3; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '{' { break alts_36_3; }
+                    if pos >= chars.len() || chars[pos] != '{' { break alts_27_3; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_36_3; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_36_3; }
+                    if pos >= chars.len() { break alts_27_3; }
+                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_27_3; }
                     pos += 1;
-                    let opt_saved_38 = pos;
-                    let mut opt_ok_38 = false;
-                    rep_38: {
-                        if pos >= chars.len() { break rep_38; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_38; }
+                    let opt_saved_29 = pos;
+                    let mut opt_ok_29 = false;
+                    rep_29: {
+                        if pos >= chars.len() { break rep_29; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_29; }
                         pos += 1;
-                        opt_ok_38 = true;
+                        opt_ok_29 = true;
                     }
-                    if !opt_ok_38 { pos = opt_saved_38; }
-                    let opt_saved_39 = pos;
-                    let mut opt_ok_39 = false;
-                    rep_39: {
-                        if pos >= chars.len() { break rep_39; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_39; }
+                    if !opt_ok_29 { pos = opt_saved_29; }
+                    let opt_saved_30 = pos;
+                    let mut opt_ok_30 = false;
+                    rep_30: {
+                        if pos >= chars.len() { break rep_30; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_30; }
                         pos += 1;
-                        opt_ok_39 = true;
+                        opt_ok_30 = true;
                     }
-                    if !opt_ok_39 { pos = opt_saved_39; }
-                    let opt_saved_40 = pos;
-                    let mut opt_ok_40 = false;
-                    rep_40: {
-                        if pos >= chars.len() { break rep_40; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_40; }
+                    if !opt_ok_30 { pos = opt_saved_30; }
+                    let opt_saved_31 = pos;
+                    let mut opt_ok_31 = false;
+                    rep_31: {
+                        if pos >= chars.len() { break rep_31; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_31; }
                         pos += 1;
-                        opt_ok_40 = true;
+                        opt_ok_31 = true;
                     }
-                    if !opt_ok_40 { pos = opt_saved_40; }
-                    let opt_saved_41 = pos;
-                    let mut opt_ok_41 = false;
-                    rep_41: {
-                        if pos >= chars.len() { break rep_41; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_41; }
+                    if !opt_ok_31 { pos = opt_saved_31; }
+                    let opt_saved_32 = pos;
+                    let mut opt_ok_32 = false;
+                    rep_32: {
+                        if pos >= chars.len() { break rep_32; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_32; }
                         pos += 1;
-                        opt_ok_41 = true;
+                        opt_ok_32 = true;
                     }
-                    if !opt_ok_41 { pos = opt_saved_41; }
-                    let opt_saved_42 = pos;
-                    let mut opt_ok_42 = false;
-                    rep_42: {
-                        if pos >= chars.len() { break rep_42; }
-                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_42; }
+                    if !opt_ok_32 { pos = opt_saved_32; }
+                    let opt_saved_33 = pos;
+                    let mut opt_ok_33 = false;
+                    rep_33: {
+                        if pos >= chars.len() { break rep_33; }
+                        if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_33; }
                         pos += 1;
-                        opt_ok_42 = true;
+                        opt_ok_33 = true;
                     }
-                    if !opt_ok_42 { pos = opt_saved_42; }
-                    if pos >= chars.len() || chars[pos] != '}' { break alts_36_3; }
+                    if !opt_ok_33 { pos = opt_saved_33; }
+                    if pos >= chars.len() || chars[pos] != '}' { break alts_27_3; }
                     pos += 1;
-                    alts_ok_36 = true;
+                    alts_ok_27 = true;
                 }
             }
         }
     }
-    if !alts_ok_36 { return -1; }
+    if !alts_ok_27 { return -1; }
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     return pos;
@@ -3149,138 +4219,138 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_43 = pos;
-        rep_43: {
-            let alts_saved_44 = pos;
-            let mut alts_ok_44 = false;
-            alts_44_0: {
-                pos = alts_saved_44;
-                if pos >= chars.len() { break alts_44_0; }
-                if chars[pos] == '"' { break alts_44_0; }
+        let rep_saved_34 = pos;
+        rep_34: {
+            let alts_saved_35 = pos;
+            let mut alts_ok_35 = false;
+            alts_35_0: {
+                pos = alts_saved_35;
+                if pos >= chars.len() { break alts_35_0; }
+                if chars[pos] == '"' { break alts_35_0; }
                 pos += 1;
-                alts_ok_44 = true;
+                alts_ok_35 = true;
             }
-            if !alts_ok_44 {
-                alts_44_1: {
-                    pos = alts_saved_44;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_44_1; }
+            if !alts_ok_35 {
+                alts_35_1: {
+                    pos = alts_saved_35;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_35_1; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_44_1; }
-                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_44_1; }
+                    if pos >= chars.len() { break alts_35_1; }
+                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_35_1; }
                     pos += 1;
-                    alts_ok_44 = true;
+                    alts_ok_35 = true;
                 }
-                if !alts_ok_44 {
-                    alts_44_2: {
-                        pos = alts_saved_44;
-                        let alts_saved_45 = pos;
-                        let mut alts_ok_45 = false;
-                        alts_45_0: {
-                            pos = alts_saved_45;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_45_0; }
+                if !alts_ok_35 {
+                    alts_35_2: {
+                        pos = alts_saved_35;
+                        let alts_saved_36 = pos;
+                        let mut alts_ok_36 = false;
+                        alts_36_0: {
+                            pos = alts_saved_36;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_36_0; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != 'x' { break alts_45_0; }
+                            if pos >= chars.len() || chars[pos] != 'x' { break alts_36_0; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_45_0; }
-                            if !('0' <= chars[pos] <= '7') { break alts_45_0; }
+                            if pos >= chars.len() { break alts_36_0; }
+                            if !('0' <= chars[pos] <= '7') { break alts_36_0; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_45_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
+                            if pos >= chars.len() { break alts_36_0; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_36_0; }
                             pos += 1;
-                            alts_ok_45 = true;
+                            alts_ok_36 = true;
                         }
-                        if !alts_ok_45 {
-                            alts_45_1: {
-                                pos = alts_saved_45;
-                                if pos >= chars.len() || chars[pos] != '\\' { break alts_45_1; }
+                        if !alts_ok_36 {
+                            alts_36_1: {
+                                pos = alts_saved_36;
+                                if pos >= chars.len() || chars[pos] != '\\' { break alts_36_1; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_45_1; }
-                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_45_1; }
+                                if pos >= chars.len() { break alts_36_1; }
+                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_36_1; }
                                 pos += 1;
-                                alts_ok_45 = true;
+                                alts_ok_36 = true;
                             }
                         }
-                        if !alts_ok_45 { break alts_44_2; }
-                        alts_ok_44 = true;
+                        if !alts_ok_36 { break alts_35_2; }
+                        alts_ok_35 = true;
                     }
-                    if !alts_ok_44 {
-                        alts_44_3: {
-                            pos = alts_saved_44;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_44_3; }
+                    if !alts_ok_35 {
+                        alts_35_3: {
+                            pos = alts_saved_35;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_35_3; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != 'u' { break alts_44_3; }
+                            if pos >= chars.len() || chars[pos] != 'u' { break alts_35_3; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != '{' { break alts_44_3; }
+                            if pos >= chars.len() || chars[pos] != '{' { break alts_35_3; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_44_3; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_44_3; }
+                            if pos >= chars.len() { break alts_35_3; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_35_3; }
                             pos += 1;
-                            let opt_saved_46 = pos;
-                            let mut opt_ok_46 = false;
-                            rep_46: {
-                                if pos >= chars.len() { break rep_46; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_46; }
+                            let opt_saved_37 = pos;
+                            let mut opt_ok_37 = false;
+                            rep_37: {
+                                if pos >= chars.len() { break rep_37; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_37; }
                                 pos += 1;
-                                opt_ok_46 = true;
+                                opt_ok_37 = true;
                             }
-                            if !opt_ok_46 { pos = opt_saved_46; }
-                            let opt_saved_47 = pos;
-                            let mut opt_ok_47 = false;
-                            rep_47: {
-                                if pos >= chars.len() { break rep_47; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_47; }
+                            if !opt_ok_37 { pos = opt_saved_37; }
+                            let opt_saved_38 = pos;
+                            let mut opt_ok_38 = false;
+                            rep_38: {
+                                if pos >= chars.len() { break rep_38; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_38; }
                                 pos += 1;
-                                opt_ok_47 = true;
+                                opt_ok_38 = true;
                             }
-                            if !opt_ok_47 { pos = opt_saved_47; }
-                            let opt_saved_48 = pos;
-                            let mut opt_ok_48 = false;
-                            rep_48: {
-                                if pos >= chars.len() { break rep_48; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_48; }
+                            if !opt_ok_38 { pos = opt_saved_38; }
+                            let opt_saved_39 = pos;
+                            let mut opt_ok_39 = false;
+                            rep_39: {
+                                if pos >= chars.len() { break rep_39; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_39; }
                                 pos += 1;
-                                opt_ok_48 = true;
+                                opt_ok_39 = true;
                             }
-                            if !opt_ok_48 { pos = opt_saved_48; }
-                            let opt_saved_49 = pos;
-                            let mut opt_ok_49 = false;
-                            rep_49: {
-                                if pos >= chars.len() { break rep_49; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_49; }
+                            if !opt_ok_39 { pos = opt_saved_39; }
+                            let opt_saved_40 = pos;
+                            let mut opt_ok_40 = false;
+                            rep_40: {
+                                if pos >= chars.len() { break rep_40; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_40; }
                                 pos += 1;
-                                opt_ok_49 = true;
+                                opt_ok_40 = true;
                             }
-                            if !opt_ok_49 { pos = opt_saved_49; }
-                            let opt_saved_50 = pos;
-                            let mut opt_ok_50 = false;
-                            rep_50: {
-                                if pos >= chars.len() { break rep_50; }
-                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_50; }
+                            if !opt_ok_40 { pos = opt_saved_40; }
+                            let opt_saved_41 = pos;
+                            let mut opt_ok_41 = false;
+                            rep_41: {
+                                if pos >= chars.len() { break rep_41; }
+                                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break rep_41; }
                                 pos += 1;
-                                opt_ok_50 = true;
+                                opt_ok_41 = true;
                             }
-                            if !opt_ok_50 { pos = opt_saved_50; }
-                            if pos >= chars.len() || chars[pos] != '}' { break alts_44_3; }
+                            if !opt_ok_41 { pos = opt_saved_41; }
+                            if pos >= chars.len() || chars[pos] != '}' { break alts_35_3; }
                             pos += 1;
-                            alts_ok_44 = true;
+                            alts_ok_35 = true;
                         }
-                        if !alts_ok_44 {
-                            alts_44_4: {
-                                pos = alts_saved_44;
-                                if pos >= chars.len() || chars[pos] != '\\' { break alts_44_4; }
+                        if !alts_ok_35 {
+                            alts_35_4: {
+                                pos = alts_saved_35;
+                                if pos >= chars.len() || chars[pos] != '\\' { break alts_35_4; }
                                 pos += 1;
-                                if pos >= chars.len() || chars[pos] != '\n' { break alts_44_4; }
+                                if pos >= chars.len() || chars[pos] != '\n' { break alts_35_4; }
                                 pos += 1;
-                                alts_ok_44 = true;
+                                alts_ok_35 = true;
                             }
                         }
                     }
                 }
             }
-            if !alts_ok_44 { break rep_43; }
+            if !alts_ok_35 { break rep_34; }
             continue;
         }
-        pos = rep_saved_43;
+        pos = rep_saved_34;
         break;
     }
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
@@ -3299,42 +4369,42 @@ fn try_RAW_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
 
 fn try_RAW_STRING_CONTENT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_51 = pos;
-    let mut alts_ok_51 = false;
-    alts_51_0: {
-        pos = alts_saved_51;
-        if pos >= chars.len() || chars[pos] != '#' { break alts_51_0; }
+    let alts_saved_42 = pos;
+    let mut alts_ok_42 = false;
+    alts_42_0: {
+        pos = alts_saved_42;
+        if pos >= chars.len() || chars[pos] != '#' { break alts_42_0; }
         pos += 1;
         pos = try_RAW_STRING_CONTENT(chars, pos);
-        if pos < 0 { break alts_51_0; }
-        if pos >= chars.len() || chars[pos] != '#' { break alts_51_0; }
+        if pos < 0 { break alts_42_0; }
+        if pos >= chars.len() || chars[pos] != '#' { break alts_42_0; }
         pos += 1;
-        alts_ok_51 = true;
+        alts_ok_42 = true;
     }
-    if !alts_ok_51 {
-        alts_51_1: {
-            pos = alts_saved_51;
-            if pos >= chars.len() || chars[pos] != '"' { break alts_51_1; }
+    if !alts_ok_42 {
+        alts_42_1: {
+            pos = alts_saved_42;
+            if pos >= chars.len() || chars[pos] != '"' { break alts_42_1; }
             pos += 1;
             loop {
-                let ng_saved_52 = pos;
-                let mut ng_exit_52 = false;
-                ng_52: {
-                    if pos >= chars.len() || chars[pos] != '"' { break ng_52; }
+                let ng_saved_43 = pos;
+                let mut ng_exit_43 = false;
+                ng_43: {
+                    if pos >= chars.len() || chars[pos] != '"' { break ng_43; }
                     pos += 1;
-                    ng_exit_52 = true;
+                    ng_exit_43 = true;
                 }
-                if ng_exit_52 {
+                if ng_exit_43 {
                     break;
                 }
-                pos = ng_saved_52;
-                if pos >= chars.len() { break alts_51_1; }
+                pos = ng_saved_43;
+                if pos >= chars.len() { break alts_42_1; }
                 pos += 1;
             }
-            alts_ok_51 = true;
+            alts_ok_42 = true;
         }
     }
-    if !alts_ok_51 { return -1; }
+    if !alts_ok_42 { return -1; }
     return pos;
 }
 
@@ -3344,60 +4414,60 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
     pos += 1;
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
-    let alts_saved_53 = pos;
-    let mut alts_ok_53 = false;
-    alts_53_0: {
-        pos = alts_saved_53;
-        if pos >= chars.len() { break alts_53_0; }
+    let alts_saved_44 = pos;
+    let mut alts_ok_44 = false;
+    alts_44_0: {
+        pos = alts_saved_44;
+        if pos >= chars.len() { break alts_44_0; }
         pos += 1;
-        alts_ok_53 = true;
+        alts_ok_44 = true;
     }
-    if !alts_ok_53 {
-        alts_53_1: {
-            pos = alts_saved_53;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_53_1; }
+    if !alts_ok_44 {
+        alts_44_1: {
+            pos = alts_saved_44;
+            if pos >= chars.len() || chars[pos] != '\\' { break alts_44_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_53_1; }
-            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_53_1; }
+            if pos >= chars.len() { break alts_44_1; }
+            if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_44_1; }
             pos += 1;
-            alts_ok_53 = true;
+            alts_ok_44 = true;
         }
-        if !alts_ok_53 {
-            alts_53_2: {
-                pos = alts_saved_53;
-                let alts_saved_54 = pos;
-                let mut alts_ok_54 = false;
-                alts_54_0: {
-                    pos = alts_saved_54;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_54_0; }
+        if !alts_ok_44 {
+            alts_44_2: {
+                pos = alts_saved_44;
+                let alts_saved_45 = pos;
+                let mut alts_ok_45 = false;
+                alts_45_0: {
+                    pos = alts_saved_45;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_45_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != 'x' { break alts_54_0; }
+                    if pos >= chars.len() || chars[pos] != 'x' { break alts_45_0; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_54_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_54_0; }
+                    if pos >= chars.len() { break alts_45_0; }
+                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_54_0; }
-                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_54_0; }
+                    if pos >= chars.len() { break alts_45_0; }
+                    if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_45_0; }
                     pos += 1;
-                    alts_ok_54 = true;
+                    alts_ok_45 = true;
                 }
-                if !alts_ok_54 {
-                    alts_54_1: {
-                        pos = alts_saved_54;
-                        if pos >= chars.len() || chars[pos] != '\\' { break alts_54_1; }
+                if !alts_ok_45 {
+                    alts_45_1: {
+                        pos = alts_saved_45;
+                        if pos >= chars.len() || chars[pos] != '\\' { break alts_45_1; }
                         pos += 1;
-                        if pos >= chars.len() { break alts_54_1; }
-                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_54_1; }
+                        if pos >= chars.len() { break alts_45_1; }
+                        if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_45_1; }
                         pos += 1;
-                        alts_ok_54 = true;
+                        alts_ok_45 = true;
                     }
                 }
-                if !alts_ok_54 { break alts_53_2; }
-                alts_ok_53 = true;
+                if !alts_ok_45 { break alts_44_2; }
+                alts_ok_44 = true;
             }
         }
     }
-    if !alts_ok_53 { return -1; }
+    if !alts_ok_44 { return -1; }
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     return pos;
@@ -3410,66 +4480,66 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_55 = pos;
-        rep_55: {
-            let alts_saved_56 = pos;
-            let mut alts_ok_56 = false;
-            alts_56_0: {
-                pos = alts_saved_56;
-                if pos >= chars.len() { break alts_56_0; }
-                if chars[pos] == '"' { break alts_56_0; }
+        let rep_saved_46 = pos;
+        rep_46: {
+            let alts_saved_47 = pos;
+            let mut alts_ok_47 = false;
+            alts_47_0: {
+                pos = alts_saved_47;
+                if pos >= chars.len() { break alts_47_0; }
+                if chars[pos] == '"' { break alts_47_0; }
                 pos += 1;
-                alts_ok_56 = true;
+                alts_ok_47 = true;
             }
-            if !alts_ok_56 {
-                alts_56_1: {
-                    pos = alts_saved_56;
-                    if pos >= chars.len() || chars[pos] != '\\' { break alts_56_1; }
+            if !alts_ok_47 {
+                alts_47_1: {
+                    pos = alts_saved_47;
+                    if pos >= chars.len() || chars[pos] != '\\' { break alts_47_1; }
                     pos += 1;
-                    if pos >= chars.len() { break alts_56_1; }
-                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_56_1; }
+                    if pos >= chars.len() { break alts_47_1; }
+                    if !(chars[pos] == '\'' || chars[pos] == '"') { break alts_47_1; }
                     pos += 1;
-                    alts_ok_56 = true;
+                    alts_ok_47 = true;
                 }
-                if !alts_ok_56 {
-                    alts_56_2: {
-                        pos = alts_saved_56;
-                        let alts_saved_57 = pos;
-                        let mut alts_ok_57 = false;
-                        alts_57_0: {
-                            pos = alts_saved_57;
-                            if pos >= chars.len() || chars[pos] != '\\' { break alts_57_0; }
+                if !alts_ok_47 {
+                    alts_47_2: {
+                        pos = alts_saved_47;
+                        let alts_saved_48 = pos;
+                        let mut alts_ok_48 = false;
+                        alts_48_0: {
+                            pos = alts_saved_48;
+                            if pos >= chars.len() || chars[pos] != '\\' { break alts_48_0; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != 'x' { break alts_57_0; }
+                            if pos >= chars.len() || chars[pos] != 'x' { break alts_48_0; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_57_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                            if pos >= chars.len() { break alts_48_0; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_48_0; }
                             pos += 1;
-                            if pos >= chars.len() { break alts_57_0; }
-                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_57_0; }
+                            if pos >= chars.len() { break alts_48_0; }
+                            if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_48_0; }
                             pos += 1;
-                            alts_ok_57 = true;
+                            alts_ok_48 = true;
                         }
-                        if !alts_ok_57 {
-                            alts_57_1: {
-                                pos = alts_saved_57;
-                                if pos >= chars.len() || chars[pos] != '\\' { break alts_57_1; }
+                        if !alts_ok_48 {
+                            alts_48_1: {
+                                pos = alts_saved_48;
+                                if pos >= chars.len() || chars[pos] != '\\' { break alts_48_1; }
                                 pos += 1;
-                                if pos >= chars.len() { break alts_57_1; }
-                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_57_1; }
+                                if pos >= chars.len() { break alts_48_1; }
+                                if !(chars[pos] == 'n' || chars[pos] == 'r' || chars[pos] == 't' || chars[pos] == '\\' || chars[pos] == '0') { break alts_48_1; }
                                 pos += 1;
-                                alts_ok_57 = true;
+                                alts_ok_48 = true;
                             }
                         }
-                        if !alts_ok_57 { break alts_56_2; }
-                        alts_ok_56 = true;
+                        if !alts_ok_48 { break alts_47_2; }
+                        alts_ok_47 = true;
                     }
                 }
             }
-            if !alts_ok_56 { break rep_55; }
+            if !alts_ok_47 { break rep_46; }
             continue;
         }
-        pos = rep_saved_55;
+        pos = rep_saved_46;
         break;
     }
     if pos >= chars.len() || chars[pos] != '"' { return -1; }
@@ -3490,182 +4560,182 @@ fn try_RAW_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
 
 fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_58 = pos;
-    let mut alts_ok_58 = false;
-    alts_58_0: {
-        pos = alts_saved_58;
+    let alts_saved_49 = pos;
+    let mut alts_ok_49 = false;
+    alts_49_0: {
+        pos = alts_saved_49;
         pos = try_DEC_LITERAL(chars, pos);
-        if pos < 0 { break alts_58_0; }
-        alts_ok_58 = true;
+        if pos < 0 { break alts_49_0; }
+        alts_ok_49 = true;
     }
-    if !alts_ok_58 {
-        alts_58_1: {
-            pos = alts_saved_58;
+    if !alts_ok_49 {
+        alts_49_1: {
+            pos = alts_saved_49;
             pos = try_BIN_LITERAL(chars, pos);
-            if pos < 0 { break alts_58_1; }
-            alts_ok_58 = true;
+            if pos < 0 { break alts_49_1; }
+            alts_ok_49 = true;
         }
-        if !alts_ok_58 {
-            alts_58_2: {
-                pos = alts_saved_58;
+        if !alts_ok_49 {
+            alts_49_2: {
+                pos = alts_saved_49;
                 pos = try_OCT_LITERAL(chars, pos);
-                if pos < 0 { break alts_58_2; }
-                alts_ok_58 = true;
+                if pos < 0 { break alts_49_2; }
+                alts_ok_49 = true;
             }
-            if !alts_ok_58 {
-                alts_58_3: {
-                    pos = alts_saved_58;
+            if !alts_ok_49 {
+                alts_49_3: {
+                    pos = alts_saved_49;
                     pos = try_HEX_LITERAL(chars, pos);
-                    if pos < 0 { break alts_58_3; }
-                    alts_ok_58 = true;
+                    if pos < 0 { break alts_49_3; }
+                    alts_ok_49 = true;
                 }
             }
         }
     }
-    if !alts_ok_58 { return -1; }
-    let opt_saved_59 = pos;
-    let mut opt_ok_59 = false;
-    rep_59: {
-        let alts_saved_60 = pos;
-        let mut alts_ok_60 = false;
-        alts_60_0: {
-            pos = alts_saved_60;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_60_0; }
+    if !alts_ok_49 { return -1; }
+    let opt_saved_50 = pos;
+    let mut opt_ok_50 = false;
+    rep_50: {
+        let alts_saved_51 = pos;
+        let mut alts_ok_51 = false;
+        alts_51_0: {
+            pos = alts_saved_51;
+            if pos >= chars.len() || chars[pos] != 'u' { break alts_51_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '8' { break alts_60_0; }
+            if pos >= chars.len() || chars[pos] != '8' { break alts_51_0; }
             pos += 1;
-            alts_ok_60 = true;
+            alts_ok_51 = true;
         }
-        if !alts_ok_60 {
-            alts_60_1: {
-                pos = alts_saved_60;
-                if pos >= chars.len() || chars[pos] != 'u' { break alts_60_1; }
+        if !alts_ok_51 {
+            alts_51_1: {
+                pos = alts_saved_51;
+                if pos >= chars.len() || chars[pos] != 'u' { break alts_51_1; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '1' { break alts_60_1; }
+                if pos >= chars.len() || chars[pos] != '1' { break alts_51_1; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '6' { break alts_60_1; }
+                if pos >= chars.len() || chars[pos] != '6' { break alts_51_1; }
                 pos += 1;
-                alts_ok_60 = true;
+                alts_ok_51 = true;
             }
-            if !alts_ok_60 {
-                alts_60_2: {
-                    pos = alts_saved_60;
-                    if pos >= chars.len() || chars[pos] != 'u' { break alts_60_2; }
+            if !alts_ok_51 {
+                alts_51_2: {
+                    pos = alts_saved_51;
+                    if pos >= chars.len() || chars[pos] != 'u' { break alts_51_2; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '3' { break alts_60_2; }
+                    if pos >= chars.len() || chars[pos] != '3' { break alts_51_2; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '2' { break alts_60_2; }
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_51_2; }
                     pos += 1;
-                    alts_ok_60 = true;
+                    alts_ok_51 = true;
                 }
-                if !alts_ok_60 {
-                    alts_60_3: {
-                        pos = alts_saved_60;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_60_3; }
+                if !alts_ok_51 {
+                    alts_51_3: {
+                        pos = alts_saved_51;
+                        if pos >= chars.len() || chars[pos] != 'u' { break alts_51_3; }
                         pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_60_3; }
+                        if pos >= chars.len() || chars[pos] != '6' { break alts_51_3; }
                         pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_60_3; }
+                        if pos >= chars.len() || chars[pos] != '4' { break alts_51_3; }
                         pos += 1;
-                        alts_ok_60 = true;
+                        alts_ok_51 = true;
                     }
-                    if !alts_ok_60 {
-                        alts_60_4: {
-                            pos = alts_saved_60;
-                            if pos >= chars.len() || chars[pos] != 'u' { break alts_60_4; }
+                    if !alts_ok_51 {
+                        alts_51_4: {
+                            pos = alts_saved_51;
+                            if pos >= chars.len() || chars[pos] != 'u' { break alts_51_4; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != '1' { break alts_60_4; }
+                            if pos >= chars.len() || chars[pos] != '1' { break alts_51_4; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != '2' { break alts_60_4; }
+                            if pos >= chars.len() || chars[pos] != '2' { break alts_51_4; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != '8' { break alts_60_4; }
+                            if pos >= chars.len() || chars[pos] != '8' { break alts_51_4; }
                             pos += 1;
-                            alts_ok_60 = true;
+                            alts_ok_51 = true;
                         }
-                        if !alts_ok_60 {
-                            alts_60_5: {
-                                pos = alts_saved_60;
-                                if pos >= chars.len() || chars[pos] != 'u' { break alts_60_5; }
+                        if !alts_ok_51 {
+                            alts_51_5: {
+                                pos = alts_saved_51;
+                                if pos >= chars.len() || chars[pos] != 'u' { break alts_51_5; }
                                 pos += 1;
-                                if pos >= chars.len() || chars[pos] != 's' { break alts_60_5; }
+                                if pos >= chars.len() || chars[pos] != 's' { break alts_51_5; }
                                 pos += 1;
-                                if pos >= chars.len() || chars[pos] != 'i' { break alts_60_5; }
+                                if pos >= chars.len() || chars[pos] != 'i' { break alts_51_5; }
                                 pos += 1;
-                                if pos >= chars.len() || chars[pos] != 'z' { break alts_60_5; }
+                                if pos >= chars.len() || chars[pos] != 'z' { break alts_51_5; }
                                 pos += 1;
-                                if pos >= chars.len() || chars[pos] != 'e' { break alts_60_5; }
+                                if pos >= chars.len() || chars[pos] != 'e' { break alts_51_5; }
                                 pos += 1;
-                                alts_ok_60 = true;
+                                alts_ok_51 = true;
                             }
-                            if !alts_ok_60 {
-                                alts_60_6: {
-                                    pos = alts_saved_60;
-                                    if pos >= chars.len() || chars[pos] != 'i' { break alts_60_6; }
+                            if !alts_ok_51 {
+                                alts_51_6: {
+                                    pos = alts_saved_51;
+                                    if pos >= chars.len() || chars[pos] != 'i' { break alts_51_6; }
                                     pos += 1;
-                                    if pos >= chars.len() || chars[pos] != '8' { break alts_60_6; }
+                                    if pos >= chars.len() || chars[pos] != '8' { break alts_51_6; }
                                     pos += 1;
-                                    alts_ok_60 = true;
+                                    alts_ok_51 = true;
                                 }
-                                if !alts_ok_60 {
-                                    alts_60_7: {
-                                        pos = alts_saved_60;
-                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_60_7; }
+                                if !alts_ok_51 {
+                                    alts_51_7: {
+                                        pos = alts_saved_51;
+                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_51_7; }
                                         pos += 1;
-                                        if pos >= chars.len() || chars[pos] != '1' { break alts_60_7; }
+                                        if pos >= chars.len() || chars[pos] != '1' { break alts_51_7; }
                                         pos += 1;
-                                        if pos >= chars.len() || chars[pos] != '6' { break alts_60_7; }
+                                        if pos >= chars.len() || chars[pos] != '6' { break alts_51_7; }
                                         pos += 1;
-                                        alts_ok_60 = true;
+                                        alts_ok_51 = true;
                                     }
-                                    if !alts_ok_60 {
-                                        alts_60_8: {
-                                            pos = alts_saved_60;
-                                            if pos >= chars.len() || chars[pos] != 'i' { break alts_60_8; }
+                                    if !alts_ok_51 {
+                                        alts_51_8: {
+                                            pos = alts_saved_51;
+                                            if pos >= chars.len() || chars[pos] != 'i' { break alts_51_8; }
                                             pos += 1;
-                                            if pos >= chars.len() || chars[pos] != '3' { break alts_60_8; }
+                                            if pos >= chars.len() || chars[pos] != '3' { break alts_51_8; }
                                             pos += 1;
-                                            if pos >= chars.len() || chars[pos] != '2' { break alts_60_8; }
+                                            if pos >= chars.len() || chars[pos] != '2' { break alts_51_8; }
                                             pos += 1;
-                                            alts_ok_60 = true;
+                                            alts_ok_51 = true;
                                         }
-                                        if !alts_ok_60 {
-                                            alts_60_9: {
-                                                pos = alts_saved_60;
-                                                if pos >= chars.len() || chars[pos] != 'i' { break alts_60_9; }
+                                        if !alts_ok_51 {
+                                            alts_51_9: {
+                                                pos = alts_saved_51;
+                                                if pos >= chars.len() || chars[pos] != 'i' { break alts_51_9; }
                                                 pos += 1;
-                                                if pos >= chars.len() || chars[pos] != '6' { break alts_60_9; }
+                                                if pos >= chars.len() || chars[pos] != '6' { break alts_51_9; }
                                                 pos += 1;
-                                                if pos >= chars.len() || chars[pos] != '4' { break alts_60_9; }
+                                                if pos >= chars.len() || chars[pos] != '4' { break alts_51_9; }
                                                 pos += 1;
-                                                alts_ok_60 = true;
+                                                alts_ok_51 = true;
                                             }
-                                            if !alts_ok_60 {
-                                                alts_60_10: {
-                                                    pos = alts_saved_60;
-                                                    if pos >= chars.len() || chars[pos] != 'i' { break alts_60_10; }
+                                            if !alts_ok_51 {
+                                                alts_51_10: {
+                                                    pos = alts_saved_51;
+                                                    if pos >= chars.len() || chars[pos] != 'i' { break alts_51_10; }
                                                     pos += 1;
-                                                    if pos >= chars.len() || chars[pos] != '1' { break alts_60_10; }
+                                                    if pos >= chars.len() || chars[pos] != '1' { break alts_51_10; }
                                                     pos += 1;
-                                                    if pos >= chars.len() || chars[pos] != '2' { break alts_60_10; }
+                                                    if pos >= chars.len() || chars[pos] != '2' { break alts_51_10; }
                                                     pos += 1;
-                                                    if pos >= chars.len() || chars[pos] != '8' { break alts_60_10; }
+                                                    if pos >= chars.len() || chars[pos] != '8' { break alts_51_10; }
                                                     pos += 1;
-                                                    alts_ok_60 = true;
+                                                    alts_ok_51 = true;
                                                 }
-                                                if !alts_ok_60 {
-                                                    alts_60_11: {
-                                                        pos = alts_saved_60;
-                                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_60_11; }
+                                                if !alts_ok_51 {
+                                                    alts_51_11: {
+                                                        pos = alts_saved_51;
+                                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_51_11; }
                                                         pos += 1;
-                                                        if pos >= chars.len() || chars[pos] != 's' { break alts_60_11; }
+                                                        if pos >= chars.len() || chars[pos] != 's' { break alts_51_11; }
                                                         pos += 1;
-                                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_60_11; }
+                                                        if pos >= chars.len() || chars[pos] != 'i' { break alts_51_11; }
                                                         pos += 1;
-                                                        if pos >= chars.len() || chars[pos] != 'z' { break alts_60_11; }
+                                                        if pos >= chars.len() || chars[pos] != 'z' { break alts_51_11; }
                                                         pos += 1;
-                                                        if pos >= chars.len() || chars[pos] != 'e' { break alts_60_11; }
+                                                        if pos >= chars.len() || chars[pos] != 'e' { break alts_51_11; }
                                                         pos += 1;
-                                                        alts_ok_60 = true;
+                                                        alts_ok_51 = true;
                                                     }
                                                 }
                                             }
@@ -3678,10 +4748,10 @@ fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 }
             }
         }
-        if !alts_ok_60 { break rep_59; }
-        opt_ok_59 = true;
+        if !alts_ok_51 { break rep_50; }
+        opt_ok_50 = true;
     }
-    if !opt_ok_59 { pos = opt_saved_59; }
+    if !opt_ok_50 { pos = opt_saved_50; }
     return pos;
 }
 
@@ -3691,29 +4761,29 @@ fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if !('0' <= chars[pos] <= '9') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_61 = pos;
-        rep_61: {
-            let alts_saved_62 = pos;
-            let mut alts_ok_62 = false;
-            alts_62_0: {
-                pos = alts_saved_62;
-                if pos >= chars.len() { break alts_62_0; }
-                if !('0' <= chars[pos] <= '9') { break alts_62_0; }
+        let rep_saved_52 = pos;
+        rep_52: {
+            let alts_saved_53 = pos;
+            let mut alts_ok_53 = false;
+            alts_53_0: {
+                pos = alts_saved_53;
+                if pos >= chars.len() { break alts_53_0; }
+                if !('0' <= chars[pos] <= '9') { break alts_53_0; }
                 pos += 1;
-                alts_ok_62 = true;
+                alts_ok_53 = true;
             }
-            if !alts_ok_62 {
-                alts_62_1: {
-                    pos = alts_saved_62;
-                    if pos >= chars.len() || chars[pos] != '_' { break alts_62_1; }
+            if !alts_ok_53 {
+                alts_53_1: {
+                    pos = alts_saved_53;
+                    if pos >= chars.len() || chars[pos] != '_' { break alts_53_1; }
                     pos += 1;
-                    alts_ok_62 = true;
+                    alts_ok_53 = true;
                 }
             }
-            if !alts_ok_62 { break rep_61; }
+            if !alts_ok_53 { break rep_52; }
             continue;
         }
-        pos = rep_saved_61;
+        pos = rep_saved_52;
         break;
     }
     return pos;
@@ -3726,42 +4796,42 @@ fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'x' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_63 = pos;
-        rep_63: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_63; }
+        let rep_saved_54 = pos;
+        rep_54: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_54; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_63;
+        pos = rep_saved_54;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_64 = pos;
-        rep_64: {
-            let alts_saved_65 = pos;
-            let mut alts_ok_65 = false;
-            alts_65_0: {
-                pos = alts_saved_65;
-                if pos >= chars.len() { break alts_65_0; }
-                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_65_0; }
+        let rep_saved_55 = pos;
+        rep_55: {
+            let alts_saved_56 = pos;
+            let mut alts_ok_56 = false;
+            alts_56_0: {
+                pos = alts_saved_56;
+                if pos >= chars.len() { break alts_56_0; }
+                if !('0' <= chars[pos] <= '9' || 'a' <= chars[pos] <= 'f' || 'A' <= chars[pos] <= 'F') { break alts_56_0; }
                 pos += 1;
-                alts_ok_65 = true;
+                alts_ok_56 = true;
             }
-            if !alts_ok_65 {
-                alts_65_1: {
-                    pos = alts_saved_65;
-                    if pos >= chars.len() || chars[pos] != '_' { break alts_65_1; }
+            if !alts_ok_56 {
+                alts_56_1: {
+                    pos = alts_saved_56;
+                    if pos >= chars.len() || chars[pos] != '_' { break alts_56_1; }
                     pos += 1;
-                    alts_ok_65 = true;
+                    alts_ok_56 = true;
                 }
             }
-            if !alts_ok_65 { break rep_64; }
+            if !alts_ok_56 { break rep_55; }
             continue;
         }
-        pos = rep_saved_64;
+        pos = rep_saved_55;
         break;
     }
     return pos;
@@ -3774,42 +4844,42 @@ fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'o' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_66 = pos;
-        rep_66: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_66; }
+        let rep_saved_57 = pos;
+        rep_57: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_57; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_66;
+        pos = rep_saved_57;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !('0' <= chars[pos] <= '7') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_67 = pos;
-        rep_67: {
-            let alts_saved_68 = pos;
-            let mut alts_ok_68 = false;
-            alts_68_0: {
-                pos = alts_saved_68;
-                if pos >= chars.len() { break alts_68_0; }
-                if !('0' <= chars[pos] <= '7') { break alts_68_0; }
+        let rep_saved_58 = pos;
+        rep_58: {
+            let alts_saved_59 = pos;
+            let mut alts_ok_59 = false;
+            alts_59_0: {
+                pos = alts_saved_59;
+                if pos >= chars.len() { break alts_59_0; }
+                if !('0' <= chars[pos] <= '7') { break alts_59_0; }
                 pos += 1;
-                alts_ok_68 = true;
+                alts_ok_59 = true;
             }
-            if !alts_ok_68 {
-                alts_68_1: {
-                    pos = alts_saved_68;
-                    if pos >= chars.len() || chars[pos] != '_' { break alts_68_1; }
+            if !alts_ok_59 {
+                alts_59_1: {
+                    pos = alts_saved_59;
+                    if pos >= chars.len() || chars[pos] != '_' { break alts_59_1; }
                     pos += 1;
-                    alts_ok_68 = true;
+                    alts_ok_59 = true;
                 }
             }
-            if !alts_ok_68 { break rep_67; }
+            if !alts_ok_59 { break rep_58; }
             continue;
         }
-        pos = rep_saved_67;
+        pos = rep_saved_58;
         break;
     }
     return pos;
@@ -3822,27 +4892,27 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != 'b' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_69 = pos;
-        rep_69: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_69; }
+        let rep_saved_60 = pos;
+        rep_60: {
+            if pos >= chars.len() || chars[pos] != '_' { break rep_60; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_69;
+        pos = rep_saved_60;
         break;
     }
     if pos >= chars.len() { return -1; }
     if !(chars[pos] == '0' || chars[pos] == '1') { return -1; }
     pos += 1;
     loop {
-        let rep_saved_70 = pos;
-        rep_70: {
-            if pos >= chars.len() { break rep_70; }
-            if !(chars[pos] == '0' || chars[pos] == '1' || chars[pos] == '_') { break rep_70; }
+        let rep_saved_61 = pos;
+        rep_61: {
+            if pos >= chars.len() { break rep_61; }
+            if !(chars[pos] == '0' || chars[pos] == '1' || chars[pos] == '_') { break rep_61; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_70;
+        pos = rep_saved_61;
         break;
     }
     return pos;
@@ -3850,96 +4920,96 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
 
 fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_71 = pos;
-    let mut alts_ok_71 = false;
-    alts_71_0: {
-        pos = alts_saved_71;
+    let alts_saved_62 = pos;
+    let mut alts_ok_62 = false;
+    alts_62_0: {
+        pos = alts_saved_62;
         pos = try_DEC_LITERAL(chars, pos);
-        if pos < 0 { break alts_71_0; }
-        if pos >= chars.len() || chars[pos] != '.' { break alts_71_0; }
+        if pos < 0 { break alts_62_0; }
+        if pos >= chars.len() || chars[pos] != '.' { break alts_62_0; }
         pos += 1;
-        alts_ok_71 = true;
+        alts_ok_62 = true;
     }
-    if !alts_ok_71 {
-        alts_71_1: {
-            pos = alts_saved_71;
+    if !alts_ok_62 {
+        alts_62_1: {
+            pos = alts_saved_62;
             pos = try_DEC_LITERAL(chars, pos);
-            if pos < 0 { break alts_71_1; }
-            let opt_saved_72 = pos;
-            let mut opt_ok_72 = false;
-            rep_72: {
-                if pos >= chars.len() || chars[pos] != '.' { break rep_72; }
+            if pos < 0 { break alts_62_1; }
+            let opt_saved_63 = pos;
+            let mut opt_ok_63 = false;
+            rep_63: {
+                if pos >= chars.len() || chars[pos] != '.' { break rep_63; }
                 pos += 1;
                 pos = try_DEC_LITERAL(chars, pos);
-                if pos < 0 { break rep_72; }
-                opt_ok_72 = true;
+                if pos < 0 { break rep_63; }
+                opt_ok_63 = true;
             }
-            if !opt_ok_72 { pos = opt_saved_72; }
-            let opt_saved_73 = pos;
-            let mut opt_ok_73 = false;
-            rep_73: {
-                if pos >= chars.len() { break rep_73; }
-                if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_73; }
+            if !opt_ok_63 { pos = opt_saved_63; }
+            let opt_saved_64 = pos;
+            let mut opt_ok_64 = false;
+            rep_64: {
+                if pos >= chars.len() { break rep_64; }
+                if !(chars[pos] == 'e' || chars[pos] == 'E') { break rep_64; }
                 pos += 1;
-                let opt_saved_74 = pos;
-                let mut opt_ok_74 = false;
-                rep_74: {
-                    if pos >= chars.len() { break rep_74; }
-                    if !(chars[pos] == '+' || chars[pos] == '-') { break rep_74; }
+                let opt_saved_65 = pos;
+                let mut opt_ok_65 = false;
+                rep_65: {
+                    if pos >= chars.len() { break rep_65; }
+                    if !(chars[pos] == '+' || chars[pos] == '-') { break rep_65; }
                     pos += 1;
-                    opt_ok_74 = true;
+                    opt_ok_65 = true;
                 }
-                if !opt_ok_74 { pos = opt_saved_74; }
+                if !opt_ok_65 { pos = opt_saved_65; }
                 loop {
-                    let rep_saved_75 = pos;
-                    rep_75: {
-                        if pos >= chars.len() || chars[pos] != '_' { break rep_75; }
+                    let rep_saved_66 = pos;
+                    rep_66: {
+                        if pos >= chars.len() || chars[pos] != '_' { break rep_66; }
                         pos += 1;
                         continue;
                     }
-                    pos = rep_saved_75;
+                    pos = rep_saved_66;
                     break;
                 }
                 pos = try_DEC_LITERAL(chars, pos);
-                if pos < 0 { break rep_73; }
-                opt_ok_73 = true;
+                if pos < 0 { break rep_64; }
+                opt_ok_64 = true;
             }
-            if !opt_ok_73 { pos = opt_saved_73; }
-            let opt_saved_76 = pos;
-            let mut opt_ok_76 = false;
-            rep_76: {
-                let alts_saved_77 = pos;
-                let mut alts_ok_77 = false;
-                alts_77_0: {
-                    pos = alts_saved_77;
-                    if pos >= chars.len() || chars[pos] != 'f' { break alts_77_0; }
+            if !opt_ok_64 { pos = opt_saved_64; }
+            let opt_saved_67 = pos;
+            let mut opt_ok_67 = false;
+            rep_67: {
+                let alts_saved_68 = pos;
+                let mut alts_ok_68 = false;
+                alts_68_0: {
+                    pos = alts_saved_68;
+                    if pos >= chars.len() || chars[pos] != 'f' { break alts_68_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '3' { break alts_77_0; }
+                    if pos >= chars.len() || chars[pos] != '3' { break alts_68_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '2' { break alts_77_0; }
+                    if pos >= chars.len() || chars[pos] != '2' { break alts_68_0; }
                     pos += 1;
-                    alts_ok_77 = true;
+                    alts_ok_68 = true;
                 }
-                if !alts_ok_77 {
-                    alts_77_1: {
-                        pos = alts_saved_77;
-                        if pos >= chars.len() || chars[pos] != 'f' { break alts_77_1; }
+                if !alts_ok_68 {
+                    alts_68_1: {
+                        pos = alts_saved_68;
+                        if pos >= chars.len() || chars[pos] != 'f' { break alts_68_1; }
                         pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_77_1; }
+                        if pos >= chars.len() || chars[pos] != '6' { break alts_68_1; }
                         pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_77_1; }
+                        if pos >= chars.len() || chars[pos] != '4' { break alts_68_1; }
                         pos += 1;
-                        alts_ok_77 = true;
+                        alts_ok_68 = true;
                     }
                 }
-                if !alts_ok_77 { break rep_76; }
-                opt_ok_76 = true;
+                if !alts_ok_68 { break rep_67; }
+                opt_ok_67 = true;
             }
-            if !opt_ok_76 { pos = opt_saved_76; }
-            alts_ok_71 = true;
+            if !opt_ok_67 { pos = opt_saved_67; }
+            alts_ok_62 = true;
         }
     }
-    if !alts_ok_71 { return -1; }
+    if !alts_ok_62 { return -1; }
     return pos;
 }
 
@@ -25511,4 +26581,7 @@ global FOLLOW_MASK_35: List<List<i32>> = [[TK_PLUS]];
 global FOLLOW_MASK_36: List<List<i32>> = [[TK_COMMA, TK_GT]];
 global FOLLOW_MASK_37: List<List<i32>> = [[TK_PATHSEP]];
 global FOLLOW_MASK_38: List<List<i32>> = [[TK_GT, TK_KW_AS]];
+
+global LATN_DATA: List<i32> = [1195463758, 2, 0, 4, 0, 2, 4, 6, 1, 3, 5, 7, 0, 120, 2, -1, -1, 1, 0, 8, -1, -1, 0, 3, -1, -1, 0, 2, -1, -1, 1, 0, 56, -1, -1, 0, 3, -1, -1, 0, 2, -1, -1, 1, 0, 70, -1, -1, 0, 3, -1, -1, 0, 2, -1, -1, 1, 0, 91, -1, -1, 0, 3, -1, -1, 0, 4, -1, -1, 1, 0, 10, -1, -1, 0, 5, -1, -1, 1, 0, 1, -1, -1, 0, 1, -1, -1, 1, 0, 11, -1, -1, 0, 4, -1, -1, 3, 0, 13, -1, -1, 0, 0, 43, -1, -1, 0, 0, 49, -1, -1, 0, 5, -1, -1, 1, 0, 9, -1, -1, 0, 1, -1, -1, 1, 0, 14, -1, -1, 0, 1, -1, -1, 1, 1, 15, 47, 47, 0, 1, -1, -1, 1, 1, 16, 42, 42, 0, 1, -1, -1, 1, 0, 17, -1, -1, 0, 4, -1, -1, 3, 0, 19, -1, -1, 0, 0, 22, -1, -1, 0, 0, 26, -1, -1, 0, 5, -1, -1, 1, 0, 29, -1, -1, 0, 1, -1, -1, 1, 0, 20, -1, -1, 0, 1, -1, -1, 3, 1, 21, 0, 32, 0, 1, 21, 34, 41, 0, 1, 21, 43, 1114111, 0, 1, -1, -1, 1, 0, 18, -1, -1, 0, 1, -1, -1, 1, 0, 23, -1, -1, 0, 1, -1, -1, 1, 1, 24, 42, 42, 0, 1, -1, -1, 1, 1, 25, 42, 42, 0, 1, -1, -1, 1, 0, 18, -1, -1, 0, 1, -1, -1, 1, 0, 27, -1, -1, 0, 1, -1, -1, 1, 4, 2, 1, 28, 0, 1, -1, -1, 1, 0, 18, -1, -1, 0, 6, -1, -1, 2, 0, 30, -1, -1, 0, 0, 31, -1, -1, 0, 9, -1, -1, 1, 0, 40, -1, -1, 0, 4, -1, -1, 2, 0, 33, -1, -1, 0, 0, 36, -1, -1, 0, 5, -1, -1, 1, 0, 39, -1, -1, 0, 1, -1, -1, 1, 0, 34, -1, -1, 0, 1, -1, -1, 1, 4, 2, 1, 35, 0, 1, -1, -1, 1, 0, 32, -1, -1, 0, 1, -1, -1, 1, 0, 37, -1, -1, 0, 1, -1, -1, 2, 1, 38, 0, 41, 0, 1, 38, 43, 1114111, 0, 1, -1, -1, 1, 0, 32, -1, -1, 0, 7, -1, -1, 1, 0, 29, -1, -1, 0, 1, -1, -1, 1, 1, 41, 42, 42, 0, 1, -1, -1, 1, 1, 42, 47, 47, 0, 1, -1, -1, 1, 0, 12, -1, -1, 0, 1, -1, -1, 1, 0, 44, -1, -1, 0, 1, -1, -1, 1, 1, 45, 47, 47, 0, 1, -1, -1, 1, 1, 46, 42, 42, 0, 1, -1, -1, 1, 1, 47, 42, 42, 0, 1, -1, -1, 1, 1, 48, 47, 47, 0, 1, -1, -1, 1, 0, 12, -1, -1, 0, 1, -1, -1, 1, 0, 50, -1, -1, 0, 1, -1, -1, 1, 1, 51, 47, 47, 0, 1, -1, -1, 1, 1, 52, 42, 42, 0, 1, -1, -1, 1, 1, 53, 42, 42, 0, 1, -1, -1, 1, 1, 54, 42, 42, 0, 1, -1, -1, 1, 1, 55, 47, 47, 0, 1, -1, -1, 1, 0, 12, -1, -1, 0, 4, -1, -1, 1, 0, 58, -1, -1, 0, 5, -1, -1, 1, 0, 3, -1, -1, 0, 1, -1, -1, 1, 0, 59, -1, -1, 0, 4, -1, -1, 3, 0, 61, -1, -1, 0, 0, 64, -1, -1, 0, 0, 67, -1, -1, 0, 5, -1, -1, 1, 0, 57, -1, -1, 0, 1, -1, -1, 1, 0, 62, -1, -1, 0, 1, -1, -1, 1, 4, 0, 0, 63, 0, 1, -1, -1, 1, 0, 60, -1, -1, 0, 1, -1, -1, 1, 0, 65, -1, -1, 0, 1, -1, -1, 1, 4, 4, 2, 66, 0, 1, -1, -1, 1, 0, 60, -1, -1, 0, 1, -1, -1, 1, 0, 68, -1, -1, 0, 1, -1, -1, 1, 4, 6, 3, 69, 0, 1, -1, -1, 1, 0, 60, -1, -1, 0, 4, -1, -1, 1, 0, 72, -1, -1, 0, 5, -1, -1, 1, 0, 5, -1, -1, 0, 1, -1, -1, 1, 0, 73, -1, -1, 0, 1, -1, -1, 1, 1, 74, 47, 47, 0, 1, -1, -1, 1, 1, 75, 42, 42, 0, 1, -1, -1, 1, 1, 76, 33, 33, 0, 1, -1, -1, 1, 0, 77, -1, -1, 0, 6, -1, -1, 2, 0, 78, -1, -1, 0, 0, 79, -1, -1, 0, 9, -1, -1, 1, 0, 88, -1, -1, 0, 4, -1, -1, 2, 0, 81, -1, -1, 0, 0, 84, -1, -1, 0, 5, -1, -1, 1, 0, 87, -1, -1, 0, 1, -1, -1, 1, 0, 82, -1, -1, 0, 1, -1, -1, 1, 4, 2, 1, 83, 0, 1, -1, -1, 1, 0, 80, -1, -1, 0, 1, -1, -1, 1, 0, 85, -1, -1, 0, 1, -1, -1, 2, 1, 86, 0, 41, 0, 1, 86, 43, 1114111, 0, 1, -1, -1, 1, 0, 80, -1, -1, 0, 7, -1, -1, 1, 0, 77, -1, -1, 0, 1, -1, -1, 1, 1, 89, 42, 42, 0, 1, -1, -1, 1, 1, 90, 47, 47, 0, 1, -1, -1, 1, 0, 71, -1, -1, 0, 4, -1, -1, 1, 0, 93, -1, -1, 0, 5, -1, -1, 1, 0, 7, -1, -1, 0, 1, -1, -1, 1, 0, 94, -1, -1, 0, 1, -1, -1, 1, 1, 95, 47, 47, 0, 1, -1, -1, 1, 1, 96, 42, 42, 0, 1, -1, -1, 1, 1, 97, 42, 42, 0, 1, -1, -1, 1, 0, 98, -1, -1, 0, 4, -1, -1, 2, 0, 100, -1, -1, 0, 0, 103, -1, -1, 0, 5, -1, -1, 1, 0, 106, -1, -1, 0, 1, -1, -1, 1, 0, 101, -1, -1, 0, 1, -1, -1, 2, 1, 102, 0, 41, 0, 1, 102, 43, 1114111, 0, 1, -1, -1, 1, 0, 99, -1, -1, 0, 1, -1, -1, 1, 0, 104, -1, -1, 0, 1, -1, -1, 1, 4, 2, 1, 105, 0, 1, -1, -1, 1, 0, 99, -1, -1, 0, 6, -1, -1, 2, 0, 107, -1, -1, 0, 0, 108, -1, -1, 0, 9, -1, -1, 1, 0, 117, -1, -1, 0, 4, -1, -1, 2, 0, 110, -1, -1, 0, 0, 113, -1, -1, 0, 5, -1, -1, 1, 0, 116, -1, -1, 0, 1, -1, -1, 1, 0, 111, -1, -1, 0, 1, -1, -1, 1, 4, 2, 1, 112, 0, 1, -1, -1, 1, 0, 109, -1, -1, 0, 1, -1, -1, 1, 0, 114, -1, -1, 0, 1, -1, -1, 2, 1, 115, 0, 41, 0, 1, 115, 43, 1114111, 0, 1, -1, -1, 1, 0, 109, -1, -1, 0, 7, -1, -1, 1, 0, 106, -1, -1, 0, 1, -1, -1, 1, 1, 118, 42, 42, 0, 1, -1, -1, 1, 1, 119, 47, 47, 0, 1, -1, -1, 1, 0, 92, -1, -1, 0];
+global LATN_SIM: AtnSim = atn_decode(&LATN_DATA);
 

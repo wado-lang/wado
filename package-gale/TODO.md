@@ -44,7 +44,7 @@ The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because th
 
 Grammars whose alt selection needs arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. The static path will always have edges — this is not a tuning gap but a decidability one: the lookahead language of a recursive ambiguous prefix is non-regular, so the per-decision lookahead DFA built by subset construction over the ATN does not converge to a finite machine. ANTLR3's static LL(\*) failed here; ANTLR4 replaced it with a **runtime** simulator that builds the decision DFA lazily, driven by the actual input (ALL(\*)). Runtime-ness is what makes the answer complete.
 
-The recursive-lexer-wildcard case (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`) is now handled by a runtime lexer simulator — see "Lexer ATN" below.
+The lexer side of this is done — recursive non-greedy wildcard rules run on a runtime lexer simulator (`src/runtime/latn.wado`); see `antlr4-compatibility.md`. What remains is the parser side, below.
 
 #### Decided design — hybrid runtime ATN simulator
 
@@ -66,37 +66,14 @@ The static parser/non-greedy `??`/LR loop-entry pieces of this design are in pla
 
 The Stage B′ JVM oracle (see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
 
-#### Lexer ATN (done)
+#### Lexer ATN follow-ups (perf, optional)
 
-`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` are green. A lexer rule
-whose non-greedy repeat body recurses into itself (nested comments,
-`CMT : '/*' (CMT | .)+? '*' '/'`) is detected as ATN-class
-(`lexer_rule_is_atn_class`, `src/latn.wado`); its `try_*` body is replaced
-by a call to a runtime Pike-VM matcher (`latn_match`,
-`src/runtime/latn.wado`) over a dedicated lexer ATN (char-range atoms,
-`build_latn`). The VM is an ordered-thread Thompson NFA simulation
-(leftmost-first / PCRE priority, no backtracking) with a per-thread
-rule-call return stack for recursion; greedy/non-greedy is encoded by loop
-edge order, exactly like the parser ATN. Semantics were characterized
-clean-room against the published jar (black-box oracle). Follow-ups:
+The lexer simulator is correct and shipped; these are speed/size levers only:
 
-- The lexer ATN reuses the parser blob format + `atn_decode`, so a
-  lexer-only ATN grammar inlines the (otherwise unused) parser simulator
-  as dead code. Split the shared decode/`AtnSim` into its own fragment if
-  generated-size matters there.
-- `latn_match` interns nothing — stacks are value-copied `List<i32>` and
-  the per-step visited set is string-keyed. Fine at the cold lexer sites;
-  intern stacks (like the parser `CtxArena`) if a hot recursive-comment
-  workload shows up.
+- The lexer ATN reuses the parser blob format + `atn_decode`, so a lexer-only ATN grammar inlines the (otherwise unused) parser simulator as dead code. Split the shared decode / `AtnSim` into its own fragment if generated size matters there.
+- `latn_match` interns nothing — stacks are value-copied `List<i32>` and the per-step visited set is string-keyed. Fine at the cold lexer sites; intern stacks (like the parser `CtxArena`) if a hot recursive-comment workload shows up.
 
 To triage which static edge a concrete fix must close, `gale dump` surfaces each unresolvable decision as `Ambiguous([alt N, alt M]) — <reason>` (`AmbiguityReason` in `prediction.wado`), with the per-site LR `loop-entry:` dispatch (`conflict-min` + suffix-first overlap groups) and follow-variant `k-prefix=` masks alongside.
-
-## Stage A gaps — Gale bugs surfaced by descriptor drivers
-
-Descriptor-driver gaps are marked `[stage_a_todo]` in `status.toml`, each
-shipping a `#[TODO]` test. None are currently open — the
-recursive-lexer-wildcard pair (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`)
-was the last, now closed by the lexer ATN (see "Lexer ATN (done)" above).
 
 ## Stage B′ — JVM-oracle integration
 
