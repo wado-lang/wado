@@ -13,10 +13,10 @@
 //!
 //! GIR carries the lowered shape decisions (Direct vs Tournament,
 //! repeat strategy, per-call-site FOLLOW args). The prediction-tree section is
-//! re-built from the surface grammar + `GenContext` so it mirrors the
-//! same `build_prediction` call the parser emitter performs — that
-//! tree is computed at emit time, not stored on GIR, so reproducing
-//! it here keeps the dump faithful to "what emit sees".
+//! re-built from the surface grammar + `GenContext` via the same
+//! `build_group_prediction_tree` the parser emitter calls — that tree is
+//! computed at emit time, not stored on GIR, so reproducing it here
+//! keeps the dump faithful to "what emit sees".
 
 use {
     LoweredGrammar,
@@ -32,7 +32,7 @@ use {
     RepeatStrategy,
     rule_header,
 } from "./gir.wado";
-use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
+use { Grammar, ParserRule, Element, RepeatKind } from "./ir.wado";
 use { GenContext } from "./gen_context.wado";
 use {
     PredictionNode,
@@ -41,10 +41,10 @@ use {
     ConsumeNode,
     AmbiguousNode,
     AmbiguityReason,
-    build_prediction,
-    MAX_LOOKAHEAD_DEPTH,
+    build_group_prediction_tree,
+    group_prediction_order,
 } from "./prediction.wado";
-use { compute_overlap_groups, sort_group_by_specificity, sort_group_by_element_count } from "./alt_grouping.wado";
+use { compute_overlap_groups } from "./alt_grouping.wado";
 use { literal_const_name } from "./gen_util.wado";
 
 /// Render the full per-rule dump report for a lowered grammar.
@@ -227,10 +227,10 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
 // ==========================================================================
 
 /// Mirror `gen_parse_fn_named` (parser_gen.wado): collect the rule's
-/// non-LR alt indices, compute their FIRST sets, partition into
-/// overlap groups, and for each multi-alt group sort by specificity
-/// + element count and run `build_prediction`. Each resulting tree
-/// is rendered inline under the rule.
+/// non-LR alt indices, compute their FIRST sets, partition into overlap
+/// groups, and for each multi-alt group build the prediction tree via
+/// the shared `build_group_prediction_tree`. Each resulting tree is
+/// rendered inline under the rule.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
     let surface = find_parser_rule(grammar, &header.name);
@@ -274,32 +274,10 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         if group.len() < 2 {
             continue;
         }
-        let mut sorted_group = group.sorted();
-        sort_group_by_specificity(&mut sorted_group, &first_sets);
-        let mut mapped_alts: List<Alternative> = [];
-        for let gi of &sorted_group {
-            mapped_alts.push(surface.alternatives[non_lr_indices[*gi]]);
-        }
-        let mut local_indices: List<i32> = [];
-        for let mut i = 0; i < sorted_group.len(); i += 1 {
-            local_indices.push(i);
-        }
-        sort_group_by_element_count(&mut local_indices, &mapped_alts);
-        let mut reordered: List<i32> = [];
-        for let li of &local_indices {
-            reordered.push(sorted_group[*li]);
-        }
-
-        let mut pred_indices: List<i32> = [];
-        let mut pred_elements: List<List<Element>> = [];
-        let mut real_indices: List<i32> = [];
-        for let mut k = 0; k < reordered.len(); k += 1 {
-            let real_idx = non_lr_indices[reordered[k]];
-            pred_indices.push(real_idx);
-            pred_elements.push(surface.alternatives[real_idx].elements);
-            real_indices.push(real_idx);
-        }
-        let tree = build_prediction(&pred_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+        // Same canonical pipeline codegen uses (`build_group_prediction_tree`),
+        // so the dump shows exactly the tree the emitter builds.
+        let real_indices = group_prediction_order(group, &first_sets, &non_lr_indices);
+        let tree = build_group_prediction_tree(&surface.alternatives, group, &first_sets, &non_lr_indices, ctx);
 
         if !printed_header {
             out.push_str(&"  prediction:\n");

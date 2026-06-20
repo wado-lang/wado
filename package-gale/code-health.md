@@ -15,13 +15,6 @@ How to read:
 - This file lists only what is **not yet done**. Closed items are removed; the fix lives in commit history.
 - Line numbers are as of the audit commit and will drift.
 
-## Logic duplication
-
-The biggest single lever: most twin-path bugs exist because the second copy missed a fix.
-
-- [ ] `try_expand_opaque` re-implements `build_sll_node`'s dispatch construction (where the at-end handling got lost); `dump.wado::render_prediction` hand-mirrors `gen_multi_alt_body_alt`'s grouping+sort+`build_prediction(…, MAX_LOOKAHEAD_DEPTH, …)` pipeline.
-- [ ] Extractor emitter boilerplate ×6 (~80% identical bodies). `scripts/extract_antlr4_descriptors.wado:659-998`, `:1841-1857`
-
 ## Test coverage gaps
 
 - [ ] `codegen_test.wado` asserts only on generated-source substrings, so dispatch-shape bugs are invisible to it; coverage relies entirely on driver/descriptor layers.
