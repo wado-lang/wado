@@ -15,9 +15,8 @@ use super::types::{FunctionContext, TypeError};
 use super::util::placeholder;
 
 /// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
-/// was written `_`. Positions past the end are treated as holes too (omitted
-/// trailing args), so this mask plus the parameter count fully describes which
-/// slots inference must fill.
+/// was written `_`. Slots past the end count as holes too (omitted trailing
+/// args), so the mask need only cover the supplied args.
 pub(super) fn turbofish_holes(ast_args: &[Type]) -> Vec<bool> {
     ast_args
         .iter()
@@ -1109,15 +1108,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // Fill inference slots from the argument / expected types. Three forms
-        // share one inference path:
-        //   - fully omitted turbofish (`pick(a, b)`),
-        //   - omitted trailing args (`from_bytes::<Blob>(bytes)` — `B` inferred),
-        //   - explicit `_` placeholders (`pick::<_, bool>(a, b)`).
-        // The explicit (non-`_`) args always win; `_` only lets the inferred
-        // holes sit between explicit args. `infer_fn_type_args` returns a full
-        // param-length vec (unbound params stay as `TypeParam`), so a missing
-        // trailing param never reaches codegen as an unsubstituted `TypeParam`.
+        // Fill inference slots from the argument / expected types. One path
+        // serves three forms — a fully omitted turbofish, omitted trailing args
+        // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)
+        // — and the explicit (non-`_`) args always win. `infer_fn_type_args`
+        // returns a full param-length vec, so no slot reaches codegen
+        // unsubstituted.
         if type_args.is_empty() {
             type_args = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
         } else {

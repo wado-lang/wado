@@ -71,16 +71,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.receiver.span(),
         );
 
-        // Resolve explicit type arguments (method-level type args). A `_`
-        // resolves to UNKNOWN; the hole mask records its position so the
-        // dispatch fills it from inference.
+        // A `_` resolves to UNKNOWN here; its position is recorded in the hole
+        // mask below so the dispatch fills it from inference.
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // Only the `_` case needs the mask; an empty vec (no allocation) marks
-        // "no holes" for the fully-explicit common path.
+        // Build the mask only for the `_` case; an empty vec (no allocation)
+        // marks "no holes" for the fully-explicit common path.
         let type_arg_holes = if super::call::turbofish_has_hole(&method_call.type_args) {
             super::call::turbofish_holes(&method_call.type_args)
         } else {
@@ -647,13 +646,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Then add method-level type args with the correct offset.
         // Inference runs when the turbofish is omitted entirely or carries an
         // explicit `_` placeholder; in the latter case the inferred holes are
         // merged into the explicit args, which always win.
         let has_hole = type_arg_holes.iter().any(|&h| h);
         let (method_type_args, reuse_params) = if type_args.is_empty() || has_hole {
-            // Infer method type args from actual arguments and expected return type
             let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
