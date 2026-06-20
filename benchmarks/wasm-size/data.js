@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781947969182,
+  "lastUpdate": 1781948931284,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34157,6 +34157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/712da24b91876f8838dce001e4309db378bf08a9"
         },
         "date": 1781947968564,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d3e59e49169be3c090c41c4ad3887680f87bc87",
+          "message": "Merge pull request #1408 from wado-lang/claude/core-cbor-quality-3vyagt\n\nrefactor(cbor): match-based decoder dispatch and turbofish cleanup",
+          "timestamp": "2026-06-20T18:34:05+09:00",
+          "tree_id": "db402a35e92cdd26c05536c8ff0b6b35a78988f6",
+          "url": "https://github.com/wado-lang/wado/commit/6d3e59e49169be3c090c41c4ad3887680f87bc87"
+        },
+        "date": 1781948930677,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
