@@ -18,6 +18,9 @@ use wasm_encoder::{
     RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
+/// Software lowering of the wide-arithmetic ops for `-f no-wide-arithmetic`.
+mod wide_arith_downlevel;
+
 /// Emit a core Wasm module from a `WirPackage`.
 pub fn emit_core_module(
     wir: &WirPackage,
@@ -1082,6 +1085,24 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(condition, locals);
                 self.collect_declared_locals_instr(if_true, locals);
                 self.collect_declared_locals_instr(if_false, locals);
+            }
+            // 128-bit ops need scratch i64 locals only under the
+            // `-f no-wide-arithmetic` software lowering (see `emit_instr`).
+            WirInstr::I64MulWideU(a, b) | WirInstr::I64MulWideS(a, b) => {
+                self.collect_declared_locals_instr(a, locals);
+                self.collect_declared_locals_instr(b, locals);
+                if !self.codegen_flags.wide_arithmetic {
+                    self.declare_wide_arith_scratch(locals);
+                }
+            }
+            WirInstr::I64Add128(a, b, c, d) | WirInstr::I64Sub128(a, b, c, d) => {
+                self.collect_declared_locals_instr(a, locals);
+                self.collect_declared_locals_instr(b, locals);
+                self.collect_declared_locals_instr(c, locals);
+                self.collect_declared_locals_instr(d, locals);
+                if !self.codegen_flags.wide_arithmetic {
+                    self.declare_wide_arith_scratch(locals);
+                }
             }
             // For all other instructions, walk children generically
             other => {
@@ -2585,30 +2606,47 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit integer multi-value operations
+            // 128-bit ops push [low, high]; `-f no-wide-arithmetic` open-codes
+            // them as plain i64 for V8 (see wide_arith_downlevel.rs).
             WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
-                self.emit_instr(f, a_lo);
-                self.emit_instr(f, a_hi);
-                self.emit_instr(f, b_lo);
-                self.emit_instr(f, b_hi);
-                f.instruction(&Instruction::I64Add128);
+                if self.codegen_flags.wide_arithmetic {
+                    self.emit_instr(f, a_lo);
+                    self.emit_instr(f, a_hi);
+                    self.emit_instr(f, b_lo);
+                    self.emit_instr(f, b_hi);
+                    f.instruction(&Instruction::I64Add128);
+                } else {
+                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, false);
+                }
             }
             WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi) => {
-                self.emit_instr(f, a_lo);
-                self.emit_instr(f, a_hi);
-                self.emit_instr(f, b_lo);
-                self.emit_instr(f, b_hi);
-                f.instruction(&Instruction::I64Sub128);
+                if self.codegen_flags.wide_arithmetic {
+                    self.emit_instr(f, a_lo);
+                    self.emit_instr(f, a_hi);
+                    self.emit_instr(f, b_lo);
+                    self.emit_instr(f, b_hi);
+                    f.instruction(&Instruction::I64Sub128);
+                } else {
+                    self.emit_add_sub_128_soft(f, a_lo, a_hi, b_lo, b_hi, true);
+                }
             }
             WirInstr::I64MulWideU(a, b) => {
-                self.emit_instr(f, a);
-                self.emit_instr(f, b);
-                f.instruction(&Instruction::I64MulWideU);
+                if self.codegen_flags.wide_arithmetic {
+                    self.emit_instr(f, a);
+                    self.emit_instr(f, b);
+                    f.instruction(&Instruction::I64MulWideU);
+                } else {
+                    self.emit_mul_wide_soft(f, a, b, false);
+                }
             }
             WirInstr::I64MulWideS(a, b) => {
-                self.emit_instr(f, a);
-                self.emit_instr(f, b);
-                f.instruction(&Instruction::I64MulWideS);
+                if self.codegen_flags.wide_arithmetic {
+                    self.emit_instr(f, a);
+                    self.emit_instr(f, b);
+                    f.instruction(&Instruction::I64MulWideS);
+                } else {
+                    self.emit_mul_wide_soft(f, a, b, true);
+                }
             }
             // Multi-value local bind (tuple elision): emit the multi-value instr,
             // then local.set for each target in reverse order (top of stack first).

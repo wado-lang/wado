@@ -59,6 +59,12 @@ pub struct CodegenFlags {
     /// [`CodegenFlags::for_opt_level`]); `-f no-bare-asserts` restores the
     /// diagnostic, `-f bare-asserts` forces it at any level.
     pub bare_asserts: bool,
+
+    /// Emit native Wasm wide-arithmetic (`i64.mul_wide_u/s`, `i64.add128`,
+    /// `i64.sub128`) — the default, best on wasmtime. `-f no-wide-arithmetic`
+    /// open-codes them as 32-bit-limb i64 sequences
+    /// (`codegen/emit/wide_arith_downlevel.rs`) for V8, which lacks the proposal.
+    pub wide_arithmetic: bool,
 }
 
 impl Default for CodegenFlags {
@@ -67,6 +73,7 @@ impl Default for CodegenFlags {
             array_copy: true,
             branch_hinting: true,
             bare_asserts: false,
+            wide_arithmetic: true,
         }
     }
 }
@@ -110,6 +117,7 @@ impl CodegenFlags {
                 "array-copy" => result.array_copy = enabled,
                 "branch-hinting" => result.branch_hinting = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
+                "wide-arithmetic" => result.wide_arithmetic = enabled,
                 _ => return Err(flag.to_string()),
             }
         }
