@@ -25,6 +25,9 @@ pub struct DumpOptions {
     pub opt_iterations: Option<u32>,
     /// Generic codegen feature flags from `-f <flag>` (e.g. `["no-branch-hinting"]`).
     pub codegen_flags: Vec<String>,
+    /// `--world <name>` override. Takes precedence over the `__DATA__` section;
+    /// when `None`, the world is auto-detected from the source's `__DATA__`.
+    pub target_world: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -43,6 +46,7 @@ enum Opt {
     InlineThreshold,
     OptIterations,
     Feature,
+    World,
     Help,
 }
 
@@ -62,6 +66,7 @@ impl Opt {
         Self::InlineThreshold,
         Self::OptIterations,
         Self::Feature,
+        Self::World,
         Self::Help,
     ];
 
@@ -136,6 +141,7 @@ impl Opt {
             Self::InlineThreshold => args::INLINE_THRESHOLD_SPEC,
             Self::OptIterations => args::OPT_ITERATIONS_SPEC,
             Self::Feature => args::FEATURE_SPEC,
+            Self::World => args::WORLD_SPEC,
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -193,7 +199,7 @@ fn format_usage() -> String {
     write!(
         buf,
         "{}",
-        args::format_opts_help(&[Opt::Feature, Opt::Help], |o| o.spec())
+        args::format_opts_help(&[Opt::World, Opt::Feature, Opt::Help], |o| o.spec())
     )
     .unwrap();
     buf
@@ -220,6 +226,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut inline_threshold: Option<usize> = None;
     let mut opt_iterations: Option<u32> = None;
     let mut codegen_flags: Vec<String> = Vec::new();
+    let mut target_world: Option<String> = None;
     let mut any_phase = false;
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -295,6 +302,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     )?);
                 }
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
+                Opt::World => target_world = Some(args::require_string(&mut parser)?),
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -327,6 +335,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         inline_threshold,
         opt_iterations,
         codegen_flags,
+        target_world,
     })
 }
 
@@ -355,7 +364,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    let target_world = extract_world_from_data_section(&source);
+    let target_world = opts.target_world.clone();
 
     // Diagnostics are already emitted by the host; signal silently on failure.
     let result = wado_compiler::dump_with_host_and_world(
@@ -622,32 +631,4 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         }
     }
     Ok(())
-}
-
-/// Extract the target world from the `__DATA__` JSON section of a source file.
-///
-/// Supports two formats:
-/// - Old: `{"world": "wasi:http/service", ...}`
-/// - New: `{"wasi:http/service": {...}}` (world as top-level key containing `:` or `"test"`)
-fn extract_world_from_data_section(source: &str) -> Option<String> {
-    let marker = "\n__DATA__\n";
-    let data = if let Some(pos) = source.find(marker) {
-        &source[pos + marker.len()..]
-    } else {
-        source.strip_prefix("__DATA__\n")?
-    };
-    let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;
-    // Old format: explicit "world" key
-    if let Some(world) = json.get("world").and_then(|v| v.as_str()) {
-        return Some(world.to_string());
-    }
-    // New format: world name is a top-level key (wasi:* prefix or "test")
-    if let Some(obj) = json.as_object() {
-        for key in obj.keys() {
-            if key.starts_with("wasi:") || key == "test" {
-                return Some(key.clone());
-            }
-        }
-    }
-    None
 }
