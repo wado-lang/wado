@@ -1583,8 +1583,8 @@ impl Monomorphizer {
                             // Apply the callee's own substituted type args.
                             // Type args feeding into MethodInfo names use the
                             // qualified mangle so call sites match the
-                            // function-definition naming
-                            // (`func_inst.rs:840+`).
+                            // function-definition naming produced by the
+                            // `method_instantiation_name*` helpers.
                             let impl_names: Vec<String> = sub_impl_type_args
                                 .iter()
                                 .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
@@ -2255,8 +2255,8 @@ impl Monomorphizer {
                 // Then substitute struct_type
                 *struct_type = self.substitute_type(*struct_type, substitution, type_table);
 
-                // Important: expr.type_id has already been substituted (line 1605 above)
-                // Use it to get the correct struct type and name
+                // Important: expr.type_id has already been substituted at the top
+                // of this function. Use it to get the correct struct type and name
                 // This handles the case where struct_type is a plain Struct but expr.type_id
                 // has been properly substituted to the monomorphized version
                 if expr.type_id != *struct_type {
@@ -3794,8 +3794,8 @@ fn try_lower_comparison(
             // synthesised here (Eq / Ord operator lowering) name
             // their target methods with the same struct-name form
             // the monomorphizer's `method_instantiation_name_inner`
-            // and `func_inst.rs:840` use to set the function
-            // definition's `MethodInfo.struct_name`. Falling back to
+            // uses to set the function definition's
+            // `MethodInfo.struct_name`. Falling back to
             // `mangle_type_name` here used to emit `Foo<String>::eq`
             // call sites against `Foo<core:prelude/string.wado/String>::eq`
             // function definitions and broke the inliner's
