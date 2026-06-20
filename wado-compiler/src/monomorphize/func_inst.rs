@@ -3537,37 +3537,40 @@ impl Monomorphizer {
                 }
             }
             TirExprKind::Block(block) => {
-                for stmt in &block.stmts {
-                    match &stmt.kind {
-                        TirStmtKind::Return { value: Some(v) } => {
-                            Self::collect_return_value_type_ids(v, types);
-                        }
-                        TirStmtKind::Expr(e) => {
-                            Self::collect_return_value_types_in_expr(e, types);
-                        }
-                        TirStmtKind::If {
-                            then_block,
-                            else_block,
-                            ..
-                        } => {
-                            for s in &then_block.stmts {
-                                if let TirStmtKind::Return { value: Some(v) } = &s.kind {
-                                    Self::collect_return_value_type_ids(v, types);
-                                }
-                            }
-                            if let Some(eb) = else_block {
-                                for s in &eb.stmts {
-                                    if let TirStmtKind::Return { value: Some(v) } = &s.kind {
-                                        Self::collect_return_value_type_ids(v, types);
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+                Self::collect_return_value_types_in_block(block, types);
             }
             _ => {}
+        }
+    }
+
+    /// Collect return-value types reachable in `block`. Mirrors the traversal
+    /// of [`Self::fixup_return_types_in_block`] exactly so the wrong/correct
+    /// pairs computed here cover every Return the fixup can touch — including
+    /// those nested in `If`/`Loop`/`LabeledBlock`.
+    fn collect_return_value_types_in_block(block: &TirBlock, types: &mut IndexSet<TypeId>) {
+        for stmt in &block.stmts {
+            match &stmt.kind {
+                TirStmtKind::Return { value: Some(v) } => {
+                    Self::collect_return_value_type_ids(v, types);
+                }
+                TirStmtKind::Expr(e) => {
+                    Self::collect_return_value_types_in_expr(e, types);
+                }
+                TirStmtKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    Self::collect_return_value_types_in_block(then_block, types);
+                    if let Some(eb) = else_block {
+                        Self::collect_return_value_types_in_block(eb, types);
+                    }
+                }
+                TirStmtKind::LabeledBlock { block, .. } | TirStmtKind::Loop { body: block } => {
+                    Self::collect_return_value_types_in_block(block, types);
+                }
+                _ => {}
+            }
         }
     }
 
