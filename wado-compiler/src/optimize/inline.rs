@@ -681,6 +681,8 @@ pub fn inline_functions(
         if func.body.is_some() {
             // Track which functions were inlined into this function
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
+            // Splice-point re-valuation records (Method A): one per inlined block.
+            let mut reval: Vec<InlineRevalInfo> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
             // with the `&mut func.body` walk below.
             let mut local_count = func.local_count();
@@ -700,6 +702,7 @@ pub fn inline_functions(
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
                     &mut inline_counter,
+                    &mut reval,
                     false,
                 );
             }
@@ -707,22 +710,48 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
-                // Inline restructures the body through the arena directly, not
-                // the maintaining engine edit API, so the persisted value graph
-                // is now stale for this function — a later promotion-reading pass
-                // (the late freeze, store-load-forward) would consume a stale
-                // value and miscompile (e.g. an i128 const field read as
-                // non-constant). *Coarsen* rather than rebuild: keep the graph
-                // present (so no session rebuilds it — build-once stays intact)
-                // but clear its `value_of` / `loop_entry_values` so every stale
-                // entry is gone and a query returns no identity (conservative,
-                // never wrong). The value pool persists, so already-promoted
-                // `Operand::Value` slots still resolve. Recovering the lost
-                // identity for the spliced region (grow the graph at the splice
-                // point) is the follow-up that restores the missed optimizations.
+                // Inline splices through the arena directly, not the maintaining
+                // engine edit API, so the persisted graph is stale for this
+                // function. Method A — coarsen, then regrow each splice point:
+                //
+                // 1. Coarsen: clear `value_of` / `loop_entry_values`, dropping
+                //    every entry inline's restructuring could have staled
+                //    (conservative — a query then returns no identity, never a
+                //    wrong one; the value pool persists so promoted operands still
+                //    resolve).
+                // 2. Regrow: re-value each inlined block self-contained, seeded
+                //    with its params bound to the call-site arg values and a fresh
+                //    heap, keeping only the resulting *constants* — those are the
+                //    folds inline newly exposes (induction bound, formatter
+                //    operand) and they equal what a fresh build assigns. The walk
+                //    runs in a cloned pool (see `build_scoped`), so it never
+                //    mutates the live graph's shared values; it touches only the
+                //    spliced region (no `builder::build`, `rebuilds = 0`) and
+                //    parks no cache. `WADO_VERIFY_VG` checks no over-merge.
                 if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
                     vg.value_of.clear();
+                    vg.analysis_only.clear();
                     vg.loop_entry_values.clear();
+                }
+                if !reval.is_empty()
+                    && let Some(body) = func.body.as_mut()
+                    && body.value_graph.is_some()
+                {
+                    // Maximally-conservative alias sets (sound by
+                    // over-approximation; immaterial as only constants are kept).
+                    let all: IndexSet<u32> = (0..local_count).collect();
+                    let tt = project.type_table.borrow();
+                    for info in &reval {
+                        let vo = crate::nir_value_graph::builder::build_scoped(
+                            body, info.block, info.skip, &info.seed, &all, &all, &all,
+                            Some(&tt),
+                        );
+                        let vg = body.value_graph.as_mut().unwrap();
+                        for (e, v) in vo {
+                            vg.value_of.insert(e, v);
+                            vg.analysis_only.insert(e);
+                        }
+                    }
                 }
                 // Only this caller's body changed (callee bodies are copied,
                 // not modified), so report just the caller. The caller's
@@ -792,6 +821,7 @@ fn inline_calls_in_block(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     mut cold: bool,
 ) {
     enum Shape {
@@ -839,6 +869,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
                 match &mut body.stmts[stmt_id].kind {
@@ -858,6 +889,7 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                reval,
                 cold,
             ),
             Shape::If(cond, tb, eb) => {
@@ -872,6 +904,7 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         inline_counter,
+                        reval,
                         cold,
                     );
                 }
@@ -885,6 +918,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
                 if let Some(eb) = eb {
@@ -898,6 +932,7 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         inline_counter,
+                        reval,
                         cold,
                     );
                 }
@@ -912,6 +947,7 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                reval,
                 cold,
             ),
             Shape::None => {}
@@ -933,6 +969,7 @@ fn inline_top_level(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> ExprId {
     let result = try_inline_call_expr(
@@ -944,6 +981,7 @@ fn inline_top_level(
         locals,
         type_table,
         inline_counter,
+        reval,
         cold,
     )
     .or_else(|| {
@@ -956,6 +994,7 @@ fn inline_top_level(
             locals,
             type_table,
             inline_counter,
+            reval,
             cold,
         )
     });
@@ -973,6 +1012,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            reval,
             cold,
         );
         new_id
@@ -987,6 +1027,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            reval,
             cold,
         );
         value
@@ -1154,6 +1195,27 @@ impl InlineCtx<'_> {
     }
 }
 
+/// A spliced inlined block to re-value at the splice point (Method A): walk
+/// `block` after its `skip` param-binding statements, seeded with each remapped
+/// param local bound to the value of its call-site argument.
+pub(super) struct InlineRevalInfo {
+    pub block: BlockId,
+    pub skip: usize,
+    pub seed: IndexMap<u32, crate::nir_value_graph::ValueId>,
+}
+
+/// The value of an operand in `caller`'s graph: a promoted value directly, or a
+/// skeleton expr's recorded value (`None` for an unvalued / impure operand).
+fn operand_value_in(caller: &Body, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+    match op {
+        Operand::Value(v) => Some(v),
+        Operand::Expr(e) => caller
+            .value_graph
+            .as_ref()
+            .and_then(|vg| vg.value_of.get(&e).copied()),
+    }
+}
+
 /// Core inlining routine: builds a labeled block (in the caller arena) that
 /// binds each prepared parameter value and executes the spliced callee body
 /// with locals remapped into the caller's frame and `return`s converted to
@@ -1169,6 +1231,7 @@ fn build_inlined_labeled_block(
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
     let sanitized_name: String = func_name
         .chars()
@@ -1188,12 +1251,17 @@ fn build_inlined_labeled_block(
     let callee_local_count = candidate.local_count();
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
+    let skip = bindings.len();
+    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(skip);
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
+    let mut seed: IndexMap<u32, crate::nir_value_graph::ValueId> = IndexMap::default();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
+        if let Some(v) = operand_value_in(caller, binding.value) {
+            seed.insert(new_local_index, v);
+        }
         locals.push(NirLocal {
             name: binding.name.clone(),
             type_id: binding.local_type,
@@ -1244,6 +1312,11 @@ fn build_inlined_labeled_block(
         stmts: block_stmts,
         span: call_span,
     });
+    reval.push(InlineRevalInfo {
+        block: bid,
+        skip,
+        seed,
+    });
     caller.exprs.push(ExprNode {
         kind: ExprKind::LabeledBlock {
             label,
@@ -1268,6 +1341,7 @@ fn try_inline_call_expr(
     locals: &mut Vec<NirLocal>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
     let (module_source, func_name, arg_ops): (ModuleSource, String, Vec<Operand>) =
@@ -1314,6 +1388,7 @@ fn try_inline_call_expr(
         local_count,
         locals,
         inline_counter,
+        reval,
     );
     Some((inlined, inlined_key))
 }
@@ -1329,6 +1404,7 @@ fn try_inline_method_call_expr(
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
     let (module_source, func_name, receiver_op, arg_ops): (
@@ -1413,6 +1489,7 @@ fn try_inline_method_call_expr(
         local_count,
         locals,
         inline_counter,
+        reval,
     );
     Some((inlined, inlined_key))
 }
@@ -2098,6 +2175,7 @@ fn inline_calls_in_expr(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) {
     enum Call {
@@ -2129,6 +2207,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2141,6 +2220,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                reval,
                 cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
@@ -2181,6 +2261,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2196,6 +2277,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2208,6 +2290,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                reval,
                 cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
@@ -2243,6 +2326,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2257,6 +2341,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }

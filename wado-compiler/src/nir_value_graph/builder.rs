@@ -35,7 +35,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, OpaqueSource, ValueId, ValuePool};
+use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -190,6 +190,16 @@ struct FlowArm {
 #[derive(Debug, Clone)]
 pub struct ValueGraphBuild {
     pub value_of: IndexMap<ExprId, ValueId>,
+    /// Exprs whose `value_of` came from a scoped splice-point re-valuation
+    /// ([`build_scoped`], Method A), seeded with the call site's argument values.
+    /// Such a constant equals what the program computes (the seed is the arg's
+    /// value at the call), but it can be *more precise* than a fresh
+    /// whole-function build, which re-derives the post-inline body and may leave
+    /// the same expr opaque. The `WADO_VERIFY_VG` oracle checks the maintained
+    /// graph *refines* a fresh build, so it excludes these exprs — they are a
+    /// seed-sourced truth outside the refine relation, validated by the e2e
+    /// runtime suite, not by partition agreement with a fresh build.
+    pub analysis_only: crate::hashmap::IndexSet<ExprId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
     /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
     /// leaf's use-site value to equal this entry value — cross-iteration
@@ -263,6 +273,7 @@ pub fn build(
     body.values = pool;
     ValueGraphBuild {
         value_of,
+        analysis_only: crate::hashmap::IndexSet::default(),
         loop_entry_values,
         config: BuildConfig {
             param_locals: param_locals.to_vec(),
@@ -270,6 +281,84 @@ pub fn build(
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
         },
+    }
+}
+
+/// Scoped re-valuation of one self-contained inlined block, seeded with the
+/// call site's `param → value` map (Method A — splice-point growth). Walks only
+/// `block` after its first `skip` param-binding statements (params pre-seeded),
+/// with a fresh heap (a field read on a param is conservatively fresh), using
+/// `body`'s existing pool so produced values share ids with the graph. Returns
+/// only **constant-literal** entries: a scoped walk's non-constant values carry
+/// context local to the walk (a `FieldAccess`'s `HeapVersion` numbers from the
+/// fresh heap and would over-merge; an `Opaque` of a remapped local is
+/// walk-local), while a constant equals what a fresh build assigns. Never walks
+/// the caller's untouched remainder, so it adds no `builder::build`
+/// (`rebuilds = 0`) and parks no cache.
+pub fn build_scoped(
+    body: &mut Body,
+    block: BlockId,
+    skip: usize,
+    seed: &IndexMap<u32, ValueId>,
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+) -> IndexMap<ExprId, ValueId> {
+    // Walk in a *cloned* pool: the build stamps types (`set_type`) on the values
+    // it interns, and a value that hash-conses to one the main graph shares would
+    // have its main-graph type mutated — perturbing the structural passes. The
+    // clone keeps `body.values` untouched (seeded `ValueId`s stay valid, the
+    // clone preserves ids); only the constant *literals* are re-interned into the
+    // main pool below, which is idempotent and shared-state-free.
+    let scratch = body.values.clone();
+    let consts: Vec<(ExprId, ValueKind)> = {
+        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, scratch);
+        b.current_value = seed.clone();
+        let stmts: Vec<StmtId> = b.body.blocks[block].stmts.iter().skip(skip).copied().collect();
+        for s in stmts {
+            b.walk_stmt(s);
+        }
+        b.value_of
+            .iter()
+            .filter_map(|(&e, &v)| {
+                let k = b.pool.kind(v).clone();
+                is_const_kind(&k).then_some((e, k))
+            })
+            .collect()
+    };
+    let mut out = IndexMap::default();
+    for (e, k) in consts {
+        out.insert(e, reintern_const(&mut body.values, k));
+    }
+    out
+}
+
+/// Whether a `ValueKind` is a constant literal (carries no build-local context).
+fn is_const_kind(k: &ValueKind) -> bool {
+    matches!(
+        k,
+        ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::String(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+    )
+}
+
+/// Re-intern a constant `ValueKind` into `pool`, returning its id there.
+fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
+    match k {
+        ValueKind::Int(v, t) => pool.int_typed(v, t),
+        ValueKind::Float(b, t) => pool.float_bits(b, t),
+        ValueKind::Bool(b) => pool.bool(b),
+        ValueKind::Char(c) => pool.char(c),
+        ValueKind::String(s) => pool.string(s),
+        ValueKind::Null => pool.null(),
+        ValueKind::Unit => pool.unit(),
+        _ => unreachable!("is_const_kind gates this"),
     }
 }
 

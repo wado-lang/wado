@@ -166,8 +166,9 @@ impl<'a> Engine<'a> {
     /// The graph is built once and maintained in place — there is no rebuild.
     /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
     /// current through `maintain_value_after_edit`; a structural pass that edits
-    /// the arena directly (`inline`) coarsens the touched region instead. A
-    /// query reflects the maintained state.
+    /// the arena directly (`inline`) coarsens the touched region, then regrows
+    /// each splice point's *constants* ([`crate::nir_value_graph::builder::build_scoped`]).
+    /// A query reflects the maintained state.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
         self.body.value_graph.as_ref()?.value_of.get(&expr).copied()
@@ -435,7 +436,16 @@ impl<'a> Engine<'a> {
         // node is never emitted and so cannot be miscompiled. Every live pure
         // expr is in the fresh build, so this still checks every value the
         // optimizer could miscompile through.
-        let exprs: Vec<ExprId> = fresh.value_of.keys().copied().collect();
+        // Exclude scoped splice-point re-valuation results: seeded with the call
+        // site's args, they can be more precise than this fresh whole-function
+        // build, which is outside the refine relation this oracle checks (the
+        // e2e runtime suite validates them instead).
+        let exprs: Vec<ExprId> = fresh
+            .value_of
+            .keys()
+            .copied()
+            .filter(|e| !maintained.analysis_only.contains(e))
+            .collect();
         if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
             &mut self.body.values,
             maintained,
