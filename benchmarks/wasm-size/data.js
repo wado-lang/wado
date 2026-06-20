@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781940407856,
+  "lastUpdate": 1781947189654,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34069,6 +34069,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d9f05fa86c7aefe75512330e6f77d0a07b5cb0ce"
         },
         "date": 1781940407252,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3a59634418e3f380b7a8ac6e47ec888460d6112",
+          "message": "Merge pull request #1407 from wado-lang/claude/monomorph-phase-review-4r0dnz\n\nrefactor(monomorphize): tidy the monomorphization phase",
+          "timestamp": "2026-06-20T18:09:19+09:00",
+          "tree_id": "182fdc1ea94dbc9f4f06c2138456c4952fe92cb8",
+          "url": "https://github.com/wado-lang/wado/commit/d3a59634418e3f380b7a8ac6e47ec888460d6112"
+        },
+        "date": 1781947189086,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
