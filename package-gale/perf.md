@@ -67,7 +67,7 @@ allocation now leads outright.
 | 24.3% | `_gale_rule<AnyNameNode>`  | per-call rule-name `String` alloc at the wrapper                |
 |  7.6% | `Parser::last_end`         | `tokens.ends[pos-1]` — one `array.get i32`, huge call count     |
 |  6.7% | `List<i32>::grow`          | `TokenStream` array growth (the `/4` pre-size under-shoots SQL) |
-|  6.4% | `_kind_set_8`         | membership test over the big keyword set                        |
+|  6.4% | `_kind_set_8`              | membership test over the big keyword set                        |
 |  4.5% | `scan_any_name`            | scan (prediction)                                               |
 |  4.4% | `follow_yields`            | runtime FOLLOW gate (LL repair), parse + scan                   |
 |  3.6% | `char::to_ascii_lowercase` | case-insensitive keyword matching                               |

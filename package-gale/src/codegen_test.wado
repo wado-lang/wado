@@ -573,7 +573,10 @@ b : 'y' ;
     // Each `parse_<rule>` is a thin wrapper that hands the rule's
     // `_parse_<rule>` entry to the shared `_run_parse_entry` helper as a fn value;
     // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
-    assert str_contains(&output, &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult");
+    assert str_contains(
+        &output,
+        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult",
+    );
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
     // `pub fn parse` is a thin alias for the first rule's entry.
