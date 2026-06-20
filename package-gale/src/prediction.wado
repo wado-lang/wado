@@ -182,10 +182,10 @@ pub fn build_group_prediction_tree_from_order(
     return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
 }
 
-/// Build the prediction tree for one overlap group: order via
-/// `group_prediction_order`, then `build_prediction`. The single source
-/// of truth shared by codegen (`gen_multi_alt_body_alt`, the scan-helper
-/// gate) and the `gale dump` prediction view, so the two never drift.
+/// `build_group_prediction_tree_from_order` with the ordering done for
+/// the caller. Codegen's entry point (`gen_multi_alt_body_alt`, the
+/// scan-helper gate); `gale dump` orders once itself and calls the
+/// `_from_order` form, so both build the same tree.
 pub fn build_group_prediction_tree(
     alts: &List<Alternative>,
     group: &List<i32>,

@@ -75,9 +75,8 @@ fn generator_attr() -> String {
     return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
 }
 
-/// The `// Triage data: …status.toml ([<axis>_*]).` provenance comment
-/// shared by every emitter's `doc_lines`. `axis` is the bucket prefix
-/// (`stage_a` / `stage_b` / `stage_b_oracle`).
+/// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
+/// `stage_a` / `stage_b` / `stage_b_oracle`.
 fn triage_doc_line(axis: &String) -> String {
     return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([{*axis}_*]).`;
 }
@@ -631,28 +630,23 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     return w.to_string();
 }
 
-/// The shared shape of every per-descriptor driver test file: the
-/// `#![generated]` attribute, the provenance comment block, the Kiln
-/// `use ... with { generator }` import, any extra runtime imports, the
-/// triage decoration, and the `test "..." { ... }` wrapper. Only the
-/// per-claim specifics vary, so each `emit_*` builds a `TestFileSpec`
-/// and supplies its assertion body as a closure to `emit_test_file`.
+/// The parts of a per-descriptor driver test file that vary by claim.
+/// `emit_test_file` builds the common skeleton (`#![generated]` attr,
+/// provenance comments, Kiln `use ... with { generator }`, triage
+/// decoration, `test { ... }` wrapper) and each `emit_*` fills this in
+/// plus an assertion-body closure.
 struct TestFileSpec {
     category: String,
     name: String,
-    /// `#![generated(by = ...)]` line (`generator_attr()` for most;
-    /// the oracle claim stamps a `--finalize-stage-b-oracle` variant).
+    /// `#![generated(by = ...)]` line; the oracle claim uses a
+    /// `--finalize-stage-b-oracle` variant.
     attr: String,
-    /// Comment lines after the `// Source descriptor:` line — the
-    /// per-claim provenance / explanation block (each already `//`-prefixed).
+    /// Comment lines after `// Source descriptor:`, each `//`-prefixed.
     doc_lines: List<String>,
-    /// `tests/generated/<subdir>/...` output directory segment
-    /// (`antlr4_compat_a` / `antlr4_compat_b` / `antlr4_compat_b_oracle`).
+    /// `tests/generated/<subdir>/...` segment: `antlr4_compat_a` / `_b` / `_b_oracle`.
     output_subdir: String,
-    /// Extra runtime symbols imported from the grammar module (e.g.
-    /// `normalize_tree`, `TK_EOF`, `TK_ERROR`); empty for none.
+    /// Runtime symbols imported from the grammar module; empty for none.
     import_names: List<String>,
-    /// `test "<label>: <category>/<name>"` label prefix.
     test_label: String,
     triage: Triage,
 }
@@ -2463,13 +2457,9 @@ test "parse_cli_args: empty args fall back to default categories" {
     assert !r.categories.is_empty();
 }
 
-// ===== Emitter output =====
-//
-// The Stage A / Stage B emitters are exercised end-to-end by
-// regenerating the committed corpus (`extract-antlr4-descriptors.sh`),
-// but the Stage B′ oracle emitter only runs in the JDK-gated finalize
-// phase, so pin its output against a committed file here.
-
+// Regenerating the committed corpus exercises the Stage A / Stage B
+// emitters end-to-end, but the Stage B′ oracle emitter only runs in the
+// JDK-gated finalize phase, so pin its output against a committed file.
 test "emit_stage_b_oracle_test_file reproduces the committed file byte-for-byte" {
     let expected = #include_str("../tests/antlr4-compat/stage_b_oracle/Sets/StarSet_test.wado");
     let actual = emit_stage_b_oracle_test_file(

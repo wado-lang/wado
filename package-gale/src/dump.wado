@@ -13,10 +13,10 @@
 //!
 //! GIR carries the lowered shape decisions (Direct vs Tournament,
 //! repeat strategy, per-call-site FOLLOW args). The prediction-tree section is
-//! re-built from the surface grammar + `GenContext` via the same
-//! `build_group_prediction_tree` the parser emitter calls — that tree is
-//! computed at emit time, not stored on GIR, so reproducing it here
-//! keeps the dump faithful to "what emit sees".
+//! re-built from the surface grammar + `GenContext` through the same
+//! canonical builder the parser emitter uses — that tree is computed at
+//! emit time, not stored on GIR, so reproducing it here keeps the dump
+//! faithful to "what emit sees".
 
 use {
     LoweredGrammar,
@@ -228,9 +228,8 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
 
 /// Mirror `gen_parse_fn_named` (parser_gen.wado): collect the rule's
 /// non-LR alt indices, compute their FIRST sets, partition into overlap
-/// groups, and for each multi-alt group build the prediction tree via
-/// the shared `build_group_prediction_tree`. Each resulting tree is
-/// rendered inline under the rule.
+/// groups, and render each multi-alt group's prediction tree (built by
+/// the shared `build_group_prediction_tree_from_order`) inline.
 fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
     let surface = find_parser_rule(grammar, &header.name);
@@ -274,9 +273,8 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         if group.len() < 2 {
             continue;
         }
-        // Same canonical pipeline codegen uses, so the dump shows exactly
-        // the tree the emitter builds. The order feeds both the tree and
-        // the group header below, so compute it once.
+        // The order feeds both the tree and the group header below, so
+        // compute it once and reuse it.
         let real_indices = group_prediction_order(group, &first_sets, &non_lr_indices);
         let tree = build_group_prediction_tree_from_order(&surface.alternatives, &real_indices, ctx);
 
