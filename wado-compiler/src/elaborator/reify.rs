@@ -910,7 +910,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_param_names: Vec<String> = func
             .type_params
             .iter()
-            .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .map(|p| p.name.clone())
             .collect();
 
@@ -1008,7 +1008,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .function_effects
                 .get(&func.id)
                 .cloned()
-                .unwrap_or_else(|| self.reify_effects(&func.effects)),
+                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -1258,10 +1258,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // eagerly to the bound's function type (already baked into the
             // recorded param/return types), so they must not consume a
             // positional type-param slot or the real method params shift index.
-            if p.is_effect
-                || p.bounds.iter().any(|b| b.fn_signature.is_some())
-                || type_param_names.iter().any(|n| n == &p.name)
-            {
+            if !p.is_real_type_param() || type_param_names.iter().any(|n| n == &p.name) {
                 continue;
             }
             if type_param_names.len() <= next_idx {
@@ -1438,7 +1435,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .function_effects
                 .get(&func.id)
                 .cloned()
-                .unwrap_or_else(|| self.reify_effects(&func.effects)),
+                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -7682,16 +7679,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 _ => None,
             })
         {
-            // 7-A: the global's declared type was resolved by `annotate_decls`
-            // and lives on `current_module_globals`; read it back (same source
-            // as `reify_global`), re-resolving only if unrecorded.
-            let ty = self
-                .sem
-                .decls
-                .current_module_globals
-                .get(&ident.name)
-                .map(|(t, _)| *t)
-                .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
+            // The fact is genuinely absent here: branch 2 above already
+            // returned for any global present in `current_module_globals`, and
+            // this branch only fires for a snapshot-rehydrated callee module,
+            // which carries no `current_module_globals`. So resolve the declared
+            // type from the AST — the one documented reify type re-resolution
+            // (WEP 2026-05-26 §"Stage 7"). Everywhere else reify reads a fact.
+            let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),

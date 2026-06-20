@@ -1211,8 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .zip(inferred.iter())
                     .filter(|&(param, &tid)| {
-                        let has_fn_bound = param.bounds.iter().any(|b| b.fn_signature.is_some());
-                        !has_fn_bound
+                        !param.has_fn_bound()
                             && matches!(
                                 self.tysys.type_table.borrow().get(tid),
                                 ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
@@ -1248,9 +1247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .zip(inferred.iter())
                             .enumerate()
                             .filter(|&(_, (param, &tid))| {
-                                let has_fn_bound =
-                                    param.bounds.iter().any(|b| b.fn_signature.is_some());
-                                !has_fn_bound
+                                !param.has_fn_bound()
                                     && matches!(
                                         self.tysys.type_table.borrow().get(tid),
                                         ResolvedType::TypeParam { .. }

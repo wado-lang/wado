@@ -2923,6 +2923,23 @@ pub struct GenericParam {
     pub span: Span,
 }
 
+impl GenericParam {
+    /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
+    /// Such params are erased before codegen, so they occupy no positional
+    /// monomorphization slot.
+    pub fn has_fn_bound(&self) -> bool {
+        self.bounds.iter().any(|b| b.fn_signature.is_some())
+    }
+
+    /// Whether this param occupies a dense, positional slot — the "real" type
+    /// params monomorphization substitutes by index. Excludes effect params
+    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`). Single source for
+    /// the projection rule shared by the annotate walk and reify.
+    pub fn is_real_type_param(&self) -> bool {
+        !self.is_effect && !self.has_fn_bound()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub id: AstId,
