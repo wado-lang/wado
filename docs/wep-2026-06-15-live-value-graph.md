@@ -1308,6 +1308,33 @@ Recommended sequencing (reuse the tested builder first to limit risk):
 5. Recover the +12% / 37 `wir_expect` by promoting `FieldAccess` in-loop (its
    `heap_ver` values subsume store-load-forward) and measure criterion 2.
 
+### Step 5 progress: immutable-ref field forwarding recovers the licm cluster
+
+Landed (commit `b1e07c8ea`). The `opt_licm_immut_ref` cluster (4 fixtures, the
+goal's licm half) is recovered, `WADO_VERIFY_VG`-clean, 0 newly broken — and the
+fix retired `ref_1`'s prior verify false positive. Two parts:
+
+- A builder gap: `apply_loop_heap_effects` invalidated _every reference-aliased_
+  local's fields on an external write (a non-builtin call in a loop), while the
+  per-call `bump_call_effects` invalidated only `mut_escaped`. The loop path now
+  matches — an immutably-`&`-escaped local (`&config` to `fn process(&Config)`)
+  cannot be written through, so its field constant survives the loop call. Before,
+  `config.threshold` versioned past its seed and read an opaque `FieldAccess`
+  (`heap_ver 3`) instead of `100`.
+- The constant-leaf promotion now covers `FieldAccess` reads whose projection root
+  is not `mut_escaped` (relaxed from address-taken: an immutable `&` escape is
+  stable), freezing the now-forwarded `config_ref.threshold → 100`.
+
+The BCE cluster is harder and **not** a constant case: `let input_len =
+input.len()` is a _call_ at the build-once freeze, so `input_len` is valued as the
+call result, not `input.used`. Only when `len()` inlines (`return self.used`) does
+`input_len ≡ input.used` hold — an equivalence the build-once graph never captures
+(inline coarsens, and the inlined `input.used` is itself an unvalued post-freeze
+node). BCE then cannot prove `i < input_len` ⟹ `i < input.used`. Recovering it
+needs inline to value the inlined return and union it with the call-result value
+(sound: a call's result _is_ its return) — non-constant inline-time maintenance,
+the remaining piece for `optimize_bce_*` / `array_bounds_elim_*`.
+
 ### The 21 `-O2` regressions are node-creation, not coarsening (this session)
 
 The remaining 21 `fixture_test_o2` regressions under build-once (`compound_assign_basic`,
@@ -1514,7 +1541,7 @@ The earlier "no sound subset of mid-pipeline promotion" applied to the broad,
 unguarded variant; the `early`-only + guarded form is the sound one. Under
 `WADO_VERIFY_VG`, `ref_1` reports one **false positive**: maintained correctly
 forwards `Box{value:c}.value → c` (a valid equality at that read — the box just
-captured `c`), but the post-promotion *fresh* build fails to re-derive that
+captured `c`), but the post-promotion _fresh_ build fails to re-derive that
 field-forward, so the oracle flags a merge the runtime confirms correct (`ref_1`
 prints `true`/`false`). The durable resolution is the lower-phase graph (step 4
 below), where there is no separate build-once graph to diverge; widening
