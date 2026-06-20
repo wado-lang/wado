@@ -13,12 +13,13 @@ use crate::ast::{
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
     Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructPatternField, TaskReturnStmt, TestDecl, TraitDecl, TryOpExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport, WorldExportFn,
-    WorldExportInterface, WorldImport,
+    StructLiteralField, StructPatternField, TaskReturnStmt, TemplatePart, TemplateStringExpr,
+    TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WhileStmt, WorldDecl, WorldExport,
+    WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::token::{Span, Token, TokenKind};
+use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -81,7 +82,6 @@ pub struct ParseError {
 
 impl From<ParseError> for crate::compiler_host::Diagnostic {
     fn from(e: ParseError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         Self {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
@@ -397,7 +397,6 @@ impl Parser {
     /// attribute-start `#` (also begins `#include_str(...)`), and the
     /// contextual `test` keyword (an ordinary identifier, e.g. `test(1, 2)`).
     fn at_hard_item_keyword(&self) -> bool {
-        use TokenKind as T;
         matches!(
             self.peek_kind(),
             T::Use
@@ -421,7 +420,6 @@ impl Parser {
     /// block) every item keyword — including the contextual `flags` / `type` /
     /// `test` and the attribute-start `#` — unambiguously starts the next item.
     fn at_item_start(&self) -> bool {
-        use TokenKind as T;
         if self.at_hard_item_keyword() || matches!(self.peek_kind(), T::Flags | T::Type | T::Hash) {
             return true;
         }
@@ -5604,9 +5602,6 @@ impl Parser {
         token_parts: Vec<crate::token::TemplateTokenPart>,
         span: Span,
     ) -> ParseResult<Expr> {
-        use crate::ast::{TemplatePart, TemplateStringExpr};
-        use crate::token::TemplateTokenPart;
-
         let mut parts = Vec::new();
 
         for token_part in token_parts {
@@ -5614,11 +5609,23 @@ impl Parser {
                 TemplateTokenPart::Literal(s) => {
                     parts.push(TemplatePart::String(s));
                 }
-                TemplateTokenPart::Interpolation(raw) => {
-                    let (expr_str, format_spec) = self.split_interpolation_format(&raw, span)?;
-                    let expr = self.parse_interpolation_expr(expr_str, span)?;
+                TemplateTokenPart::Interpolation { expr, format } => {
+                    // The lexer already split off the format specifier, so the
+                    // expression source is parsed as-is (trimmed of surrounding
+                    // whitespace).
+                    let parsed = self.parse_interpolation_expr(expr.trim(), span)?;
+                    let format_spec = match format {
+                        Some(spec) if spec.is_empty() => {
+                            return Err(ParseError {
+                                message: "empty format specifier in template string".to_string(),
+                                span,
+                            });
+                        }
+                        Some(spec) => Some(FormatSpec { spec }),
+                        None => None,
+                    };
                     parts.push(TemplatePart::Interpolation {
-                        expr: Box::new(expr),
+                        expr: Box::new(parsed),
                         format: format_spec,
                     });
                 }
@@ -5630,99 +5637,6 @@ impl Parser {
             parts,
             span,
         })))
-    }
-
-    /// Split an interpolation source into expression and optional format specifier.
-    /// Input is the raw source text between `{` and `}` (e.g. `pi:.2f` or `Module::func()`).
-    fn split_interpolation_format<'b>(
-        &mut self,
-        raw: &'b str,
-        span: Span,
-    ) -> ParseResult<(&'b str, Option<FormatSpec>)> {
-        let mut in_string = false;
-        let mut backtick_depth = 0u32;
-        let mut brace_depth = 0u32;
-        let mut paren_depth = 0u32;
-        let mut bracket_depth = 0u32;
-        let mut escape_next = false;
-
-        let chars: Vec<char> = raw.chars().collect();
-        let mut i = 0;
-
-        while i < chars.len() {
-            let ch = chars[i];
-
-            if escape_next {
-                escape_next = false;
-                i += 1;
-                continue;
-            }
-
-            match ch {
-                '\\' => {
-                    if in_string || backtick_depth > 0 {
-                        escape_next = true;
-                    }
-                }
-                '"' if backtick_depth == 0 => {
-                    in_string = !in_string;
-                }
-                '`' if !in_string => {
-                    backtick_depth = u32::from(backtick_depth == 0);
-                }
-                '{' if !in_string && backtick_depth == 0 => {
-                    brace_depth += 1;
-                }
-                '}' if !in_string && backtick_depth == 0 => {
-                    brace_depth -= 1;
-                }
-                '(' if !in_string && backtick_depth == 0 => {
-                    paren_depth += 1;
-                }
-                ')' if !in_string && backtick_depth == 0 => {
-                    paren_depth = paren_depth.saturating_sub(1);
-                }
-                '[' if !in_string && backtick_depth == 0 => {
-                    bracket_depth += 1;
-                }
-                ']' if !in_string && backtick_depth == 0 => {
-                    bracket_depth = bracket_depth.saturating_sub(1);
-                }
-                ':' if !in_string
-                    && backtick_depth == 0
-                    && brace_depth == 0
-                    && paren_depth == 0
-                    && bracket_depth == 0 =>
-                {
-                    // Check for :: (scope resolution)
-                    if i + 1 < chars.len() && chars[i + 1] == ':' {
-                        i += 2;
-                        continue;
-                    }
-                    // Format specifier found
-                    let expr_str = raw[..raw.char_indices().nth(i).unwrap().0].trim();
-                    let spec_start = raw.char_indices().nth(i + 1).map_or(raw.len(), |c| c.0);
-                    let spec = &raw[spec_start..];
-                    if spec.is_empty() {
-                        return Err(ParseError {
-                            message: "empty format specifier in template string".to_string(),
-                            span,
-                        });
-                    }
-                    return Ok((
-                        expr_str,
-                        Some(FormatSpec {
-                            spec: spec.to_string(),
-                        }),
-                    ));
-                }
-                _ => {}
-            }
-
-            i += 1;
-        }
-
-        Ok((raw.trim(), None))
     }
 
     /// Parse an interpolation expression string.

@@ -5,6 +5,10 @@
 // truncated mid-call ("expected RParen, found Eof").
 use { println, Stdout } from "core:cli";
 
+fn pick(a: i32, c: char) -> i32 {
+    return a;
+}
+
 export fn run() with Stdout {
     let xs: List<i32> = [1, 2, 3];
 
@@ -17,6 +21,12 @@ export fn run() with Stdout {
     let nums: List<i32> = [255];
     let b = `hex={nums.iter().fold(0, |acc: i32, x: i32| acc + x):x}`;
     assert b == "hex=ff";
+
+    // A char literal holding a bracket must not unbalance the nesting count:
+    // `'('` is a literal, not an open paren, so the trailing `:02` spec still
+    // applies to the i32 value.
+    let c = `n={pick(7, '('):02}`;
+    assert c == "n=07";
 
     println("ok");
 }

@@ -4,8 +4,15 @@
 pub enum TemplateTokenPart {
     /// Literal text with escape sequences resolved (e.g. `\{` → `{`).
     Literal(String),
-    /// Raw source text of an interpolation expression (without enclosing braces).
-    Interpolation(String),
+    /// An interpolation. The lexer splits the content at the top-level `:`, so
+    /// `expr` is the raw expression source (without enclosing braces) and
+    /// `format` is the specifier text after the `:` (if any). Splitting here —
+    /// where the same scan already tracks strings/backticks/braces — keeps a
+    /// `:` inside parens, brackets, or a char literal out of the specifier.
+    Interpolation {
+        expr: String,
+        format: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -341,8 +348,11 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
                     TemplateTokenPart::Literal(s) => {
                         write_payload(out, b'P', "Literal", s.as_bytes());
                     }
-                    TemplateTokenPart::Interpolation(s) => {
-                        write_payload(out, b'P', "Interpolation", s.as_bytes());
+                    TemplateTokenPart::Interpolation { expr, format } => {
+                        write_payload(out, b'P', "Interpolation", expr.as_bytes());
+                        if let Some(spec) = format {
+                            write_payload(out, b'P', "FormatSpec", spec.as_bytes());
+                        }
                     }
                 }
             }
@@ -452,8 +462,10 @@ mod canonical_token_bytes_tests {
     #[test]
     fn template_string_part_kinds_distinguished() {
         let lit = TokenKind::TemplateStringLit(vec![TemplateTokenPart::Literal("hi".into())]);
-        let interp =
-            TokenKind::TemplateStringLit(vec![TemplateTokenPart::Interpolation("hi".into())]);
+        let interp = TokenKind::TemplateStringLit(vec![TemplateTokenPart::Interpolation {
+            expr: "hi".into(),
+            format: None,
+        }]);
         assert_ne!(enc(&lit), enc(&interp));
     }
 }
