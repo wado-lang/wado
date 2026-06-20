@@ -214,7 +214,7 @@ impl SerializeSeq for JsonSeqSerializer {
             self.buf.push_str(&",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize::<JsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         return r;
@@ -232,7 +232,7 @@ impl SerializeMap for JsonMapSerializer {
             self.buf.push_str(&",");
         }
         let mut ser = JsonSerializer { buf: self.buf };
-        let r = key.serialize::<JsonSerializer>(&mut ser);
+        let r = key.serialize(&mut ser);
         self.buf = ser.buf;
         self.buf.push_str(&":");
         self.need_value = true;
@@ -241,7 +241,7 @@ impl SerializeMap for JsonMapSerializer {
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize::<JsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         self.need_value = false;
@@ -262,7 +262,7 @@ impl SerializeStruct for JsonStructSerializer {
         write_escaped_string(self.buf, name);
         self.buf.push_str(&":");
         let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize::<JsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         return r;
@@ -277,7 +277,7 @@ impl SerializeStruct for JsonStructSerializer {
 impl SerializeVariant for JsonVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = JsonSerializer { buf: self.buf };
-        let r = value.serialize::<JsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -441,7 +441,7 @@ impl SerializeSeq for PrettyJsonSeqSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize::<PrettyJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         return r;
@@ -467,7 +467,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = key.serialize::<PrettyJsonSerializer>(&mut ser);
+        let r = key.serialize(&mut ser);
         self.buf = ser.buf;
         self.buf.push_str(&": ");
         self.need_value = true;
@@ -480,7 +480,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize::<PrettyJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         self.need_value = false;
@@ -509,7 +509,7 @@ impl SerializeStruct for PrettyJsonStructSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize::<PrettyJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         return r;
@@ -531,7 +531,7 @@ impl SerializeVariant for PrettyJsonVariantSerializer {
             indent: self.indent,
             depth: self.depth,
         };
-        let r = value.serialize::<PrettyJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -1608,7 +1608,7 @@ impl DeserializeSeq for JsonSeqAccess {
             self.de.expect_char(',' as i32)?;
         }
         self.first = false;
-        return match T::deserialize::<JsonDeserializer>(&mut self.de) {
+        return match T::deserialize(&mut self.de) {
             Ok(v) => Result::Ok(Option::Some(v)),
             Err(e) => {
                 builtin::cold_path();
@@ -1642,7 +1642,7 @@ impl DeserializeMap for JsonMapAccess {
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        return V::deserialize::<JsonDeserializer>(&mut self.de);
+        return V::deserialize(&mut self.de);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -1725,7 +1725,7 @@ impl DeserializeStruct for JsonStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return T::deserialize::<JsonDeserializer>(&mut self.de);
+        return T::deserialize(&mut self.de);
     }
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
@@ -1752,7 +1752,7 @@ impl DeserializeVariant for JsonVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return T::deserialize::<JsonDeserializer>(&mut self.de);
+        return T::deserialize(&mut self.de);
     }
 
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
@@ -2027,11 +2027,11 @@ impl Deserializer for JsonDeserializer {
             },
             '[' => {
                 let mut seq = self.begin_seq()?;
-                return visitor.visit_seq::<JsonSeqAccess>(&mut seq);
+                return visitor.visit_seq(&mut seq);
             },
             '{' => {
                 let mut map = self.begin_map()?;
-                return visitor.visit_map::<JsonMapAccess>(&mut map);
+                return visitor.visit_map(&mut map);
             },
             _ => {
                 if b == '-' || '0' <= b <= '9' {
@@ -2083,7 +2083,7 @@ struct CanonicalVariantSerializer {
 fn canonical_encode<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf = String::with_capacity(16);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
-    value.serialize::<CanonicalJsonSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf);
 }
 
@@ -2109,7 +2109,7 @@ impl SerializeSeq for CanonicalSeqSerializer {
             self.buf.push(',');
         }
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
-        let r = value.serialize::<CanonicalJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         self.count += 1;
         return r;
@@ -2125,13 +2125,13 @@ impl SerializeMap for CanonicalMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         let mut kbuf = String::with_capacity(16);
         let mut ser = JsonSerializer { buf: &mut kbuf };
-        key.serialize::<JsonSerializer>(&mut ser)?;
+        key.serialize(&mut ser)?;
         self.pending_key = kbuf;
         return Result::Ok(());
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let vbuf = canonical_encode::<T>(value)?;
+        let vbuf = canonical_encode(value)?;
         self.entries.push([self.pending_key, vbuf]);
         return Result::Ok(());
     }
@@ -2146,7 +2146,7 @@ impl SerializeStruct for CanonicalStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         let mut kbuf = String::with_capacity(name.len() + 2);
         write_escaped_string(&mut kbuf, name);
-        let vbuf = canonical_encode::<T>(value)?;
+        let vbuf = canonical_encode(value)?;
         self.entries.push([kbuf, vbuf]);
         return Result::Ok(());
     }
@@ -2160,7 +2160,7 @@ impl SerializeStruct for CanonicalStructSerializer {
 impl SerializeVariant for CanonicalVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalJsonSerializer { buf: self.buf };
-        let r = value.serialize::<CanonicalJsonSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -2288,7 +2288,7 @@ global SERIALIZE_BUFFER_CAPACITY: i32 = 128;
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
-    value.serialize::<JsonSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf);
 }
 
@@ -2302,8 +2302,8 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, SerializeError> {
 pub fn to_bytes<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = JsonSerializer { buf: &mut buf };
-    value.serialize::<JsonSerializer>(&mut ser)?;
-    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    value.serialize(&mut ser)?;
+    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
 /// Serializes a value to a pretty JSON string. Convenience over
@@ -2316,14 +2316,14 @@ pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, SerializeErro
         indent: &indent,
         depth: 0,
     };
-    value.serialize::<PrettyJsonSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf);
 }
 
 /// Deserializes a value from a JSON string. Convenience wrapper over
 /// `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
 pub fn from_string<T: Deserialize>(input: String) -> Result<T, DeserializeError> {
-    return from_bytes::<T, String>(input);
+    return from_bytes(input);
 }
 
 /// Deserializes a value from UTF-8 JSON bytes — the primary entry point.
@@ -2337,7 +2337,7 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, Deseria
         input: input.as_byte_slice(),
         pos: 0,
     };
-    let v = T::deserialize::<JsonDeserializer>(&mut de)?;
+    let v = T::deserialize(&mut de)?;
     de.skip_whitespace();
     if de.pos < de.input.len() {
         builtin::cold_path();
@@ -2355,8 +2355,8 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S) -> Result<T, Deseria
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<List<u8>, SerializeError> {
     let mut buf = String::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalJsonSerializer { buf: &mut buf };
-    value.serialize::<CanonicalJsonSerializer>(&mut ser)?;
-    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    value.serialize(&mut ser)?;
+    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
 
 /// Serializes a value to pretty-printed UTF-8 JSON bytes.
@@ -2368,6 +2368,6 @@ pub fn to_bytes_pretty<T: Serialize>(value: &T) -> Result<List<u8>, SerializeErr
         indent: &indent,
         depth: 0,
     };
-    value.serialize::<PrettyJsonSerializer>(&mut ser)?;
-    return Result::Ok(List::<u8>::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
+    value.serialize(&mut ser)?;
+    return Result::Ok(List::internal_from_raw(buf.internal_raw_bytes(), buf.len()));
 }
