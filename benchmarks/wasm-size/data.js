@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781920384172,
+  "lastUpdate": 1781921595176,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33805,6 +33805,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e0af9b5160769db9df77e167a6321a4bb22ffa1d"
         },
         "date": 1781920383567,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "047995102a4e7e882bf51a38883fa65d4e018a1c",
+          "message": "Merge pull request #1400 from wado-lang/claude/wado-closure-examples-9nnf8c\n\nfix(parser): keep a colon inside parens/brackets/char literals out of a template format specifier",
+          "timestamp": "2026-06-20T11:03:27+09:00",
+          "tree_id": "78cc4356758cb02d594955dab5c75fe8fed1c0c1",
+          "url": "https://github.com/wado-lang/wado/commit/047995102a4e7e882bf51a38883fa65d4e018a1c"
+        },
+        "date": 1781921594555,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
