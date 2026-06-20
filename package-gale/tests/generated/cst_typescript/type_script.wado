@@ -12747,17 +12747,6 @@ fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> =
     return Result::Ok(());
 }
 
-fn _parse_type_parameter__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_0, 0);
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
-    pos += 1;
-    pos = scan_type_argument(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let identifier = _parse_identifier(p, follow)?;
@@ -12765,18 +12754,6 @@ fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> =
         let constraint = _parse_constraint(p, &EMPTY_FOLLOW)?;
     }
     return Result::Ok(());
-}
-
-fn _parse_type_parameter__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_identifier(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_EXTENDS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-        let sp = pos;
-        pos = scan_constraint(tokens, pos, &EMPTY_FOLLOW, 0);
-        if pos < 0 { pos = sp; }
-    }
-    return pos;
 }
 
 fn _parse_type_parameter__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {

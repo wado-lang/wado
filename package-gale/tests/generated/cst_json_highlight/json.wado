@@ -1997,46 +1997,11 @@ fn _parse_obj__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
-fn _parse_obj__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
-    pos += 1;
-    pos = scan_pair(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-        let sp = pos;
-        sg_3_done: {
-            sg_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
-                pos += 1;
-                pos = scan_pair(tokens, pos, 0);
-                if pos < 0 { break sg_3; }
-                break sg_3_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_obj__inner_alt_1(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let rbrace = p.expect(TK_LIT_RBRACE)?;
     return Result::Ok(());
-}
-
-fn _parse_obj__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_obj__inner(p: &mut Parser) -> Result<(), ParseError> {
@@ -2099,13 +2064,13 @@ fn _parse_arr__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_4_done: {
-                sg_4: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_4; }
+            sg_3_done: {
+                sg_3: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
                     pos += 1;
                     pos = scan_value(tokens, pos, 0);
-                    if pos < 0 { break sg_4; }
-                    break sg_4_done;
+                    if pos < 0 { break sg_3; }
+                    break sg_3_done;
                 }
                 break rep_scan;
             }
@@ -2120,46 +2085,11 @@ fn _parse_arr__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
-fn _parse_arr__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
-    pos += 1;
-    pos = scan_value(tokens, pos, 0);
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
-        let sp = pos;
-        sg_5_done: {
-            sg_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_5; }
-                pos += 1;
-                pos = scan_value(tokens, pos, 0);
-                if pos < 0 { break sg_5; }
-                break sg_5_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_arr__inner_alt_1(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
     return Result::Ok(());
-}
-
-fn _parse_arr__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_arr__inner(p: &mut Parser) -> Result<(), ParseError> {

@@ -1576,52 +1576,11 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     return Result::Ok(());
 }
 
-fn _parse_m__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_K { return -1; }
-    pos += 1;
-    sg_3_done: {
-        sg_3: {
-            if pos >= tokens.len() || tokens[pos] != TK_X { break sg_3; }
-            pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_3; }
-            pos += 1;
-            break sg_3_done;
-        }
-        return -1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_X && !(follow_yields(tokens, pos, follow, TK_EOF)) {
-        let sp = pos;
-        sg_4_done: {
-            sg_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_X { break sg_4; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_4; }
-                pos += 1;
-                break sg_4_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
 fn _parse_m__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let k = p.expect(TK_K)?;
     let z = p.expect(TK_Z)?;
     return Result::Ok(());
-}
-
-fn _parse_m__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_K { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_Z { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_m__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {

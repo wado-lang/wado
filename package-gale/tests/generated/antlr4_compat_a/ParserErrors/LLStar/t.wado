@@ -1360,21 +1360,6 @@ fn _parse_a__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
-fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
-    pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_A {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_LIT_A { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_B { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let mut _plus_first = true;
@@ -1396,21 +1381,6 @@ fn _parse_a__inner_alt_1(p: &mut Parser) -> Result<(), ParseError> {
     }
     let lit_c = p.expect(TK_LIT_C)?;
     return Result::Ok(());
-}
-
-fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
-    pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_LIT_A {
-        let sp = pos;
-        if pos >= tokens.len() || tokens[pos] != TK_LIT_A { pos = -1; } else { pos += 1; }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_C { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_a__inner(p: &mut Parser) -> Result<(), ParseError> {

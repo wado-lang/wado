@@ -6089,24 +6089,10 @@ fn _parse_rule_spec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMP
     return Result::Ok(());
 }
 
-fn _parse_rule_spec__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_lexer_rule_spec(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_rule_spec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let parser_rule_spec = _parse_parser_rule_spec(p, follow)?;
     return Result::Ok(());
-}
-
-fn _parse_rule_spec__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_parser_rule_spec(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
@@ -7467,24 +7453,10 @@ fn _parse_lexer_atom__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     return Result::Ok(());
 }
 
-fn _parse_lexer_atom__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_character_range(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_lexer_atom__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let terminal_def = _parse_terminal_def(p, follow)?;
     return Result::Ok(());
-}
-
-fn _parse_lexer_atom__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    pos = scan_terminal_def(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
@@ -7598,29 +7570,11 @@ fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     return Result::Ok(());
 }
 
-fn _parse_not_set__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
-    pos += 1;
-    pos = scan_set_element(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let not = p.expect(TK_NOT)?;
     let block_set = _parse_block_set(p, follow)?;
     return Result::Ok(());
-}
-
-fn _parse_not_set__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_NOT { return -1; }
-    pos += 1;
-    pos = scan_block_set(tokens, pos, follow, 0);
-    if pos < 0 { return -1; }
-    return pos;
 }
 
 fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
