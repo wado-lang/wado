@@ -1846,13 +1846,20 @@ impl FunctionTranslator<'_, '_> {
             .type_of(v)
             .expect("promoted value has no recorded type");
         match kind {
-            ValueKind::Int(value, _) => match self.type_table.get(type_id) {
+            // Width from the literal's own carried `TypeId` (the hash-cons key),
+            // not the shared `type_of(v)`: a constant is width-correct regardless
+            // of how many differently-typed uses share its `ValueId`. This is the
+            // prerequisite that makes a constant safe to promote *early* (before
+            // the passes can add a divergent-width use). Behavior-neutral today
+            // (late freeze sets `type_of` to the same type); load-bearing for
+            // early promotion.
+            ValueKind::Int(value, int_ty) => match self.type_table.get(int_ty) {
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
                     WirInstr::I64Const(value as i64)
                 }
                 _ => WirInstr::I32Const(value as i32),
             },
-            ValueKind::Float(bits, _) => match self.type_table.get(type_id) {
+            ValueKind::Float(bits, float_ty) => match self.type_table.get(float_ty) {
                 ResolvedType::Primitive(PrimitiveType::F32) => {
                     WirInstr::F32Const(f64::from_bits(bits) as f32)
                 }

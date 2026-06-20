@@ -348,8 +348,9 @@ fn analyze_expr(
         // non-Local inner so nested ref uses are still classified.
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            // A promoted `Operand::Value` inner is a constant, not a tracked ref.
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 && refs.contains_key(index)
             {
                 return;

@@ -84,10 +84,17 @@ impl Rule for ValueCopyElideRule<'_> {
             let Some(arg) = args.first().map(|a| a.expr) else {
                 continue;
             };
-            let arg_kind = engine.body.exprs[arg.as_expr().expect("skeleton operand")]
-                .kind
-                .clone();
-            engine.replace_expr_kind(value, arg_kind);
+            // A promoted `Operand::Value` arg (a constant — copying it is a no-op)
+            // redirects directly; otherwise adopt the skeleton arg's kind.
+            match arg.as_expr() {
+                Some(ae) => {
+                    let arg_kind = engine.body.exprs[ae].kind.clone();
+                    engine.replace_expr_kind(value, arg_kind);
+                }
+                None => {
+                    engine.redirect_expr(value, arg);
+                }
+            }
             changed = true;
         }
         changed
@@ -295,7 +302,8 @@ fn elision_safe(
     let Some(arg) = args.first() else {
         return false;
     };
-    match arg_source_root(body, arg.expr.as_expr().expect("skeleton operand")) {
+    // A promoted `Operand::Value` arg is a constant — uniquely owned, no root.
+    match arg.expr.as_expr().and_then(|e| arg_source_root(body, e)) {
         Some(root) => match usage.get(&root) {
             Some(u) => !u.is_assigned() && !u.has_field_mutation,
             None => true,

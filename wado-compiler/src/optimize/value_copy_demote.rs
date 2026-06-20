@@ -380,7 +380,9 @@ fn demote_candidate(
     // The argument side: a fresh rvalue (`None` root) is uniquely owned;
     // an immutable-ref parameter cannot be mutated; otherwise every use of
     // the root local must itself be element-clean.
-    match arg_source_root(body, arg0.as_expr().expect("skeleton operand")) {
+    // A promoted `Operand::Value` arg is a constant: a fresh, uniquely-owned
+    // rvalue with no root local — the `None` (clean) case.
+    match arg0.as_expr().and_then(|e| arg_source_root(body, e)) {
         None => true,
         Some(root) => {
             let clean = is_immutable_ref_param(params, an.type_table, root)
@@ -703,7 +705,12 @@ impl ElementClean<'_, '_> {
                 // `&mut x`, `&mut x[i]`, `&mut x.field` — a mutable
                 // reference into the handle escapes our control.
                 let inner = *inner;
-                if expr_mentions_local(body, inner.as_expr().expect("skeleton operand"), idx) {
+                // A promoted `Operand::Value` inner is a constant; it mentions no
+                // local, so it cannot escape `idx`.
+                if inner
+                    .as_expr()
+                    .is_some_and(|ie| expr_mentions_local(body, ie, idx))
+                {
                     self.clean = false;
                 }
             }
@@ -757,7 +764,12 @@ impl ElementClean<'_, '_> {
                 expr: inner,
             } => {
                 let inner = *inner;
-                if expr_mentions_local(body, inner.as_expr().expect("skeleton operand"), idx) {
+                // A promoted `Operand::Value` inner is a constant; it mentions no
+                // local, so it cannot escape `idx`.
+                if inner
+                    .as_expr()
+                    .is_some_and(|ie| expr_mentions_local(body, ie, idx))
+                {
                     self.clean = false;
                 }
             }

@@ -38,7 +38,8 @@ pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::Index { expr: inner, .. } => {
-            projection_root_local(body, inner.as_expr().expect("skeleton operand"))
+            // A promoted `Operand::Value` inner has no skeleton root local.
+            projection_root_local(body, inner.as_expr()?)
         }
         _ => None,
     }
@@ -70,7 +71,9 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => strip_refs(body, inner.as_expr().expect("skeleton operand")),
+            // A promoted `Operand::Value` inner cannot be stripped further; the
+            // wrapper id is the leaf.
+        } => inner.as_expr().map_or(id, |e| strip_refs(body, e)),
         _ => id,
     }
 }

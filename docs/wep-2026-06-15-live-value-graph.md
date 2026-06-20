@@ -1341,7 +1341,7 @@ cheap retain is sound. Measured on the full `-O2` corpus under `WADO_VERIFY_VG`:
   reaching def. Inlining can restructure control flow (introduce a loop
   back-edge), so a fresh build makes the read loop-variant; two distinct locals
   sharing a constant init (`index = 0`, `init = 0`) then both keep the
-  hash-consed constant and over-merge. Only a literal *expr node* is truly
+  hash-consed constant and over-merge. Only a literal _expr node_ is truly
   inline-invariant, and keeping just those recovers nothing. All three retains
   yield the same 21 (constant store→load forwarding across inline is exactly the
   unsound `Local`-read case), so coarsening cannot recover them. clear-all stays
@@ -1352,42 +1352,42 @@ Two decisive experiments pin it to the node-creation half and rule out Method A:
 - **Fresh rebuild at the inline splice** (force `value_graph = None` so the next
   query rebuilds) recovers them: `compound_assign_basic` folds to
   `fmt_decimal(15/12/24/6/2)`, `store_to_load_forwarding` drops all panics. So
-  the values *are* derivable — build-once plus incomplete maintenance loses them.
+  the values _are_ derivable — build-once plus incomplete maintenance loses them.
   But this is a rebuild (what the WEP forbids), and it works only because the
-  rebuilt graph is taken *after* `sroa` has scalarized: the recovery is downstream
+  rebuilt graph is taken _after_ `sroa` has scalarized: the recovery is downstream
   of the splice, not at it.
 - **Completing Method A's seeding** (seed `build_scoped`'s scratch heap with the
   call-site struct-literal field values, so a `param.f` read in the spliced body
   forwards — `compound_assign`'s `Box<i32>{value: x}.Display::fmt` makes
   `self.value = 15` a constant in the inlined region) lands the value in
-  `value_of` but recovers **0** of the 21: `inline` runs *before* `sroa`, only
+  `value_of` but recovers **0** of the 21: `inline` runs _before_ `sroa`, only
   `peephole` sits between them and does not forward field reads, so `sroa`
   restructures `self.value` into a fresh scalar local and the entry is lost before
   any forwarder runs. Reverted — correct but inert against these regressions.
 - **Seeding at the node-creating pass itself** (`sroa` transfers a forwarded field
   read's constant to the scalar read it mints, via `Engine::seed_const_value` —
   the WEP's "have the creating pass seed `value_of`"). Recovers **0**: a debug
-  trace shows `engine.value()` is `None` for *every* `obj.f` read `sroa` rewrites.
+  trace shows `engine.value()` is `None` for _every_ `obj.f` read `sroa` rewrites.
   The field reads themselves postdate the build-once graph (assert / template
   desugaring mints them after the freeze), so they were never valued — there is
   nothing to transfer. This is the gap one level up, and it generalizes: under
   build-once, **every node created after the freeze is unvalued**, and only a
   rebuild over the current body values them. No localized seed reaches them; that
   is precisely why the fresh rebuild is the only thing that recovers, and why the
-  fix must be *born-frozen values* (Route B), not post-hoc maintenance. Reverted.
-- **The combination** (precise inline coarsening — drop the spliced *region's*
-  exprs plus every *non*-constant caller entry, keeping caller constants so
-  `p2.a = 42` survives the inline that wiped `run()`'s graph — *plus* the `sroa`
+  fix must be _born-frozen values_ (Route B), not post-hoc maintenance. Reverted.
+- **The combination** (precise inline coarsening — drop the spliced _region's_
+  exprs plus every _non_-constant caller entry, keeping caller constants so
+  `p2.a = 42` survives the inline that wiped `run()`'s graph — _plus_ the `sroa`
   const-transfer above, now with a value to transfer) **does** light up `__sroa_*`
   reads (`p2.a → 42`), but is **unsound**: 20 over-merges, 22 fixtures miscompiled.
   `WADO_VERIFY_VG` pins it: `__sroa_p_x` maintained→`Int(0)` but fresh→`ValueId(45)`.
   The forwarded constant a field read carried is **context-dependent** — it is the
   value at one heap version / reaching def, not a property of the scalar's def. A
-  fresh post-`sroa` build re-derives the scalar from *its* def and splits, so
+  fresh post-`sroa` build re-derives the scalar from _its_ def and splits, so
   transferring the constant onto the new node over-merges. This is the same lesson
   as constant-retain (a constant on a `Local`/scalar read is only as stable as its
-  reaching def) and the deepest reason the value cannot be *maintained* across
-  restructuring — it must be *born* in the operand slot, which is Route B.
+  reaching def) and the deepest reason the value cannot be _maintained_ across
+  restructuring — it must be _born_ in the operand slot, which is Route B.
 
 Remaining piece (the node-creation half): when a structural pass creates a local
 def with a known value and reads of it, maintenance must propagate the def's
@@ -1407,33 +1407,33 @@ localized-maintenance variants were measured under `WADO_VERIFY_VG`:
 5. sroa-const-seed (transfer field read's constant to the scalar) — sound, 0
    (the field reads postdate the freeze; nothing to transfer).
 6. precise-retain + sroa-seed — unsound (20 over-merges, 22 miscompiled).
-7. precise inline retain alone (drop spliced-region exprs, keep *caller*
+7. precise inline retain alone (drop spliced-region exprs, keep _caller_
    constants) — **still unsound**: `opt_container_sroa_nondup_idx` over-merges
    `__v3`/`__v1`, two caller locals both kept a constant that a fresh build splits.
 8. pre-`sroa` field forward (promote `obj.f` constants to frozen operands before
-   `sroa`) — ineffective: the *field* read `p2.a` does not forward at the value
+   `sroa`) — ineffective: the _field_ read `p2.a` does not forward at the value
    graph (it gets an opaque `FieldAccess(recv, field, ver)`, a heap-version/root
    gap), so there is no constant to freeze; the recovery the fresh rebuild gets is
-   the post-`sroa` *scalar* (`__sroa_p2_a = 42; read → 42`), not the field.
+   the post-`sroa` _scalar_ (`__sroa_p2_a = 42; read → 42`), not the field.
 9. pre-`inline` constant forward (freeze constants before inline empties the
    graph) — **unsound and net-negative**: recovers 1 (`inline_cold_path_cost`) but
    14 over-merges and 13 newly broken. Building the graph early and then letting
    inline/`sroa` restructure re-introduces the same stale-context over-merge.
 
-Variants 8–9 confirm the recovery is the post-`sroa` *scalar* local read, which
+Variants 8–9 confirm the recovery is the post-`sroa` _scalar_ local read, which
 build-once leaves unvalued (a fresh rebuild over the scalarized body is the only
 thing that values it), and that pre-emptively building/forwarding to dodge that
 just relocates the same stale-context over-merge.
 
-Variant 7 is the clinching proof. The hope was that a *caller* constant is safe
+Variant 7 is the clinching proof. The hope was that a _caller_ constant is safe
 because its reaching def is caller-side; it is not, because `inline` restructures
 the caller's own control flow (a spliced loop/branch puts the read on a back-edge),
 so a fresh build re-derives the caller read as loop-variant. The invariant under
 all seven: **a value the graph forwarded is bound to the flow context it was
 derived in, and any structural pass can change that context for any read** — so no
-retained or transferred value is safe, and `clear-all` is the *unique* sound
+retained or transferred value is safe, and `clear-all` is the _unique_ sound
 coarsening. The one thing that recovers — a fresh rebuild over the post-`sroa`
-body — is the rebuild build-once forbids. Only a value *born* in the operand slot
+body — is the rebuild build-once forbids. Only a value _born_ in the operand slot
 (frozen at the def, never re-derived) is context-free. Recovery is therefore Route
 B or nothing — this is now demonstrated, not argued.
 
@@ -1441,6 +1441,48 @@ The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
 config-aware fresh rebuild per query, off by default) is reinstated as the guard
 for this maintenance work — it is what proved both keep-all and constant-retain
 unsound, redirecting the effort to Route B.
+
+### Variant 10: born-frozen constant promotion is sound and recovers the values
+
+The one variant that is _not_ maintenance: promote each constant-valued leaf read
+(`Local` / `FieldAccess`) to its literal `Operand::Value` at the **early freeze**
+(`freeze_pure_arith` before the optimize loop), where the build-once graph still
+values it. A literal is context-free, so this is sound by construction — `0`
+over-merges across the whole `-O2` corpus under `WADO_VERIFY_VG` — and it survives
+`inline` and `sroa` because both copy operands rather than re-derive them.
+Measured: the value _is_ recovered (`compound_assign`'s `i32::fmt_decimal` arg
+becomes the constant `15`/`12`/`24`/`6`/`2`; `store_to_load`'s asserts fold). This
+is the first lever that both stays sound and carries the value across the
+structural passes — the operand-promotion keystone, applied to constants.
+
+Two pieces of follow-up remain to _land_ a fixture recovery, both now scoped:
+
+- Pass migration. A promoted `Operand::Value` where a pass assumed a skeleton
+  `Expr` panics on `as_expr().expect("skeleton operand")` (139 such sites total).
+  Constant-leaf promotion reaches ~14 of them; each is the same uniform guard (a
+  promoted constant is the benign case — no projection root, no ref target,
+  trivially speculatable / uniquely-owned). Landed this round: `arena_query` (×2),
+  `niri`, `alias`, `builder`, `ref_elim`, `value_copy_demote` (×2),
+  `value_copy_elide` (×2), `remarks`, `elide_box_local` — hardening that is correct
+  and behavior-neutral on its own, and a prerequisite for any promotion widening.
+  A few more (`string_push`, a second `elide_box_local`) surface per fixture round;
+  the set converges.
+- A residual fold. `inline` binds the spliced callee's param as
+  `let self = Operand::Value(15)`; the read `self` does not fold because
+  `niri::value_to_lattice` needs `type_of(v)` and the value that reaches the
+  binding through the `Display::fmt` inline + box `sroa` chain loses its recorded
+  type. Stamping the type through that chain (or a `CopySource::Const` in
+  `copy_prop`) closes it.
+
+Width preservation — the WEP's named early-promotion blocker — is **fixed**:
+`extract_value` now takes a constant's width from the literal's own carried
+`TypeId` (the hash-cons key) rather than the shared `type_of(v)`, so a constant is
+width-correct no matter how many differently-typed uses share its `ValueId`
+(behavior-neutral today; load-bearing for early promotion). So the path is no
+longer "Route B, blocked on a width bug" but "width fixed; born-frozen constant
+promotion demonstrated sound; landing = the bounded pass-migration + the residual
+type-fold above." The migration guards and the width fix are committed as
+neutral groundwork; the promotion switch itself is the next focused step.
 
 ## See also
 

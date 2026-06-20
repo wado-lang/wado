@@ -384,7 +384,9 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = projection_root_local(body, inner.as_expr().expect("skeleton operand"))
+            // A promoted `Operand::Value` inner has no projection root local.
+            if let Some(ie) = inner.as_expr()
+                && let Some(r) = projection_root_local(body, ie)
             {
                 out.insert(r);
             }

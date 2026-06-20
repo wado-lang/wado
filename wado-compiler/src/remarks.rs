@@ -190,10 +190,15 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
         } => *expr,
         _ => arg.into(),
     };
-    match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-        ExprKind::FieldAccess { expr, .. } => {
-            body.exprs[expr.as_expr().expect("skeleton operand")].type_id
-        }
-        _ => body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
+    // A promoted `Operand::Value` has no skeleton place; fall back to the
+    // argument's own type (this only feeds a diagnostic remark).
+    let Some(inner_e) = inner.as_expr() else {
+        return body.exprs[arg].type_id;
+    };
+    match &body.exprs[inner_e].kind {
+        ExprKind::FieldAccess { expr, .. } => expr
+            .as_expr()
+            .map_or(body.exprs[inner_e].type_id, |e| body.exprs[e].type_id),
+        _ => body.exprs[inner_e].type_id,
     }
 }

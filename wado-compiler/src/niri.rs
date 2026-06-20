@@ -1317,8 +1317,11 @@ impl<'a> Interpreter<'a> {
             return true;
         }
 
-        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(sink.body(), scrutinee.as_expr().expect("skeleton operand")) {
+        // Rule 3: non-const speculatable scrutinee, all-arms-equal. A promoted
+        // `Operand::Value` scrutinee is a constant — trivially speculatable.
+        if let Some(e) = scrutinee.as_expr()
+            && !is_speculatable_a(sink.body(), e)
+        {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {

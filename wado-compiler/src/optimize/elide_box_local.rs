@@ -241,8 +241,9 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
         } => {
             let inner = *inner;
             let field_name = field_name.clone();
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            // A promoted `Operand::Value` inner is a constant, not a box local.
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
                 let index = *index;
                 let s = stats.entry(index).or_default();

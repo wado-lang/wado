@@ -1076,14 +1076,13 @@ impl<'a> Builder<'a> {
                 // Reference look-through: a read `r.f` where `r = &v` forwards
                 // from `v`'s field slot (the pointee's current VN / root),
                 // using `v`'s live slot state so a stale forward is impossible.
-                let (recv, root) =
-                    match self.reference_lookthrough(inner.as_expr().expect("skeleton operand")) {
-                        Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                        None => (
-                            walked,
-                            self.receiver_root(inner.as_expr().expect("skeleton operand")),
-                        ),
-                    };
+                // A promoted `Operand::Value` receiver has no skeleton place: no
+                // reference target and no receiver root local.
+                let inner_e = inner.as_expr();
+                let (recv, root) = match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
+                    Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
+                    None => (walked, inner_e.and_then(|ie| self.receiver_root(ie))),
+                };
                 let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
