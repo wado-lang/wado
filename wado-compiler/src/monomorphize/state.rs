@@ -148,10 +148,11 @@ pub(super) struct Monomorphizer {
     /// in the substitution map when rewriting static method calls.
     pub current_impl_type_param_count: usize,
     /// Base struct name of the impl block being instantiated (e.g., `TreeMap` for
-    /// `impl<K,V> TreeMap<K,V>`). Used to restrict impl type arg propagation to
-    /// calls on the same struct — calls to other structs within the same impl block
-    /// must not receive these type args.
-    pub current_impl_struct_name: String,
+    /// `impl<K,V> TreeMap<K,V>`), or `None` when the current function is not an
+    /// impl method. Used to restrict impl type arg propagation to calls on the
+    /// same struct — calls to other structs within the same impl block must not
+    /// receive these type args.
+    pub current_impl_struct_name: Option<String>,
     /// Maps each type-parameter *name* of the function currently being
     /// instantiated to its key in the substitution map (impl-level params use
     /// their own index; method-level params are offset past the impl params).
@@ -178,7 +179,7 @@ impl Monomorphizer {
                 trait_env,
             },
             current_impl_type_param_count: 0,
-            current_impl_struct_name: String::new(),
+            current_impl_struct_name: None,
             current_param_substitution_key: IndexMap::default(),
         }
     }

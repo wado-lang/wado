@@ -1263,8 +1263,7 @@ impl Monomorphizer {
         self.current_impl_struct_name = generic
             .method_info
             .as_ref()
-            .map(|info| info.base_struct_name.clone())
-            .unwrap_or_default();
+            .map(|info| info.base_struct_name.clone());
         let body = generic.body.as_ref().map(|b| {
             let mut new_body = b.clone();
             self.substitute_types_in_block(
@@ -1546,7 +1545,8 @@ impl Monomorphizer {
                             )
                         } else if self.current_impl_type_param_count > 0
                             && info.struct_name == info.base_struct_name
-                            && info.base_struct_name == self.current_impl_struct_name
+                            && self.current_impl_struct_name.as_deref()
+                                == Some(info.base_struct_name.as_str())
                         {
                             // The callee has no monomorph_info, but the outer function
                             // has impl-level type params AND the callee's struct matches
