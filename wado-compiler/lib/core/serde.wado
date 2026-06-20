@@ -140,7 +140,9 @@ impl DeserializeError {
 
 #[compiler_item("serialize_seq")]
 pub trait SerializeSeq {
+    #[compiler_item("serialize_seq_element")]
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+    #[compiler_item("serialize_seq_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
@@ -152,13 +154,17 @@ pub trait SerializeMap {
 
 #[compiler_item("serialize_struct")]
 pub trait SerializeStruct {
+    #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
+    #[compiler_item("serialize_struct_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 #[compiler_item("serialize_variant")]
 pub trait SerializeVariant {
+    #[compiler_item("serialize_variant_payload")]
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+    #[compiler_item("serialize_variant_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
@@ -202,19 +208,23 @@ pub trait Serializer {
         return seq.end();
     }
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
+    #[compiler_item("serializer_begin_seq")]
     fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
     fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self];
+    #[compiler_item("serializer_begin_struct")]
     fn begin_struct(
         &mut self,
         name: &String,
         fields: i32,
     ) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+    #[compiler_item("serializer_serialize_unit_variant")]
     fn serialize_unit_variant(
         &mut self,
         type_name: &String,
         variant_name: &String,
         disc: i32,
     ) -> Result<(), SerializeError>;
+    #[compiler_item("serializer_begin_variant")]
     fn begin_variant(
         &mut self,
         type_name: &String,
@@ -232,7 +242,9 @@ pub trait Serialize {
 
 #[compiler_item("deserialize_seq")]
 pub trait DeserializeSeq {
+    #[compiler_item("deserialize_seq_next_element")]
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>;
+    #[compiler_item("deserialize_seq_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
@@ -264,18 +276,26 @@ pub trait FieldSchema {
 
 #[compiler_item("deserialize_struct")]
 pub trait DeserializeStruct {
+    #[compiler_item("deserialize_struct_next_field")]
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>;
+    #[compiler_item("deserialize_struct_value")]
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
+    #[compiler_item("deserialize_struct_skip")]
     fn skip(&mut self) -> Result<(), DeserializeError>;
+    #[compiler_item("deserialize_struct_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
 #[compiler_item("deserialize_variant")]
 pub trait DeserializeVariant {
+    #[compiler_item("deserialize_variant_variant_name")]
     fn variant_name(&mut self) -> Result<String, DeserializeError>;
+    #[compiler_item("deserialize_variant_disc")]
     fn disc(&mut self) -> Result<i32, DeserializeError>;
+    #[compiler_item("deserialize_variant_payload")]
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
     fn is_unit(&mut self) -> Result<bool, DeserializeError>;
+    #[compiler_item("deserialize_variant_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
@@ -358,13 +378,16 @@ pub trait Deserializer {
         }
     }
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
+    #[compiler_item("deserializer_begin_seq")]
     fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self];
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self];
+    #[compiler_item("deserializer_begin_struct")]
     fn begin_struct(
         &mut self,
         name: &String,
         num_fields: i32,
     ) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+    #[compiler_item("deserializer_begin_variant")]
     fn begin_variant(
         &mut self,
         type_name: &String,

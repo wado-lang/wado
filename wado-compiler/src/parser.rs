@@ -5458,9 +5458,10 @@ impl Parser {
                 });
             } else {
                 // Trait methods are not pub (visibility comes from trait itself)
-                // Trait methods cannot be exported at the CM boundary
-                let _ = attrs; // attrs currently unused for trait methods
-                methods.push(self.parse_function(false, false, false, Vec::new())?);
+                // Trait methods cannot be exported at the CM boundary.
+                // Attributes (e.g. `#[compiler_item("...")]`) carry through so
+                // the elaborator can register per-method compiler items.
+                methods.push(self.parse_function(false, false, false, attrs)?);
             }
         }
 

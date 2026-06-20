@@ -319,6 +319,57 @@ pub enum CompilerItem {
     /// `u128 as f32` casts.
     U128AsF32,
 
+    // ── Serde protocol methods ────────────────────────────────────────
+    // Methods on the `core:serde` (de)serializer traits that `serde_synth`
+    // emits calls to. Registered per `(trait, method)` so a stdlib rename of
+    // any one method flows through the synthesiser without a hardcoded literal.
+    /// `Serializer::begin_seq`.
+    SerializerBeginSeq,
+    /// `Serializer::begin_struct`.
+    SerializerBeginStruct,
+    /// `Serializer::serialize_unit_variant`.
+    SerializerSerializeUnitVariant,
+    /// `Serializer::begin_variant`.
+    SerializerBeginVariant,
+    /// `SerializeSeq::element`.
+    SerializeSeqElement,
+    /// `SerializeSeq::end`.
+    SerializeSeqEnd,
+    /// `SerializeStruct::field`.
+    SerializeStructField,
+    /// `SerializeStruct::end`.
+    SerializeStructEnd,
+    /// `SerializeVariant::payload`.
+    SerializeVariantPayload,
+    /// `SerializeVariant::end`.
+    SerializeVariantEnd,
+    /// `Deserializer::begin_seq`.
+    DeserializerBeginSeq,
+    /// `Deserializer::begin_struct`.
+    DeserializerBeginStruct,
+    /// `Deserializer::begin_variant`.
+    DeserializerBeginVariant,
+    /// `DeserializeSeq::next_element`.
+    DeserializeSeqNextElement,
+    /// `DeserializeSeq::end`.
+    DeserializeSeqEnd,
+    /// `DeserializeStruct::next_field`.
+    DeserializeStructNextField,
+    /// `DeserializeStruct::value`.
+    DeserializeStructValue,
+    /// `DeserializeStruct::skip`.
+    DeserializeStructSkip,
+    /// `DeserializeStruct::end`.
+    DeserializeStructEnd,
+    /// `DeserializeVariant::variant_name`.
+    DeserializeVariantVariantName,
+    /// `DeserializeVariant::disc`.
+    DeserializeVariantDisc,
+    /// `DeserializeVariant::payload`.
+    DeserializeVariantPayload,
+    /// `DeserializeVariant::end`.
+    DeserializeVariantEnd,
+
     // ── Type families ─────────────────────────────────────────────────
     /// The tuple type family (`pub type [..T];`). The owning module is
     /// recorded so the compiler can synthesise tuple types under the
@@ -413,6 +464,29 @@ impl CompilerItem {
         Self::I128AsF32,
         Self::U128AsF64,
         Self::U128AsF32,
+        Self::SerializerBeginSeq,
+        Self::SerializerBeginStruct,
+        Self::SerializerSerializeUnitVariant,
+        Self::SerializerBeginVariant,
+        Self::SerializeSeqElement,
+        Self::SerializeSeqEnd,
+        Self::SerializeStructField,
+        Self::SerializeStructEnd,
+        Self::SerializeVariantPayload,
+        Self::SerializeVariantEnd,
+        Self::DeserializerBeginSeq,
+        Self::DeserializerBeginStruct,
+        Self::DeserializerBeginVariant,
+        Self::DeserializeSeqNextElement,
+        Self::DeserializeSeqEnd,
+        Self::DeserializeStructNextField,
+        Self::DeserializeStructValue,
+        Self::DeserializeStructSkip,
+        Self::DeserializeStructEnd,
+        Self::DeserializeVariantVariantName,
+        Self::DeserializeVariantDisc,
+        Self::DeserializeVariantPayload,
+        Self::DeserializeVariantEnd,
         Self::Tuple,
         Self::Array,
     ];
@@ -506,6 +580,29 @@ impl CompilerItem {
             Self::I128AsF32 => "i128_as_f32",
             Self::U128AsF64 => "u128_as_f64",
             Self::U128AsF32 => "u128_as_f32",
+            Self::SerializerBeginSeq => "serializer_begin_seq",
+            Self::SerializerBeginStruct => "serializer_begin_struct",
+            Self::SerializerSerializeUnitVariant => "serializer_serialize_unit_variant",
+            Self::SerializerBeginVariant => "serializer_begin_variant",
+            Self::SerializeSeqElement => "serialize_seq_element",
+            Self::SerializeSeqEnd => "serialize_seq_end",
+            Self::SerializeStructField => "serialize_struct_field",
+            Self::SerializeStructEnd => "serialize_struct_end",
+            Self::SerializeVariantPayload => "serialize_variant_payload",
+            Self::SerializeVariantEnd => "serialize_variant_end",
+            Self::DeserializerBeginSeq => "deserializer_begin_seq",
+            Self::DeserializerBeginStruct => "deserializer_begin_struct",
+            Self::DeserializerBeginVariant => "deserializer_begin_variant",
+            Self::DeserializeSeqNextElement => "deserialize_seq_next_element",
+            Self::DeserializeSeqEnd => "deserialize_seq_end",
+            Self::DeserializeStructNextField => "deserialize_struct_next_field",
+            Self::DeserializeStructValue => "deserialize_struct_value",
+            Self::DeserializeStructSkip => "deserialize_struct_skip",
+            Self::DeserializeStructEnd => "deserialize_struct_end",
+            Self::DeserializeVariantVariantName => "deserialize_variant_variant_name",
+            Self::DeserializeVariantDisc => "deserialize_variant_disc",
+            Self::DeserializeVariantPayload => "deserialize_variant_payload",
+            Self::DeserializeVariantEnd => "deserialize_variant_end",
             Self::Tuple => "tuple",
             Self::Array => "array",
         }
@@ -630,7 +727,30 @@ impl CompilerItem {
             | Self::SerializeErrorKindCustom
             | Self::DeserializeErrorKindMissingField
             | Self::DeserializeErrorKindUnknownVariant
-            | Self::DeserializeErrorKindInvalidValue => false,
+            | Self::DeserializeErrorKindInvalidValue
+            | Self::SerializerBeginSeq
+            | Self::SerializerBeginStruct
+            | Self::SerializerSerializeUnitVariant
+            | Self::SerializerBeginVariant
+            | Self::SerializeSeqElement
+            | Self::SerializeSeqEnd
+            | Self::SerializeStructField
+            | Self::SerializeStructEnd
+            | Self::SerializeVariantPayload
+            | Self::SerializeVariantEnd
+            | Self::DeserializerBeginSeq
+            | Self::DeserializerBeginStruct
+            | Self::DeserializerBeginVariant
+            | Self::DeserializeSeqNextElement
+            | Self::DeserializeSeqEnd
+            | Self::DeserializeStructNextField
+            | Self::DeserializeStructValue
+            | Self::DeserializeStructSkip
+            | Self::DeserializeStructEnd
+            | Self::DeserializeVariantVariantName
+            | Self::DeserializeVariantDisc
+            | Self::DeserializeVariantPayload
+            | Self::DeserializeVariantEnd => false,
         }
     }
 
@@ -698,7 +818,30 @@ impl CompilerItem {
             | Self::I128AsF64
             | Self::I128AsF32
             | Self::U128AsF64
-            | Self::U128AsF32 => CompilerItemKind::Method,
+            | Self::U128AsF32
+            | Self::SerializerBeginSeq
+            | Self::SerializerBeginStruct
+            | Self::SerializerSerializeUnitVariant
+            | Self::SerializerBeginVariant
+            | Self::SerializeSeqElement
+            | Self::SerializeSeqEnd
+            | Self::SerializeStructField
+            | Self::SerializeStructEnd
+            | Self::SerializeVariantPayload
+            | Self::SerializeVariantEnd
+            | Self::DeserializerBeginSeq
+            | Self::DeserializerBeginStruct
+            | Self::DeserializerBeginVariant
+            | Self::DeserializeSeqNextElement
+            | Self::DeserializeSeqEnd
+            | Self::DeserializeStructNextField
+            | Self::DeserializeStructValue
+            | Self::DeserializeStructSkip
+            | Self::DeserializeStructEnd
+            | Self::DeserializeVariantVariantName
+            | Self::DeserializeVariantDisc
+            | Self::DeserializeVariantPayload
+            | Self::DeserializeVariantEnd => CompilerItemKind::Method,
             Self::Tuple => CompilerItemKind::TupleFamily,
             Self::Array => CompilerItemKind::BuiltinType,
             Self::OptionSome | Self::OptionNone | Self::ResultOk | Self::ResultErr => {

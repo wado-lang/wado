@@ -90,6 +90,32 @@ pub(super) struct SerdeStdlibNames {
     pub d_struct_access_proj: String,
     pub d_seq_access_proj: String,
     pub d_variant_access_proj: String,
+    /// Method names on the (de)serializer traits, resolved per
+    /// `(trait, method)` compiler item so `serde_synth` emits the call
+    /// without a hardcoded literal.
+    pub m_serializer_begin_seq: String,
+    pub m_serializer_begin_struct: String,
+    pub m_serializer_serialize_unit_variant: String,
+    pub m_serializer_begin_variant: String,
+    pub m_serialize_seq_element: String,
+    pub m_serialize_seq_end: String,
+    pub m_serialize_struct_field: String,
+    pub m_serialize_struct_end: String,
+    pub m_serialize_variant_payload: String,
+    pub m_serialize_variant_end: String,
+    pub m_deserializer_begin_seq: String,
+    pub m_deserializer_begin_struct: String,
+    pub m_deserializer_begin_variant: String,
+    pub m_deserialize_seq_next_element: String,
+    pub m_deserialize_seq_end: String,
+    pub m_deserialize_struct_next_field: String,
+    pub m_deserialize_struct_value: String,
+    pub m_deserialize_struct_skip: String,
+    pub m_deserialize_struct_end: String,
+    pub m_deserialize_variant_variant_name: String,
+    pub m_deserialize_variant_disc: String,
+    pub m_deserialize_variant_payload: String,
+    pub m_deserialize_variant_end: String,
 }
 
 impl SerdeStdlibNames {
@@ -224,6 +250,73 @@ impl SerdeStdlibNames {
                     items.trait_name(CompilerItem::DeserializeVariant),
                 )
             ),
+            m_serializer_begin_seq: items
+                .method_name(CompilerItem::SerializerBeginSeq)
+                .to_string(),
+            m_serializer_begin_struct: items
+                .method_name(CompilerItem::SerializerBeginStruct)
+                .to_string(),
+            m_serializer_serialize_unit_variant: items
+                .method_name(CompilerItem::SerializerSerializeUnitVariant)
+                .to_string(),
+            m_serializer_begin_variant: items
+                .method_name(CompilerItem::SerializerBeginVariant)
+                .to_string(),
+            m_serialize_seq_element: items
+                .method_name(CompilerItem::SerializeSeqElement)
+                .to_string(),
+            m_serialize_seq_end: items.method_name(CompilerItem::SerializeSeqEnd).to_string(),
+            m_serialize_struct_field: items
+                .method_name(CompilerItem::SerializeStructField)
+                .to_string(),
+            m_serialize_struct_end: items
+                .method_name(CompilerItem::SerializeStructEnd)
+                .to_string(),
+            m_serialize_variant_payload: items
+                .method_name(CompilerItem::SerializeVariantPayload)
+                .to_string(),
+            m_serialize_variant_end: items
+                .method_name(CompilerItem::SerializeVariantEnd)
+                .to_string(),
+            m_deserializer_begin_seq: items
+                .method_name(CompilerItem::DeserializerBeginSeq)
+                .to_string(),
+            m_deserializer_begin_struct: items
+                .method_name(CompilerItem::DeserializerBeginStruct)
+                .to_string(),
+            m_deserializer_begin_variant: items
+                .method_name(CompilerItem::DeserializerBeginVariant)
+                .to_string(),
+            m_deserialize_seq_next_element: items
+                .method_name(CompilerItem::DeserializeSeqNextElement)
+                .to_string(),
+            m_deserialize_seq_end: items
+                .method_name(CompilerItem::DeserializeSeqEnd)
+                .to_string(),
+            m_deserialize_struct_next_field: items
+                .method_name(CompilerItem::DeserializeStructNextField)
+                .to_string(),
+            m_deserialize_struct_value: items
+                .method_name(CompilerItem::DeserializeStructValue)
+                .to_string(),
+            m_deserialize_struct_skip: items
+                .method_name(CompilerItem::DeserializeStructSkip)
+                .to_string(),
+            m_deserialize_struct_end: items
+                .method_name(CompilerItem::DeserializeStructEnd)
+                .to_string(),
+            m_deserialize_variant_variant_name: items
+                .method_name(CompilerItem::DeserializeVariantVariantName)
+                .to_string(),
+            m_deserialize_variant_disc: items
+                .method_name(CompilerItem::DeserializeVariantDisc)
+                .to_string(),
+            m_deserialize_variant_payload: items
+                .method_name(CompilerItem::DeserializeVariantPayload)
+                .to_string(),
+            m_deserialize_variant_end: items
+                .method_name(CompilerItem::DeserializeVariantEnd)
+                .to_string(),
         }
     }
 }
@@ -882,7 +975,7 @@ fn generate_struct_serialize(
         local_ref(1, "s", mut_ref_s),
         "S",
         &names.serializer,
-        "begin_struct",
+        &names.m_serializer_begin_struct,
         serde_module.clone(),
         vec![],
         vec![],
@@ -915,7 +1008,7 @@ fn generate_struct_serialize(
             local_ref(st_local, "st", mut_ref_ss),
             &names.s_struct_serializer_proj,
             &names.serialize_struct,
-            "field",
+            &names.m_serialize_struct_field,
             serde_module.clone(),
             vec![field_type_names[i].clone()],
             vec![*field_type],
@@ -937,7 +1030,7 @@ fn generate_struct_serialize(
         local_ref(st_local, "st", mut_ref_ss),
         &names.s_struct_serializer_proj,
         &names.serialize_struct,
-        "end",
+        &names.m_serialize_struct_end,
         serde_module,
         vec![],
         vec![],
@@ -1147,7 +1240,7 @@ fn generate_struct_deserialize(
         local_ref(0, "d", mut_ref_d),
         "D",
         &names.deserializer,
-        "begin_struct",
+        &names.m_deserializer_begin_struct,
         serde_module.clone(),
         vec![],
         vec![],
@@ -1212,7 +1305,7 @@ fn generate_struct_deserialize(
         local_ref(sd_local, "sd", mut_ref_sa),
         &names.d_struct_access_proj,
         &names.deserialize_struct,
-        "next_field",
+        &names.m_deserialize_struct_next_field,
         serde_module.clone(),
         vec![struct_type_name],
         vec![struct_type],
@@ -1234,7 +1327,7 @@ fn generate_struct_deserialize(
             local_ref(sd_local, "sd", mut_ref_sa),
             &names.d_struct_access_proj,
             &names.deserialize_struct,
-            "value",
+            &names.m_deserialize_struct_value,
             serde_module.clone(),
             vec![field_type_names[i].clone()],
             vec![*type_id],
@@ -1297,7 +1390,7 @@ fn generate_struct_deserialize(
         local_ref(sd_local, "sd", mut_ref_sa),
         &names.d_struct_access_proj,
         &names.deserialize_struct,
-        "skip",
+        &names.m_deserialize_struct_skip,
         serde_module.clone(),
         vec![],
         vec![],
@@ -1403,7 +1496,7 @@ fn generate_struct_deserialize(
         local_ref(sd_local, "sd", mut_ref_sa),
         &names.d_struct_access_proj,
         &names.deserialize_struct,
-        "end",
+        &names.m_deserialize_struct_end,
         serde_module,
         vec![],
         vec![],
@@ -1809,7 +1902,7 @@ fn generate_enum_serialize(
             local_ref(1, "s", mut_ref_s),
             "S",
             &names.serializer,
-            "serialize_unit_variant",
+            &names.m_serializer_serialize_unit_variant,
             serde_module.clone(),
             vec![],
             vec![],
@@ -1993,7 +2086,7 @@ fn generate_enum_deserialize(
         local_ref(0, "d", mut_ref_d),
         "D",
         &names.deserializer,
-        "begin_variant",
+        &names.m_deserializer_begin_variant,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2024,7 +2117,7 @@ fn generate_enum_deserialize(
         local_ref(va_local, "va", mut_ref_va),
         &names.d_variant_access_proj,
         &names.deserialize_variant,
-        "disc",
+        &names.m_deserialize_variant_disc,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2056,7 +2149,7 @@ fn generate_enum_deserialize(
             local_ref(va_local, "va", mut_ref_va),
             &names.d_variant_access_proj,
             &names.deserialize_variant,
-            "end",
+            &names.m_deserialize_variant_end,
             serde_module.clone(),
             vec![],
             vec![],
@@ -2122,7 +2215,7 @@ fn generate_enum_deserialize(
         local_ref(va_local, "va", mut_ref_va),
         &names.d_variant_access_proj,
         &names.deserialize_variant,
-        "variant_name",
+        &names.m_deserialize_variant_variant_name,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2176,7 +2269,7 @@ fn generate_enum_deserialize(
             local_ref(va_local, "va", mut_ref_va),
             &names.d_variant_access_proj,
             &names.deserialize_variant,
-            "end",
+            &names.m_deserialize_variant_end,
             serde_module.clone(),
             vec![],
             vec![],
@@ -2410,7 +2503,7 @@ fn generate_variant_serialize(
                 local_ref(1, "s", mut_ref_s),
                 "S",
                 &names.serializer,
-                "serialize_unit_variant",
+                &names.m_serializer_serialize_unit_variant,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -2456,7 +2549,7 @@ fn generate_variant_serialize(
                 local_ref(1, "s", mut_ref_s),
                 "S",
                 &names.serializer,
-                "begin_variant",
+                &names.m_serializer_begin_variant,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -2486,7 +2579,7 @@ fn generate_variant_serialize(
                 local_ref(vs_local, "__vs", mut_ref_vs),
                 &names.s_variant_serializer_proj,
                 &names.serialize_variant,
-                "payload",
+                &names.m_serialize_variant_payload,
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
                 vec![*payload_type],
@@ -2499,7 +2592,7 @@ fn generate_variant_serialize(
                 local_ref(vs_local, "__vs", mut_ref_vs),
                 &names.s_variant_serializer_proj,
                 &names.serialize_variant,
-                "end",
+                &names.m_serialize_variant_end,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -2715,7 +2808,7 @@ fn generate_variant_deserialize(
         local_ref(0, "d", mut_ref_d),
         "D",
         &names.deserializer,
-        "begin_variant",
+        &names.m_deserializer_begin_variant,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2744,7 +2837,7 @@ fn generate_variant_deserialize(
         local_ref(va_local, "va", mut_ref_va),
         &names.d_variant_access_proj,
         &names.deserialize_variant,
-        "disc",
+        &names.m_deserialize_variant_disc,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2778,7 +2871,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "end",
+                &names.m_deserialize_variant_end,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -2823,7 +2916,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "payload",
+                &names.m_deserialize_variant_payload,
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
                 vec![*payload_type],
@@ -2836,7 +2929,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "end",
+                &names.m_deserialize_variant_end,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -2933,7 +3026,7 @@ fn generate_variant_deserialize(
         local_ref(va_local, "va", mut_ref_va),
         &names.d_variant_access_proj,
         &names.deserialize_variant,
-        "variant_name",
+        &names.m_deserialize_variant_variant_name,
         serde_module.clone(),
         vec![],
         vec![],
@@ -2989,7 +3082,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "end",
+                &names.m_deserialize_variant_end,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -3034,7 +3127,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "payload",
+                &names.m_deserialize_variant_payload,
                 serde_module.clone(),
                 vec![payload_type_names[i].clone()],
                 vec![*payload_type],
@@ -3047,7 +3140,7 @@ fn generate_variant_deserialize(
                 local_ref(va_local, "va", mut_ref_va),
                 &names.d_variant_access_proj,
                 &names.deserialize_variant,
-                "end",
+                &names.m_deserialize_variant_end,
                 serde_module.clone(),
                 vec![],
                 vec![],
@@ -3386,7 +3479,7 @@ fn generate_flags_serialize(
         local_ref(1, "s", mut_ref_s),
         "S",
         &names.serializer,
-        "begin_seq",
+        &names.m_serializer_begin_seq,
         serde_module.clone(),
         vec![],
         vec![],
@@ -3409,7 +3502,7 @@ fn generate_flags_serialize(
             local_ref(seq_local, "seq", mut_ref_seq),
             &names.s_seq_serializer_proj,
             &names.serialize_seq,
-            "element",
+            &names.m_serialize_seq_element,
             serde_module.clone(),
             vec![string_struct_name.clone()],
             vec![string_type],
@@ -3433,7 +3526,7 @@ fn generate_flags_serialize(
         local_ref(seq_local, "seq", mut_ref_seq),
         &names.s_seq_serializer_proj,
         &names.serialize_seq,
-        "end",
+        &names.m_serialize_seq_end,
         serde_module,
         vec![],
         vec![],
@@ -3607,7 +3700,7 @@ fn generate_flags_deserialize(
         local_ref(0, "d", mut_ref_d),
         "D",
         &names.deserializer,
-        "begin_seq",
+        &names.m_deserializer_begin_seq,
         serde_module.clone(),
         vec![],
         vec![],
@@ -3645,7 +3738,7 @@ fn generate_flags_deserialize(
         local_ref(seq_local, "seq", mut_ref_seq),
         &names.d_seq_access_proj,
         &names.deserialize_seq,
-        "next_element",
+        &names.m_deserialize_seq_next_element,
         serde_module.clone(),
         vec![string_struct_name.clone()],
         vec![string_type],
@@ -3809,7 +3902,7 @@ fn generate_flags_deserialize(
         local_ref(seq_local, "seq", mut_ref_seq),
         &names.d_seq_access_proj,
         &names.deserialize_seq,
-        "end",
+        &names.m_deserialize_seq_end,
         serde_module,
         vec![],
         vec![],
