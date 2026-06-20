@@ -121,6 +121,14 @@ pub struct Engine<'a> {
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
+    /// Set once a caller applies a deliberate [`Engine::value_union`] — a
+    /// semantic merge from an external proof (e.g. a guard implying `x ≡ y`),
+    /// not structural congruence. Such a union intentionally coarsens the graph
+    /// beyond what a context-free fresh build derives, so the `WADO_VERIFY_VG`
+    /// refinement oracle (which validates *structural* maintenance) no longer
+    /// applies and is skipped. No production pass unions, so this stays false
+    /// outside the union unit tests.
+    manual_union_applied: bool,
 }
 
 impl<'a> Engine<'a> {
@@ -145,6 +153,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
             vg_type_table: None,
+            manual_union_applied: false,
         };
         // The value graph lives on `Body` and is built once, then maintained
         // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
@@ -314,6 +323,7 @@ impl<'a> Engine<'a> {
         b: crate::nir_value_graph::ValueId,
     ) -> crate::nir_value_graph::ValueId {
         self.ensure_value_graph();
+        self.manual_union_applied = true;
         self.body.values.union(a, b)
     }
 
@@ -383,6 +393,7 @@ impl<'a> Engine<'a> {
 
     fn ensure_value_graph(&mut self) {
         if self.body.value_graph.is_some() {
+            self.verify_maintained_graph();
             return;
         }
         crate::optimize::vg_measure::record_actual_build(&*self.body);
@@ -395,6 +406,66 @@ impl<'a> Engine<'a> {
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
+    }
+
+    /// Soundness net for per-edit maintenance (`WADO_VERIFY_VG`): rebuild a fresh
+    /// graph with the config the graph was built with and assert the maintained
+    /// partition *refines* it — the maintained graph may merge a pair only if a
+    /// fresh build also merges it. An over-merge is a value the optimizer could
+    /// miscompile through; fail loudly. Off (and free) unless `WADO_VERIFY_VG` is
+    /// set. The core instrument for the all-pass maintenance work.
+    fn verify_maintained_graph(&mut self) {
+        if !crate::optimize::vg_measure::verify_enabled()
+            || self.body.value_graph.is_none()
+            || self.manual_union_applied
+        {
+            return;
+        }
+        let cfg = self.body.value_graph.as_ref().unwrap().config.clone();
+        let fresh = crate::nir_value_graph::builder::build(
+            &mut *self.body,
+            &cfg.param_locals,
+            &cfg.aliased,
+            &cfg.untrackable,
+            &cfg.mut_escaped,
+            self.vg_type_table,
+        );
+        let maintained = self.body.value_graph.as_ref().unwrap();
+        // Live exprs only (a fresh build walks from the root); exclude
+        // splice-point const re-valuation results (seed-sourced, can be more
+        // precise than fresh — outside the refine relation).
+        let exprs: Vec<ExprId> = fresh
+            .value_of
+            .keys()
+            .copied()
+            .filter(|e| !maintained.analysis_only.contains(e))
+            .collect();
+        if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
+            &mut self.body.values,
+            maintained,
+            &fresh,
+            &exprs,
+        ) {
+            let detail = crate::nir_value_graph::builder::first_overmerge_pair(
+                &mut self.body.values,
+                maintained,
+                &fresh,
+                &exprs,
+            )
+            .map(|(a, b)| {
+                format!(
+                    "\n  {a:?} = {:?}\n  {b:?} = {:?}\n  maintained: {a:?}->{:?} {b:?}->{:?}\n  fresh: {a:?}->{:?} {b:?}->{:?}",
+                    self.body.exprs[a].kind,
+                    self.body.exprs[b].kind,
+                    maintained.value_of.get(&a),
+                    maintained.value_of.get(&b),
+                    fresh.value_of.get(&a),
+                    fresh.value_of.get(&b),
+                )
+            })
+            .unwrap_or_default();
+            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}{detail}");
+        }
     }
 
     /// Read-only view of the owning function's local list. Some rules

@@ -23,6 +23,16 @@ pub fn enabled() -> bool {
     *ON.get_or_init(|| std::env::var_os("WADO_MEASURE_VG").is_some())
 }
 
+/// Gate for the value-graph soundness harness (`WADO_VERIFY_VG`). When on, every
+/// graph query rebuilds a fresh graph and asserts the maintained partition
+/// refines it (`builder::partition_refines`) — proving per-edit maintenance
+/// never over-merges. Off by default (zero cost); slow when on (a fresh build
+/// per query), for small inputs. Reinstated for the all-pass maintenance work.
+pub fn verify_enabled() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("WADO_VERIFY_VG").is_some())
+}
+
 #[derive(Default)]
 struct Acc {
     /// Per-function root-statement (hash, node_count) at its last build.

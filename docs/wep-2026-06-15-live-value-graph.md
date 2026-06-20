@@ -1308,6 +1308,59 @@ Recommended sequencing (reuse the tested builder first to limit risk):
 5. Recover the +12% / 37 `wir_expect` by promoting `FieldAccess` in-loop (its
    `heap_ver` values subsume store-load-forward) and measure criterion 2.
 
+### The 21 `-O2` regressions are node-creation, not coarsening (this session)
+
+The remaining 21 `fixture_test_o2` regressions under build-once (`compound_assign_basic`,
+`store_to_load_forwarding`, the `array_bounds_elim_*` / `optimize_bce_*` /
+`opt_licm_immut_ref_*` clusters) share **one** root cause, and it is **not** the
+inline-coarsening half of "maintain through structural passes."
+
+Diagnosis: a structural pass (`sroa` / `container_sroa` / `field_scalarize`)
+creates **new scalar locals** after the graph is frozen — e.g. `p2.a = 42`
+becomes `__sroa_p2_a = 42; … read __sroa_p2_a`. Under build-once there is no
+rebuild, so the new read's value must come from maintenance. But
+`Engine::maintain_pure_value` re-derives only `Binary` / `Unary` / `Cast`; a
+`Local` read needs its **reaching def**, which is flow state the frozen graph
+discards. So the read carries no `ValueId`, `engine.value()` returns `None`, and
+`store_load_forward` / BCE / `condition_implication` cannot fold it — the assert,
+the bounds check, the `{x}` format stay live. `compound_assign_basic` is the same
+shape one inline deep: `{x}` lowers to `Box<i32>{value: x}.Display::fmt(…)`, which
+`inline` splices and `sroa` then scalarizes into a fresh local.
+
+What this rules out: the inline-coarsening lever does **not** move these, and no
+cheap retain is sound. Measured on the full `-O2` corpus under `WADO_VERIFY_VG`:
+
+- `value_of.clear()` (clear-all) — sound, 21 failures.
+- keep-every-caller-entry (keep-all) — **over-merges** (`serde_json_*`,
+  `variant_qualified_pattern`, `opt_container_sroa_nondup_idx`,
+  `parser_synth_id_collision_test`): it retains opaque call-result classes that
+  inlining turns into distinct allocations a fresh build splits.
+- keep-only-constant-valued entries (constant-retain) — **also over-merges** (31
+  cases: `closure_*`, `opt_container_sroa_*`, `mut_param`, …). The hole: a
+  `Local` read pointing at a constant is sound only while that constant is its
+  reaching def. Inlining can restructure control flow (introduce a loop
+  back-edge), so a fresh build makes the read loop-variant; two distinct locals
+  sharing a constant init (`index = 0`, `init = 0`) then both keep the
+  hash-consed constant and over-merge. Only a literal *expr node* is truly
+  inline-invariant, and keeping just those recovers nothing. All three retains
+  yield the same 21 (constant store→load forwarding across inline is exactly the
+  unsound `Local`-read case), so coarsening cannot recover them. clear-all stays
+  the sound coarsening.
+
+Remaining piece (the node-creation half): when a structural pass creates a local
+def with a known value and reads of it, maintenance must propagate the def's
+value to those reads — either by re-deriving the affected local's reaching defs
+pointwise, or by having the creating pass seed `value_of` for the new reads. This
+is the precise obligation Route B discharges by construction (flow frozen into
+`Operand::Value` at the def, a read of a promoted local is the value itself), so
+the durable fix is Route B, not a `Local`-read case in `maintain_pure_value` or a
+retain at the inline splice.
+
+The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
+config-aware fresh rebuild per query, off by default) is reinstated as the guard
+for this maintenance work — it is what proved both keep-all and constant-retain
+unsound, redirecting the effort to Route B.
+
 ## See also
 
 - [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; equality saturation stays deferred there.

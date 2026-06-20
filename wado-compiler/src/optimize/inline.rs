@@ -718,7 +718,17 @@ pub fn inline_functions(
                 //    every entry inline's restructuring could have staled
                 //    (conservative — a query then returns no identity, never a
                 //    wrong one; the value pool persists so promoted operands still
-                //    resolve).
+                //    resolve). Keeping any caller entry is unsound here, even a
+                //    constant-valued one: a `Local` read pointing at a constant is
+                //    sound only while that constant is its reaching def, and
+                //    inlining can restructure control flow (introduce a loop
+                //    back-edge) so a fresh build makes the read loop-variant — two
+                //    distinct locals sharing a constant init then over-merge
+                //    (`WADO_VERIFY_VG` flags `index`/`init` on the closure / sroa
+                //    fixtures). Only a literal *expr node* is truly inline-invariant,
+                //    and keeping just those recovers nothing. Sound, precise
+                //    forwarding across inline is Route B's job (flow frozen into
+                //    operand slots), not a retain here.
                 // 2. Regrow: re-value each inlined block self-contained, seeded
                 //    with its params bound to the call-site arg values and a fresh
                 //    heap, keeping only the resulting *constants* — those are the
@@ -730,6 +740,7 @@ pub fn inline_functions(
                 //    parks no cache.
                 if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
                     vg.value_of.clear();
+                    vg.analysis_only.clear();
                     vg.loop_entry_values.clear();
                 }
                 if !reval.is_empty()
@@ -758,6 +769,7 @@ pub fn inline_functions(
                         let vg = body.value_graph.as_mut().unwrap();
                         for (e, v) in vo {
                             vg.value_of.insert(e, v);
+                            vg.analysis_only.insert(e);
                         }
                     }
                 }

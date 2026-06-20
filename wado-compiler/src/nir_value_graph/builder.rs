@@ -190,12 +190,34 @@ struct FlowArm {
 #[derive(Debug, Clone)]
 pub struct ValueGraphBuild {
     pub value_of: IndexMap<ExprId, ValueId>,
+    /// Exprs whose `value_of` came from a scoped splice-point re-valuation
+    /// ([`build_scoped`], Method A const-splice), seeded with the call site's
+    /// argument values. Such a constant equals what the program computes but can
+    /// be *more precise* than a fresh whole-function build, so the
+    /// `WADO_VERIFY_VG` refine oracle excludes these exprs (validated by the e2e
+    /// runtime suite instead).
+    pub analysis_only: crate::hashmap::IndexSet<ExprId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
     /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
     /// leaf's use-site value to equal this entry value — cross-iteration
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// The build config (param seeding + alias sets) this graph was produced
+    /// with, so the `WADO_VERIFY_VG` oracle rebuilds with *this* config (not the
+    /// consuming session's) — a config-view difference is not mistaken for an
+    /// over-merge while a genuine maintenance staleness still fails.
+    pub config: BuildConfig,
+}
+
+/// The parameters [`build`] was called with, retained so a verify-time rebuild
+/// reproduces the same value partition. Only for the verify oracle.
+#[derive(Clone, Default, Debug)]
+pub struct BuildConfig {
+    pub param_locals: Vec<u32>,
+    pub aliased: crate::hashmap::IndexSet<u32>,
+    pub untrackable: crate::hashmap::IndexSet<u32>,
+    pub mut_escaped: crate::hashmap::IndexSet<u32>,
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -245,7 +267,14 @@ pub fn build(
     body.values = pool;
     ValueGraphBuild {
         value_of,
+        analysis_only: crate::hashmap::IndexSet::default(),
         loop_entry_values,
+        config: BuildConfig {
+            param_locals: param_locals.to_vec(),
+            aliased: aliased.clone(),
+            untrackable: untrackable.clone(),
+            mut_escaped: mut_escaped.clone(),
+        },
     }
 }
 
@@ -336,6 +365,64 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Unit => pool.unit(),
         _ => unreachable!("is_const_kind gates this"),
     }
+}
+
+/// Soundness check for conservative per-edit maintenance: the maintained
+/// partition must **refine** the fresh one — every pair the maintained graph
+/// merges, a fresh build also merges. The reverse (a fresh build merges a pair
+/// the maintained graph splits) is allowed: conservative coarsening, a missed
+/// optimization, never a miscompile. `Err` names the first expression pair the
+/// maintained graph merges but a fresh build splits (the only unsound direction).
+pub(crate) fn partition_refines(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Result<(), String> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Err(format!(
+                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
+                ));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    Ok(())
+}
+
+/// Debug aid: the first `(prev_e, e)` pair the maintained graph merges but a
+/// fresh build splits, for instrumenting a verify failure.
+pub(crate) fn first_overmerge_pair(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Option<(ExprId, ExprId)> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Some((prev_e, e));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    None
 }
 
 struct Builder<'a> {
