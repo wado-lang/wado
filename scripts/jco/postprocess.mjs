@@ -13,7 +13,14 @@
 //   2. Insert the stream-write hook (patch: stream write hook). Lets a WASI shim
 //      receive bulk stream data via `globalThis._jcoStreamWriteHook`, bypassing
 //      jco's byte-at-a-time rendezvous. Required for the example/jco-shim cli.js
-//      stdout path.
+//      stdout path. The hook must go inside `streamWrite`, NOT at the first
+//      `streamEnd.copy` in the file — `streamRead` is emitted first and has its
+//      own `streamEnd.copy`, so anchoring on the first one would hook the read
+//      path (a no-op, guarded by `isWritable()`) and leave stdout unhooked.
+//
+// Each transform throws if it is needed (its precondition is present) but its
+// anchor is missing — a silent no-op would yield a clean-looking component that
+// produces no output or crashes at runtime with no pointer back to here.
 //
 // Not handled: the async-non-void-export return fix (patch #3 in the fork). It
 // rewrites emitted code jco shapes differently per export, so it is left to the
@@ -22,6 +29,7 @@
 // jco yet anyway (a separate WIT-representation error).
 
 const INTERNAL_FUTURE = /class InternalFuture\s*\{/;
+const STREAM_WRITE_FN = /async function streamWrite\s*\(/;
 const STREAM_COPY = "const result = await streamEnd.copy({";
 
 const STREAM_HOOK = `if (typeof globalThis._jcoStreamWriteHook === 'function' && streamEnd.isWritable()) {
@@ -39,17 +47,31 @@ const STREAM_HOOK = `if (typeof globalThis._jcoStreamWriteHook === 'function' &&
 export function postprocess(js, classes) {
   const applied = [];
 
+  // (1) Inject the future-end classes when `InternalFuture` constructs them but
+  // released jco did not emit their definitions.
   if (INTERNAL_FUTURE.test(js)) {
-    if (!/class FutureReadableEnd\b/.test(js)) {
-      js = js.replace(INTERNAL_FUTURE, (m) => `${classes}\n\n    ${m}`);
-      applied.push("inject-future-end-classes");
-    } else {
+    if (/class FutureReadableEnd\b/.test(js)) {
       applied.push("future-end-classes-already-present");
+    } else {
+      const injected = js.replace(INTERNAL_FUTURE, (m) => `${classes}\n\n    ${m}`);
+      if (injected === js) {
+        throw new Error("postprocess: InternalFuture is present but the class-injection anchor did not match");
+      }
+      js = injected;
+      applied.push("inject-future-end-classes");
     }
   }
 
-  if (js.includes(STREAM_COPY)) {
-    js = js.replace(STREAM_COPY, STREAM_HOOK + STREAM_COPY);
+  // (2) Insert the stream-write hook inside `streamWrite` — at the first
+  // `streamEnd.copy` AFTER the streamWrite header, never the file's first copy
+  // (which belongs to streamRead).
+  const swMatch = STREAM_WRITE_FN.exec(js);
+  if (swMatch) {
+    const copyIdx = js.indexOf(STREAM_COPY, swMatch.index);
+    if (copyIdx === -1) {
+      throw new Error("postprocess: streamWrite is present but its streamEnd.copy anchor was not found");
+    }
+    js = js.slice(0, copyIdx) + STREAM_HOOK + js.slice(copyIdx);
     applied.push("stream-write-hook");
   }
 

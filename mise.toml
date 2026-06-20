@@ -639,10 +639,15 @@ cargo run -q -p wado-cli -- compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wa
 node scripts/jco/transpile-released.mjs "$WORK/$NAME.wasm" "$WORK/jco" >/dev/null
 echo "# $NAME on Node (jco, self-timed, best of $RUNS):"
 for i in $(seq 1 "$RUNS"); do
-  node -e "
+  # `timeout` guards against the known jco read-stream deadlock: filesystem-backed
+  # benchmarks (Preopens) hang forever, so cap each run instead of wedging.
+  if ! timeout 120 node -e "
     process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
     import('$WORK/jco/$NAME.js').then(m => m.run.run()).then(() => process.exit(0))
       .catch(e => { console.error(e.message || e); process.exit(1); });
-  "
+  "; then
+    echo "error: '$NAME' did not finish on Node (timed out or errored). Filesystem-backed benchmarks are not yet supported via jco." >&2
+    exit 1
+  fi
 done
 """
