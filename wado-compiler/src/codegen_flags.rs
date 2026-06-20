@@ -59,6 +59,19 @@ pub struct CodegenFlags {
     /// [`CodegenFlags::for_opt_level`]); `-f no-bare-asserts` restores the
     /// diagnostic, `-f bare-asserts` forces it at any level.
     pub bare_asserts: bool,
+
+    /// Emit the native Wasm wide-arithmetic instructions (`i64.mul_wide_u/s`,
+    /// `i64.add128`, `i64.sub128`) — the default. Pass `-f no-wide-arithmetic`
+    /// to lower them to plain 64-bit integer sequences instead.
+    ///
+    /// wasmtime implements the wide-arithmetic proposal, so the native
+    /// instructions are best there. V8 (Node, browsers) does not implement it
+    /// at all, so a component containing those opcodes fails to compile under
+    /// jco-transpiled execution. `-f no-wide-arithmetic` open-codes each op with
+    /// 32-bit-limb arithmetic in `codegen/emit.rs`, producing portable output at
+    /// some runtime cost. The lowering is in codegen, so the WIR still shows the
+    /// wide ops; only the final Wasm changes.
+    pub wide_arithmetic: bool,
 }
 
 impl Default for CodegenFlags {
@@ -67,6 +80,7 @@ impl Default for CodegenFlags {
             array_copy: true,
             branch_hinting: true,
             bare_asserts: false,
+            wide_arithmetic: true,
         }
     }
 }
@@ -110,6 +124,7 @@ impl CodegenFlags {
                 "array-copy" => result.array_copy = enabled,
                 "branch-hinting" => result.branch_hinting = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
+                "wide-arithmetic" => result.wide_arithmetic = enabled,
                 _ => return Err(flag.to_string()),
             }
         }

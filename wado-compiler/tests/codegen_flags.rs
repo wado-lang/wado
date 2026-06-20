@@ -1,11 +1,10 @@
 //! Tests for the `-f <flag>` codegen feature flags plumbed through
 //! [`CompilerOptions::codegen_flags`].
 //!
-//! The only flag so far is `array-copy`, which switches the
-//! `builtin::array_copy` lowering between the native Wasm `array.copy`
-//! instruction (the default) and an open-coded loop (`-f no-array-copy`). We
-//! assert on the disassembled WAT so the test pins the actual codegen
-//! difference rather than an internal detail.
+//! Covers `array-copy`, `branch-hinting`, `bare-asserts`, and
+//! `wide-arithmetic`. Each test asserts on the disassembled WAT (or the run
+//! output) so it pins the actual codegen difference rather than an internal
+//! detail.
 
 mod common;
 
@@ -219,6 +218,87 @@ fn no_bare_asserts_restores_the_diagnostic_at_os() {
     assert!(
         ships_assert_diagnostic(&wasm),
         "`-f no-bare-asserts` must restore the diagnostic even at -Os"
+    );
+}
+
+/// Exercises every 128-bit wide-arithmetic op the codegen can emit:
+/// `i64.mul_wide_u` / `mul_wide_s` (via the builtins, which `core:prelude`
+/// uses for float formatting and `i128`) and `i64.add128` / `sub128`. The
+/// inputs hit carry/borrow and sign edges so the `-f no-wide-arithmetic`
+/// software lowering is checked against the native instructions, not just
+/// happy-path values. The trailing float keeps a realistic `fpfmt` user of
+/// `mul_wide_u` in the program too.
+const WIDE_ARITH_SOURCE: &str = r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [lo1, hi1] = builtin::i64_mul_wide_u(0xFFFFFFFFFFFFFFFF as i64, 3 as i64);
+    println(`{lo1} {hi1}`);
+    let [lo2, hi2] = builtin::i64_mul_wide_s(0 - 5, 7);
+    println(`{lo2} {hi2}`);
+    let [lo3, hi3] = builtin::i64_add128(0xFFFFFFFFFFFFFFFF as i64, 0, 2, 0);
+    println(`{lo3} {hi3}`);
+    let [lo4, hi4] = builtin::i64_sub128(1, 5, 2, 2);
+    println(`{lo4} {hi4}`);
+    println(`{3.141592653589793}`);
+}
+"#;
+
+fn compile_wide_arith(codegen_flags: Vec<String>) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        codegen_flags,
+        ..Default::default()
+    };
+    common::compile_source_with_compiler_options(
+        Path::new("wide_arith_test.wado"),
+        WIDE_ARITH_SOURCE,
+        options,
+    )
+    .expect("compilation should succeed")
+    .wasm
+}
+
+const WIDE_OPS: [&str; 4] = [
+    "i64.mul_wide_u",
+    "i64.mul_wide_s",
+    "i64.add128",
+    "i64.sub128",
+];
+
+#[test]
+fn default_emits_wide_arithmetic() {
+    let wat = wasmprinter::print_bytes(&compile_wide_arith(Vec::new())).expect("disassemble");
+    for op in WIDE_OPS {
+        assert!(wat.contains(op), "default codegen must emit `{op}`");
+    }
+}
+
+#[test]
+fn no_wide_arithmetic_flag_lowers_to_plain_i64() {
+    let wat = wasmprinter::print_bytes(&compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
+        .expect("disassemble");
+    for op in WIDE_OPS {
+        assert!(
+            !wat.contains(op),
+            "`-f no-wide-arithmetic` must not emit `{op}` (V8 has no wide-arithmetic support)"
+        );
+    }
+}
+
+#[test]
+fn no_wide_arithmetic_preserves_results() {
+    let native = common::run_wasm(compile_wide_arith(Vec::new())).expect("run native");
+    let soft = common::run_wasm(compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
+        .expect("run software-lowered");
+    assert!(
+        !native.trapped && !soft.trapped,
+        "neither build should trap"
+    );
+    assert!(!native.stdout.is_empty(), "expected output");
+    assert_eq!(
+        soft.stdout, native.stdout,
+        "software wide-arithmetic must match the native instructions"
     );
 }
 
