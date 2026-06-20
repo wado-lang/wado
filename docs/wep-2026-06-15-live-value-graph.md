@@ -1455,34 +1455,50 @@ becomes the constant `15`/`12`/`24`/`6`/`2`; `store_to_load`'s asserts fold). Th
 is the first lever that both stays sound and carries the value across the
 structural passes — the operand-promotion keystone, applied to constants.
 
-Two pieces of follow-up remain to _land_ a fixture recovery, both now scoped:
+End-to-end **recovery was demonstrated** this round: with the three pieces below
+applied, `compound_assign_basic` and `inline_cold_path_cost` both pass (the first
+actual `-O2` recoveries of the session). Three pieces were needed, and the third
+exposes the real soundness boundary:
 
 - Pass migration. A promoted `Operand::Value` where a pass assumed a skeleton
   `Expr` panics on `as_expr().expect("skeleton operand")` (139 such sites total).
-  Constant-leaf promotion reaches ~14 of them; each is the same uniform guard (a
-  promoted constant is the benign case — no projection root, no ref target,
-  trivially speculatable / uniquely-owned). Landed this round: `arena_query` (×2),
-  `niri`, `alias`, `builder`, `ref_elim`, `value_copy_demote` (×2),
-  `value_copy_elide` (×2), `remarks`, `elide_box_local` — hardening that is correct
-  and behavior-neutral on its own, and a prerequisite for any promotion widening.
-  A few more (`string_push`, a second `elide_box_local`) surface per fixture round;
-  the set converges.
-- A residual fold. `inline` binds the spliced callee's param as
-  `let self = Operand::Value(15)`; the read `self` does not fold because
-  `niri::value_to_lattice` needs `type_of(v)` and the value that reaches the
-  binding through the `Display::fmt` inline + box `sroa` chain loses its recorded
-  type. Stamping the type through that chain (or a `CopySource::Const` in
-  `copy_prop`) closes it.
+  Constant-leaf promotion reaches ~14; each is the same uniform guard (a promoted
+  constant is the benign case — no projection root, no ref target, trivially
+  speculatable / uniquely-owned). The 12 already committed as groundwork plus
+  `ref_elim`, `string_push`, a second `elide_box_local`, and `builder`'s effect
+  walk cover the reachable set; it converges per fixture round.
+- The residual fold. `inline` binds the spliced callee param as
+  `let self = Operand::Value(15)`, but the read `self` did not fold: `const_fold`'s
+  `flow_fold_value_a` calls `try_fold_a`, which only folds `Binary`/`Unary`/`Cast`
+  and **never consults the local env for a bare `Local` read** — even though its
+  own doc promises "env-bound locals". Routing a `Local` read through
+  `expr_to_lattice_a` (which does read the env) folds `let x = <const>; … x …`
+  that store→load forwarding missed (a post-`inline` binding the build-once graph
+  never valued). This is a real, localized completeness gap.
+- The soundness boundary (why this is not committed). A constant read is only safe
+  to freeze in a place that is **not** a lvalue (the `&mut x` / `.field` / receiver
+  positions — guarded by `is_place_read`) **and** whose storage a fresh build will
+  still agree is that constant. The early freeze is **mid-pipeline**: a later
+  `inline` / `sroa` can re-contextualize a promoted read's neighbours, so a fresh
+  rebuild splits a pair the maintained graph still merges — `ref_1`'s
+  `let mut c = true; &mut c; … c …` over-merges (`WADO_VERIFY_VG` flags it). The
+  hazard is exactly the reference-aliased / mutable locals; but `compound_assign`'s
+  recovery itself depends on promoting a mutable, aliased `x` read, so excluding
+  the unsound case (`!aliased` / `!mut`) also removes the recovery. There is no
+  sound subset of _mid-pipeline_ freeze promotion that recovers these.
 
-Width preservation — the WEP's named early-promotion blocker — is **fixed**:
-`extract_value` now takes a constant's width from the literal's own carried
-`TypeId` (the hash-cons key) rather than the shared `type_of(v)`, so a constant is
-width-correct no matter how many differently-typed uses share its `ValueId`
-(behavior-neutral today; load-bearing for early promotion). So the path is no
-longer "Route B, blocked on a width bug" but "width fixed; born-frozen constant
-promotion demonstrated sound; landing = the bounded pass-migration + the residual
-type-fold above." The migration guards and the width fix are committed as
-neutral groundwork; the promotion switch itself is the next focused step.
+Conclusion: born-frozen constant promotion **recovers** the constant-forwarding
+regressions and is the right mechanism, but soundness requires promoting at
+**lower** — before any pass runs, so no read is ever re-contextualized — which is
+Route B step 1 proper (`lower::translate::convert_operand` births the operand;
+the value passes then only union). The width-preservation blocker is **fixed**
+(`extract_value` takes a constant's width from the literal's own carried `TypeId`,
+not the shared `type_of(v)`). So the path is now "width fixed; recovery
+demonstrated; the residual `flow_fold` gap identified; the remaining work is
+promote-at-lower (so promotion precedes re-contextualization) plus the bounded
+pass-migration." The migration guards and the width fix are committed as neutral
+groundwork; the leaf-promotion switch and residual fold are reverted (unsound
+mid-pipeline) pending the promote-at-lower move.
 
 ## See also
 
