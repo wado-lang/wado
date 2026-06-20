@@ -4051,10 +4051,23 @@ pub struct TirImpl {
     pub span: Span,
 }
 
+/// Which compiler-synthesizable trait an `impl Trait for Type;` request names.
+///
+/// The set is closed: the elaborator classifies the requested trait at the
+/// syntax boundary and rejects anything else with a diagnostic, so downstream
+/// synthesis never needs to re-parse a trait-name string. `From` carries its
+/// source type as a resolved [`TypeId`] rather than a mangled `From<…>` name.
+#[derive(Debug, Clone)]
+pub enum SynthTrait {
+    From { source: TypeId },
+    Serialize,
+    Deserialize,
+}
+
 /// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
 #[derive(Debug, Clone)]
 pub struct SynthesisRequest {
-    pub trait_name: String,
+    pub trait_ref: SynthTrait,
     pub target_type_name: String,
     pub target_type_id: TypeId,
     /// Type parameters: `(name, index, type_id)`

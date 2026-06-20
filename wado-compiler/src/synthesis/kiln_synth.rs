@@ -12,9 +12,8 @@
 //!
 //! See WEP 2026-04-12 (Kiln) §"Options schema".
 
-use crate::compiler_item::CompilerItem;
 use crate::package::Package;
-use crate::tir::SynthesisRequest;
+use crate::tir::{SynthTrait, SynthesisRequest};
 
 /// Target world that identifies a Kiln generator package.
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
@@ -41,16 +40,9 @@ pub fn prepare_kiln(project: &mut Package) {
         return;
     };
 
-    let deserialize_trait_name = entry_module
-        .type_table
-        .borrow()
-        .compiler_items()
-        .trait_name(CompilerItem::Deserialize)
-        .to_string();
-    let already_requested = entry_module
-        .synthesis_requests
-        .iter()
-        .any(|req| req.trait_name == deserialize_trait_name && req.target_type_name == "Options");
+    let already_requested = entry_module.synthesis_requests.iter().any(|req| {
+        matches!(req.trait_ref, SynthTrait::Deserialize) && req.target_type_name == "Options"
+    });
     if already_requested {
         return;
     }
@@ -62,7 +54,7 @@ pub fn prepare_kiln(project: &mut Package) {
         .unwrap_or(crate::tir::TypeTable::UNIT);
 
     entry_module.synthesis_requests.push(SynthesisRequest {
-        trait_name: deserialize_trait_name,
+        trait_ref: SynthTrait::Deserialize,
         target_type_name: "Options".to_string(),
         target_type_id,
         type_params: Vec::new(),

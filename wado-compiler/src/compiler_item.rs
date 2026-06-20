@@ -1095,6 +1095,17 @@ impl CompilerItems {
         self.require_trait(item).1
     }
 
+    /// Non-panicking [`Self::trait_name`]: `None` when the item is not
+    /// registered. Used to classify a trait reference against optional
+    /// anchors (e.g. serde traits, absent unless the program imports serde)
+    /// without forcing every caller to import them.
+    pub fn trait_name_opt(&self, item: CompilerItem) -> Option<&str> {
+        match self.get(item)? {
+            Resolved::Trait { name, .. } => Some(name.as_str()),
+            _ => None,
+        }
+    }
+
     /// Resolved method name of a **single-method** trait — `"fmt"` for
     /// `Display`, `"inspect"` for `Inspect`, and so on across the
     /// format-family traits. Panics for multi-method traits where

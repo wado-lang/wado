@@ -282,6 +282,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `impl Trait for Type;` requested synthesis of a trait the compiler
+    /// cannot generate. Only `From`, `Serialize`, and `Deserialize` are
+    /// synthesizable through the bodyless-impl form.
+    UnsupportedSynthesisTrait {
+        trait_name: String,
+        type_name: String,
+        span: Span,
+    },
+
     /// Trait impl cannot re-specify a parameter default (defaults belong to
     /// the trait declaration).
     DefaultInTraitImpl {
@@ -638,6 +647,17 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("pattern mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::UnsupportedSynthesisTrait {
+                trait_name,
+                type_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "cannot synthesize trait `{trait_name}` for `{type_name}`: only `From`, `Serialize`, and `Deserialize` support `impl Trait for Type;`"
+                ),
                 *span,
             ),
             TypeError::DefaultInTraitImpl {

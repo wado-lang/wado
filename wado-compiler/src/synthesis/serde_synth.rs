@@ -13,9 +13,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, SynthTrait, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStructField, TirTemplatePart, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -314,50 +314,52 @@ pub fn synthesize_serde(project: &mut Package) {
         let mut generated = Vec::new();
 
         for req in &requests {
-            let trait_name = req.trait_name.as_str();
-            if trait_name == names.serialize {
-                let key = MethodName::format_local(
-                    &req.target_type_name,
-                    Some(&names.serialize),
-                    "serialize",
-                );
-                if existing.contains(&key) {
-                    continue;
-                }
-                let func = generate_struct_serialize(module, req, &names)
-                    .or_else(|| generate_enum_serialize(module, req, &names))
-                    .or_else(|| generate_variant_serialize(module, req, &names))
-                    .or_else(|| generate_flags_serialize(module, req, &names));
-                if let Some(f) = func {
-                    generated.push(Rc::new(RefCell::new(f)));
-                }
-            } else if trait_name == names.deserialize {
-                let key = MethodName::format_local(
-                    &req.target_type_name,
-                    Some(&names.deserialize),
-                    "deserialize",
-                );
-                if existing.contains(&key) {
-                    continue;
-                }
-                if let Some((lookup_func, deser_func)) =
-                    generate_struct_deserialize(module, req, &names)
-                {
-                    generated.push(Rc::new(RefCell::new(lookup_func)));
-                    generated.push(Rc::new(RefCell::new(deser_func)));
-                } else {
-                    let func = generate_enum_deserialize(module, req, &names)
-                        .or_else(|| generate_variant_deserialize(module, req, &names))
-                        .or_else(|| generate_flags_deserialize(module, req, &names));
+            match req.trait_ref {
+                SynthTrait::Serialize => {
+                    let key = MethodName::format_local(
+                        &req.target_type_name,
+                        Some(&names.serialize),
+                        "serialize",
+                    );
+                    if existing.contains(&key) {
+                        continue;
+                    }
+                    let func = generate_struct_serialize(module, req, &names)
+                        .or_else(|| generate_enum_serialize(module, req, &names))
+                        .or_else(|| generate_variant_serialize(module, req, &names))
+                        .or_else(|| generate_flags_serialize(module, req, &names));
                     if let Some(f) = func {
                         generated.push(Rc::new(RefCell::new(f)));
                     }
                 }
-            } else {
-                panic!(
-                    "unsupported synthesis trait `{trait_name}` for `{}`",
-                    req.target_type_name
-                );
+                SynthTrait::Deserialize => {
+                    let key = MethodName::format_local(
+                        &req.target_type_name,
+                        Some(&names.deserialize),
+                        "deserialize",
+                    );
+                    if existing.contains(&key) {
+                        continue;
+                    }
+                    if let Some((lookup_func, deser_func)) =
+                        generate_struct_deserialize(module, req, &names)
+                    {
+                        generated.push(Rc::new(RefCell::new(lookup_func)));
+                        generated.push(Rc::new(RefCell::new(deser_func)));
+                    } else {
+                        let func = generate_enum_deserialize(module, req, &names)
+                            .or_else(|| generate_variant_deserialize(module, req, &names))
+                            .or_else(|| generate_flags_deserialize(module, req, &names));
+                        if let Some(f) = func {
+                            generated.push(Rc::new(RefCell::new(f)));
+                        }
+                    }
+                }
+                // `From` requests are drained by `from_synth`, which runs
+                // before this pass, so none reach the serde drain.
+                SynthTrait::From { .. } => unreachable!(
+                    "From synthesis requests must be drained by from_synth before serde_synth"
+                ),
             }
         }
 

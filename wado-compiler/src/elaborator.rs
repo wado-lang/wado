@@ -786,6 +786,54 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
+    /// Classify the trait named by an `impl Trait for Type;` request into a
+    /// [`tir::SynthTrait`]. Returns `None` for any trait the compiler cannot
+    /// synthesize, letting the caller emit a diagnostic. `From<Source>`
+    /// resolves its argument to a [`TypeId`] here so no downstream pass has to
+    /// re-parse the mangled trait name.
+    fn classify_synth_trait(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
+        use crate::compiler_item::CompilerItem;
+        let base = trait_type.head_base_name()?;
+        // `trait_name_opt` keeps the serde anchors optional: a program that
+        // never imports serde has them unregistered, and a `From<…>` request
+        // must still classify there without tripping a registry panic.
+        enum Kind {
+            From,
+            Serialize,
+            Deserialize,
+        }
+        let kind = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            let is = |item| items.trait_name_opt(item) == Some(base);
+            if is(CompilerItem::Serialize) {
+                Kind::Serialize
+            } else if is(CompilerItem::Deserialize) {
+                Kind::Deserialize
+            } else if is(CompilerItem::From) {
+                Kind::From
+            } else {
+                return None;
+            }
+        };
+        match kind {
+            Kind::Serialize => Some(tir::SynthTrait::Serialize),
+            Kind::Deserialize => Some(tir::SynthTrait::Deserialize),
+            // `From<Source>` resolves its single argument to a `TypeId` so no
+            // downstream pass re-parses the mangled trait name.
+            Kind::From => {
+                if let ast::Type::Generic(generic) = trait_type
+                    && generic.args.len() == 1
+                {
+                    let source = self.resolve_type(&generic.args[0]);
+                    Some(tir::SynthTrait::From { source })
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     /// Record a coercion decision for the expression at `ast_id`. Called
     /// from each successful `try_coerce_*` sub-helper so every caller of
     /// those helpers (`try_coerce`, `resolve_cast`, the deferred-coercion
@@ -1499,23 +1547,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // `tir_module.synthesis_requests`.
                     if impl_block.is_synthesize_request {
                         if let Some(ref trait_type) = impl_block.trait_type {
-                            let synth_trait_name = self.get_type_name_full(trait_type);
-                            let target_type_id = self.resolve_type(&impl_block.ty);
-                            let type_params: Vec<_> = self
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .iter()
-                                .map(|(name, &(index, type_id))| (name.clone(), index, type_id))
-                                .collect();
-                            let req = crate::tir::SynthesisRequest {
-                                trait_name: synth_trait_name,
-                                target_type_name: struct_name.clone(),
-                                target_type_id,
-                                type_params,
-                                span: impl_block.span,
-                            };
-                            self.record_pending_synthesis_request(req);
+                            match self.classify_synth_trait(trait_type) {
+                                Some(trait_ref) => {
+                                    let target_type_id = self.resolve_type(&impl_block.ty);
+                                    let type_params: Vec<_> = self
+                                        .annotate_ctx
+                                        .trait_ctx
+                                        .type_params
+                                        .iter()
+                                        .map(|(name, &(index, type_id))| {
+                                            (name.clone(), index, type_id)
+                                        })
+                                        .collect();
+                                    let req = crate::tir::SynthesisRequest {
+                                        trait_ref,
+                                        target_type_name: struct_name.clone(),
+                                        target_type_id,
+                                        type_params,
+                                        span: impl_block.span,
+                                    };
+                                    self.record_pending_synthesis_request(req);
+                                }
+                                None => {
+                                    let _ = self.logger.error(
+                                        types::TypeError::UnsupportedSynthesisTrait {
+                                            trait_name: self.get_type_name_full(trait_type),
+                                            type_name: struct_name.clone(),
+                                            span: impl_block.span,
+                                        },
+                                    );
+                                }
+                            }
                         }
                         self.annotate_ctx.trait_ctx = saved_trait_ctx;
                         continue;
