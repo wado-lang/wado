@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781794827372,
+  "lastUpdate": 1781913869502,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33737,6 +33737,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 393446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15a3205ea22c31edb9251eba36518529e7234541",
+          "message": "Merge pull request #1396 from wado-lang/claude/package-gale-parser-errors-x39ifc\n\nfeat(gale)!: error-resilient generated parsers",
+          "timestamp": "2026-06-20T08:54:21+09:00",
+          "tree_id": "349d70fe4ca2b6c441766108ec9680eb2580952e",
+          "url": "https://github.com/wado-lang/wado/commit/15a3205ea22c31edb9251eba36518529e7234541"
+        },
+        "date": 1781913868898,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
             "unit": "bytes"
           }
         ]
