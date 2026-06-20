@@ -2059,6 +2059,40 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` (recursively) mentions a `TypeParam` / `TypePack` whose
+    /// `index` equals `index`. Used to tell whether a method type parameter is
+    /// inferable from an argument position (it appears in a value-parameter's
+    /// type) versus only from the return type.
+    pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {
+                *i == index
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_type_param_index(*inner, index),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| self.contains_type_param_index(*p, index))
+                    || self.contains_type_param_index(*return_type, index)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.contains_type_param_index(*t, index)),
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                self.contains_type_param_index(*param_id, index)
+            }
+            _ => false,
+        }
+    }
+
     /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
     /// whose `index >= base` (see `elaborator::infer_hole`).
     pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
