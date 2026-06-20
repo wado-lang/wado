@@ -29,6 +29,35 @@ fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
     }
 }
 
+/// Rebuild `func` to point at the monomorphized instance named `mangled`,
+/// preserving the call's `method_info`. The new `monomorph_info` records the
+/// pre-mono `generic_name` and the type args the instance was keyed with.
+///
+/// `func.method_info` is unchanged until the reassignment, so cloning it here
+/// matches the previous per-site `let original_method_info = …` capture.
+fn apply_instantiation(
+    func: &mut FunctionRef,
+    module_source: ModuleSource,
+    mangled: String,
+    generic_name: String,
+    impl_type_args: Vec<TypeId>,
+    method_type_args: Vec<TypeId>,
+    is_blanket: bool,
+) {
+    let method_info = func.method_info.clone();
+    *func = FunctionRef {
+        module_source,
+        name: mangled,
+        monomorph_info: Some(MonomorphInfo {
+            generic_name,
+            impl_type_args,
+            method_type_args,
+            is_blanket,
+        }),
+        method_info,
+    };
+}
+
 impl Monomorphizer {
     /// Try to find a queued instantiation, allowing `key.module_source` to be
     /// an approximate hint. Mirrors `lookup_template_with_trait_fallback` in
@@ -241,17 +270,16 @@ impl Monomorphizer {
                     method_info: original_method_info.clone(),
                 };
                 if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                    *func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled.clone(),
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: original_func_name,
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args.clone(),
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    let mangled = mangled.clone();
+                    apply_instantiation(
+                        func,
+                        key.module_source.clone(),
+                        mangled,
+                        original_func_name,
+                        key.impl_type_args.clone(),
+                        key.method_type_args.clone(),
+                        false,
+                    );
 
                     if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
                         && let Some(&concrete) = key.method_type_args.get(*index as usize)
@@ -294,18 +322,15 @@ impl Monomorphizer {
                     if let Some((key, mangled)) =
                         self.lookup_instantiation_with_trait_fallback(key, &candidates, None)
                     {
-                        let original_method_info = func.method_info.clone();
-                        *func = FunctionRef {
-                            module_source: key.module_source.clone(),
-                            name: mangled,
-                            monomorph_info: Some(MonomorphInfo {
-                                generic_name: generic_method_name,
-                                impl_type_args: key.impl_type_args.clone(),
-                                method_type_args: key.method_type_args,
-                                is_blanket: false,
-                            }),
-                            method_info: original_method_info,
-                        };
+                        apply_instantiation(
+                            func,
+                            key.module_source.clone(),
+                            mangled,
+                            generic_method_name,
+                            key.impl_type_args.clone(),
+                            key.method_type_args,
+                            false,
+                        );
                         break;
                     }
                 }
@@ -368,18 +393,15 @@ impl Monomorphizer {
                     &candidates,
                     receiver_module.as_ref(),
                 ) {
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: full_method_name.clone(),
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args,
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source.clone(),
+                        mangled,
+                        full_method_name.clone(),
+                        key.impl_type_args.clone(),
+                        key.method_type_args,
+                        false,
+                    );
                     type_args.clear();
                     rewritten = true;
                     break;
@@ -433,18 +455,15 @@ impl Monomorphizer {
                                 dg_receiver_module.as_ref(),
                             )
                         {
-                            let original_method_info = method_func.method_info.clone();
-                            *method_func = FunctionRef {
-                                module_source: combined_key.module_source.clone(),
-                                name: mangled,
-                                monomorph_info: Some(MonomorphInfo {
-                                    generic_name: generic_method_name.clone(),
-                                    impl_type_args: combined_key.impl_type_args.clone(),
-                                    method_type_args: combined_key.method_type_args.clone(),
-                                    is_blanket: false,
-                                }),
-                                method_info: original_method_info,
-                            };
+                            apply_instantiation(
+                                method_func,
+                                combined_key.module_source.clone(),
+                                mangled,
+                                generic_method_name.clone(),
+                                combined_key.impl_type_args.clone(),
+                                combined_key.method_type_args.clone(),
+                                false,
+                            );
                             type_args.clear();
 
                             if let ResolvedType::TypeParam { index, .. } =
@@ -551,19 +570,15 @@ impl Monomorphizer {
                     &pk_candidates,
                     pk_receiver_module.as_ref(),
                 ) {
-                    // Preserve original method_info
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source.clone(),
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name: key.name.clone(),
-                            impl_type_args: key.impl_type_args.clone(),
-                            method_type_args: key.method_type_args,
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source.clone(),
+                        mangled,
+                        key.name.clone(),
+                        key.impl_type_args.clone(),
+                        key.method_type_args,
+                        false,
+                    );
                     break;
                 }
             }
@@ -608,18 +623,15 @@ impl Monomorphizer {
                 None
             };
             if let Some((mangled, generic_name, impl_ta, method_ta, ms)) = blanket_lookup {
-                let original_method_info = method_func.method_info.clone();
-                *method_func = FunctionRef {
-                    module_source: ms,
-                    name: mangled,
-                    monomorph_info: Some(MonomorphInfo {
-                        generic_name,
-                        impl_type_args: impl_ta,
-                        method_type_args: method_ta,
-                        is_blanket: true,
-                    }),
-                    method_info: original_method_info,
-                };
+                apply_instantiation(
+                    method_func,
+                    ms,
+                    mangled,
+                    generic_name,
+                    impl_ta,
+                    method_ta,
+                    true,
+                );
             }
         }
         // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
@@ -657,18 +669,15 @@ impl Monomorphizer {
                     &candidates,
                     tuple_receiver_module.as_ref(),
                 ) {
-                    let original_method_info = method_func.method_info.clone();
-                    *method_func = FunctionRef {
-                        module_source: key.module_source,
-                        name: mangled,
-                        monomorph_info: Some(MonomorphInfo {
-                            generic_name,
-                            impl_type_args,
-                            method_type_args: vec![],
-                            is_blanket: false,
-                        }),
-                        method_info: original_method_info,
-                    };
+                    apply_instantiation(
+                        method_func,
+                        key.module_source,
+                        mangled,
+                        generic_name,
+                        impl_type_args,
+                        vec![],
+                        false,
+                    );
                 }
             }
         }
