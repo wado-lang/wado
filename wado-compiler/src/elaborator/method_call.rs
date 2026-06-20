@@ -38,6 +38,10 @@ pub(super) struct MethodCallInput<'a> {
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
+    /// Per-position `_` mask for `type_args` (see `call::turbofish_holes`).
+    /// Empty when the caller supplied no `_` placeholders (synthetic callers
+    /// and fully-explicit turbofish), which leaves inference untriggered.
+    pub type_arg_holes: Vec<bool>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
     pub span: Span,
@@ -67,12 +71,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.receiver.span(),
         );
 
-        // Resolve explicit type arguments (method-level type args)
+        // Resolve explicit type arguments (method-level type args). A `_`
+        // resolves to UNKNOWN; the hole mask records its position so the
+        // dispatch fills it from inference.
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+        let type_arg_holes = super::call::turbofish_holes(&method_call.type_args);
 
         self.resolve_method_call_with(
             MethodCallInput {
@@ -81,6 +88,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
                 type_args,
+                type_arg_holes,
                 args: &method_call.args,
                 expected_type,
                 span: method_call.span,
@@ -110,6 +118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_id,
             call_id,
             type_args,
+            type_arg_holes,
             args: args_ast,
             expected_type,
             span,
@@ -632,10 +641,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Then add method-level type args with the correct offset
-        // If no explicit type args, try to infer from arguments
-        let (method_type_args, reuse_params) = if type_args.is_empty() {
-            // Try to infer method type args from actual arguments and expected return type
+        // Then add method-level type args with the correct offset.
+        // Inference runs when the turbofish is omitted entirely or carries an
+        // explicit `_` placeholder; in the latter case the inferred holes are
+        // merged into the explicit args, which always win.
+        let has_hole = type_arg_holes.iter().any(|&h| h);
+        let (method_type_args, reuse_params) = if type_args.is_empty() || has_hole {
+            // Infer method type args from actual arguments and expected return type
             let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
@@ -648,7 +660,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_name: trait_name.as_deref(),
                 span,
             });
-            (inferred.type_args, inferred.bound_check_params)
+            if type_args.is_empty() {
+                (inferred.type_args, inferred.bound_check_params)
+            } else {
+                let mut merged = type_args;
+                super::call::merge_turbofish_type_args(
+                    &mut merged,
+                    &type_arg_holes,
+                    &inferred.type_args,
+                );
+                (merged, inferred.bound_check_params)
+            }
         } else {
             (type_args, None)
         };
@@ -1240,6 +1262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .enumerate()
                     .find(|(_, c)| c.name == static_call.method)
+                    .map(|(i, c)| (i, c.clone()))
                 {
                     // Each variant case has exactly one payload.
                     let payload_is_unit = matches!(
@@ -1257,22 +1280,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Check payload type against the variant case's expected type
-                    if !args.is_empty()
-                        && let Some(&expected_type) = param_types.first()
-                    {
-                        let span = static_call
-                            .args
-                            .first()
-                            .map_or(static_call.span, super::ast::Expr::span);
-                        self.typecheck(args[0].type_id, expected_type, span);
+                    // Refine `_` placeholders in the turbofish (`Result::<_,
+                    // MyErr>::Ok(7)`): infer the hole slots from the payload
+                    // while the explicit args stay pinned. Without holes the
+                    // explicitly-resolved `target_type_id` is already complete.
+                    let target_holes = match &static_call.target_type {
+                        ast::Type::Generic(g) => super::call::turbofish_holes(&g.args),
+                        _ => vec![],
+                    };
+                    let result_type = if target_holes.iter().any(|&h| h) {
+                        let explicit_args = match self.tysys.type_table.borrow().get(target_type_id)
+                        {
+                            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                            _ => Vec::new(),
+                        };
+                        self.infer_variant_type_args(
+                            &name,
+                            &variant_info,
+                            &case_data,
+                            args.first(),
+                            None,
+                            &explicit_args,
+                            &target_holes,
+                        )
+                    } else {
+                        target_type_id
+                    };
+
+                    // Check payload type against the variant case's payload
+                    // type, substituted with the (possibly refined) type args.
+                    if !args.is_empty() {
+                        let result_args = match self.tysys.type_table.borrow().get(result_type) {
+                            ResolvedType::GenericInstance { type_args, .. } => {
+                                Some(type_args.clone())
+                            }
+                            _ => None,
+                        };
+                        let expected_payload = match result_args {
+                            Some(args_vec) => {
+                                Some(self.substitute_type_params(case_data.payload, &args_vec))
+                            }
+                            None => param_types.first().copied(),
+                        };
+                        if let Some(expected_type) = expected_payload {
+                            let span = static_call
+                                .args
+                                .first()
+                                .map_or(static_call.span, super::ast::Expr::span);
+                            self.typecheck(args[0].type_id, expected_type, span);
+                        }
                     }
 
                     // Stage 7-B: reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
-                    return target_type_id;
+                    return result_type;
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `Result::<T, E>::from(e)`)

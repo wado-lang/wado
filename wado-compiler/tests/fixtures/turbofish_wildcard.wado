@@ -1,0 +1,48 @@
+// `_` in a turbofish leaves a type-argument slot for inference while the other
+// args stay explicit (issue #1106). It reuses the same inference an omitted
+// turbofish uses — the explicit (non-`_`) args always win.
+
+variant MyErr {
+    Bad,
+}
+
+fn pick<A, B>(a: A, b: B) -> A {
+    return a;
+}
+
+struct Holder {
+    v: i32,
+}
+
+impl Holder {
+    fn cast<A, B>(&self, a: A, b: B) -> A {
+        return a;
+    }
+    fn make<A, B>(a: A, b: B) -> A {
+        return a;
+    }
+}
+
+test "free function: leading `_`, explicit tail" {
+    let x = pick::<_, bool>(42, true);
+    assert x == 42;
+}
+
+test "variant constructor: inferred payload, explicit error type" {
+    let r = Result::<_, MyErr>::Ok(7);
+    assert r matches { Result::Ok(7) };
+}
+
+test "instance method: `_` slot inferred from argument" {
+    let h = Holder { v: 0 };
+    let y = h.cast::<_, bool>(99, true);
+    assert y == 99;
+}
+
+test "static method-level turbofish: `_` slot inferred" {
+    let z = Holder::make::<_, bool>(5, true);
+    assert z == 5;
+}
+
+__DATA__
+{"test": {}}

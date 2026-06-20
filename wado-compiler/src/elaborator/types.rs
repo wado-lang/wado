@@ -144,6 +144,9 @@ pub enum TypeError {
     /// Unknown type name
     UnknownType { name: String, span: Span },
 
+    /// `_` inference placeholder used outside a turbofish type argument.
+    InferPlaceholderNotAllowed { span: Span },
+
     /// Unknown function
     UnknownFunction { name: String, span: Span },
 
@@ -458,6 +461,11 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::InferPlaceholderNotAllowed { span } => (
+                Code::UnknownType,
+                "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
+                *span,
+            ),
             TypeError::UnknownFunction { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown function '{name}'"),

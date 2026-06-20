@@ -115,6 +115,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     TypeTable::ERROR
                 }
             }
+            // Inference placeholder `_`. The unknown type is the same value an
+            // omitted turbofish slot carries, so non-turbofish positions behave
+            // as before; turbofish resolution detects `_` slots structurally
+            // (see `resolve_call`) and fills them from inference.
+            Type::Infer(_) => TypeTable::UNKNOWN,
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
             Type::Error(_) => TypeTable::ERROR,

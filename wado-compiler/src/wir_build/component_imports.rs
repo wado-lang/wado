@@ -293,7 +293,7 @@ fn references_cli_error_code(ty: &Type) -> bool {
         Type::NamespacedGeneric(generic) => generic.args.iter().any(references_cli_error_code),
         Type::Tuple(elems) => elems.iter().any(references_cli_error_code),
         Type::Reference(inner) | Type::MutReference(inner) => references_cli_error_code(inner),
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Error(_) => false,
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
     }
 }
 
@@ -331,6 +331,6 @@ fn collect_resources_in_type(
         Type::Reference(inner) | Type::MutReference(inner) => {
             collect_resources_in_type(inner, registry, out);
         }
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Error(_) => {}
+        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
 }

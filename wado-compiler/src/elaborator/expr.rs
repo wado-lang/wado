@@ -487,6 +487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             None,
                             expected_type,
+                            &[],
+                            &[],
                         )
                     };
 
