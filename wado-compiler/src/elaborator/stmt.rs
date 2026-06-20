@@ -618,6 +618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
             | Type::Error(_) => false,
         }
     }
@@ -647,6 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
             | Type::Error(_) => return variant_name.to_string(),
         };
         format!("{base}::{variant_name}")
@@ -2200,6 +2202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: None,
                 call_id: None,
                 type_args: vec![],
+                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,
@@ -2260,6 +2263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: None,
                 call_id: None,
                 type_args: vec![],
+                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,
@@ -2680,6 +2684,7 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
         Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
         Type::TypePackSpread(name, _) => format!("..{name}"),
+        Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
     }
 }
@@ -2824,6 +2829,7 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Reference(_)
         | Type::MutReference(_)
         | Type::TypePackSpread(_, _)
+        | Type::Infer(_)
         | Type::Error(_) => return None,
     };
     match (ty_name, const_name) {

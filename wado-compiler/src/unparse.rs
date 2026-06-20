@@ -3574,6 +3574,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
                 delimited_into("<", ">", &ng.args, output, unparse_type_into);
             }
         }
+        Type::Infer(_) => output.push('_'),
         Type::Error(_) => output.push_str("<error>"),
     }
 }

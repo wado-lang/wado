@@ -4483,6 +4483,16 @@ impl Parser {
             return Ok(Type::Tuple(types));
         }
 
+        // Inference placeholder `_`. Bare `_` (not `_::x` / `_<T>`, which are
+        // never valid type heads) is a wildcard: inferred inside a turbofish,
+        // resolved to the unknown type elsewhere.
+        if matches!(self.peek_kind(), TokenKind::Ident(n) if n == "_")
+            && !matches!(self.peek_nth(1).kind, TokenKind::ColonColon | TokenKind::Lt)
+        {
+            self.advance();
+            return Ok(Type::Infer(start_span));
+        }
+
         let name = self.consume_ident()?;
 
         // Check for namespaced type: namespace::type<T>

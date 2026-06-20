@@ -14,6 +14,58 @@ use super::infer::InferCtx;
 use super::types::{FunctionContext, TypeError};
 use super::util::placeholder;
 
+/// Per-position `_` mask for a turbofish: `holes[i]` is true when argument `i`
+/// was written `_`. Slots past the end count as holes too (omitted trailing
+/// args), so the mask need only cover the supplied args.
+pub(super) fn turbofish_holes(ast_args: &[Type]) -> Vec<bool> {
+    ast_args
+        .iter()
+        .map(|t| matches!(t, Type::Infer(_)))
+        .collect()
+}
+
+/// Whether slot `i` is an inference hole given the `_` mask: an explicit `_`
+/// (`holes[i]`) or a slot omitted past the end of the turbofish.
+fn is_turbofish_hole(holes: &[bool], i: usize) -> bool {
+    holes.get(i).copied().unwrap_or(true)
+}
+
+/// Whether a turbofish carries an explicit `_` placeholder. Non-allocating, so
+/// callers gate the (allocating) [`turbofish_holes`] mask on it.
+pub(super) fn turbofish_has_hole(ast_args: &[Type]) -> bool {
+    ast_args.iter().any(|t| matches!(t, Type::Infer(_)))
+}
+
+/// True when a turbofish needs inference to fill some type-argument slot: it
+/// supplies fewer args than the generic has parameters (omitted trailing args)
+/// or it contains an explicit `_` placeholder.
+pub(super) fn turbofish_needs_inference(ast_args: &[Type], param_count: usize) -> bool {
+    ast_args.len() < param_count || turbofish_has_hole(ast_args)
+}
+
+/// Merge inferred type args into the explicitly-resolved ones in place. A slot
+/// takes the inferred value when it was written `_` or omitted past the end of
+/// the turbofish; every other slot keeps its explicit type, so the explicit
+/// (non-`_`) args always win. `inferred` is a full param-length vec (unbound
+/// params stay as `TypeParam`); an empty `inferred` (inference found nothing)
+/// leaves the explicit args untouched.
+pub(super) fn merge_turbofish_type_args(
+    explicit: &mut Vec<TypeId>,
+    holes: &[bool],
+    inferred: &[TypeId],
+) {
+    for (i, &filled) in inferred.iter().enumerate() {
+        if !is_turbofish_hole(holes, i) {
+            continue;
+        }
+        if i < explicit.len() {
+            explicit[i] = filled;
+        } else {
+            explicit.push(filled);
+        }
+    }
+}
+
 /// View of a `ResolvedType::Function` after peeling references and
 /// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
 struct FnSignature {
@@ -427,19 +479,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // If no explicit type args, try to infer from argument types.
-                // This is an exploratory probe: the `suffix` may match a
-                // builtin-registry entry (e.g. `builtin::foo`) keyed by bare
-                // name; otherwise the local-module lookup almost never
-                // succeeds and `infer_static_method_type_args` below runs.
                 let mangled_name = MethodName::format_local(prefix, None, suffix);
+                // Omitted turbofish infers both levels; an explicit `_` fills
+                // only the hole slots (see `infer_static_call_type_args`).
                 if method_type_args.is_empty() {
-                    let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
-                    method_type_args =
-                        self.infer_fn_type_args(&probe, &call.args, &args, expected_type);
-                }
-                if method_type_args.is_empty() {
-                    let (impl_args, method_args) = self.infer_static_method_type_args(
+                    let (impl_args, method_args) = self.infer_static_call_type_args(
                         prefix,
                         suffix,
                         &call.args,
@@ -448,6 +492,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
+                } else if turbofish_has_hole(&call.type_args) {
+                    // Partial method-level turbofish (`Type::m::<_, U>(..)`):
+                    // fill the `_` slots from inference, explicit args stay put.
+                    let (impl_args, method_args) = self.infer_static_call_type_args(
+                        prefix,
+                        suffix,
+                        &call.args,
+                        &args,
+                        expected_type,
+                    );
+                    if impl_type_args_inferred.is_empty() {
+                        impl_type_args_inferred = impl_args;
+                    }
+                    let holes = turbofish_holes(&call.type_args);
+                    merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
                 // Stage 5 (Gap 1 of WEP 2026-05-26): record the combined
                 // `(impl_args, method_args)` for the static-method call
@@ -655,6 +714,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             payload.as_deref(),
                             expected_type,
+                            &[],
+                            &[],
                         )
                     };
 
@@ -794,6 +855,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     &case_data,
                                     payload.as_deref(),
                                     expected_type,
+                                    &[],
+                                    &[],
                                 )
                             };
 
@@ -1039,35 +1102,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::local(&self.current_module_source, display_name)
         };
 
-        // Resolve explicit type arguments
+        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
         let mut type_args: Vec<TypeId> = call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // If no explicit type args, try to infer from argument types.
+        // Fill inference slots from the argument / expected types. One path
+        // serves three forms — a fully omitted turbofish, omitted trailing args
+        // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)
+        // — and the explicit (non-`_`) args always win. `infer_fn_type_args`
+        // returns a full param-length vec, so no slot reaches codegen
+        // unsubstituted.
         if type_args.is_empty() {
             type_args = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
         } else {
-            // Partial turbofish: the explicit args give a leading prefix and
-            // the remaining type params are left to inference (e.g.
-            // `from_bytes::<Blob>(bytes)` where `B` is the byte-container
-            // type). Infer the trailing params from the arguments and adopt
-            // only the inferred tail — the explicit prefix wins.
-            // `infer_fn_type_args` returns a full param-length vec (unbound
-            // params stay as `TypeParam`). Without this the missing trailing
-            // params stay unsubstituted and reach codegen
-            // (`unsubstituted TypeParam` panic).
             let type_param_count = self
                 .lookup_function_type_params(&callee)
                 .iter()
                 .filter(|p| !p.is_effect)
                 .count();
-            if type_args.len() < type_param_count {
+            if turbofish_needs_inference(&call.type_args, type_param_count) {
+                let holes = turbofish_holes(&call.type_args);
                 let inferred = self.infer_fn_type_args(&callee, &call.args, &args, expected_type);
-                if inferred.len() > type_args.len() {
-                    type_args.extend_from_slice(&inferred[type_args.len()..]);
-                }
+                merge_turbofish_type_args(&mut type_args, &holes, &inferred);
             }
         }
 
@@ -2132,6 +2190,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Infer the type args of a `Type::method(...)` static call whose
+    /// method-level turbofish is omitted or carries `_`. Probes `suffix` as a
+    /// local free function first — covering builtin-registry entries keyed by
+    /// bare name — then falls back to full static-method inference, which also
+    /// yields the impl-level args. Returns `(impl_args, method_args)`.
+    fn infer_static_call_type_args(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        raw_args: &[Expr],
+        args: &[TirExpr],
+        expected_type: Option<TypeId>,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        let probe = CalleeRef::local(&self.current_module_source, suffix.to_string());
+        let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type);
+        if !method_args.is_empty() {
+            return (Vec::new(), method_args);
+        }
+        self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type)
+    }
+
     /// Infer impl-level and method-level type arguments for a generic static method
     /// by looking up the method in loaded modules. Works cross-module unlike
     /// `infer_fn_type_args` (which requires same-module data).
@@ -2416,6 +2495,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         case_data: &super::types::VariantCaseData,
         payload: Option<&TirExpr>,
         expected_type: Option<TypeId>,
+        explicit_args: &[TypeId],
+        holes: &[bool],
     ) -> TypeId {
         // Track the canonical module_source from expected_type if available.
         // This ensures the created GenericInstance uses the same module_source
@@ -2427,6 +2508,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.type_table,
             variant_info.type_param_type_ids.clone(),
         );
+
+        // Explicit turbofish args pin their slots as strong constraints; a `_`
+        // slot is skipped so the payload/expected passes infer it. This is how
+        // `Result::<_, MyErr>::Ok(x)` keeps `MyErr` while inferring `T`.
+        for (i, &param_id) in variant_info.type_param_type_ids.iter().enumerate() {
+            if !holes.get(i).copied().unwrap_or(true)
+                && let Some(&explicit) = explicit_args.get(i)
+            {
+                infer.add(param_id, explicit);
+            }
+        }
 
         // Forward inference: unify the case payload's declared type against
         // the actual payload expression's type.

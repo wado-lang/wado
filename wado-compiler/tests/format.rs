@@ -171,6 +171,21 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// A `_` inference placeholder inside a turbofish must round-trip through the
+/// formatter as `_` (issue #1106), not get dropped or rewritten to a name.
+#[test]
+fn test_format_turbofish_wildcard_roundtrips() {
+    let source = "fn run() {\n    let r = make::<_, MyErr>(42);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("make::<_, MyErr>"),
+        "expected `_` to survive formatting, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// `reactive` is a prefix keyword that must precede `let`. The formatter used
 /// to emit `let reactive ...`, which the parser rejects ("expected pattern,
 /// found Reactive"), so formatting any `reactive let` binding produced output

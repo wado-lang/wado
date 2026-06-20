@@ -1043,6 +1043,7 @@ fn classify_position(
         Type::Function(_)
         | Type::NamespacedGeneric(_)
         | Type::TypePackSpread(..)
+        | Type::Infer(_)
         | Type::Error(_) => PositionKind::ForeignType,
     }
 }

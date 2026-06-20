@@ -2343,6 +2343,17 @@ let x = identity::<i32>(42);           // turbofish required (for now)
 // let y = identity(42);               // not yet supported
 ```
 
+A `_` inside a turbofish leaves that type-argument slot for inference while the
+others stay explicit, reusing the same inference an omitted turbofish uses. The
+explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
+an omitted turbofish on an uninferable parameter. It is scoped to turbofish
+arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
+
+```wado
+let r = Result::<_, MyErr>::Ok(42);    // infers Ok payload type, pins the error type
+let a = pick::<_, bool>(1, true);      // infers the first type argument
+```
+
 ### Traits
 
 Traits define shared behavior that types can implement. Wado uses **static dispatch** for trait methods - all calls are resolved at compile time.
