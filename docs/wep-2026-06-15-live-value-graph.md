@@ -1364,6 +1364,17 @@ Two decisive experiments pin it to the node-creation half and rule out Method A:
   `peephole` sits between them and does not forward field reads, so `sroa`
   restructures `self.value` into a fresh scalar local and the entry is lost before
   any forwarder runs. Reverted — correct but inert against these regressions.
+- **Seeding at the node-creating pass itself** (`sroa` transfers a forwarded field
+  read's constant to the scalar read it mints, via `Engine::seed_const_value` —
+  the WEP's "have the creating pass seed `value_of`"). Recovers **0**: a debug
+  trace shows `engine.value()` is `None` for *every* `obj.f` read `sroa` rewrites.
+  The field reads themselves postdate the build-once graph (assert / template
+  desugaring mints them after the freeze), so they were never valued — there is
+  nothing to transfer. This is the gap one level up, and it generalizes: under
+  build-once, **every node created after the freeze is unvalued**, and only a
+  rebuild over the current body values them. No localized seed reaches them; that
+  is precisely why the fresh rebuild is the only thing that recovers, and why the
+  fix must be *born-frozen values* (Route B), not post-hoc maintenance. Reverted.
 
 Remaining piece (the node-creation half): when a structural pass creates a local
 def with a known value and reads of it, maintenance must propagate the def's
@@ -1373,8 +1384,11 @@ born frozen so a read of it cannot stale. This is the precise obligation Route B
 discharges by construction (flow frozen into `Operand::Value` at the def, a read
 of a promoted local is the value itself), so the durable fix is Route B — not a
 `Local`-read case in `maintain_pure_value`, not field-seeding the regrow, not a
-retain at the inline splice. Method A is proven insufficient for the 21 by the
-four sound coarsening/regrow variants all landing on the same set.
+retain at the inline splice, not seeding at `sroa`. Method A is proven
+insufficient for the 21 by five sound variants (clear-all, keep-all-sound-subset,
+constant-retain, field-seed-regrow, sroa-const-seed) all landing on the same set;
+the one thing that recovers — a fresh rebuild over the post-`sroa` body — is the
+rebuild build-once forbids. Recovery is therefore Route B or nothing.
 
 The `WADO_VERIFY_VG` oracle (`verify_maintained_graph` / `partition_refines`,
 config-aware fresh rebuild per query, off by default) is reinstated as the guard
