@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781913869502,
+  "lastUpdate": 1781920384172,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33761,6 +33761,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15a3205ea22c31edb9251eba36518529e7234541"
         },
         "date": 1781913868898,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e0af9b5160769db9df77e167a6321a4bb22ffa1d",
+          "message": "Merge pull request #1399 from wado-lang/claude/package-gale-dead-code-9sxxet\n\nperf(gale): stop emitting unused per-alt scan helpers on token-led dispatch",
+          "timestamp": "2026-06-20T10:42:51+09:00",
+          "tree_id": "a793c9902b4ed44a653a35382bfb3102ba8f2a8a",
+          "url": "https://github.com/wado-lang/wado/commit/e0af9b5160769db9df77e167a6321a4bb22ffa1d"
+        },
+        "date": 1781920383567,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
