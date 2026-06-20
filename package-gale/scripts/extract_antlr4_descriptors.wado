@@ -75,6 +75,12 @@ fn generator_attr() -> String {
     return "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado\")]";
 }
 
+/// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
+/// `stage_a` / `stage_b` / `stage_b_oracle`.
+fn triage_doc_line(axis: &String) -> String {
+    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([{*axis}_*]).`;
+}
+
 // ===== Descriptor format =====
 
 fn is_known_section(name: &String) -> bool {
@@ -624,6 +630,59 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     return w.to_string();
 }
 
+/// The parts of a per-descriptor driver test file that vary by claim.
+/// `emit_test_file` builds the common skeleton (`#![generated]` attr,
+/// provenance comments, Kiln `use ... with { generator }`, triage
+/// decoration, `test { ... }` wrapper) and each `emit_*` fills this in
+/// plus an assertion-body closure.
+struct TestFileSpec {
+    category: String,
+    name: String,
+    /// `#![generated(by = ...)]` line; the oracle claim uses a
+    /// `--finalize-stage-b-oracle` variant.
+    attr: String,
+    /// Comment lines after `// Source descriptor:`, each `//`-prefixed.
+    doc_lines: List<String>,
+    /// `tests/generated/<subdir>/...` segment: `antlr4_compat_a` / `_b` / `_b_oracle`.
+    output_subdir: String,
+    /// Runtime symbols imported from the grammar module; empty for none.
+    import_names: List<String>,
+    test_label: String,
+    triage: Triage,
+}
+
+fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&spec.attr);
+    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
+    w.line(&"//");
+    w.line(&`// Source descriptor: {spec.category}/{spec.name} (ANTLR4 runtime-testsuite).`);
+    for let dl of &spec.doc_lines {
+        w.line(dl);
+    }
+    w.blank();
+    w.line(&`use t from "../../grammars/{spec.category}/{spec.name}.g4"`);
+    w.line(&"    with {");
+    w.line(&"        generator: {");
+    w.line(&`            module: "../../../../src/generator.wado",`);
+    w.line(&"            options: { highlight: false },");
+    w.line(&`            output_dir: "tests/generated/{spec.output_subdir}/{spec.category}/{spec.name}",`);
+    w.line(&"        },");
+    w.line(&"    };");
+    for let sym of &spec.import_names {
+        w.line(&`use \{ {*sym} \} from "../../grammars/{spec.category}/{spec.name}.g4";`);
+    }
+    w.blank();
+    if let Todo(reason) = &spec.triage {
+        w.line(&`// triage: {escape_for_wado_str(reason)}`);
+        w.line(&"#[TODO]");
+    }
+    w.begin(&`test "{spec.test_label}: {spec.category}/{spec.name}"`);
+    body(&mut w);
+    w.end();
+    return w.to_string();
+}
+
 /// Emit one Stage B driver test file for a single descriptor.
 ///
 /// The file lives at
@@ -650,38 +709,26 @@ fn emit_stage_b_test_file(
     expected_tree: &String,
     triage: &Triage,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&generator_attr());
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_b/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
-    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_b: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-    w.line(&"let actual = t::to_string_tree(&result);");
-    w.line(&"let norm = normalize_tree(&expected);");
-    // Backticks land in the generated source verbatim; the Wado compiler
-    // there interprets them as a template string with `{actual}` etc.
-    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [triage_doc_line(&"stage_b")],
+        output_subdir: "antlr4_compat_b",
+        import_names: ["normalize_tree"],
+        test_label: "stage_b",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&"let actual = t::to_string_tree(&result);");
+        w.line(&"let norm = normalize_tree(&expected);");
+        // Backticks land in the generated source verbatim; the Wado compiler
+        // there interprets them as a template string with `{actual}` etc.
+        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    });
 }
 
 /// Emit a Stage B sub-tree driver test file. Variant of
@@ -703,39 +750,28 @@ fn emit_stage_sub_b_test_file(
     sub_rule: &String,
     triage: &Triage,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&generator_attr());
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_*]).");
-    w.line(&"//");
-    w.line(&`// Stage B sub-tree: [output] is the labelled child '{*sub_rule}' subtree,`);
-    w.line(&"// not the start rule's full tree. Navigate via find_first_child_node.");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_b/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
-    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_b_sub: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-    w.line(&`let actual = t::to_string_subtree(&result, &"{*sub_rule}");`);
-    w.line(&"let norm = normalize_tree(&expected);");
-    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [
+            triage_doc_line(&"stage_b"), "//",
+            `// Stage B sub-tree: [output] is the labelled child '{*sub_rule}' subtree,`,
+            "// not the start rule's full tree. Navigate via find_first_child_node.",
+        ],
+        output_subdir: "antlr4_compat_b",
+        import_names: ["normalize_tree"],
+        test_label: "stage_b_sub",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&`let actual = t::to_string_subtree(&result, &"{*sub_rule}");`);
+        w.line(&"let norm = normalize_tree(&expected);");
+        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    });
 }
 
 /// Emit one Stage A claim (b) driver test file (parse-accepts-input)
@@ -757,40 +793,29 @@ fn emit_stage_a_parse_test_file(
     start: &String,
     triage: &Triage,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&generator_attr());
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
-    w.line(&"//");
-    w.line(&"// Stage A claim (b): the generated parser must accept the descriptor's");
-    w.line(&"// [input] without returning an error. No parse-tree shape comparison.");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_a/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_a_parse: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-    w.line(&"if !result.ok() {");
-    w.indent();
-    w.line(&"let d = &result.diagnostics[0];");
-    w.line(&"panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);");
-    w.dedent();
-    w.line(&"}");
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [
+            triage_doc_line(&"stage_a"), "//", "// Stage A claim (b): the generated parser must accept the descriptor's",
+            "// [input] without returning an error. No parse-tree shape comparison.",
+        ],
+        output_subdir: "antlr4_compat_a",
+        import_names: [],
+        test_label: "stage_a_parse",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&"if !result.ok() {");
+        w.indent();
+        w.line(&"let d = &result.diagnostics[0];");
+        w.line(&"panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);");
+        w.dedent();
+        w.line(&"}");
+    });
 }
 
 /// Pick the public parser entry to call for a descriptor's `[start]`.
@@ -899,51 +924,42 @@ fn emit_stage_a_err_test_file(
     is_lexer: bool,
     triage: &Triage,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&generator_attr());
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
-    w.line(&"//");
-    w.line(&"// Stage A claim (c): the generated parser/lexer must report an error for [input].");
-    w.line(&"//   - Parser-type: t::parse(&input) must return Err.");
-    w.line(&"//   - Lexer-type:  t::tokenize(&input) must produce at least one TK_ERROR.");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_a/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
+    let mut import_names: List<String> = [];
     if is_lexer {
-        w.line(&`use \{ TK_ERROR \} from "../../grammars/{*category}/{*name}.g4";`);
+        import_names.push("TK_ERROR");
     }
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_a_err: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    if is_lexer {
-        w.line(&"let tokens = t::tokenize(&input);");
-        w.line(&"let mut has_err = false;");
-        w.begin(&"for let mut i = 0; i < tokens.len(); i += 1");
-        w.begin(&"if tokens.kinds[i] == TK_ERROR");
-        w.line(&"has_err = true;");
-        w.line(&"break;");
-        w.end();
-        w.end();
-        w.line(&"assert has_err, `expected at least one TK_ERROR token in tokenize output`;");
-    } else {
-        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-        w.line(&"assert !result.ok(), `expected parse to fail but it succeeded`;");
-    }
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [
+            triage_doc_line(&"stage_a"), "//",
+            "// Stage A claim (c): the generated parser/lexer must report an error for [input].",
+            "//   - Parser-type: t::parse(&input) must return Err.",
+            "//   - Lexer-type:  t::tokenize(&input) must produce at least one TK_ERROR.",
+        ],
+        output_subdir: "antlr4_compat_a",
+        import_names,
+        test_label: "stage_a_err",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        if is_lexer {
+            w.line(&"let tokens = t::tokenize(&input);");
+            w.line(&"let mut has_err = false;");
+            w.begin(&"for let mut i = 0; i < tokens.len(); i += 1");
+            w.begin(&"if tokens.kinds[i] == TK_ERROR");
+            w.line(&"has_err = true;");
+            w.line(&"break;");
+            w.end();
+            w.end();
+            w.line(&"assert has_err, `expected at least one TK_ERROR token in tokenize output`;");
+        } else {
+            w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+            w.line(&"assert !result.ok(), `expected parse to fail but it succeeded`;");
+        }
+    });
 }
 
 /// Emit one Stage A claim (d) driver test file (tokens-equivalence)
@@ -965,38 +981,27 @@ fn emit_stage_a_tokens_test_file(
     expected: &String,
     triage: &Triage,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&generator_attr());
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_a_*]).");
-    w.line(&"//");
-    w.line(&"// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format");
-    w.line(&"// dump as the descriptor's [output] block.");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_a/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
-    w.line(&`use \{ TK_EOF \} from "../../grammars/{*category}/{*name}.g4";`);
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_a_tokens: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
-    w.line(&"let tokens = t::tokenize(&input);");
-    w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
-    w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: generator_attr(),
+        doc_lines: [
+            triage_doc_line(&"stage_a"), "//",
+            "// Stage A claim (d): t::tokenize(&input) renders to the same ANTLR4-format",
+            "// dump as the descriptor's [output] block.",
+        ],
+        output_subdir: "antlr4_compat_a",
+        import_names: ["TK_EOF"],
+        test_label: "stage_a_tokens",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(expected)}";`);
+        w.line(&"let tokens = t::tokenize(&input);");
+        w.line(&"let actual = t::to_lexer_string(&tokens, TK_EOF);");
+        w.line(&"assert actual == expected, `actual:\\n{actual}\\nexpected:\\n{expected}`;");
+    });
 }
 
 // ===== Main =====
@@ -1886,37 +1891,27 @@ fn emit_stage_b_oracle_test_file(
     triage: &Triage,
     oracle_version: &String,
 ) -> String {
-    let mut w = CodeWriter::new();
-    w.line(&"#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]");
-    w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
-    w.line(&"//");
-    w.line(&`// Source descriptor: {*category}/{*name} (ANTLR4 runtime-testsuite).`);
-    w.line(&`// Expected tree: antlr-{*oracle_version}-complete.jar on the action-body-stripped grammar.`);
-    w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml ([stage_b_oracle_*]).");
-    w.blank();
-    w.line(&`use t from "../../grammars/{*category}/{*name}.g4"`);
-    w.line(&"    with {");
-    w.line(&"        generator: {");
-    w.line(&`            module: "../../../../src/generator.wado",`);
-    w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/antlr4_compat_b_oracle/{*category}/{*name}",`);
-    w.line(&"        },");
-    w.line(&"    };");
-    w.line(&`use \{ normalize_tree \} from "../../grammars/{*category}/{*name}.g4";`);
-    w.blank();
-    if let Todo(reason) = triage {
-        w.line(&`// triage: {escape_for_wado_str(reason)}`);
-        w.line(&"#[TODO]");
-    }
-    w.begin(&`test "stage_b_oracle: {*category}/{*name}"`);
-    w.line(&`let input = "{escape_for_wado_str(input)}";`);
-    w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
-    w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
-    w.line(&"let actual = t::to_string_tree(&result);");
-    w.line(&"let norm = normalize_tree(&expected);");
-    w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
-    w.end();
-    return w.to_string();
+    let spec = TestFileSpec {
+        category: *category,
+        name: *name,
+        attr: "#![generated(by = \"package-gale/scripts/extract_antlr4_descriptors.wado --finalize-stage-b-oracle\")]",
+        doc_lines: [
+            `// Expected tree: antlr-{*oracle_version}-complete.jar on the action-body-stripped grammar.`,
+            triage_doc_line(&"stage_b_oracle"),
+        ],
+        output_subdir: "antlr4_compat_b_oracle",
+        import_names: ["normalize_tree"],
+        test_label: "stage_b_oracle",
+        triage: *triage,
+    };
+    return emit_test_file(&spec, |w: &mut CodeWriter| {
+        w.line(&`let input = "{escape_for_wado_str(input)}";`);
+        w.line(&`let expected = "{escape_for_wado_str(expected_tree)}";`);
+        w.line(&`let result = t::{parse_call_for_start(start)}(&input);`);
+        w.line(&"let actual = t::to_string_tree(&result);");
+        w.line(&"let norm = normalize_tree(&expected);");
+        w.line(&"assert actual == norm, `actual:   {actual}\\nexpected: {norm}`;");
+    });
 }
 
 /// Decide whether a descriptor `[output]` block can be checked as a Stage B
@@ -2153,6 +2148,7 @@ fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
     return match *axis {
         "cat" => maps.category.lookup(key),
         "a" => maps.stage_a.lookup(key),
+        "oracle" => maps.stage_b_oracle.lookup(key),
         _ => maps.stage_b.lookup(key),
     };
 }
@@ -2234,6 +2230,25 @@ test "triage: stage B skip and todo populate stage_b only" {
     assert_triage_pass(&maps, &"a", &"ParserExec/AltLabels");
     assert_triage_pass(&maps, &"cat", &"LexerExec/Foo");
     assert_triage_pass(&maps, &"a", &"LexerExec/Foo");
+}
+
+test "triage: stage_b_oracle skip and todo populate stage_b_oracle only" {
+    let toml = Option::<String>::Some(
+        "[stage_b_oracle_todo]
+\"ParserExec/Foo\" = \"oracle tree diverges — ATN-class\"
+[stage_b_oracle_skip]
+\"ParserExec/Bar\" = \"StringTemplate directive outside action body\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"oracle", &"ParserExec/Foo", &"oracle tree diverges — ATN-class");
+    assert_triage_skip(&maps, &"oracle", &"ParserExec/Bar", &"StringTemplate directive outside action body");
+    // The oracle axis is independent: an oracle verdict must not leak into
+    // category / Stage A / Stage B (the `_ => stage_b` fall-through hazard).
+    assert_triage_pass(&maps, &"cat", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"a", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"b", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"b", &"ParserExec/Bar");
 }
 
 test "triage: same key can carry independent category and stage B verdicts" {
@@ -2440,4 +2455,51 @@ test "parse_cli_args: empty args fall back to default categories" {
     let r = parse_cli_args([]).unwrap();
     assert r.want_all == false;
     assert !r.categories.is_empty();
+}
+
+// Regenerating the committed corpus exercises the Stage A / Stage B
+// emitters end-to-end, but the Stage B′ oracle emitter only runs in the
+// JDK-gated finalize phase, so pin its output against a committed file.
+test "emit_stage_b_oracle_test_file reproduces the committed file byte-for-byte" {
+    let expected = #include_str("../tests/antlr4-compat/stage_b_oracle/Sets/StarSet_test.wado");
+    let actual = emit_stage_b_oracle_test_file(
+        &"Sets",
+        &"StarSet",
+        &"abaac",
+        &"a",
+        &"(a a b a a c)",
+        &Triage::Pass,
+        &"4.13.2",
+    );
+    assert actual == expected, `\nactual:\n{actual}\nexpected:\n{expected}`;
+}
+
+test "emit_test_file: Todo triage decorates the test and wires Stage A paths" {
+    let src = emit_stage_a_parse_test_file(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky"));
+    assert src.contains("#[TODO]"), src;
+    assert src.contains("// triage: flaky"), src;
+    assert src.contains("output_dir: \"tests/generated/antlr4_compat_a/Foo/Bar\""), src;
+    assert src.contains("test \"stage_a_parse: Foo/Bar\""), src;
+    assert src.contains("t::parse_start(&input)"), src;
+    // Stage A parse needs no extra runtime import.
+    assert !src.contains("normalize_tree"), src;
+}
+
+test "emit_test_file: per-claim imports and output dirs differ" {
+    let b = emit_stage_b_test_file(&"C", &"N", &"i", &"", &"(t)", &Triage::Pass);
+    assert b.contains("use { normalize_tree }"), b;
+    assert b.contains("output_dir: \"tests/generated/antlr4_compat_b/C/N\""), b;
+    assert b.contains("t::parse(&input)"), b;
+
+    let lexer_err = emit_stage_a_err_test_file(&"C", &"N", &"i", &"", true, &Triage::Pass);
+    assert lexer_err.contains("use { TK_ERROR }"), lexer_err;
+    assert lexer_err.contains("has_err"), lexer_err;
+
+    let parser_err = emit_stage_a_err_test_file(&"C", &"N", &"i", &"r", false, &Triage::Pass);
+    assert !parser_err.contains("use { TK_ERROR }"), parser_err;
+    assert parser_err.contains("expected parse to fail"), parser_err;
+
+    let tokens = emit_stage_a_tokens_test_file(&"C", &"N", &"i", &"[@0]", &Triage::Pass);
+    assert tokens.contains("use { TK_EOF }"), tokens;
+    assert tokens.contains("to_lexer_string"), tokens;
 }

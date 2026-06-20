@@ -11,9 +11,10 @@
 //! translation from `PredictionNode` to source lives in
 //! `parser_gen.wado` (`gen_prediction_code_inner`).
 
-use { Element, RepeatElement } from "./ir.wado";
+use { Element, RepeatElement, Alternative } from "./ir.wado";
 use { GenContext, is_nullable } from "./gen_context.wado";
 use { first_contains, literal_const_name, str_set_insert_all } from "./gen_util.wado";
+use { sort_group_by_specificity } from "./alt_grouping.wado";
 use { TreeSet } from "core:collections";
 
 pub variant PredictionNode {
@@ -90,6 +91,31 @@ fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) 
     return -1;
 }
 
+/// Fill `tokens` with the union of every config's FIRST tokens (in
+/// first-seen order) and `config_firsts` with each config's own FIRST
+/// list (index-aligned to `configs`). The shared front half of both SLL
+/// dispatch builders (`build_sll_node`, `try_expand_opaque`); written
+/// through `&mut` out-params so the (hot-path) collections are never
+/// copied back out.
+fn collect_config_first_tokens(
+    configs: &List<SllConfig>,
+    ctx: &mut GenContext,
+    tokens: &mut List<String>,
+    config_firsts: &mut List<List<String>>,
+) {
+    let mut seen = TreeSet::<String>::new();
+    for let c of configs {
+        let first = sll_config_first(c, ctx);
+        for let tk of &first {
+            if !seen.contains(*tk) {
+                seen.insert(*tk);
+                tokens.push(*tk);
+            }
+        }
+        config_firsts.push(first);
+    }
+}
+
 /// Shared lookahead ceiling `k` for static prediction. In
 /// `build_prediction` it counts *branching* decisions (`Dispatch`
 /// levels), not raw tokens; exceeding it yields
@@ -119,6 +145,56 @@ pub fn build_prediction(
     }
     let tree = build_sll_node(&configs, 0, max_depth, ctx);
     return strip_dead_consume(tree);
+}
+
+/// Project an overlap `group` (indices into `non_lr_indices`) to surface
+/// alt indices in the canonical prediction order: numeric, then by
+/// specificity (FIRST-set size). Both the prediction tree
+/// (`build_group_prediction_tree`) and any rendering of the group must
+/// use this order so they agree on which alt sits where.
+pub fn group_prediction_order(
+    group: &List<i32>,
+    first_sets: &List<List<String>>,
+    non_lr_indices: &List<i32>,
+) -> List<i32> {
+    let mut sorted_group = group.sorted();
+    sort_group_by_specificity(&mut sorted_group, first_sets);
+    let mut real: List<i32> = [];
+    for let gi of &sorted_group {
+        real.push(non_lr_indices[*gi]);
+    }
+    return real;
+}
+
+/// Build the prediction tree for an overlap group already projected to
+/// surface alt indices in canonical order (`group_prediction_order`).
+/// Lets a caller that needs the order anyway (e.g. `gale dump`, for its
+/// header) reuse it instead of re-sorting.
+pub fn build_group_prediction_tree_from_order(
+    alts: &List<Alternative>,
+    real_indices: &List<i32>,
+    ctx: &mut GenContext,
+) -> PredictionNode {
+    let mut pred_elements: List<List<Element>> = [];
+    for let ri of real_indices {
+        pred_elements.push(alts[*ri].elements);
+    }
+    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+}
+
+/// `build_group_prediction_tree_from_order` with the ordering done for
+/// the caller. Codegen's entry point (`gen_multi_alt_body_alt`, the
+/// scan-helper gate); `gale dump` orders once itself and calls the
+/// `_from_order` form, so both build the same tree.
+pub fn build_group_prediction_tree(
+    alts: &List<Alternative>,
+    group: &List<i32>,
+    first_sets: &List<List<String>>,
+    non_lr_indices: &List<i32>,
+    ctx: &mut GenContext,
+) -> PredictionNode {
+    let real_indices = group_prediction_order(group, first_sets, non_lr_indices);
+    return build_group_prediction_tree_from_order(alts, &real_indices, ctx);
 }
 
 /// Strip Consume nodes whose child contains any Ambiguous — fall back to
@@ -631,18 +707,8 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     }
 
     let mut all_tokens: List<String> = [];
-    let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: List<List<String>> = [];
-    for let c of closed {
-        let first = sll_config_first(&c, ctx);
-        for let tk of &first {
-            if !all_tokens_seen.contains(*tk) {
-                all_tokens_seen.insert(*tk);
-                all_tokens.push(*tk);
-            }
-        }
-        config_firsts.push(first);
-    }
+    collect_config_first_tokens(&closed, ctx, &mut all_tokens, &mut config_firsts);
 
     let mut branches: List<PredictionBranch> = [];
 
@@ -826,18 +892,8 @@ fn try_expand_opaque(
         all_configs.push(ec);
     }
     let mut all_tokens: List<String> = [];
-    let mut all_tokens_seen = TreeSet::<String>::new();
     let mut config_firsts: List<List<String>> = [];
-    for let c of all_configs {
-        let first = sll_config_first(&c, ctx);
-        for let tk of &first {
-            if !all_tokens_seen.contains(*tk) {
-                all_tokens_seen.insert(*tk);
-                all_tokens.push(*tk);
-            }
-        }
-        config_firsts.push(first);
-    }
+    collect_config_first_tokens(&all_configs, ctx, &mut all_tokens, &mut config_firsts);
     let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;
     for let mut t = 0; t < all_tokens.len(); t += 1 {
