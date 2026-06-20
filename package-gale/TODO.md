@@ -153,12 +153,9 @@ Runtime performance — the benchmark state, the live profile, the
 directions that would move the needle, and measured dead-ends (e.g.
 data-driven scan) — lives in [`perf.md`](./perf.md).
 
-## Code-health bugs (from the 2026-06-10 `package-gale/` audit)
+## Code-health bugs
 
-Correctness findings migrated from `code-health.md` when that file was
-narrowed to cleanup work. Line numbers are as of the audit commit and
-will drift. "✓ verified" meant re-confirmed by reading the cited code;
-the rest deserve a failing test first.
+Line numbers will drift; add a failing test before fixing.
 
 ### Soundness and compatibility divergence
 
