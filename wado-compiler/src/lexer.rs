@@ -8,7 +8,8 @@
 // are the free functions [`lex`] and [`lex_with_line`].
 
 use crate::comment::{Comment, CommentKind};
-use crate::token::{Span, Token, TokenKind};
+use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+use crate::token::{Span, TemplateTokenPart, Token, TokenKind};
 
 /// Check if a string is a valid Wado identifier.
 /// Valid identifiers match the pattern /^[a-zA-Z_][a-zA-Z0-9_]*$/
@@ -116,7 +117,6 @@ impl std::fmt::Display for LexError {
 
 impl From<LexError> for crate::compiler_host::Diagnostic {
     fn from(e: LexError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         Self {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
@@ -957,8 +957,6 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_template_string(&mut self) -> TokenKind {
-        use crate::token::TemplateTokenPart;
-
         let start = self.pos;
         let start_line = self.line;
         let start_column = self.column;
@@ -1032,9 +1030,12 @@ impl<'a> Lexer<'a> {
                             &mut current_literal,
                         )));
                     }
-                    let (interp, hit_eof) =
+                    let (interp_expr, interp_format, hit_eof) =
                         self.collect_interpolation_source(start, start_line, start_column);
-                    parts.push(TemplateTokenPart::Interpolation(interp));
+                    parts.push(TemplateTokenPart::Interpolation {
+                        expr: interp_expr,
+                        format: interp_format,
+                    });
                     if hit_eof {
                         // Outer template terminated mid-interpolation. The
                         // error was already recorded; surface whatever parts
@@ -1060,20 +1061,38 @@ impl<'a> Lexer<'a> {
         TokenKind::TemplateStringLit(parts)
     }
 
-    /// Collect the raw source text of an interpolation expression.
-    /// Called after consuming the opening `{`. Consumes up to and including
-    /// the closing `}`. Returns `(source, hit_eof)`; when `hit_eof` is true
-    /// the enclosing template string was truncated mid-interpolation and an
-    /// error has been recorded.
+    /// Collect an interpolation, split into expression source and optional
+    /// format specifier. Called after consuming the opening `{`; consumes up to
+    /// and including the closing `}`. Returns `(expr, format, hit_eof)`; when
+    /// `hit_eof` is true the enclosing template string was truncated
+    /// mid-interpolation and an error has been recorded.
+    ///
+    /// The format specifier is the text after the first top-level `:` (`{expr:spec}`).
+    /// Nesting (parens, brackets, braces), string/template/char literals, and
+    /// `::` scope resolution are tracked here so only a `:` at the expression's
+    /// top level is treated as the separator.
     fn collect_interpolation_source(
         &mut self,
         start: usize,
         start_line: usize,
         start_column: usize,
-    ) -> (String, bool) {
-        let mut source = String::new();
+    ) -> (String, Option<String>, bool) {
+        // Append to the format buffer once the specifier `:` is seen, else to
+        // the expression buffer.
+        fn push(expr: &mut String, format: &mut Option<String>, ch: char) {
+            match format {
+                Some(f) => f.push(ch),
+                None => expr.push(ch),
+            }
+        }
+
+        let mut expr = String::new();
+        let mut format: Option<String> = None;
         let mut brace_depth = 1u32;
+        let mut paren_depth = 0u32;
+        let mut bracket_depth = 0u32;
         let mut in_string = false;
+        let mut in_char = false;
         let mut backtick_depth = 0u32;
         let mut escape_next = false;
 
@@ -1083,44 +1102,84 @@ impl<'a> Lexer<'a> {
                     kind: LexErrorKind::UnterminatedTemplateString,
                     span: self.span_from(start, start_line, start_column),
                 });
-                return (source, true);
+                return (expr, format, true);
             };
             self.advance();
 
             if escape_next {
-                source.push(ch);
+                push(&mut expr, &mut format, ch);
                 escape_next = false;
                 continue;
             }
 
+            // Structural characters only matter outside string/char/template literals.
+            let structural = !in_string && !in_char && backtick_depth == 0;
+
             match ch {
                 '\\' => {
-                    source.push(ch);
-                    if in_string || backtick_depth > 0 {
+                    push(&mut expr, &mut format, ch);
+                    if in_string || in_char || backtick_depth > 0 {
                         escape_next = true;
                     }
                 }
-                '"' if backtick_depth == 0 => {
-                    source.push(ch);
+                '"' if !in_char && backtick_depth == 0 => {
+                    push(&mut expr, &mut format, ch);
                     in_string = !in_string;
                 }
-                '`' if !in_string => {
-                    source.push(ch);
+                // Wado has no lifetimes, so `'` always delimits a char literal.
+                '\'' if !in_string && backtick_depth == 0 => {
+                    push(&mut expr, &mut format, ch);
+                    in_char = !in_char;
+                }
+                '`' if !in_string && !in_char => {
+                    push(&mut expr, &mut format, ch);
                     backtick_depth = u32::from(backtick_depth == 0);
                 }
-                '{' if !in_string && backtick_depth == 0 => {
-                    source.push(ch);
+                '{' if structural => {
+                    push(&mut expr, &mut format, ch);
                     brace_depth += 1;
                 }
-                '}' if !in_string && backtick_depth == 0 => {
+                '}' if structural => {
                     brace_depth -= 1;
                     if brace_depth == 0 {
-                        return (source, false);
+                        return (expr, format, false);
                     }
-                    source.push(ch);
+                    push(&mut expr, &mut format, ch);
+                }
+                '(' if structural => {
+                    push(&mut expr, &mut format, ch);
+                    paren_depth += 1;
+                }
+                ')' if structural => {
+                    push(&mut expr, &mut format, ch);
+                    paren_depth = paren_depth.saturating_sub(1);
+                }
+                '[' if structural => {
+                    push(&mut expr, &mut format, ch);
+                    bracket_depth += 1;
+                }
+                ']' if structural => {
+                    push(&mut expr, &mut format, ch);
+                    bracket_depth = bracket_depth.saturating_sub(1);
+                }
+                ':' if structural
+                    && format.is_none()
+                    && brace_depth == 1
+                    && paren_depth == 0
+                    && bracket_depth == 0 =>
+                {
+                    if self.peek().is_some_and(|(_, c)| c == ':') {
+                        // `::` scope resolution, not a specifier separator.
+                        self.advance();
+                        expr.push(':');
+                        expr.push(':');
+                    } else {
+                        // Everything after this top-level `:` is the specifier.
+                        format = Some(String::new());
+                    }
                 }
                 _ => {
-                    source.push(ch);
+                    push(&mut expr, &mut format, ch);
                 }
             }
         }
