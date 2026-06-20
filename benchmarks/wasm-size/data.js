@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781947189654,
+  "lastUpdate": 1781947969182,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34113,6 +34113,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d3a59634418e3f380b7a8ac6e47ec888460d6112"
         },
         "date": 1781947189086,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "712da24b91876f8838dce001e4309db378bf08a9",
+          "message": "Merge pull request #1406 from wado-lang/claude/elaborator-phase-smell-2qskzg\n\nrefactor(elaborator): close out the annotate→reify boundary smells (Stage 7)",
+          "timestamp": "2026-06-20T18:21:28+09:00",
+          "tree_id": "b8a775dae3b32c8481714390640ac11bd7bf02b6",
+          "url": "https://github.com/wado-lang/wado/commit/712da24b91876f8838dce001e4309db378bf08a9"
+        },
+        "date": 1781947968564,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
