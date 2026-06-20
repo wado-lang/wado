@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781921595176,
+  "lastUpdate": 1781924597582,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33849,6 +33849,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/047995102a4e7e882bf51a38883fa65d4e018a1c"
         },
         "date": 1781921594555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "55e4a0755f1e310667917d5c9f243edd8c03ed81",
+          "message": "Merge pull request #1401 from wado-lang/claude/hello-wasi-cli-example-k629uq\n\ndocs(example): add hello_cm.wado using raw wasi:cli",
+          "timestamp": "2026-06-20T11:53:14+09:00",
+          "tree_id": "7983e4cd2981083a5bff130ac30d0dbdffec899b",
+          "url": "https://github.com/wado-lang/wado/commit/55e4a0755f1e310667917d5c9f243edd8c03ed81"
+        },
+        "date": 1781924596959,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
