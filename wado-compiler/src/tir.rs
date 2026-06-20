@@ -1848,6 +1848,11 @@ impl TypeTable {
                 // resolution once the underlying type is fully concrete.
                 let concrete = self.substitute_type_params(param_id, substitution);
                 if !self.contains_type_param(concrete) {
+                    // Associated types are inherited through references (mirrors
+                    // method-call auto-deref), so peel `&`/`&mut` before
+                    // projecting: a `D` inferred as `&mut MyDe` still projects
+                    // `D::Acc` to `MyDe`'s associated type.
+                    let concrete = self.peel_refs(concrete);
                     if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
                         return resolved;
                     }

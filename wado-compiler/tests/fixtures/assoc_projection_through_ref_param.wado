@@ -1,0 +1,77 @@
+// Regression: a generic static trait call `T::deser(d)` whose method type
+// param `D` is inferred (no turbofish) from an argument that is a reference to
+// a reference (`&mut self.de`, where `self.de: &mut MyDe`) inferred `D = &mut
+// MyDe`. The generic impl's body projects `D::Acc`; resolving the projection on
+// a reference type found no impl and left an unsubstituted `AssocTypeProjection`
+// that reached codegen and panicked. Associated types are inherited through
+// references (like method-call auto-deref), so the projection must peel
+// references before resolving.
+
+trait Seq {
+    fn get(&mut self) -> i32;
+}
+
+trait De {
+    type Acc: Seq;
+    fn begin(&mut self) -> Self::Acc with stores[self];
+}
+
+trait Deser {
+    fn deser<D: De>(d: &mut D) -> Self;
+}
+
+struct MyAcc {
+    v: i32,
+}
+impl Seq for MyAcc {
+    fn get(&mut self) -> i32 {
+        return self.v;
+    }
+}
+
+struct MyDe {
+    x: i32,
+}
+impl De for MyDe {
+    type Acc = MyAcc;
+    fn begin(&mut self) -> MyAcc with stores[self] {
+        return MyAcc { v: self.x };
+    }
+}
+
+struct Wrap<T> {
+    inner: T,
+}
+impl<T: Deser> Deser for Wrap<T> {
+    fn deser<D: De>(d: &mut D) -> Self {
+        let mut acc = d.begin();
+        let _ = acc.get();
+        let inner = T::deser(d);
+        return Wrap { inner };
+    }
+}
+impl Deser for i32 {
+    fn deser<D: De>(d: &mut D) -> i32 {
+        let mut acc = d.begin();
+        return acc.get();
+    }
+}
+
+struct Access {
+    de: &mut MyDe,
+}
+impl Access {
+    fn step<T: Deser>(&mut self) -> T {
+        return T::deser(&mut self.de);
+    }
+}
+
+test "infer reference deserializer through a ref-to-ref argument" {
+    let mut d = MyDe { x: 7 };
+    let mut a = Access { de: &mut d };
+    let w: Wrap<i32> = a.step::<Wrap<i32>>();
+    assert w.inner == 7;
+}
+
+__DATA__
+{"test": {}}
