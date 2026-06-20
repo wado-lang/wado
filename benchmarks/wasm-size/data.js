@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781924597582,
+  "lastUpdate": 1781925411851,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33893,6 +33893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55e4a0755f1e310667917d5c9f243edd8c03ed81"
         },
         "date": 1781924596959,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1c742a2d69ca945aeb3bcce64d65294e945d9ba3",
+          "message": "Merge pull request #1402 from wado-lang/claude/testfloats-timeout-fix-2kao0x\n\nchore: raise testFloats timeout to 10s to fix CI flakiness",
+          "timestamp": "2026-06-20T12:07:57+09:00",
+          "tree_id": "8a4be18ce1c62ad28061374022323778cdf87d82",
+          "url": "https://github.com/wado-lang/wado/commit/1c742a2d69ca945aeb3bcce64d65294e945d9ba3"
+        },
+        "date": 1781925411621,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
