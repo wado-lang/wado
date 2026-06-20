@@ -153,45 +153,39 @@ impl TypeSystem {
     const AUTO_DERIVED_METHODS: &'static [(CompilerItem, &'static str)] =
         &[(CompilerItem::Eq, "eq"), (CompilerItem::Ord, "cmp")];
 
-    /// The trait name and the return type an auto-derived trait fixes,
-    /// regardless of what any user impl writes (`Eq` → `bool`, `Ord` →
-    /// `Ordering`).
-    fn auto_derive_descriptor(&self, item: CompilerItem) -> (String, TypeId) {
+    /// The return type an auto-derived trait fixes, regardless of what any user
+    /// impl writes (`Eq` → `bool`, `Ord` → `Ordering`).
+    fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
+        match item {
+            CompilerItem::Eq => TypeTable::BOOL,
+            _ => self
+                .type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::Ordering),
+        }
+    }
+
+    /// Resolve the auto-derived trait that declares `method_name`, returning its
+    /// trait name and fixed return type, or `None` when no auto-derived trait
+    /// declares that method.
+    pub(super) fn auto_derive_by_method(&self, method_name: &str) -> Option<(String, TypeId)> {
+        let item = Self::AUTO_DERIVED_METHODS
+            .iter()
+            .find(|(_, m)| *m == method_name)
+            .map(|(it, _)| *it)?;
         let trait_name = self
             .type_table
             .borrow()
             .compiler_items()
             .trait_name(item)
             .to_string();
-        let return_type = match item {
-            CompilerItem::Eq => TypeTable::BOOL,
-            _ => self
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::Ordering),
-        };
-        (trait_name, return_type)
-    }
-
-    /// Resolve the auto-derived trait that declares `method_name`. Returns its
-    /// compiler-item identity, trait name, and fixed return type, or `None`
-    /// when no auto-derived trait declares that method.
-    pub(super) fn auto_derive_by_method(
-        &self,
-        method_name: &str,
-    ) -> Option<(CompilerItem, String, TypeId)> {
-        let item = Self::AUTO_DERIVED_METHODS
-            .iter()
-            .find(|(_, m)| *m == method_name)
-            .map(|(it, _)| *it)?;
-        let (trait_name, return_type) = self.auto_derive_descriptor(item);
-        Some((item, trait_name, return_type))
+        Some((trait_name, self.auto_derive_return_type(item)))
     }
 
     /// Mirror of [`Self::auto_derive_by_method`] keyed by trait name, for
-    /// operator dispatch which already knows the trait. Returns the
-    /// compiler-item identity and the fixed return type.
-    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<(CompilerItem, TypeId)> {
+    /// operator dispatch which already knows the trait. Returns the fixed
+    /// return type, or `None` when `trait_name` is not an auto-derived trait.
+    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<TypeId> {
         let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
             let name = self
                 .type_table
@@ -201,8 +195,7 @@ impl TypeSystem {
                 .to_string();
             (name == trait_name).then_some(*item)
         })?;
-        let (_, return_type) = self.auto_derive_descriptor(item);
-        Some((item, return_type))
+        Some(self.auto_derive_return_type(item))
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
@@ -1450,10 +1443,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
         {
-            let return_type = auto_derive.map_or(info.output_type, |(_, rt)| rt);
+            let return_type = auto_derive.unwrap_or(info.output_type);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if let Some((_, return_type)) = auto_derive
+        } else if let Some(return_type) = auto_derive
             && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name)
         {
             let ref_self_ty = self
@@ -1512,7 +1505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let (_, trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
+        let (trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
         if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
