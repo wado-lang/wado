@@ -1135,19 +1135,19 @@ fn method_name_for_type(
             return_type,
             ..
         } => {
-            // Match the mangling used by `synthesis/traits::generate_fn_inspect_fn`:
-            // base struct is `Fn`, type args are `[<arity>, <return-type-mangled>]`.
-            // Without this arm, the `_` fallback below would call
-            // `LocalMethodName::new("Fn<N,Ret>", ...)` whose debug_assert
-            // rejects struct names containing `<`.
-            let arity = params.len().to_string();
-            let ret_name = tt_ref.mangle_type_name(return_type);
+            // A `Fn` receiver mangles as base struct `Fn` with the canonical
+            // `[arity, return-type]` args (shared with trait synthesis through
+            // `name::fn_type_arg_names`). Without this arm the `_` fallback
+            // would call `LocalMethodName::new("Fn<N,Ret>", ...)` whose
+            // debug_assert rejects struct names containing `<`.
+            let type_args =
+                crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
             LocalMethodName::new(
                 crate::name::CLOSURE_FN_TRAIT.to_string(),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
-            .with_struct_type_args(&[arity, ret_name])
+            .with_struct_type_args(&type_args)
         }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);

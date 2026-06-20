@@ -1178,6 +1178,18 @@ pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
     format!("Fn<{param_count},{ret_type}>")
 }
 
+/// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
+/// receiver: `[arity, return-type]`. Feeding these to
+/// [`mangle_generic_name`] with `CLOSURE_FN_TRAIT` reproduces the
+/// [`mangle_fn_type`] head, so the two spellings cannot drift. Trait synthesis
+/// (`Fn<N,Ret>^Inspect`) and template expansion both build them here.
+///
+/// Examples:
+/// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
+pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
+    vec![arity.to_string(), return_type_name.to_string()]
+}
+
 /// Build an Option type name from inner type name.
 ///
 /// Examples:
