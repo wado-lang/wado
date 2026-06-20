@@ -1,0 +1,163 @@
+//! Runtime lexer ATN simulator — Pike-VM (leftmost-first) NFA matching.
+//!
+//! Emitted into a generated lexer only for ATN-class lexer rules: a rule
+//! whose non-greedy repeat body recurses into itself, the nested-comment
+//! pattern `CMT : '/*' (CMT | .)+? '*' '/'`. Static single-pass lexing
+//! cannot decide whether an inner `/*` opens a nested rule or is just
+//! wildcard text — that needs unbounded lookahead. This simulator runs a
+//! Thompson NFA over the input characters with an ordered thread list
+//! (leftmost-first / PCRE priority): no backtracking, linear in the
+//! live thread-set per position.
+//!
+//! Semantics (matches ANTLR4 as a black box, characterized via the
+//! published jar — see License hygiene in AGENTS.md): the winning match
+//! is the one reached by the highest-priority thread, where priority is
+//! the order transitions are laid down at build time — non-greedy loops
+//! put the exit edge first, alternations keep source order. A
+//! higher-priority thread that is still live preempts a lower-priority
+//! thread's earlier accept, so greedy loops yield the longest match and
+//! non-greedy loops the shortest that still lets the rule finish.
+//!
+//! Clean-room: textbook Thompson / Pike VM (ordered thread list, epsilon
+//! closure with a per-step visited set, char-class move), NOT ANTLR4's
+//! lexer ATN simulator. The atom alphabet is Unicode scalars; recursion
+//! into a referenced lexer rule uses a per-thread return stack of ATN
+//! states.
+
+use { TreeSet } from "core:collections";
+use { AtnSim, ATN_RULE_STOP, ATN_TR_ATOM, ATN_TR_NOT_ATOM, ATN_TR_WILDCARD, ATN_TR_RULE } from "./atn.wado";
+
+/// One NFA thread parked at an actionable state: either a consuming state
+/// (its transitions are atom/wildcard, read by the move step) or an accept
+/// marker (the start rule's stop reached with an empty return stack).
+struct LThread {
+    state: i32,
+    stack: List<i32>,
+    accept: bool,
+}
+
+/// Canonical key for the per-step visited set: the state plus its return
+/// stack. `#` separates the state from the stack and `,` separates frames
+/// so distinct (state, stack) pairs never collide (`1#2,3` vs `12#3`).
+fn latn_sig(state: i32, stack: &List<i32>) -> String {
+    let mut s = `{state}#`;
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if i > 0 {
+            s.push_str(&",");
+        }
+        s.push_str(&`{stack[i]}`);
+    }
+    return s;
+}
+
+/// Epsilon-closure of `(state, stack)`, appending every reachable
+/// actionable thread to `out` in priority (transition) order. `visited`
+/// dedups by (state, stack) so epsilon cycles terminate. A `RULE`
+/// transition pushes its return state and jumps to the callee start; a
+/// `RULE_STOP` pops (or accepts when the stack is empty).
+fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<String>, state: i32, stack: &List<i32>) {
+    let key = latn_sig(state, stack);
+    if visited.contains(key) {
+        return;
+    }
+    visited.insert(key);
+
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        if stack.is_empty() {
+            out.push(LThread { state, stack: [], accept: true });
+        } else {
+            let ret = stack[stack.len() - 1];
+            let mut rest: List<i32> = [];
+            for let mut i = 0; i < stack.len() - 1; i += 1 {
+                rest.push(stack[i]);
+            }
+            latn_closure(sim, out, visited, ret, &rest);
+        }
+        return;
+    }
+
+    let ts = sim.state_tr_start[state];
+    let tc = sim.state_tr_count[state];
+    if tc > 0 {
+        let k0 = sim.tr_kind[ts];
+        if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
+            out.push(LThread { state, stack: *stack, accept: false });
+            return;
+        }
+    }
+    for let mut i = 0; i < tc; i += 1 {
+        let idx = ts + i;
+        let target = sim.tr_target[idx];
+        if sim.tr_kind[idx] == ATN_TR_RULE {
+            if target < 0 {
+                // Unresolved rule reference — a dead edge, skip it.
+                continue;
+            }
+            let mut ns: List<i32> = *stack;
+            ns.push(sim.tr_follow[idx]);
+            latn_closure(sim, out, visited, target, &ns);
+        } else {
+            latn_closure(sim, out, visited, target, stack);
+        }
+    }
+}
+
+/// Match lexer rule `start_rule` against `chars` starting at `start`.
+/// Returns the end position (exclusive) of the winning match, or -1 if the
+/// rule does not match. The caller (the generated tokenizer) compares this
+/// length against the other rules' for the cross-rule longest-match.
+pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32) -> i32 {
+    let mut best = -1;
+    let mut clist: List<LThread> = [];
+    let mut seed = TreeSet::<String>::new();
+    let empty: List<i32> = [];
+    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty);
+
+    let mut pos = start;
+    loop {
+        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
+        let mut nlist: List<LThread> = [];
+        let mut nseen = TreeSet::<String>::new();
+        let mut i = 0;
+        let mut stop = false;
+        while i < clist.len() && !stop {
+            let th = &clist[i];
+            if th.accept {
+                // Highest-priority surviving accept at this position wins;
+                // lower-priority threads after it are discarded. Threads
+                // before it (higher priority, still consuming) already fed
+                // `nlist` and may overwrite `best` with a longer match.
+                best = pos;
+                stop = true;
+            } else {
+                let ts = sim.state_tr_start[th.state];
+                let tc = sim.state_tr_count[th.state];
+                for let mut j = 0; j < tc; j += 1 {
+                    let idx = ts + j;
+                    let kind = sim.tr_kind[idx];
+                    let matched = if cur < 0 {
+                        false;
+                    } else if kind == ATN_TR_ATOM {
+                        cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
+                    } else if kind == ATN_TR_WILDCARD {
+                        true;
+                    } else if kind == ATN_TR_NOT_ATOM {
+                        cur != sim.tr_label[idx];
+                    } else {
+                        false;
+                    };
+                    if matched {
+                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack);
+                    }
+                }
+            }
+            i += 1;
+        }
+        clist = nlist;
+        if clist.is_empty() {
+            break;
+        }
+        pos += 1;
+    }
+    return best;
+}

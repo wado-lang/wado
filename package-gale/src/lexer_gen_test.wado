@@ -15,6 +15,7 @@ use {
     compute_elem_first_chars,
 } from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { TreeMap } from "core:collections";
 
 fn parse_grammar(input: String) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -153,7 +154,8 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let g = parse_grammar("lexer grammar T; ID : 'a' ; Id : 'b' ;");
     let lits: List<LitToken> = [];
     let mut w = CodeWriter::new();
-    gen_lexer(&mut w, &g, &lits);
+    let atn_class = TreeMap::<String, i32>::new();
+    gen_lexer(&mut w, &g, &lits, &atn_class);
     let out = w.to_string();
     assert out.contains("fn try_ID("), out;
     assert out.contains("fn try_Id("), out;

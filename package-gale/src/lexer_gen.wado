@@ -18,6 +18,7 @@ use {
 } from "./ir.wado";
 use { escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
+use { TreeMap } from "core:collections";
 
 pub struct LitToken {
     pub text: String,
@@ -290,12 +291,17 @@ fn rule_name_exists(lexer_rules: &List<LexerRule>, name: &String) -> bool {
     return false;
 }
 
-pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+pub fn gen_lexer(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    lit_tokens: &List<LitToken>,
+    atn_class: &TreeMap<String, i32>,
+) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     gen_lexer_struct(w);
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class);
     gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options);
@@ -346,6 +352,7 @@ fn gen_lexer_match_fns(
     keywords: &List<KeywordInfo>,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
+    atn_class: &TreeMap<String, i32>,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -357,7 +364,7 @@ fn gen_lexer_match_fns(
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
             // A recursive fragment needs its own `try_*` matcher (non-
@@ -365,7 +372,7 @@ fn gen_lexer_match_fns(
             // resolves case-insensitivity from `resolve_ci(grammar_opts,
             // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
             // on the fragment overrides the grammar-level flag.
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
         }
     }
 }
@@ -442,6 +449,7 @@ fn gen_lexer_match_fn(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
+    atn_class: &TreeMap<String, i32>,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
@@ -451,6 +459,14 @@ fn gen_lexer_match_fn(
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
+    // ATN-class rule (recursive non-greedy body): the static single-pass
+    // emitter cannot decide it, so delegate to the runtime lexer simulator.
+    if let Some(idx) = atn_class.get(rule.name) {
+        w.line(&`return latn_match(&LATN_SIM, {idx}, chars, start);`);
+        w.end();
+        w.blank();
+        return;
+    }
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci);
