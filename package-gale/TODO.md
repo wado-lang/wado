@@ -62,7 +62,7 @@ The static parser/non-greedy `??`/LR loop-entry pieces of this design are in pla
 #### Remaining work
 
 - **General multi-alt `Ambiguous` group / multiple `??` per rule.** A genuinely multi-alt Ambiguous group (3+ alts, overlapping first-sets) and `>1` exit-first decision per rule need a compile-time decision-number correspondence between `build_atn` and the emitter (stamp the ATN decision number on the surface group/repeat node, thread it onto the GIR op, emit `atn_predict_with_stack(sim, decision, …)`). This retires the `atn_ng_optional_enter` "unique exit-first BlockStart" heuristic.
-- **Per-`Parser` DFA cache** (perf), once more decisions route through the simulator.
+- **Per-`Parser` DFA cache** (perf), once more decisions route through the simulator. Lowest priority: this is a pure speed lever — the simulator is already correct without it, so the cache never changes a prediction outcome. Defer until profiling shows simulator closures are hot.
 - **P5 — lexer ATN + non-greedy wildcard.** Flip `RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` (`[stage_a_todo]`).
 
 The Stage B′ JVM oracle (see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
