@@ -622,3 +622,27 @@ node -e "
 "
 """
 
+
+[tasks.jco-bench]
+description = "Benchmark a Wado program on Node via jco (compile -f no-wide-arithmetic, transpile, self-time 3x)"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WADO="${1:?Usage: mise run jco-bench <program.wado> [runs]}"
+RUNS="${2:-3}"
+NAME=$(basename "$WADO" .wado)
+WORK=$(mktemp -d)
+# V8 has no wide-arithmetic; -f no-wide-arithmetic keeps float formatting (and
+# any i128 math) off the native ops so the component runs under Node.
+cargo run -q -p wado-cli -- compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wasm" "$WADO"
+node scripts/jco/transpile-released.mjs "$WORK/$NAME.wasm" "$WORK/jco" >/dev/null
+echo "# $NAME on Node (jco, self-timed, best of $RUNS):"
+for i in $(seq 1 "$RUNS"); do
+  node -e "
+    process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
+    import('$WORK/jco/$NAME.js').then(m => m.run.run()).then(() => process.exit(0))
+      .catch(e => { console.error(e.message || e); process.exit(1); });
+  "
+done
+"""
