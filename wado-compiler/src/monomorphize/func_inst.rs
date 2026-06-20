@@ -508,7 +508,7 @@ impl Monomorphizer {
                                 let key = InstantiationKey {
                                     name: generic_method_name,
                                     module_source: template_module,
-                                    impl_type_args: impl_type_args.clone(),
+                                    impl_type_args,
                                     method_type_args,
                                     method_info,
                                 };
@@ -684,7 +684,7 @@ impl Monomorphizer {
                                             let key = InstantiationKey {
                                                 name: generic_method_name.clone(),
                                                 module_source: template_module,
-                                                impl_type_args: impl_type_args.clone(),
+                                                impl_type_args,
                                                 method_type_args: type_args.clone(),
                                                 method_info: Some(method_info),
                                             };
@@ -833,7 +833,7 @@ impl Monomorphizer {
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
-                                    impl_type_args: effective_impl_type_args.clone(),
+                                    impl_type_args: effective_impl_type_args,
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
@@ -912,7 +912,7 @@ impl Monomorphizer {
                                 let key = InstantiationKey {
                                     name: generic_method_name.clone(),
                                     module_source: template_module,
-                                    impl_type_args: impl_type_args.clone(),
+                                    impl_type_args,
                                     method_type_args: method_type_args_for_key,
                                     method_info,
                                 };
@@ -1509,270 +1509,264 @@ impl Monomorphizer {
                 // A static method call carries method_info; substitute the type
                 // args embedded in its mangled name too.
                 let is_static_method = call_func.method_info.is_some();
-                if is_static_method {
-                    if !substitution.is_empty()
-                        && let Some(info) = call_func.method_info.clone()
-                    {
-                        let old_func_name = call_func.name.clone();
-                        let module_source = call_func.module_source.clone();
+                if is_static_method
+                    && !substitution.is_empty()
+                    && let Some(info) = call_func.method_info.clone()
+                {
+                    let old_func_name = call_func.name.clone();
+                    let module_source = call_func.module_source.clone();
 
-                        // Derive substituted type args from the callee's own monomorph_info.
-                        // The callee's monomorph_info records which type params the callee
-                        // uses (impl-level and method-level). We substitute through the
-                        // outer function's substitution map to resolve any type params.
-                        //
-                        // This is the single source of truth for the callee's type args.
-                        // We must NOT use the outer substitution map's entries directly
-                        // as type args — those are the outer function's type params, not
-                        // the callee's.
-                        let (sub_impl_type_args, sub_method_type_args) = if let FunctionRef {
+                    // Derive substituted type args from the callee's own monomorph_info.
+                    // The callee's monomorph_info records which type params the callee
+                    // uses (impl-level and method-level). We substitute through the
+                    // outer function's substitution map to resolve any type params.
+                    //
+                    // This is the single source of truth for the callee's type args.
+                    // We must NOT use the outer substitution map's entries directly
+                    // as type args — those are the outer function's type params, not
+                    // the callee's.
+                    let (sub_impl_type_args, sub_method_type_args) = if let FunctionRef {
+                        monomorph_info: Some(mi),
+                        ..
+                    } = &*call_func
+                    {
+                        (
+                            mi.impl_type_args
+                                .iter()
+                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                .collect::<Vec<_>>(),
+                            mi.method_type_args
+                                .iter()
+                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                .collect::<Vec<_>>(),
+                        )
+                    } else if self.current_impl_type_param_count > 0
+                        && info.struct_name == info.base_struct_name
+                        && self.current_impl_struct_name.as_deref()
+                            == Some(info.base_struct_name.as_str())
+                    {
+                        // The callee has no monomorph_info, but the outer function
+                        // has impl-level type params AND the callee's struct matches
+                        // the outer impl's struct (e.g., we're inside
+                        // `impl<K,V> TreeMap<K,V>` and calling `TreeMap::new()`).
+                        // The elaborator didn't annotate the bare struct reference with
+                        // type args, so we derive them from the outer substitution's
+                        // impl-level entries.
+                        let mut sorted_entries: Vec<_> = substitution.iter().collect();
+                        sorted_entries.sort_by_key(|(idx, _)| **idx);
+                        let impl_args: Vec<TypeId> = sorted_entries
+                            .iter()
+                            .take(self.current_impl_type_param_count)
+                            .map(|(_, tid)| **tid)
+                            .collect();
+                        (impl_args, vec![])
+                    } else {
+                        (vec![], vec![])
+                    };
+
+                    // Build the new method info with substituted type names.
+                    let mut new_info = if info.is_type_param_receiver {
+                        // The struct name is a type parameter (e.g., T^Ord::cmp);
+                        // resolve the concrete receiver by the param's name.
+                        match self.receiver_substitution_tid(&info, substitution) {
+                            Some(concrete_tid) => {
+                                let type_name = type_table.mangle_type_name(concrete_tid);
+                                let base = type_table.base_type_name(concrete_tid);
+                                info.with_substituted_struct_name(&type_name, &base)
+                            }
+                            None => info.clone(),
+                        }
+                    } else {
+                        // Apply the callee's own substituted type args.
+                        // Type args feeding into MethodInfo names use the
+                        // qualified mangle so call sites match the
+                        // function-definition naming produced by the
+                        // `method_instantiation_name*` helpers.
+                        let impl_names: Vec<String> = sub_impl_type_args
+                            .iter()
+                            .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                            .collect();
+                        let method_names: Vec<String> = sub_method_type_args
+                            .iter()
+                            .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
+                            .collect();
+                        if impl_names.is_empty() && method_names.is_empty() {
+                            info.clone()
+                        } else {
+                            info.with_type_args(&impl_names, &method_names)
+                        }
+                    };
+                    // For type param receivers, also update method type args if they
+                    // contain type params that need substitution (e.g., R → FixedReader
+                    // in a default trait method body calling Self::read::<R>(r)).
+                    // The with_substituted_struct_name above only replaces the struct
+                    // name, not the method type args.
+                    if info.is_type_param_receiver
+                        && let FunctionRef {
                             monomorph_info: Some(mi),
                             ..
                         } = &*call_func
-                        {
-                            (
-                                mi.impl_type_args
-                                    .iter()
-                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                    .collect::<Vec<_>>(),
-                                mi.method_type_args
-                                    .iter()
-                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                    .collect::<Vec<_>>(),
-                            )
-                        } else if self.current_impl_type_param_count > 0
-                            && info.struct_name == info.base_struct_name
-                            && self.current_impl_struct_name.as_deref()
-                                == Some(info.base_struct_name.as_str())
-                        {
-                            // The callee has no monomorph_info, but the outer function
-                            // has impl-level type params AND the callee's struct matches
-                            // the outer impl's struct (e.g., we're inside
-                            // `impl<K,V> TreeMap<K,V>` and calling `TreeMap::new()`).
-                            // The elaborator didn't annotate the bare struct reference with
-                            // type args, so we derive them from the outer substitution's
-                            // impl-level entries.
-                            let mut sorted_entries: Vec<_> = substitution.iter().collect();
-                            sorted_entries.sort_by_key(|(idx, _)| **idx);
-                            let impl_args: Vec<TypeId> = sorted_entries
+                    {
+                        let substituted_method_args: Vec<TypeId> = mi
+                            .method_type_args
+                            .iter()
+                            .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                            .collect();
+                        let any_changed = substituted_method_args
+                            .iter()
+                            .zip(mi.method_type_args.iter())
+                            .any(|(a, b)| a != b);
+                        if any_changed {
+                            new_info.method_type_args = substituted_method_args
                                 .iter()
-                                .take(self.current_impl_type_param_count)
-                                .map(|(_, tid)| **tid)
+                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
                                 .collect();
-                            (impl_args, vec![])
-                        } else {
-                            (vec![], vec![])
-                        };
+                        }
+                    }
+                    let new_func_name = new_info.to_mangled_name();
 
-                        // Build the new method info with substituted type names.
-                        let mut new_info = if info.is_type_param_receiver {
-                            // The struct name is a type parameter (e.g., T^Ord::cmp);
-                            // resolve the concrete receiver by the param's name.
-                            match self.receiver_substitution_tid(&info, substitution) {
-                                Some(concrete_tid) => {
-                                    let type_name = type_table.mangle_type_name(concrete_tid);
-                                    let base = type_table.base_type_name(concrete_tid);
-                                    info.with_substituted_struct_name(&type_name, &base)
-                                }
-                                None => info.clone(),
-                            }
-                        } else {
-                            // Apply the callee's own substituted type args.
-                            // Type args feeding into MethodInfo names use the
-                            // qualified mangle so call sites match the
-                            // function-definition naming produced by the
-                            // `method_instantiation_name*` helpers.
-                            let impl_names: Vec<String> = sub_impl_type_args
-                                .iter()
-                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
-                                .collect();
-                            let method_names: Vec<String> = sub_method_type_args
-                                .iter()
-                                .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
-                                .collect();
-                            if impl_names.is_empty() && method_names.is_empty() {
-                                info.clone()
+                    // The work each branch performs is gated on its own real
+                    // precondition, not on whether the mangled name changed:
+                    //
+                    //  - A type-param receiver (`S^Trait::method`) needs its
+                    //    home module resolved and its concrete instance queued
+                    //    exactly when the receiver resolved to a concrete type.
+                    //    The mangled name is incidental — it stays `S^…` when a
+                    //    user struct is literally named `S` (so it equals the
+                    //    type-param spelling), yet the instance must still be
+                    //    queued or it is left unresolved at WIR build.
+                    //  - A non-type-param call encodes all of its type args in
+                    //    its name, so an unchanged name means nothing to rewrite.
+                    let receiver_tid = self.receiver_substitution_tid(&info, substitution);
+                    let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
+                        !matches!(
+                            type_table.get(tid),
+                            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                        )
+                    });
+
+                    if info.is_type_param_receiver {
+                        if receiver_is_concrete {
+                            let concrete_type_id = receiver_tid
+                                .expect("receiver_is_concrete implies a resolved receiver");
+                            let receiver_module =
+                                module_source_for_trait_impl(type_table, concrete_type_id);
+                            // Per the inspect_ref_array_field.wado contract, this
+                            // path must consult `concrete_impl_module_for` only —
+                            // letting a generic `impl<T> Trait for Foo<T>` leak in
+                            // would route `&List<i32>^Inspect` to List's impl in
+                            // format.wado instead of the ref blanket's, and the
+                            // leading `&` would disappear at codegen.
+                            //
+                            // If no concrete impl exists, a generic impl
+                            // on the receiver type lives in that type's
+                            // own module by convention — fall through to
+                            // `receiver_module`. Only when no per-type
+                            // impl exists at all does dispatch run
+                            // through a blanket impl
+                            // (`impl<I: Bound> Trait for I`); those live
+                            // in the blanket's own module.
+                            let trait_name_for_blanket = new_info
+                                .base_trait_name
+                                .as_deref()
+                                .or(new_info.trait_name.as_deref());
+                            let generic_or_concrete =
+                                self.functions.generic_or_concrete_impl_module(
+                                    &new_info,
+                                    receiver_module.as_ref(),
+                                );
+                            let blanket_module = if generic_or_concrete.is_none() {
+                                trait_name_for_blanket.and_then(|tn| {
+                                    self.functions
+                                        .trait_env
+                                        .blanket_impl_module_for_trait(tn, receiver_module.as_ref())
+                                        .cloned()
+                                })
                             } else {
-                                info.with_type_args(&impl_names, &method_names)
-                            }
-                        };
-                        // For type param receivers, also update method type args if they
-                        // contain type params that need substitution (e.g., R → FixedReader
-                        // in a default trait method body calling Self::read::<R>(r)).
-                        // The with_substituted_struct_name above only replaces the struct
-                        // name, not the method type args.
-                        if info.is_type_param_receiver
-                            && let FunctionRef {
+                                None
+                            };
+                            let concrete_impl_module = self
+                                .functions
+                                .impl_module(&new_info, receiver_module.as_ref());
+                            let concrete_module =
+                                concrete_impl_module.or(blanket_module).or(receiver_module);
+                            let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
                                 monomorph_info: Some(mi),
                                 ..
                             } = &*call_func
-                        {
-                            let substituted_method_args: Vec<TypeId> = mi
-                                .method_type_args
-                                .iter()
-                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                                .collect();
-                            let any_changed = substituted_method_args
-                                .iter()
-                                .zip(mi.method_type_args.iter())
-                                .any(|(a, b)| a != b);
-                            if any_changed {
-                                new_info.method_type_args = substituted_method_args
+                            {
+                                mi.method_type_args
                                     .iter()
-                                    .map(|&tid| type_table.mangle_type_arg_for_generic(tid))
-                                    .collect();
-                            }
-                        }
-                        let new_func_name = new_info.to_mangled_name();
-
-                        // The work each branch performs is gated on its own real
-                        // precondition, not on whether the mangled name changed:
-                        //
-                        //  - A type-param receiver (`S^Trait::method`) needs its
-                        //    home module resolved and its concrete instance queued
-                        //    exactly when the receiver resolved to a concrete type.
-                        //    The mangled name is incidental — it stays `S^…` when a
-                        //    user struct is literally named `S` (so it equals the
-                        //    type-param spelling), yet the instance must still be
-                        //    queued or it is left unresolved at WIR build.
-                        //  - A non-type-param call encodes all of its type args in
-                        //    its name, so an unchanged name means nothing to rewrite.
-                        let receiver_tid = self.receiver_substitution_tid(&info, substitution);
-                        let receiver_is_concrete = receiver_tid.is_some_and(|tid| {
-                            !matches!(
-                                type_table.get(tid),
-                                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                            )
-                        });
-
-                        if info.is_type_param_receiver {
-                            if receiver_is_concrete {
-                                let concrete_type_id = receiver_tid
-                                    .expect("receiver_is_concrete implies a resolved receiver");
-                                let receiver_module =
-                                    module_source_for_trait_impl(type_table, concrete_type_id);
-                                // Per the inspect_ref_array_field.wado contract, this
-                                // path must consult `concrete_impl_module_for` only —
-                                // letting a generic `impl<T> Trait for Foo<T>` leak in
-                                // would route `&List<i32>^Inspect` to List's impl in
-                                // format.wado instead of the ref blanket's, and the
-                                // leading `&` would disappear at codegen.
-                                //
-                                // If no concrete impl exists, a generic impl
-                                // on the receiver type lives in that type's
-                                // own module by convention — fall through to
-                                // `receiver_module`. Only when no per-type
-                                // impl exists at all does dispatch run
-                                // through a blanket impl
-                                // (`impl<I: Bound> Trait for I`); those live
-                                // in the blanket's own module.
-                                let trait_name_for_blanket = new_info
-                                    .base_trait_name
-                                    .as_deref()
-                                    .or(new_info.trait_name.as_deref());
-                                let generic_or_concrete =
-                                    self.functions.generic_or_concrete_impl_module(
-                                        &new_info,
-                                        receiver_module.as_ref(),
-                                    );
-                                let blanket_module = if generic_or_concrete.is_none() {
-                                    trait_name_for_blanket.and_then(|tn| {
-                                        self.functions
-                                            .trait_env
-                                            .blanket_impl_module_for_trait(
-                                                tn,
-                                                receiver_module.as_ref(),
-                                            )
-                                            .cloned()
-                                    })
-                                } else {
-                                    None
-                                };
-                                let concrete_impl_module = self
-                                    .functions
-                                    .impl_module(&new_info, receiver_module.as_ref());
-                                let concrete_module =
-                                    concrete_impl_module.or(blanket_module).or(receiver_module);
-                                let method_type_arg_tids: Vec<TypeId> = if let FunctionRef {
-                                    monomorph_info: Some(mi),
-                                    ..
-                                } = &*call_func
-                                {
-                                    mi.method_type_args
-                                        .iter()
-                                        .map(|&tid| {
-                                            self.substitute_type(tid, substitution, type_table)
-                                        })
-                                        .collect()
-                                } else {
-                                    Vec::new()
-                                };
-                                let impl_type_arg_tids: Vec<TypeId> = type_table
-                                    .generic_type_args(concrete_type_id)
-                                    .unwrap_or_default();
-                                // A generic-instance receiver
-                                // (`List<i32>^Default::default`) must queue its impl
-                                // instantiation even with no method type args of its
-                                // own — they are impl-level. A non-generic receiver
-                                // (`i32^Default::default`) is a direct function.
-                                let new_monomorph = if method_type_arg_tids.is_empty()
-                                    && impl_type_arg_tids.is_empty()
-                                {
-                                    None
-                                } else {
-                                    let base_info = LocalMethodName::new(
-                                        new_info.base_struct_name.clone(),
-                                        new_info.trait_name.clone(),
-                                        new_info.method_name.clone(),
-                                    )
-                                    .with_base_trait_module(new_info.base_trait_module.clone());
-                                    let generic_name = base_info.to_mangled_name();
-                                    Some(MonomorphInfo {
-                                        generic_name,
-                                        impl_type_args: impl_type_arg_tids,
-                                        method_type_args: method_type_arg_tids,
-                                        is_blanket: false,
-                                    })
-                                };
-                                // Generics have a defined home module by construction:
-                                // either the trait-impl block's module, or — for
-                                // auto-derived impls — the receiver type's module
-                                // (`module_source_for_trait_impl`). Crash here rather
-                                // than fall back to the call-site module; a failure
-                                // means a missing prelude definition or an unhandled
-                                // `ResolvedType` arm in `module_source_for_trait_impl`.
-                                let resolved_module = concrete_module.unwrap_or_else(|| {
-                                    panic!(
-                                        "no home module for generic dispatch `{}` \
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                    .collect()
+                            } else {
+                                Vec::new()
+                            };
+                            let impl_type_arg_tids: Vec<TypeId> = type_table
+                                .generic_type_args(concrete_type_id)
+                                .unwrap_or_default();
+                            // A generic-instance receiver
+                            // (`List<i32>^Default::default`) must queue its impl
+                            // instantiation even with no method type args of its
+                            // own — they are impl-level. A non-generic receiver
+                            // (`i32^Default::default`) is a direct function.
+                            let new_monomorph = if method_type_arg_tids.is_empty()
+                                && impl_type_arg_tids.is_empty()
+                            {
+                                None
+                            } else {
+                                let base_info = LocalMethodName::new(
+                                    new_info.base_struct_name.clone(),
+                                    new_info.trait_name.clone(),
+                                    new_info.method_name.clone(),
+                                )
+                                .with_base_trait_module(new_info.base_trait_module.clone());
+                                let generic_name = base_info.to_mangled_name();
+                                Some(MonomorphInfo {
+                                    generic_name,
+                                    impl_type_args: impl_type_arg_tids,
+                                    method_type_args: method_type_arg_tids,
+                                    is_blanket: false,
+                                })
+                            };
+                            // Generics have a defined home module by construction:
+                            // either the trait-impl block's module, or — for
+                            // auto-derived impls — the receiver type's module
+                            // (`module_source_for_trait_impl`). Crash here rather
+                            // than fall back to the call-site module; a failure
+                            // means a missing prelude definition or an unhandled
+                            // `ResolvedType` arm in `module_source_for_trait_impl`.
+                            let resolved_module = concrete_module.unwrap_or_else(|| {
+                                panic!(
+                                    "no home module for generic dispatch `{}` \
                                          (concrete type id {:?}); add the missing impl \
                                          to the prelude, or extend \
                                          `module_source_for_trait_impl` for the receiver's \
                                          `ResolvedType` arm",
-                                        new_info.to_mangled_name(),
-                                        concrete_type_id,
-                                    )
-                                });
-                                *call_func = FunctionRef {
-                                    module_source: resolved_module,
-                                    name: new_func_name,
-                                    monomorph_info: new_monomorph,
-                                    method_info: Some(new_info),
-                                };
-                            }
-                        } else if new_func_name != old_func_name {
-                            let monomorph_info = Some(MonomorphInfo {
-                                generic_name: old_func_name,
-                                impl_type_args: sub_impl_type_args,
-                                method_type_args: sub_method_type_args,
-                                is_blanket: false,
+                                    new_info.to_mangled_name(),
+                                    concrete_type_id,
+                                )
                             });
                             *call_func = FunctionRef {
-                                module_source,
+                                module_source: resolved_module,
                                 name: new_func_name,
-                                monomorph_info,
+                                monomorph_info: new_monomorph,
                                 method_info: Some(new_info),
                             };
                         }
+                    } else if new_func_name != old_func_name {
+                        let monomorph_info = Some(MonomorphInfo {
+                            generic_name: old_func_name,
+                            impl_type_args: sub_impl_type_args,
+                            method_type_args: sub_method_type_args,
+                            is_blanket: false,
+                        });
+                        *call_func = FunctionRef {
+                            module_source,
+                            name: new_func_name,
+                            monomorph_info,
+                            method_info: Some(new_info),
+                        };
                     }
                 }
                 for arg in args {
