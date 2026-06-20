@@ -311,7 +311,7 @@ simulator (which already exists and is correct), not to fail:
 - the mandate yields on a 1-token FIRST match without verifying the
   caller continuation past the shared delimiter (`a and b and )`);
 - two enter edges sharing a first token are decided by FIRST alone;
-- the parse-side scan tournament seeds from an empty `GALE_SCAN_STACK`
+- the parse-side scan tournament seeds from an empty `SCAN_STACK`
   instead of `p.atn_stack`, so an enclosing parser rule's mandatory
   delimiter is invisible to the scan decision when the immediate
   continuation is nullable.

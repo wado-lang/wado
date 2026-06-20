@@ -85,7 +85,7 @@ pub struct LoweredGrammar {
     pub parser_rules: List<Rule>,
     /// Interned multi-element token-kind sets. `lower` rewrites every
     /// `<expr> matches { TK_X | TK_Y | ... }` decision into a
-    /// `_gale_kind_set_<id>(<expr>)` call; this list drives the
+    /// `_kind_set_<id>(<expr>)` call; this list drives the
     /// helper-function emission.
     pub kind_sets: List<KindSet>,
     /// Prediction-strategy diagnostics raised while lowering picked a
@@ -885,7 +885,7 @@ pub struct ScanRuleCallElement {
     pub min_prec_arg: Option<i32>,
     /// Scan-side mirror of `RuleCallOp.atn_call_site`: the originating surface
     /// `RuleRefElement.atn_call_site` id, so the scan emit can push this call's
-    /// exact ATN return state onto the scan caller stack (`GALE_SCAN_STACK`)
+    /// exact ATN return state onto the scan caller stack (`SCAN_STACK`)
     /// for the ATN-class LR loop decision. -1 if none.
     pub atn_call_site: i32 = -1,
 }
@@ -988,7 +988,7 @@ pub variant FieldKind {
     Span,
 }
 
-/// One interned token-kind set. emit drops a `_gale_kind_set_<id>(k)
+/// One interned token-kind set. emit drops a `_kind_set_<id>(k)
 /// -> bool` helper for each entry; multi-element `matches { ... }`
 /// checks elsewhere route through the helper to share the body.
 pub struct KindSet {

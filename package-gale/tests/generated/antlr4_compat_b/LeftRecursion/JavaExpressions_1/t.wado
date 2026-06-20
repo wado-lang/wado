@@ -1898,7 +1898,7 @@ global RK_EXPRESSIONLIST: NodeKind = 1;
 global RK_E: NodeKind = 2;
 global RK_TYPESPEC: NodeKind = 3;
 
-global GALE_RULE_NAMES: List<String> = ["s", "expressionList", "e", "typespec"];
+global RULE_NAMES: List<String> = ["s", "expressionList", "e", "typespec"];
 
 struct Parser {
     tokens: TokenStream,
@@ -2166,13 +2166,13 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 if pos < 0 { break try_6; }
                 let gp_1 = pos;
                 let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _gale_kind_set_1(sgk_1) {
+                if _kind_set_1(sgk_1) {
                     sg_1: {
                         pos = gp_1;
                         sg_1_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break sg_1_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+                            if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                                 let sp = pos;
                                 pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
                                 if pos < 0 { pos = sp; }
@@ -2220,7 +2220,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_2(alt_kind) {
+        } else if _kind_set_2(alt_kind) {
             pos = start;
             try_8: {
                 let gp_4 = pos;
@@ -2256,7 +2256,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_3(alt_kind) {
+        } else if _kind_set_3(alt_kind) {
             pos = start;
             try_9: {
                 let gp_5 = pos;
@@ -2313,7 +2313,7 @@ fn scan_e_lr_8(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2333,7 +2333,7 @@ fn scan_e_lr_9(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2379,7 +2379,7 @@ fn scan_e_lr_14(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         pos = scan_expression_list(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
@@ -2728,7 +2728,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_4(suffix_kind) {
+        } else if _kind_set_4(suffix_kind) {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_13(tokens, pos, follow);
@@ -2744,7 +2744,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_5(suffix_kind) {
+        } else if _kind_set_5(suffix_kind) {
             if 13 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_17(tokens, pos, follow);
@@ -2752,7 +2752,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_6(suffix_kind) {
+        } else if _kind_set_6(suffix_kind) {
             if 12 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_18(tokens, pos, follow);
@@ -2760,7 +2760,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_7(suffix_kind) {
+        } else if _kind_set_7(suffix_kind) {
             if 11 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_19(tokens, pos, follow);
@@ -2768,7 +2768,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_8(suffix_kind) {
+        } else if _kind_set_8(suffix_kind) {
             if 10 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_20(tokens, pos, follow);
@@ -2784,7 +2784,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_9(suffix_kind) {
+        } else if _kind_set_9(suffix_kind) {
             if 8 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_22(tokens, pos, follow);
@@ -2840,7 +2840,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
             } else {
                 break;
             }
-        } else if _gale_kind_set_10(suffix_kind) {
+        } else if _kind_set_10(suffix_kind) {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 pos = scan_e_lr_29(tokens, pos, follow);
@@ -3078,7 +3078,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let int = p.expect(TK_INT)?;
         return Result::Ok(());
     }
-    if _gale_kind_set_11(kind) {
+    if _kind_set_11(kind) {
         if p.peek_kind() == TK_ID {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -3111,7 +3111,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
             let lparen = p.expect(TK_LIT_LPAREN)?;
-            if _gale_kind_set_0(p.peek_kind()) {
+            if _kind_set_0(p.peek_kind()) {
                 let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
             }
             let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -3149,12 +3149,12 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         return Result::Ok(());
     }
-    if _gale_kind_set_2(kind) {
+    if _kind_set_2(kind) {
         let plus_or_minus_or_lit_plusplus_or_lit_minusminus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS, TK_LIT_PLUSPLUS, TK_LIT_MINUSMINUS])?;
         let e = _parse_e(p, follow, 14)?;
         return Result::Ok(());
     }
-    if _gale_kind_set_3(kind) {
+    if _kind_set_3(kind) {
         let tilde_or_bang = p.match_set([TK_LIT_TILDE, TK_LIT_BANG])?;
         let e = _parse_e(p, follow, 14)?;
         return Result::Ok(());
@@ -3209,7 +3209,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                         let dot = p.expect(TK_LIT_DOT)?;
                         let lit_super = p.expect(TK_LIT_SUPER)?;
                         let lparen = p.expect(TK_LIT_LPAREN)?;
-                        if _gale_kind_set_0(p.peek_kind()) {
+                        if _kind_set_0(p.peek_kind()) {
                             let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
                         }
                         let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -3227,7 +3227,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                         let lit_new = p.expect(TK_LIT_NEW)?;
                         let id = p.expect(TK_ID)?;
                         let lparen = p.expect(TK_LIT_LPAREN)?;
-                        if _gale_kind_set_0(p.peek_kind()) {
+                        if _kind_set_0(p.peek_kind()) {
                             let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
                         }
                         let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -3250,7 +3250,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_4(_sk) {
+        } else if _kind_set_4(_sk) {
             if 15 >= min_prec {
                 if scan_e_lr_13(&p.kinds, p.pos) < 0 {
                     break;
@@ -3268,7 +3268,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let lparen = p.expect(TK_LIT_LPAREN)?;
-                if _gale_kind_set_0(p.peek_kind()) {
+                if _kind_set_0(p.peek_kind()) {
                     let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW)?;
                 }
                 let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -3276,7 +3276,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_5(_sk) {
+        } else if _kind_set_5(_sk) {
             if 13 >= min_prec {
                 if scan_e_lr_17(&p.kinds, p.pos) < 0 {
                     break;
@@ -3288,7 +3288,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_6(_sk) {
+        } else if _kind_set_6(_sk) {
             if 12 >= min_prec {
                 if scan_e_lr_18(&p.kinds, p.pos) < 0 {
                     break;
@@ -3300,7 +3300,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_7(_sk) {
+        } else if _kind_set_7(_sk) {
             if 11 >= min_prec {
                 if scan_e_lr_19(&p.kinds, p.pos) < 0 {
                     break;
@@ -3312,7 +3312,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_8(_sk) {
+        } else if _kind_set_8(_sk) {
             if 10 >= min_prec {
                 if scan_e_lr_20(&p.kinds, p.pos) < 0 {
                     break;
@@ -3336,7 +3336,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_9(_sk) {
+        } else if _kind_set_9(_sk) {
             if 8 >= min_prec {
                 if scan_e_lr_22(&p.kinds, p.pos) < 0 {
                     break;
@@ -3422,7 +3422,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             } else {
                 break;
             }
-        } else if _gale_kind_set_10(_sk) {
+        } else if _kind_set_10(_sk) {
             if 1 >= min_prec {
                 if scan_e_lr_29(&p.kinds, p.pos) < 0 {
                     break;
@@ -3581,68 +3581,39 @@ fn _parse_typespec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     return Result::Ok(());
 }
 
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = entry(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return parse_s(input, max_errors);
 }
 
 pub fn parse_s(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_s(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_s(p));
 }
 
 pub fn parse_expression_list(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_expression_list(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression_list(p));
 }
 
 pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_e(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
 }
 
 pub fn parse_typespec(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_typespec(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_typespec(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
@@ -3650,7 +3621,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 54; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -3659,63 +3630,63 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
+fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_ID | TK_INT | TK_LIT_BANG | TK_LIT_INT | TK_LIT_LPAREN | TK_LIT_MINUS | TK_LIT_MINUSMINUS | TK_LIT_NEW | TK_LIT_PLUS | TK_LIT_PLUSPLUS | TK_LIT_SUPER | TK_LIT_THIS | TK_LIT_TILDE };
 }
 
-fn _gale_kind_set_1(k: i32) -> bool {
+fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_LIT_LBRACKET | TK_LIT_LPAREN };
 }
 
-fn _gale_kind_set_2(k: i32) -> bool {
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_LIT_MINUS | TK_LIT_MINUSMINUS | TK_LIT_PLUS | TK_LIT_PLUSPLUS };
 }
 
-fn _gale_kind_set_3(k: i32) -> bool {
+fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_LIT_BANG | TK_LIT_TILDE };
 }
 
-fn _gale_kind_set_4(k: i32) -> bool {
+fn _kind_set_4(k: i32) -> bool {
     return k matches { TK_LIT_MINUSMINUS | TK_LIT_PLUSPLUS };
 }
 
-fn _gale_kind_set_5(k: i32) -> bool {
+fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_LIT_PERCENT | TK_LIT_SLASH | TK_LIT_STAR };
 }
 
-fn _gale_kind_set_6(k: i32) -> bool {
+fn _kind_set_6(k: i32) -> bool {
     return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
 }
 
-fn _gale_kind_set_7(k: i32) -> bool {
+fn _kind_set_7(k: i32) -> bool {
     return k matches { TK_LIT_GTGT | TK_LIT_GTGTGT | TK_LIT_LTLT };
 }
 
-fn _gale_kind_set_8(k: i32) -> bool {
+fn _kind_set_8(k: i32) -> bool {
     return k matches { TK_LIT_GT | TK_LIT_GTEQ | TK_LIT_LT | TK_LIT_LTEQ };
 }
 
-fn _gale_kind_set_9(k: i32) -> bool {
+fn _kind_set_9(k: i32) -> bool {
     return k matches { TK_LIT_BANGEQ | TK_LIT_EQEQ };
 }
 
-fn _gale_kind_set_10(k: i32) -> bool {
+fn _kind_set_10(k: i32) -> bool {
     return k matches { TK_LIT_AMPEQ | TK_LIT_CARETEQ | TK_LIT_EQ | TK_LIT_GTGTEQ | TK_LIT_GTGTGTEQ | TK_LIT_LTLTEQ | TK_LIT_MINUSEQ | TK_LIT_PERCENTEQ | TK_LIT_PIPEEQ | TK_LIT_PLUSEQ | TK_LIT_SLASHEQ | TK_LIT_STAREQ };
 }
 
-fn _gale_kind_set_11(k: i32) -> bool {
+fn _kind_set_11(k: i32) -> bool {
     return k matches { TK_ID | TK_LIT_INT };
 }
 

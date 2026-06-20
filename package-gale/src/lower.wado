@@ -226,7 +226,7 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     }
     // Phase 2.7 — pre-intern multi-element token-kind sets that
     // surface in dispatch branches and `Op::Excluded` kinds. The
-    // resulting registry is the source of truth for `_gale_kind_set_<id>`
+    // resulting registry is the source of truth for `_kind_set_<id>`
     // helper-function emission; emit consults it in lockstep with
     // the dispatch / op walk it does anyway.
     let kind_sets = intern_kind_sets(&parser_rules, ctx);
@@ -294,7 +294,7 @@ fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool
 /// `List<KindSet>` is keyed by registration order — single-token
 /// sets are not interned (emit renders those as `<expr> == TK_X`
 /// directly), and identical sets share a single `id` so the
-/// generated `_gale_kind_set_<id>` helper is shared.
+/// generated `_kind_set_<id>` helper is shared.
 ///
 /// Covers the `Direct` dispatch (multi-token branch.tokens) and
 /// `Op::Excluded.kinds`. `Tournament` carries only alt indices and
@@ -306,7 +306,7 @@ fn intern_kind_sets(parser_rules: &List<Rule>, ctx: &mut GenContext) -> List<Kin
     // set the lowered IR carries. ctx is also where emit interns
     // sets at gen_parse_fn time via `kind_check_str`; sharing the
     // registry means lower's helper ids match emit's call sites
-    // exactly — `_gale_kind_set_<id>` references resolve to the
+    // exactly — `_kind_set_<id>` references resolve to the
     // helper this pre-pass produced.
     for let rule of parser_rules {
         walk_rule_for_kind_sets(rule, ctx);
@@ -360,7 +360,7 @@ fn walk_rule_for_kind_sets(rule: &Rule, ctx: &mut GenContext) {
 
 /// Walk a `ScanBody` and pre-register every kind set the op-driven
 /// scan emit will consult at `kind_check_str` time. Keeps the
-/// registry in lock-step with the IR so `_gale_kind_set_<id>` names
+/// registry in lock-step with the IR so `_kind_set_<id>` names
 /// don't shift when emit-time intern call orders change between
 /// refactors.
 fn walk_scan_body_for_kind_sets(body: &ScanBody, ctx: &mut GenContext) {
@@ -387,7 +387,7 @@ fn walk_scan_element_for_kind_sets(elem: &ScanElement, ctx: &mut GenContext) {
             // while-loop guard. For Optional + RuleRef bodies the emit
             // additionally subtracts `caller_follow_first` from the
             // loop's first set — pre-register that derived set too so
-            // the `_gale_kind_set_<id>` registry stays anchored to the
+            // the `_kind_set_<id>` registry stays anchored to the
             // lower walk order.
             if r.inner_first.len() >= 2 {
                 ctx.intern_kind_set(&r.inner_first);
@@ -486,7 +486,7 @@ fn walk_op_for_kind_sets(op: &Op, ctx: &mut GenContext) {
             // Also walk the nested scan mirror: kind sets that surface
             // only through `RepeatOp.scan_body` (e.g. an inner Repeat's
             // `inner_first`) would otherwise be interned late by emit,
-            // shifting `_gale_kind_set_<id>` ids out of the anchor walk.
+            // shifting `_kind_set_<id>` ids out of the anchor walk.
             walk_scan_element_for_kind_sets(&r.scan_body, ctx);
         },
         Group(go) => {

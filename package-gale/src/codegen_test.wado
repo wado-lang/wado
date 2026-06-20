@@ -570,10 +570,12 @@ b : 'y' ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_a(input: &String");
     assert str_contains(&output, &"pub fn parse_b(input: &String");
-    // Each `parse_<rule>` builds a Parser, runs the rule's `_parse_<rule>`
-    // entry, and folds the error into the diagnostics stream.
-    assert str_contains(&output, &"let _r = _parse_a(&mut p);");
-    assert str_contains(&output, &"let _r = _parse_b(&mut p);");
+    // Each `parse_<rule>` is a thin wrapper that hands the rule's
+    // `_parse_<rule>` entry to the shared `_run_parse_entry` helper as a fn value;
+    // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
+    assert str_contains(&output, &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult");
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
     // `pub fn parse` is a thin alias for the first rule's entry.
     assert str_contains(&output, &"return parse_a(input, max_errors);");
 }
@@ -693,7 +695,7 @@ WS : [ \\t\\n]+ -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"pub fn parse_expr(input: &String");
-    assert str_contains(&output, &"let _r = _parse_expr(&mut p);");
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {

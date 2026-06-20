@@ -210,7 +210,7 @@ pub const NO_CACHE_SPEC: OptSpec = OptSpec {
     long: Some("no-cache"),
     short: None,
     value: None,
-    desc: "Bypass all build caches: re-run Kiln generators on every invocation\nand recompile generator wasm components from source.\nIntended for profiling and cache-bug debugging.",
+    desc: "Bypass all build caches: re-run Kiln generators on every invocation\nand recompile generator wasm components from source.\nThe cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
 };
 
 pub fn match_opt<T: Copy>(

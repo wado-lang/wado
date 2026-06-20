@@ -143,17 +143,22 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
     // caller's continuation at runtime via the `follow` argument (see
     // `follow_yields` / `FollowArg`). The follow-mask globals are
     // emitted by `gen_follow_mask_globals` at the end of codegen.
-    gen_parse_entry(w, lowered, ctx);
+    gen_parse_entry(w, lowered);
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
 /// rule (which drives the builder), and return a `ParseResult`. A propagated
 /// `Err` is the single fail-soft diagnostic; the partial tree (open nodes
 /// folded by each wrapper's `finish_node`) is still returned.
-fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
+    // The tokenize → run-entry → fold-error body is identical for every rule, so
+    // it lives in a single `_run_parse_entry` helper; each `parse_<rule>` is a thin
+    // wrapper that hands it the rule's `_parse_<rule>` entry as a fn value.
+    gen_run_parse_entry(w);
+    w.blank();
     // `parse` is the start (first) rule. Per-rule `parse_<rule>` entries let a
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
     // ANTLR4-compat descriptors name one), mirroring the typed parser.
@@ -163,26 +168,28 @@ fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContex
     w.end();
     w.blank();
     for let rule of &lowered.parser_rules {
-        gen_parse_rule_entry(w, rule, ctx);
+        gen_parse_rule_entry(w, rule);
     }
 }
 
-/// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry:
-/// tokenize, run `_parse_<rule>`, fold the partial tree, and on error push a
-/// single diagnostic (deepest of the propagated error and `p.pending`).
-fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
-    let header = rule_header(rule);
-    let follow_arg = if ctx.emit_follow() { ", &EMPTY_FOLLOW" } else { "" };
-    w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
+/// Emit the shared entry body once per generated module: tokenize, run the
+/// supplied rule entry (`_parse_<rule>`, passed as a fn value so a follow-gated
+/// or LR entry's defaulted `follow` / `min_prec` arguments fill in), fold the
+/// partial tree, and on error push a single diagnostic (deepest of the
+/// propagated error and `p.pending`).
+fn gen_run_parse_entry(w: &mut CodeWriter) {
+    w.begin(
+        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult",
+    );
     w.line(&"let _ = max_errors;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
-    w.line(&`let _r = _parse_{header.snake_name}(&mut p{follow_arg});`);
+    w.line(&"let _r = entry(&mut p);");
     w.begin(&"if let Err(e) = _r");
     // Surface the deepest error: a scan-gated repeat's speculative re-parse
     // records the precise inner error in `p.pending` (see
     // `gen_rep_break_with_recovery`); prefer it over the shallow propagated
-    // `e` when it sits at or past `e` (mirrors the typed `_gale_pick_error`).
+    // `e` when it sits at or past `e`.
     w.line(&"let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };");
     w.line(&"let lc = line_col(p.tokens.chars, e.span.start);");
     w.line(
@@ -194,6 +201,16 @@ fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     w.line(&"p.diagnostics.push(d);");
     w.end();
     w.line(&"return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };");
+    w.end();
+}
+
+/// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
+/// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)` so a follow-gated
+/// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule) {
+    let header = rule_header(rule);
+    w.begin(&`pub fn parse_{header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult`);
+    w.line(&`return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_{header.snake_name}(p));`);
     w.end();
     w.blank();
 }
@@ -238,7 +255,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
         s.add_field(&"trace_depth", &"i32");
     }
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
-    // it); the decoded ATN is shared via the module-level `GALE_ATN_SIM`.
+    // it); the decoded ATN is shared via the module-level `ATN_SIM`.
     // `atn_stack` is the caller stack of ATN return states for full-context
     // prediction. `atn_ret_pending` passes a call site's return state to the
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
@@ -834,11 +851,11 @@ fn gen_lr_suffix_dispatch_atn(
     w.begin(&"loop");
     if side.scan {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &GALE_SCAN_STACK, {decision}, tokens, pos, TK_EOF, min_prec);`,
+            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, {decision}, tokens, pos, TK_EOF, min_prec);`,
         );
     } else {
         w.line(
-            &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+            &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
         );
     }
     w.line(&`let _lr_pos0 = {pos_expr};`);
@@ -1344,7 +1361,7 @@ fn is_self_ref_scan_call(se: &ScanElement, rule_name: &String) -> bool {
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
 /// of `p.peek_at(d)`. Multi-token sets route through
-/// `ctx.kind_check_str` so they collapse to a `_gale_kind_set_<id>(...)`
+/// `ctx.kind_check_str` so they collapse to a `_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
 /// site bloats the generated wasm by hundreds of KB.
 fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
@@ -1390,9 +1407,9 @@ fn gen_scan_op_element(
         // never leaks the frame.
         let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
         if push_ret >= 0 {
-            w.line(&`GALE_SCAN_STACK.push({push_ret});`);
+            w.line(&`SCAN_STACK.push({push_ret});`);
             w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
-            w.line(&"GALE_SCAN_STACK.pop();");
+            w.line(&"SCAN_STACK.pop();");
         } else {
             w.line(&`pos = {fn_name}(tokens, pos{follow_arg_str}, {min_prec});`);
         }
@@ -2882,7 +2899,7 @@ fn gen_lr_fn_atn(
     let mut nc: List<[String, i32]> = [];
     w.begin(&"loop");
     w.line(
-        &`let _atn_alt = atn_lr_loop_decision(&GALE_ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     w.line(&"let _lr_pos0 = p.pos;");
     let mut is_first = true;
@@ -3440,7 +3457,7 @@ fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     // rather than emit a parser that silently mispredicts. No corpus grammar
     // has a `??` inside an LR rule.
     assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
-    return `atn_ng_optional_enter(&GALE_ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
+    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -3932,7 +3949,7 @@ fn op_field(op: &Op) -> String {
 /// Render the `p.match_not([…])` expression for an `Op::Excluded`.
 /// Lower interns multi-element exclusion sets via
 /// `ctx.intern_kind_set`; if a future slice routes those through the
-/// generated `_gale_kind_set_<id>_match_not` helper this is the
+/// generated `_kind_set_<id>_match_not` helper this is the
 /// single call site to update.
 fn gen_op_excluded_call(e: &ExcludedOp) -> String {
     let mut list = String::with_capacity(32);
@@ -5987,13 +6004,13 @@ fn rule_takes_min_prec(rule: &Rule) -> bool {
     };
 }
 
-/// Emit a `_gale_kind_set_<id>(k: i32) -> bool` function for every
+/// Emit a `_kind_set_<id>(k: i32) -> bool` function for every
 /// multi-element token-kind set interned during parser codegen. The
 /// `ctx.kind_check_str` and `ctx.kind_negate_check_str` methods rewrite
 /// every multi-element `matches { ... }` check into a call into one of
 /// these helpers, so duplicate sets share a single function body in
 /// the generated wasm.
-/// Emit `_gale_kind_set_<id>(k) -> bool` helpers. The id range
+/// Emit `_kind_set_<id>(k) -> bool` helpers. The id range
 /// `0..lowered.kind_sets.len()` reads tokens directly from
 /// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
 /// surfacing as actual generated code. Higher ids (sets emit-time
@@ -6046,7 +6063,7 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
 }
 
 fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
-    let mut f = FnSpec::new(&`_gale_kind_set_{id}`);
+    let mut f = FnSpec::new(&`_kind_set_{id}`);
     f.add_param(&"k", &"i32");
     f.set_return_type(&"bool");
     f.emit_begin(w);
