@@ -42,10 +42,12 @@ fn rule_const(name: &String) -> String {
 }
 
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
-/// table (rule-index order); the name table drives `to_string_tree`.
+/// table (rule-index order); the name table drives `to_string_tree`. The
+/// `RK_*` constants are `pub` so a consumer can dispatch on `CstNode.kind`
+/// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        w.line(&`global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
+        w.line(&`pub global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);

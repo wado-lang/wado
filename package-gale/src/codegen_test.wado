@@ -96,6 +96,15 @@ test "generate token kind" {
     assert !str_contains(&output, &"    DIGIT,");
 }
 
+test "node-kind constants are pub so consumers can dispatch on CstNode.kind" {
+    let mut grammar = parse("grammar T; prog : expr ; expr : INT ; INT : [0-9]+ ;").unwrap();
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub global RK_PROG:");
+    assert str_contains(&output, &"pub global RK_EXPR:");
+    // No non-pub `global RK_` line should remain.
+    assert !str_contains(&output, &"\nglobal RK_");
+}
+
 test "generate wildcard element" {
     let mut grammar = Grammar {
         name: "Test",
