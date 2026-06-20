@@ -358,6 +358,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // First, determine expected parameter types to handle coercion.
         let mut param_types = self.lookup_function_param_types(effective_name);
 
+        // Whether `param_types` holds a variant payload rather than declared
+        // function params (see the hole-pin loop below).
+        let mut is_variant_payload = false;
+
         // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
         if param_types.is_empty()
@@ -403,6 +407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                     param_types.push(payload_type);
+                    is_variant_payload = true;
                 }
             }
         }
@@ -417,6 +422,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(self.resolve_expr(arg, ctx, expected_type), arg.span())
             })
             .collect();
+
+        // Pin a deferred hole carried into a variant payload (`Result::Ok(v)`,
+        // `v = gen()?`) against the payload type. Regular call arguments are
+        // pinned post-inference below; this loop runs pre-inference, so it is
+        // scoped to variant payloads to avoid touching them.
+        if is_variant_payload {
+            for (i, arg) in args.iter_mut().enumerate() {
+                if let Some(&expected) = param_types.get(i)
+                    && self.type_has_infer_hole(arg.type_id)
+                    && self.hole_pinnable_against(expected)
+                {
+                    self.solve_infer_holes_against(arg.type_id, expected);
+                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                }
+            }
+        }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
         // both the defining module and the name-as-defined; `None` means the
@@ -1197,8 +1218,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !type_args.is_empty() {
             self.recoerce_literal_args(&call.args, &mut args, &check_param_types);
         }
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
+                // Pin a deferred hole carried into this argument
+                // (`let v = gen()?; foo(v)`) against the parameter type.
+                if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected) {
+                    self.solve_infer_holes_against(arg.type_id, expected);
+                    arg.type_id = self.apply_infer_holes(arg.type_id);
+                }
                 self.typecheck(
                     arg.type_id,
                     expected,

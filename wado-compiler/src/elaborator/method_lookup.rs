@@ -1160,6 +1160,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         };
 
+        // Kept for the collision check below: an unconstrained method param
+        // solves to its own id, which can share `(name, index)` — hence the
+        // same `TypeId` — with an enclosing scope param.
+        let method_param_ids = method_type_param_ids.clone();
         let mut infer = InferCtx::new(&self.tysys.type_table, method_type_param_ids);
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
@@ -1172,14 +1176,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             infer.add_expected_return(decl_return_type, expected);
         }
 
-        // Accept an inference result when each method type param resolved
-        // either to a concrete type, or to an outer-scope `TypeParam` (one
-        // already registered in `trait_ctx.type_params`). Outer-scope params
-        // are fine because monomorphization's index-based substitution will
-        // rewrite them alongside the surrounding generics. Anything else —
-        // including a fresh method-level `TypeParam` that no outer binding
-        // knows about — would leave a dangling id at the call site, so
-        // drop the inference and let the caller fall back to `vec![]`.
+        // Outer-scope type params (the surrounding impl / fn generics). A method
+        // param the solver forwards to one of these is fine: monomorphization's
+        // index-based substitution rewrites it alongside the surrounding
+        // generics. See the classification below.
         let scope_params: Vec<TypeId> = self
             .annotate_ctx
             .trait_ctx
@@ -1194,91 +1194,93 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_assoc_bound_args(&method_type_params, &mut inferred);
         let all_concrete = inferred.iter().all(|&tid| !self.is_unbound_type_param(tid));
         if !all_concrete {
-            let all_outer = inferred.iter().all(|tid| scope_params.contains(tid));
-            if !all_outer {
-                // A method type parameter resolved to neither a concrete type
-                // nor an outer-scope parameter — it stayed a fresh, dangling
-                // `TypeParam`. Without an explicit turbofish or an LHS type
-                // annotation there is nothing left to pin it, so report a
-                // clean diagnostic here instead of letting the dangling id
-                // reach a later phase and panic.
-                //
-                // `fn`-bound parameters (`<F: fn(...) -> ...>`) are excluded:
-                // they are constrained structurally from the bound's function
-                // type, not by call-site inference, so an empty result for
-                // them is expected and handled downstream.
-                let unresolved: Vec<&str> = method_type_params
-                    .iter()
-                    .zip(inferred.iter())
-                    .filter(|&(param, &tid)| {
-                        !param.has_fn_bound()
-                            && matches!(
-                                self.tysys.type_table.borrow().get(tid),
-                                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                            )
-                            && !scope_params.contains(&tid)
-                    })
-                    .map(|(param, _)| param.name.as_str())
-                    .collect();
-                if !unresolved.is_empty() {
-                    let params = unresolved
+            // Classify each method type parameter that did not resolve to a
+            // concrete type. A parameter is genuinely resolved when it is
+            // pinned by an *argument* — it occurs in a value parameter's type,
+            // so unification fixes it regardless of id collisions — or bound by
+            // the expected return to a *different* outer scope parameter. A
+            // parameter that occurs only in the return type and stayed its own
+            // id is unconstrained: its id can collide *by index* with an
+            // enclosing generic (both `T` at index 0), so it must not be
+            // silently fused to that outer parameter. Defer it to a hole that
+            // the call's sink / expected-type context resolves. (Without this,
+            // serde `Result` deserialize fused `payload<T>` and `payload<E>`
+            // into a single `payload<T>`.)
+            let arg_count = args.len();
+            let arg_inferable: Vec<bool> = (0..method_type_params.len())
+                .map(|i| {
+                    let idx = impl_offset + i as u32;
+                    let tt = self.tysys.type_table.borrow();
+                    param_types
                         .iter()
-                        .map(|n| format!("`{n}`"))
+                        .take(arg_count)
+                        .any(|&pt| tt.contains_type_param_index(pt, idx))
+                })
+                .collect();
+            let param_like: Vec<bool> = inferred
+                .iter()
+                .map(|&tid| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(tid),
+                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                    )
+                })
+                .collect();
+            // Slots needing attention: still parametric and neither
+            // argument-pinned nor forwarded to a *different* outer scope param.
+            let attention: Vec<usize> = (0..inferred.len())
+                .filter(|&i| {
+                    param_like[i]
+                        && !arg_inferable[i]
+                        && !(scope_params.contains(&inferred[i])
+                            && inferred[i] != method_param_ids[i])
+                })
+                .collect();
+            if !attention.is_empty() {
+                // `fn`-bound parameters (`<F: fn(...) -> ...>`) are constrained
+                // structurally from the bound, not by call-site inference, so an
+                // empty result for them is expected and handled downstream.
+                let deferrable: Vec<usize> = attention
+                    .iter()
+                    .copied()
+                    .filter(|&i| !method_type_params[i].has_fn_bound())
+                    .collect();
+                if !deferrable.is_empty() {
+                    let params = deferrable
+                        .iter()
+                        .map(|&i| format!("`{}`", method_type_params[i].name))
                         .collect::<Vec<_>>()
                         .join(", ");
                     let message = format!(
                         "cannot infer type parameter {params} of method `{method_name}`; \
                          add a turbofish (`{method_name}::<...>()`) or a type annotation"
                     );
-
                     // Defer (mint a hole per unresolved param) when no expected
                     // type pins it yet and the receiver/args are hole-free, so
                     // the holey result can be solved at an enclosing boundary
-                    // (`p.get().unwrap()`). An unsolved hole still raises
-                    // `message` in `finalize_infer_holes`.
+                    // (`p.get().unwrap()`, an `if let` sink, a `return`). An
+                    // unsolved hole still raises `message` in
+                    // `finalize_infer_holes`.
                     let can_defer = expected_return_type.is_none()
                         && !self.type_has_infer_hole(receiver_type)
                         && args.iter().all(|a| !self.type_has_infer_hole(a.type_id));
                     if can_defer {
-                        // (slot, name, bound names) per unresolved param; bounds
-                        // ride the hole for re-verification once solved.
-                        let slots: Vec<(usize, String, Vec<String>)> = method_type_params
-                            .iter()
-                            .zip(inferred.iter())
-                            .enumerate()
-                            .filter(|&(_, (param, &tid))| {
-                                !param.has_fn_bound()
-                                    && matches!(
-                                        self.tysys.type_table.borrow().get(tid),
-                                        ResolvedType::TypeParam { .. }
-                                            | ResolvedType::TypePack { .. }
-                                    )
-                                    && !scope_params.contains(&tid)
-                            })
-                            .map(|(i, (param, _))| {
-                                let bound_names: Vec<String> = param
-                                    .bounds
-                                    .iter()
-                                    .filter(|b| b.fn_signature.is_none())
-                                    .map(|b| b.name.clone())
-                                    .collect();
-                                (i, param.name.clone(), bound_names)
-                            })
-                            .collect();
-                        for (i, param_name, bound_names) in slots {
-                            inferred[i] = self.mint_infer_hole(
-                                span,
-                                message.clone(),
-                                param_name,
-                                bound_names,
-                            );
+                        for i in deferrable {
+                            let bound_names: Vec<String> = method_type_params[i]
+                                .bounds
+                                .iter()
+                                .filter(|b| b.fn_signature.is_none())
+                                .map(|b| b.name.clone())
+                                .collect();
+                            let name = method_type_params[i].name.clone();
+                            inferred[i] =
+                                self.mint_infer_hole(span, message.clone(), name, bound_names);
                         }
                         return InferredMethodTypeArgs {
                             type_args: inferred,
                             bound_check_params,
                         };
                     }
-
                     let _ = self
                         .logger
                         .error(TypeError::CannotInferType { message, span });

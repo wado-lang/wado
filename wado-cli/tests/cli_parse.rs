@@ -701,6 +701,21 @@ fn dump_opt_level() {
 }
 
 #[test]
+fn dump_world_defaults_to_none() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::dump::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, None);
+}
+
+#[test]
+fn dump_world() {
+    let parser = Parser::from_args(&["--tir-monomorphized", "--world", "test", "input.wado"]);
+    let opts = wado_cli::dump::parse_args(parser).unwrap();
+    assert!(opts.show_tir_monomorphized);
+    assert_eq!(opts.target_world.as_deref(), Some("test"));
+}
+
+#[test]
 fn dump_tokens() {
     let parser = Parser::from_args(&["--tokens", "input.wado"]);
     let opts = wado_cli::dump::parse_args(parser).unwrap();

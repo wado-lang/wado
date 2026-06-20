@@ -559,7 +559,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check each argument against expected parameter type
-        for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
+        for (i, (arg, &expected_type)) in
+            args.iter_mut().zip(expected_param_types.iter()).enumerate()
+        {
+            // Pin a deferred hole that rode a prior binding into this argument
+            // (`let v = gen()?; out.push(v)`) against the parameter type.
+            if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
+                self.solve_infer_holes_against(arg.type_id, expected_type);
+                arg.type_id = self.apply_infer_holes(arg.type_id);
+            }
             let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
             self.typecheck(arg.type_id, expected_type, arg_span);
         }
