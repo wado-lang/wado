@@ -72,6 +72,37 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 /// anchor shape.
 pub const CLOSURE_FN_TRAIT: &str = "Fn";
 
+/// Label the template-string synthesiser stamps on the block wrapping an
+/// expanded `` `...` `` literal. The template-hoist and const-branch-prune
+/// optimizers key on it to recognise template expansions, so the producer
+/// (`synthesis::template`) and those consumers share this one definition
+/// instead of re-hardcoding the literal — compiler-internal, hence a `const`.
+pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
+
+/// Name of the result accumulator local in an expanded template block.
+/// Recognised by the template-hoist optimizer; single-sourced here.
+pub const TEMPLATE_RESULT_LOCAL: &str = "__r";
+
+/// Name of the `Formatter` local in an expanded template block. Producer-only
+/// today, kept beside its siblings so the template-local convention lives in
+/// one place.
+pub const TEMPLATE_FORMATTER_LOCAL: &str = "__f";
+
+/// Per-module initializer function the lowering phase synthesises to run a
+/// module's global initializers. The optimizer's liveness / const-object
+/// passes treat it as a root, so producer and consumers share this name.
+pub const MODULE_INIT_FUNCTION: &str = "__initialize_module";
+
+/// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
+/// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
+/// over the latter still covers both.
+pub const MODULES_INIT_FUNCTION: &str = "__initialize_modules";
+
+/// Prefix the const-object globalization pass stamps on the globals it hoists
+/// constant aggregates into (`__const_obj_0`, …). It both mints and rescans
+/// these names, so the prefix lives here rather than as a repeated literal.
+pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
+
 /// A free function name (not a method on a struct).
 ///
 /// Format: `{module_source}/{name}`

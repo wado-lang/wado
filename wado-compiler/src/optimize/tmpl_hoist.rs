@@ -505,7 +505,11 @@ fn transform_stmt(
     };
     if let Some((local_index, value)) = let_info {
         let tmpl_block = match &engine.body.exprs[value].kind {
-            ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
+            ExprKind::LabeledBlock { label, block, .. }
+                if label == crate::name::TEMPLATE_BLOCK_LABEL =>
+            {
+                Some(*block)
+            }
             _ => None,
         };
         if let Some(tb) = tmpl_block
@@ -642,7 +646,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             value,
             type_id,
             ..
-        } if name == "__r" => {
+        } if name == crate::name::TEMPLATE_RESULT_LOCAL => {
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
@@ -701,7 +705,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == "__tmpl" => match &body.exprs[*val].kind {
+        } if label == crate::name::TEMPLATE_BLOCK_LABEL => match &body.exprs[*val].kind {
             ExprKind::Local { index, .. } if *index == buf_local_index => {}
             _ => return None,
         },
