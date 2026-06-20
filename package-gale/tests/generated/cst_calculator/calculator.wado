@@ -1783,7 +1783,7 @@ global RK_FUNC_: NodeKind = 9;
 global RK_FUNCNAME: NodeKind = 10;
 global RK_RELOP: NodeKind = 11;
 
-global GALE_RULE_NAMES: List<String> = ["equation", "expression", "multiplyingExpression", "powExpression", "signedAtom", "atom", "scientific", "constant", "variable", "func_", "funcname", "relop"];
+global RULE_NAMES: List<String> = ["equation", "expression", "multiplyingExpression", "powExpression", "signedAtom", "atom", "scientific", "constant", "variable", "func_", "funcname", "relop"];
 
 struct Parser {
     tokens: TokenStream,
@@ -1941,7 +1941,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     let mut pos = pos;
     pos = scan_multiplying_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
@@ -1977,7 +1977,7 @@ fn scan_multiplying_expression(tokens: &Array<i32>, pos: i32, follow: &List<List
     let mut pos = pos;
     pos = scan_pow_expression(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
@@ -2056,7 +2056,7 @@ fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_2(alt_kind) {
+        } else if _kind_set_2(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_func_(tokens, pos, follow, 0);
@@ -2064,7 +2064,7 @@ fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_3(alt_kind) {
+        } else if _kind_set_3(alt_kind) {
             pos = start;
             try_3: {
                 pos = scan_atom(tokens, pos, follow, 0);
@@ -2100,7 +2100,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 break scan_alts;
             }
             return -1;
-        } else if _gale_kind_set_4(alt_kind) {
+        } else if _kind_set_4(alt_kind) {
             pos = start;
             try_2: {
                 pos = scan_constant(tokens, pos, follow, 0);
@@ -2135,7 +2135,7 @@ fn scan_scientific(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 }
 
 fn scan_constant(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_4(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_4(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2177,14 +2177,14 @@ fn scan_func_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 }
 
 fn scan_funcname(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_2(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_2(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
 fn scan_relop(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_5(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_5(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2375,11 +2375,11 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         let signed_atom = _parse_signed_atom(p, follow)?;
         return Result::Ok(());
     }
-    if _gale_kind_set_2(kind) {
+    if _kind_set_2(kind) {
         let func_ = _parse_func_(p, follow)?;
         return Result::Ok(());
     }
-    if _gale_kind_set_3(kind) {
+    if _kind_set_3(kind) {
         let atom = _parse_atom(p, follow)?;
         return Result::Ok(());
     }
@@ -2413,7 +2413,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let variable = _parse_variable(p, follow)?;
         return Result::Ok(());
     }
-    if _gale_kind_set_4(kind) {
+    if _kind_set_4(kind) {
         let constant = _parse_constant(p, follow)?;
         return Result::Ok(());
     }
@@ -2463,7 +2463,7 @@ fn _parse_scientific(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 fn _parse_constant__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_4(kind) {
+    if _kind_set_4(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -2550,7 +2550,7 @@ fn _parse_func_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
 fn _parse_funcname__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_2(kind) {
+    if _kind_set_2(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -2576,7 +2576,7 @@ fn _parse_funcname(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 fn _parse_relop__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_5(kind) {
+    if _kind_set_5(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -2599,188 +2599,71 @@ fn _parse_relop(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
     return Result::Ok(());
 }
 
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = entry(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return parse_equation(input, max_errors);
 }
 
 pub fn parse_equation(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_equation(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_equation(p));
 }
 
 pub fn parse_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_expression(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expression(p));
 }
 
 pub fn parse_multiplying_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_multiplying_expression(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_multiplying_expression(p));
 }
 
 pub fn parse_pow_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_pow_expression(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pow_expression(p));
 }
 
 pub fn parse_signed_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_signed_atom(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_signed_atom(p));
 }
 
 pub fn parse_atom(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_atom(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_atom(p));
 }
 
 pub fn parse_scientific(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_scientific(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_scientific(p));
 }
 
 pub fn parse_constant(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_constant(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_constant(p));
 }
 
 pub fn parse_variable(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_variable(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_variable(p));
 }
 
 pub fn parse_func_(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_func_(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_func_(p));
 }
 
 pub fn parse_funcname(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_funcname(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_funcname(p));
 }
 
 pub fn parse_relop(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_relop(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_relop(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
@@ -2788,7 +2671,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 29; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -2797,39 +2680,39 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
+fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_MINUS | TK_PLUS };
 }
 
-fn _gale_kind_set_1(k: i32) -> bool {
+fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_DIV | TK_TIMES };
 }
 
-fn _gale_kind_set_2(k: i32) -> bool {
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_ACOS | TK_ASIN | TK_ATAN | TK_COS | TK_LN | TK_LOG | TK_SIN | TK_SQRT | TK_TAN };
 }
 
-fn _gale_kind_set_3(k: i32) -> bool {
+fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_EULER | TK_I | TK_LPAREN | TK_PI | TK_SCIENTIFIC_NUMBER | TK_VARIABLE };
 }
 
-fn _gale_kind_set_4(k: i32) -> bool {
+fn _kind_set_4(k: i32) -> bool {
     return k matches { TK_EULER | TK_I | TK_PI };
 }
 
-fn _gale_kind_set_5(k: i32) -> bool {
+fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_EQ | TK_GT | TK_LT };
 }
 

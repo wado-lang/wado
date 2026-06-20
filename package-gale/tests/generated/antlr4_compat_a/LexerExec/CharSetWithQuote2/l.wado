@@ -1149,7 +1149,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 
-global GALE_RULE_NAMES: List<String> = [];
+global RULE_NAMES: List<String> = [];
 
 struct Parser {
     tokens: TokenStream,
@@ -1295,7 +1295,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 4; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -1304,14 +1304,14 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }

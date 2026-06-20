@@ -2448,7 +2448,7 @@ global RK_HTMLCOMMENT: NodeKind = 8;
 global RK_SCRIPT: NodeKind = 9;
 global RK_STYLE: NodeKind = 10;
 
-global GALE_RULE_NAMES: List<String> = ["htmlDocument", "scriptletOrSeaWs", "htmlElements", "htmlElement", "htmlContent", "htmlAttribute", "htmlChardata", "htmlMisc", "htmlComment", "script", "style"];
+global RULE_NAMES: List<String> = ["htmlDocument", "scriptletOrSeaWs", "htmlElements", "htmlElement", "htmlContent", "htmlAttribute", "htmlChardata", "htmlMisc", "htmlComment", "script", "style"];
 
 struct Parser {
     tokens: TokenStream,
@@ -2591,7 +2591,7 @@ impl Parser {
 
 fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2602,7 +2602,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos >= tokens.len() || tokens[pos] != TK_XML { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2613,13 +2613,13 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         if pos >= tokens.len() || tokens[pos] != TK_DTD { pos = -1; } else { pos += 1; }
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    while pos < tokens.len() && _gale_kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_elements(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2629,7 +2629,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
 }
 
 fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2637,7 +2637,7 @@ fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
 
 fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos]) {
+    while pos < tokens.len() && _kind_set_2(tokens[pos]) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2645,7 +2645,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     }
     pos = scan_html_element(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow), 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _gale_kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; break; }
@@ -2674,13 +2674,13 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 }
                 let gp_0 = pos;
                 let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _gale_kind_set_4(sgk_0) {
+                if _kind_set_4(sgk_0) {
                     sg_0: {
                         pos = gp_0;
                         sg_0_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_0_0; }
                             pos += 1;
-                            if pos < tokens.len() && _gale_kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                            if pos < tokens.len() && _kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                 let sp = pos;
                                 sg_1_done: {
                                     sg_1: {
@@ -2747,18 +2747,18 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 
 fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _gale_kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
                 let gp_3 = pos;
                 let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _gale_kind_set_7(sgk_3) {
+                if _kind_set_7(sgk_3) {
                     sg_3: {
                         pos = gp_3;
                         sg_3_0: {
@@ -2781,7 +2781,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                         pos = gp_3;
                     }
                 }
-                if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                     if pos < 0 { pos = sp; }
@@ -2818,7 +2818,7 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 }
 
 fn scan_html_chardata(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_8(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2829,7 +2829,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _gale_kind_set_6(alt_kind) {
+        if _kind_set_6(alt_kind) {
             pos = start;
             try_0: {
                 pos = scan_html_comment(tokens, pos, follow, 0);
@@ -2853,7 +2853,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
 }
 
 fn scan_html_comment(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
-    if pos < tokens.len() && _gale_kind_set_6(tokens[pos]) {
+    if pos < tokens.len() && _kind_set_6(tokens[pos]) {
         return pos + 1;
     }
     return -1;
@@ -2919,7 +2919,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
-            if _gale_kind_set_0(p.peek_kind()) {
+            if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -2945,7 +2945,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 {
-            if _gale_kind_set_0(p.peek_kind()) {
+            if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -2971,7 +2971,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos_3 = pos;
         }
         if rep_scan_pos_3 < 0 {
-            if _gale_kind_set_0(p.peek_kind()) {
+            if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -2994,7 +2994,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos_4 = pos;
         }
         if rep_scan_pos_4 < 0 {
-            if _gale_kind_set_1(p.peek_kind()) {
+            if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_html_elements(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -3023,7 +3023,7 @@ fn _parse_html_document(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_0(kind) {
+    if _kind_set_0(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -3059,7 +3059,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
-            if _gale_kind_set_2(p.peek_kind()) {
+            if _kind_set_2(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_html_misc(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -3083,7 +3083,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 {
-            if _gale_kind_set_2(p.peek_kind()) {
+            if _kind_set_2(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
                 if let Err(_rec_e) = _parse_html_misc(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
@@ -3201,7 +3201,7 @@ fn _parse_html_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_gale_kind_set_8(p.peek_kind())) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
         let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW)?;
     }
     loop {
@@ -3214,7 +3214,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 sg_7: {
                     let gp_8 = pos;
                     let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _gale_kind_set_7(sgk_8) {
+                    if _kind_set_7(sgk_8) {
                         sg_8: {
                             pos = gp_8;
                             sg_8_0: {
@@ -3237,7 +3237,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                             pos = gp_8;
                         }
                     }
-                    if pos < tokens.len() && _gale_kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_8(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                         let sp = pos;
                         pos = scan_html_chardata(tokens, pos, &EMPTY_FOLLOW, 0);
                         if pos < 0 { pos = sp; }
@@ -3251,14 +3251,14 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         let grp_kind = p.peek_kind();
-        if _gale_kind_set_5(grp_kind) {
+        if _kind_set_5(grp_kind) {
             let html_element = _parse_html_element(p, follow)?;
         } else if grp_kind == TK_CDATA {
             let cdata = p.expect(TK_CDATA)?;
-        } else if _gale_kind_set_6(grp_kind) {
+        } else if _kind_set_6(grp_kind) {
             let html_comment = _parse_html_comment(p, follow)?;
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_gale_kind_set_8(p.peek_kind())) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW)?;
         }
     }
@@ -3302,7 +3302,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_8(kind) {
+    if _kind_set_8(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -3328,7 +3328,7 @@ fn _parse_html_chardata(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_6(kind) {
+    if _kind_set_6(kind) {
         let html_comment = _parse_html_comment(p, follow)?;
         return Result::Ok(());
     }
@@ -3358,7 +3358,7 @@ fn _parse_html_misc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if _gale_kind_set_6(kind) {
+    if _kind_set_6(kind) {
         let _ = p.expect(kind)?;
         return Result::Ok(());
     }
@@ -3419,173 +3419,67 @@ fn _parse_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Res
     return Result::Ok(());
 }
 
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = entry(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return parse_html_document(input, max_errors);
 }
 
 pub fn parse_html_document(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_document(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_document(p));
 }
 
 pub fn parse_scriptlet_or_sea_ws(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_scriptlet_or_sea_ws(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_scriptlet_or_sea_ws(p));
 }
 
 pub fn parse_html_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_elements(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_elements(p));
 }
 
 pub fn parse_html_element(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_element(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_element(p));
 }
 
 pub fn parse_html_content(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_content(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_content(p));
 }
 
 pub fn parse_html_attribute(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_attribute(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_attribute(p));
 }
 
 pub fn parse_html_chardata(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_chardata(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_chardata(p));
 }
 
 pub fn parse_html_misc(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_misc(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_misc(p));
 }
 
 pub fn parse_html_comment(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_html_comment(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_html_comment(p));
 }
 
 pub fn parse_script(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_script(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_script(p));
 }
 
 pub fn parse_style(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_style(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_style(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
@@ -3593,7 +3487,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 25; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -3602,51 +3496,51 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
+fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_SCRIPTLET | TK_SEA_WS };
 }
 
-fn _gale_kind_set_1(k: i32) -> bool {
+fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _gale_kind_set_2(k: i32) -> bool {
+fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SEA_WS };
 }
 
-fn _gale_kind_set_3(k: i32) -> bool {
+fn _kind_set_3(k: i32) -> bool {
     return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_HTML_TEXT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_SEA_WS | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _gale_kind_set_4(k: i32) -> bool {
+fn _kind_set_4(k: i32) -> bool {
     return k matches { TK_TAG_CLOSE | TK_TAG_SLASH_CLOSE };
 }
 
-fn _gale_kind_set_5(k: i32) -> bool {
+fn _kind_set_5(k: i32) -> bool {
     return k matches { TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _gale_kind_set_6(k: i32) -> bool {
+fn _kind_set_6(k: i32) -> bool {
     return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
 }
 
-fn _gale_kind_set_7(k: i32) -> bool {
+fn _kind_set_7(k: i32) -> bool {
     return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT | TK_SCRIPTLET | TK_SCRIPT_OPEN | TK_STYLE_OPEN | TK_TAG_OPEN };
 }
 
-fn _gale_kind_set_8(k: i32) -> bool {
+fn _kind_set_8(k: i32) -> bool {
     return k matches { TK_HTML_TEXT | TK_SEA_WS };
 }
 

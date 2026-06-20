@@ -1133,7 +1133,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 global RK_A: NodeKind = 0;
 
-global GALE_RULE_NAMES: List<String> = ["a"];
+global RULE_NAMES: List<String> = ["a"];
 
 struct Parser {
     tokens: TokenStream,
@@ -1292,7 +1292,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         }
         return -1;
     }
-    while pos < tokens.len() && _gale_kind_set_0(tokens[pos]) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
         let gp_1 = pos;
         sg_1: {
@@ -1367,15 +1367,11 @@ fn _parse_a(p: &mut Parser) -> Result<(), ParseError> {
     return Result::Ok(());
 }
 
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return parse_a(input, max_errors);
-}
-
-pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
     let _ = max_errors;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
-    let _r = _parse_a(&mut p);
+    let _r = entry(&mut p);
     if let Err(e) = _r {
         let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
         let lc = line_col(p.tokens.chars, e.span.start);
@@ -1386,12 +1382,20 @@ pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
+pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return parse_a(input, max_errors);
+}
+
+pub fn parse_a(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));
+}
+
 pub fn to_string_tree(result: &ParseResult) -> String {
     let mut token_names: List<String> = List::with_capacity(5);
     for let mut k = 0; k < 5; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -1400,19 +1404,19 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
+fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_LIT_A | TK_LIT_B };
 }
 

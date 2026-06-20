@@ -67,7 +67,7 @@ allocation now leads outright.
 | 24.3% | `_gale_rule<AnyNameNode>`  | per-call rule-name `String` alloc at the wrapper                |
 |  7.6% | `Parser::last_end`         | `tokens.ends[pos-1]` — one `array.get i32`, huge call count     |
 |  6.7% | `List<i32>::grow`          | `TokenStream` array growth (the `/4` pre-size under-shoots SQL) |
-|  6.4% | `_gale_kind_set_8`         | membership test over the big keyword set                        |
+|  6.4% | `_kind_set_8`              | membership test over the big keyword set                        |
 |  4.5% | `scan_any_name`            | scan (prediction)                                               |
 |  4.4% | `follow_yields`            | runtime FOLLOW gate (LL repair), parse + scan                   |
 |  3.6% | `char::to_ascii_lowercase` | case-insensitive keyword matching                               |
@@ -84,7 +84,7 @@ allocation now leads outright.
 Rough buckets (self-time): the per-call rule-name `String` allocation at
 the `_gale_rule` boundary (all `_gale_rule<*>` variants summed) ≈ **~27%**
 — now the dominant single cost (§1); `scan_*` ≈ **~13%**; kind-set
-membership (`_gale_kind_set_*`) ≈ **~11%**; token-stream construction (now
+membership (`_kind_set_*`) ≈ **~11%**; token-stream construction (now
 flat `i32`-array building: `List<i32>::grow`+`push`+`push_token`) ≈
 **~10%** — down from ~25% pre-SoA, and dominated by `grow` because the
 `chars.len()/4` pre-size under-shoots SQL token density (§4); `Parser`
@@ -188,9 +188,9 @@ the call site. Either path closes the gap:
 (Release allocates faster so the share is smaller than dev-host, but the
 per-parse allocation-count drop is real and host-independent.)
 
-### 2. Kind-set membership — `_gale_kind_set_*` (~11%)
+### 2. Kind-set membership — `_kind_set_*` (~11%)
 
-`_gale_kind_set_8` alone is 6.4%: a `k matches { TK_… | TK_… | … }`
+`_kind_set_8` alone is 6.4%: a `k matches { TK_… | TK_… | … }`
 membership test over the large SQLite keyword set (~125 kinds), called
 from scan dispatch and the parser's lookahead gates. Generated today as a
 branch/compare cascade (71 such helpers in the SQLite parser). A

@@ -1329,7 +1329,7 @@ pub fn token_kind_name(kind: i32) -> String {
 global RK_PROGRAM: NodeKind = 0;
 global RK_STATEMENT: NodeKind = 1;
 
-global GALE_RULE_NAMES: List<String> = ["program", "statement"];
+global RULE_NAMES: List<String> = ["program", "statement"];
 
 struct Parser {
     tokens: TokenStream,
@@ -1493,7 +1493,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         sg_0: {
             if pos >= tokens.len() || tokens[pos] != TK_LIT_DEVICE { break sg_0; }
             pos += 1;
-            if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+            if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                 let sp = pos;
                 let gp_1 = pos;
                 sg_1: {
@@ -1529,7 +1529,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             sg_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_DEVICE { break sg_2; }
                 pos += 1;
-                if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
                     let gp_3 = pos;
                     sg_3: {
@@ -1624,7 +1624,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                     sg_4: {
                         if pos >= tokens.len() || tokens[pos] != TK_LIT_DEVICE { break sg_4; }
                         pos += 1;
-                        if pos < tokens.len() && _gale_kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                        if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                             let sp = pos;
                             let gp_5 = pos;
                             sg_5: {
@@ -1708,38 +1708,31 @@ fn _parse_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     return Result::Ok(());
 }
 
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+    let _ = max_errors;
+    let tokens = tokenize(input);
+    let mut p = Parser::new(tokens);
+    let _r = entry(&mut p);
+    if let Err(e) = _r {
+        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
+        let lc = line_col(p.tokens.chars, e.span.start);
+        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+        d.rule_stack = e.rule_stack;
+        p.diagnostics.push(d);
+    }
+    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+}
+
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return parse_program(input, max_errors);
 }
 
 pub fn parse_program(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_program(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_program(p));
 }
 
 pub fn parse_statement(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    let _ = max_errors;
-    let tokens = tokenize(input);
-    let mut p = Parser::new(tokens);
-    let _r = _parse_statement(&mut p, &EMPTY_FOLLOW);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
-    }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_statement(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
@@ -1747,7 +1740,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 9; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -1756,19 +1749,19 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
-    for let mut i = 0; i < GALE_RULE_NAMES.len(); i += 1 {
-        if GALE_RULE_NAMES[i] == *rule {
+    for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
+        if RULE_NAMES[i] == *rule {
             _kind = i;
             break;
         }
     }
     if let Some(sub) = result.root.find_child(_kind as NodeKind) {
-        return sub.to_string_tree(&result.tokens, &GALE_RULE_NAMES, &token_names);
+        return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();
 }
 
-fn _gale_kind_set_0(k: i32) -> bool {
+fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_OPT1 | TK_OPT2 | TK_OPT3 };
 }
 
