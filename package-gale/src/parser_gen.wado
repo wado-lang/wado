@@ -2208,6 +2208,16 @@ fn gen_parse_fn_named(
     }
 
     if has_overlaps {
+        // Pre-compute which alts' scan helpers the dispatch will call so the
+        // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
+        let mut referenced_scans: List<i32> = [];
+        for let group of &groups {
+            if group.len() > 1 {
+                let tree = build_group_prediction_tree(rule, group, &first_sets, &non_lr_indices, ctx);
+                collect_referenced_scan_alts(&tree, &rule.alternatives, ctx, &mut referenced_scans);
+            }
+        }
+
         for let group of groups {
             if group.len() > 1 {
                 for let gi of group {
@@ -2236,10 +2246,11 @@ fn gen_parse_fn_named(
                     w.end();
                     w.blank();
 
-                    // Generate scan helper for this alternative if it has a
-                    // scannable prefix (at least one scannable element before
-                    // the first unscannable one).
-                    gen_alt_scan_if_possible(w, alt, lowered_rule, fn_name, alt_index, &rule.name, ctx);
+                    // Emit the per-alt scan helper only when the dispatch
+                    // actually calls it; a token-led group leaves it dead.
+                    if referenced_scans.contains(&alt_index) {
+                        gen_alt_scan_if_possible(w, alt, lowered_rule, fn_name, alt_index, &rule.name, ctx);
+                    }
                 }
             }
         }
@@ -5821,6 +5832,92 @@ fn elements_match(consumed: &Element, expected: &Element) -> bool {
     return false;
 }
 
+/// Build the prediction tree for one overlap group, exactly as the
+/// dispatch emitter does: sort by specificity, project to real alt
+/// indices, then `build_prediction`. Shared by the scan-helper gate
+/// (`collect_referenced_scan_alts`) and `gen_multi_alt_body_alt` so the
+/// two agree on the same tree.
+fn build_group_prediction_tree(
+    rule: &ParserRule,
+    group: &List<i32>,
+    first_sets: &List<List<String>>,
+    non_lr_indices: &List<i32>,
+    ctx: &mut GenContext,
+) -> PredictionNode {
+    let mut sorted_group = group.sorted();
+    sort_group_by_specificity(&mut sorted_group, first_sets);
+    let mut pred_indices: List<i32> = [];
+    let mut pred_elements: List<List<Element>> = [];
+    for let mut k = 0; k < sorted_group.len(); k += 1 {
+        let idx = sorted_group[k];
+        let real_idx = non_lr_indices[idx];
+        pred_indices.push(real_idx);
+        pred_elements.push(rule.alternatives[real_idx].elements);
+    }
+    return build_prediction(&pred_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+}
+
+/// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch
+/// actually calls. Must mirror the `Ambiguous` arm of
+/// `gen_prediction_code_inner`: only an `Ambiguous` node (the longest-match
+/// tournament / hybrid path) references a scan helper, so a token-led
+/// `Dispatch`/`Leaf` tree leaves every per-alt helper dead.
+fn collect_referenced_scan_alts(
+    node: &PredictionNode,
+    alts: &List<Alternative>,
+    ctx: &mut GenContext,
+    out: &mut List<i32>,
+) {
+    match *node {
+        Leaf(_) => {
+        },
+        Consume(c) => collect_referenced_scan_alts(&c.child, alts, ctx, out),
+        Dispatch(d) => {
+            for let branch of &d.branches {
+                collect_referenced_scan_alts(&branch.child, alts, ctx, out);
+            }
+        },
+        Ambiguous(a) => {
+            let mut sorted_indices = a.alts.sorted();
+            sort_group_by_element_count(&mut sorted_indices, alts);
+            let mut all_have_scans = true;
+            for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
+                if !alt_has_scan(&alts[sorted_indices[i]].elements, ctx) {
+                    all_have_scans = false;
+                    break;
+                }
+            }
+            if !(all_have_scans && sorted_indices.len() >= 2) {
+                return;
+            }
+            // `all_full` ⇒ longest-match tournament scans every alt; otherwise
+            // the hybrid path scans only the non-last alts that have a scan.
+            let mut all_full = true;
+            for let mut i = 0; i < sorted_indices.len(); i += 1 {
+                let idx = sorted_indices[i];
+                if !alt_has_scan(&alts[idx].elements, ctx) || !alt_scan_is_full(&alts[idx].elements, ctx) {
+                    all_full = false;
+                    break;
+                }
+            }
+            if all_full {
+                for let idx of &sorted_indices {
+                    if !out.contains(idx) {
+                        out.push(*idx);
+                    }
+                }
+            } else {
+                for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
+                    let idx = sorted_indices[i];
+                    if alt_has_scan(&alts[idx].elements, ctx) && !out.contains(&idx) {
+                        out.push(idx);
+                    }
+                }
+            }
+        },
+    }
+}
+
 /// Emit the body of a multi-alt rule whose alts have overlapping
 /// FIRST sets — the prediction codepath. `fn_name` is the name of
 /// the surrounding emit function (`parse_<rule>`); it's threaded into
@@ -5869,18 +5966,7 @@ fn gen_multi_alt_body_alt(
                 ctx,
             );
         } else {
-            // Sort group by specificity before building prediction tree.
-            let mut sorted_group = group.sorted();
-            sort_group_by_specificity(&mut sorted_group, first_sets);
-            let mut pred_indices: List<i32> = [];
-            let mut pred_elements: List<List<Element>> = [];
-            for let mut k = 0; k < sorted_group.len(); k += 1 {
-                let idx = sorted_group[k];
-                let real_idx = non_lr_indices[idx];
-                pred_indices.push(real_idx);
-                pred_elements.push(rule.alternatives[real_idx].elements);
-            }
-            let tree = build_prediction(&pred_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+            let tree = build_group_prediction_tree(rule, group, first_sets, non_lr_indices, ctx);
             gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx, &rule.name);
         }
 
