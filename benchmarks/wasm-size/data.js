@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781925411851,
+  "lastUpdate": 1781935261493,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -33937,6 +33937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1c742a2d69ca945aeb3bcce64d65294e945d9ba3"
         },
         "date": 1781925411621,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "865932faef755871609683d1e2525a7715fabcf6",
+          "message": "Merge pull request #1404 from wado-lang/claude/wir-optimize-o0-gate-yzwomw\n\nrefactor(wir-optimize): reclassify nullable_ref as mandatory lowering",
+          "timestamp": "2026-06-20T14:51:07+09:00",
+          "tree_id": "4b7fd1e2c0c9142b18ea301eef67f7b18f27a43c",
+          "url": "https://github.com/wado-lang/wado/commit/865932faef755871609683d1e2525a7715fabcf6"
+        },
+        "date": 1781935260890,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
