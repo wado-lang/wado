@@ -2148,6 +2148,7 @@ fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
     return match *axis {
         "cat" => maps.category.lookup(key),
         "a" => maps.stage_a.lookup(key),
+        "oracle" => maps.stage_b_oracle.lookup(key),
         _ => maps.stage_b.lookup(key),
     };
 }
@@ -2229,6 +2230,25 @@ test "triage: stage B skip and todo populate stage_b only" {
     assert_triage_pass(&maps, &"a", &"ParserExec/AltLabels");
     assert_triage_pass(&maps, &"cat", &"LexerExec/Foo");
     assert_triage_pass(&maps, &"a", &"LexerExec/Foo");
+}
+
+test "triage: stage_b_oracle skip and todo populate stage_b_oracle only" {
+    let toml = Option::<String>::Some(
+        "[stage_b_oracle_todo]
+\"ParserExec/Foo\" = \"oracle tree diverges — ATN-class\"
+[stage_b_oracle_skip]
+\"ParserExec/Bar\" = \"StringTemplate directive outside action body\"
+",
+    );
+    let maps = load_triage_maps(&toml);
+    assert_triage_todo(&maps, &"oracle", &"ParserExec/Foo", &"oracle tree diverges — ATN-class");
+    assert_triage_skip(&maps, &"oracle", &"ParserExec/Bar", &"StringTemplate directive outside action body");
+    // The oracle axis is independent: an oracle verdict must not leak into
+    // category / Stage A / Stage B (the `_ => stage_b` fall-through hazard).
+    assert_triage_pass(&maps, &"cat", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"a", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"b", &"ParserExec/Foo");
+    assert_triage_pass(&maps, &"b", &"ParserExec/Bar");
 }
 
 test "triage: same key can carry independent category and stage B verdicts" {
