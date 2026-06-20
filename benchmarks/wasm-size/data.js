@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781935993489,
+  "lastUpdate": 1781940407856,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34045,6 +34045,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 308950,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9f05fa86c7aefe75512330e6f77d0a07b5cb0ce",
+          "message": "Merge pull request #1405 from wado-lang/claude/package-gale-refactor-t0sgks\n\nrefactor(gale): share one parse-entry helper and drop the redundant gale/GALE prefix",
+          "timestamp": "2026-06-20T16:16:34+09:00",
+          "tree_id": "88bb70766e70ada29f1a8c8151d80755dd24a791",
+          "url": "https://github.com/wado-lang/wado/commit/d9f05fa86c7aefe75512330e6f77d0a07b5cb0ce"
+        },
+        "date": 1781940407252,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
             "unit": "bytes"
           }
         ]
