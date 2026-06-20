@@ -1,12 +1,14 @@
-//! WIR optimization — structural and peephole optimizations on `WirPackage`.
-//!
-//! Runs after `wir_build` and before `codegen::emit`.
+//! WIR optimization — structural and peephole passes on `WirPackage`.
+//! Runs after `wir_build`, before `codegen::emit`.
 //!
 //! ## Pass inventory
 //!
+//! `nullable_ref` is a mandatory representation lowering, not an optimization:
+//! it runs at every `-O`. The rest are optimizations, skipped at `-O0`.
+//!
 //! | Module            | Pass                                       |
 //! |-------------------|--------------------------------------------|
-//! | `nullable_ref`        | Null-niche variant representation           |
+//! | `nullable_ref`        | Null-niche variant representation (mandatory) |
 //! | `sroa_variant_return` | Multi-value return SROA (variants)          |
 //! | `elide_struct`        | Struct local elimination (single + multi)   |
 //! | `array`               | Push collapse / data promotion / splitting  |
@@ -18,26 +20,11 @@
 //! | `init_guard`      | Trivial init-guard global removal           |
 //! | `dce`             | Dead code / type / global elimination       |
 //!
-//! Dead-argument / dead-return-value elimination used to live here. They
-//! were moved to TIR (`optimize::dae`, `optimize::drve`) so they can
-//! interact with `inline` / `copy_prop` / `const_fold` / `dce` inside the
-//! same fixed-point loop.
-//!
-//! Single-field parameter SROA and the adjacent-use Box-local elision
-//! used to live here as `sroa_param` and `elide_struct`'s
-//! `elide_adjacent_single_use_struct_locals`. Both moved to NIR
-//! (`optimize::sroa_param` and `optimize::elide_box_local`) so the
-//! rewritten signatures and substituted expressions feed the rest of
-//! the optimizer's fix-point loop. The WIR-side `ModRef` summary that
-//! powered the adjacent-use pass was retired with it; the NIR
-//! equivalent is `optimize::mod_ref`.
-//!
-//! Write-only-local elimination is split across both layers:
-//! `optimize::elide_local` handles TIR locals (user `let`, SROA / variant
-//! shadow temps); `wir_optimize::elide_local` handles locals synthesised
-//! by `wir_build` (`__match_scrut_N`, multi-value temps, pair temps) that
-//! TIR cannot see. Both passes are narrow: they only elide locals that
-//! are never read.
+//! Related passes live elsewhere: dead-arg/-return elim and single-field param
+//! SROA moved to NIR (`optimize::{dae,drve,sroa_param,elide_box_local}`) to join
+//! its fixed-point loop. Write-only-local elim is split — `optimize::elide_local`
+//! for TIR locals, `elide_local` here for `wir_build`-synthesised locals TIR
+//! can't see.
 
 mod array;
 mod branch_hint;
@@ -72,7 +59,7 @@ use elide_struct::{
     elide_multi_field_struct_locals, elide_single_field_struct_locals, flatten_seq_assignments,
 };
 use init_guard::remove_trivial_init_globals;
-use nullable_ref::optimize_nullable_refs;
+use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use sroa_variant_return::sroa_variant_returns;
 
@@ -98,33 +85,27 @@ fn wir_pass(
     pass_dump::dump_wir(name, module, Phase::After);
 }
 
-/// Run all WIR-level optimizations on the module (in-place).
+/// Run the WIR-level optimizations on the module (in-place).
 ///
-/// Optimization passes are skipped at `-O0`, but dead-item compaction always runs
-/// so the emitter receives a clean module with no dead_*_indices to filter.
+/// Passes are skipped at `-O0`; only dead-item compaction runs, so the emitter
+/// never sees `dead_*_indices`.
 ///
-/// `optimize_nullable_refs` is the exception: it runs unconditionally (even at
-/// `-O0`) because it picks a *representation* for eligible variants (e.g.
-/// `Option<&T>` → `(ref null T)`), and that representation has to be
-/// consistent between the storage (the Wasm initializer can only encode
-/// `None` as `ref.null` for these variants) and the consumers (pattern
-/// match emits `ref.test`/`ref.cast` against the chosen repr). Skipping
-/// it at `-O0` produces a module where a `null`-initialised
-/// `Option<&T>` global stores `ref.null` but `if let Some(_) = ...`
-/// expects a `struct.new`-shaped subtype-hierarchy value, trapping in
-/// `ref.as_non_null` on the first read.
+/// `lower_nullable_refs` is the exception — a mandatory representation lowering,
+/// not an optimization, so it runs before the `-O0` gate. The frontend already
+/// emits `None` as `ref.null` (the `?`-desugar yields `TirExprKind::Null`); this
+/// picks the matching WIR repr, so skipping it miscompiles rather than just slowing
+/// code. (The frontend/WIR repr split is a known layering smell, tracked separately.)
 pub fn optimize_wir(
     module: &mut WirPackage,
     opt_level: OptLevel,
     flags: CodegenFlags,
     profiler: &dyn SpanEmitter,
 ) {
-    // Always run NullableRef before anything else — see comment above.
-    optimize_nullable_refs(module);
+    // Mandatory representation lowering — runs before the `-O0` gate. See above.
+    lower_nullable_refs(module);
 
     if opt_level == OptLevel::O0 {
-        // Trap-based hint inference runs even at -O0: like the build-time
-        // `apply_cold_path_hints`, branch hints are independent of `-O`.
+        // Branch hints are independent of `-O`, like build-time cold-path hints.
         if flags.branch_hinting {
             wir_pass("wir/infer_branch_hints", module, profiler, |m| {
                 infer_branch_hints(m);
@@ -134,12 +115,9 @@ pub fn optimize_wir(
         return;
     }
 
-    // Phase 1: Type representation
-    //
-    // Rewrite type-level representations before any value-level passes see them.
+    // Phase 1: type representation, before any value-level pass sees it.
     profiler.span_start("wir/phase1_type_repr");
-    // Pre-SROA copy propagation: inline trivial copies like `alias = source`
-    // so that SROA can see direct variant access patterns (RefTest/RefCast on source).
+    // Inline trivial `alias = source` copies so SROA sees RefTest/RefCast on source.
     wir_pass("wir/propagate_trivial_copies", module, profiler, |m| {
         peephole::propagate_trivial_copies(m);
     });
@@ -148,43 +126,29 @@ pub fn optimize_wir(
     });
     profiler.span_end("wir/phase1_type_repr");
 
-    // Phase 2: Struct local elimination (round 1)
-    //
-    // After NIR `sroa_param` strips single-field struct parameters down
-    // to scalars, call sites may hold `LocalSet(x, StructNew { [inner] })`
-    // where every use of `x` is via StructGet. Substitute `inner` directly.
-    // The adjacent-use Box-local elision that used to follow this pass
-    // now runs at NIR (`optimize::elide_box_local`).
+    // Phase 2: struct-local elimination (round 1). After NIR `sroa_param`
+    // scalarises single-field struct params, call sites hold
+    // `LocalSet(x, StructNew{[inner]})` read only via StructGet — substitute `inner`.
     wir_pass("wir/elide_single_field_struct", module, profiler, |m| {
         elide_single_field_struct_locals(m);
     });
 
-    // Phase 3: Data flow
-    //
-    // Forward constant struct fields. List literals already arrive as
-    // `StructNew List<T> { repr: array.new_fixed, used: N }` (the NIR
-    // `optimize::array_literal` pass materializes the literal and `wir_build`
-    // lowers it), so the bounds-check-elimination path keys on that shape
-    // directly. Loop-guarded bounds checks are eliminated at TIR level by the
-    // condition_implication pass.
+    // Phase 3: forward constant struct fields. List literals arrive as
+    // `StructNew List<T> { repr: array.new_fixed, used: N }`, so bounds-check
+    // elimination keys on that shape.
     profiler.span_start("wir/phase3_data_flow");
     forward_struct_field_constants(module);
     profiler.span_end("wir/phase3_data_flow");
 
-    // Phase 4: Library-specific rewrites
-    //
-    // Rewrite library call patterns into more efficient instruction sequences.
+    // Phase 4: rewrite library call patterns into tighter instruction sequences.
     profiler.span_start("wir/phase4_lib_rewrites");
     promote_constant_arrays_to_data(module);
     split_large_array_literals(module);
     profiler.span_end("wir/phase4_lib_rewrites");
 
-    // Phase 5: Peephole + struct local elimination (round 2)
-    //
-    // Run peephole optimizations (constant folding, copy elision, multi-value
-    // struct elision), then flatten seq assignments to expose multi-field struct
-    // locals for elimination. The Nops/dead locals these passes leave behind
-    // are picked up by phase 7's final `cleanup` before codegen.
+    // Phase 5: peephole (const fold, copy elision, multi-value struct elision),
+    // then flatten seq assignments to expose multi-field struct locals. Leftover
+    // Nops/dead locals are cleaned in phase 7.
     profiler.span_start("wir/phase5_peephole");
     let types = &module.types;
     for func in &mut module.functions {
@@ -194,9 +158,8 @@ pub fn optimize_wir(
     }
     flatten_seq_assignments(module);
     elide_multi_field_struct_locals(module);
-    // Multi-field struct-local elision rewrites multi-value destructures into
-    // fresh `LocalSet alias = LocalGet temp` copies. Re-run copy propagation to
-    // fold those away — the phase-1 run happened before these copies existed.
+    // Re-run copy propagation: elision rewrote destructures into fresh
+    // `LocalSet alias = LocalGet temp` copies the phase-1 run never saw.
     wir_pass(
         "wir/propagate_trivial_copies_post_sroa",
         module,
@@ -207,43 +170,29 @@ pub fn optimize_wir(
     );
     profiler.span_end("wir/phase5_peephole");
 
-    // Phase 6: Write-only local elimination for WIR-synthesised locals
-    //
-    // TIR's `optimize::elide_local` only sees TIR locals. The WIR builder
-    // synthesises locals during lowering — `__match_scrut_N` for match
-    // scrutinee binding, multi-value temps, `__pair_temp_N` for
-    // Future/Stream pair returns — that no TIR pass can reach. Once the
-    // surrounding lowering shape turns out not to need their value (e.g.
-    // every match arm uses wildcard / binding patterns), they sit as
-    // dead writes. Strip them here so codegen doesn't emit unreachable
-    // locals.
+    // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
+    // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
+    // doesn't emit dead locals.
     wir_pass("wir/elide_write_only_locals", module, profiler, |m| {
         elide_write_only_locals(m);
     });
 
-    // Phase 7: Global cleanup
-    //
-    // Remove trivial module-init guard globals that serve no purpose after DCE,
-    // then run the final body cleanup before codegen sees the module: removes
-    // Nops, dead `DeclareLocal`s, and dead code after `Unreachable`.
+    // Phase 7: global cleanup, then final body cleanup (Nops, dead
+    // `DeclareLocal`s, dead code after `Unreachable`) before codegen.
     profiler.span_start("wir/phase7_global_cleanup");
-    // Promote extracted-but-now-constant global initializers to eager Wasm
-    // constants before guard removal, so the emptied `__initialize_module`
-    // body and `__modules_initialized` guard become reclaimable here.
+    // Promote now-constant global inits to eager Wasm constants first, so the
+    // emptied `__initialize_module` and its guard become reclaimable here.
     wir_pass("wir/promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });
-    // Merge identical immutable const globals (e.g. duplicate `[10, 20, 30]`
-    // hoisted by `const_object_globalization`) now that they are immutable.
+    // Merge identical immutable const globals now that they are immutable.
     wir_pass("wir/dedupe_const_globals", module, profiler, |m| {
         dedupe_const_globals(m);
     });
     remove_trivial_init_globals(module);
     cleanup(module);
-    // Branch-hint finalization: collapse `if cond { br N }` break/continue
-    // guards into `br_if` (after `init_guard`, whose matcher keys on the
-    // `If { GlobalGet, [Br] }` shape), then infer trap-based hints on the
-    // final branch structure.
+    // Collapse `if cond { br N }` guards into `br_if` (after `init_guard`, which
+    // keys on the `If { GlobalGet, [Br] }` shape), then infer trap-based hints.
     wir_pass("wir/select_br_if", module, profiler, |m| {
         select_br_ifs(m);
     });
@@ -254,13 +203,7 @@ pub fn optimize_wir(
     }
     profiler.span_end("wir/phase7_global_cleanup");
 
-    // Phase 8: Final DCE & compaction
-    //
-    // Mark functions orphaned by earlier WIR passes as dead (notably a
-    // single-element array literal's `List<T>::push` instantiation, whose
-    // only call site never existed once NIR `optimize::array_literal`
-    // materialized the literal), then mark unreachable types as dead and
-    // compact all dead items out of the module.
+    // Phase 8: mark functions/types orphaned by earlier passes dead, then compact.
     profiler.span_start("wir/phase8_dce_compact");
     dce::mark_unreachable_defined_functions(module);
     dce_unreachable_types(module);
