@@ -2208,11 +2208,8 @@ fn gen_parse_fn_named(
     }
 
     if has_overlaps {
-        // A group whose prediction resolves token-led (a pure
-        // `Dispatch`/`Leaf` tree) never calls its alts' `_scan_<n>`
-        // helpers; only an `Ambiguous` node (the longest-match
-        // tournament / hybrid dispatch) does. Collect the alts whose
-        // scan helper is actually referenced so the rest stay unemitted.
+        // Pre-compute which alts' scan helpers the dispatch will call so the
+        // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
         let mut referenced_scans: List<i32> = [];
         for let group of &groups {
             if group.len() > 1 {
@@ -5860,12 +5857,11 @@ fn build_group_prediction_tree(
     return build_prediction(&pred_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
 }
 
-/// Collect the alt indices whose per-alt `_scan_<n>` helper the
-/// prediction dispatch actually calls. Mirrors the `Ambiguous` arm of
-/// `gen_prediction_code_inner`: a token-led `Dispatch`/`Leaf` tree never
-/// references a scan helper, so a group that resolves token-led leaves
-/// every per-alt scan helper dead. Only `Ambiguous` nodes (the
-/// longest-match tournament and hybrid paths) reference them.
+/// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch
+/// actually calls. Must mirror the `Ambiguous` arm of
+/// `gen_prediction_code_inner`: only an `Ambiguous` node (the longest-match
+/// tournament / hybrid path) references a scan helper, so a token-led
+/// `Dispatch`/`Leaf` tree leaves every per-alt helper dead.
 fn collect_referenced_scan_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,

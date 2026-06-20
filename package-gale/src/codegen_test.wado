@@ -607,25 +607,24 @@ b : 'y' ;
 }
 
 test "token-led overlap dispatch emits no per-alt scan helpers" {
-    // `r`'s two alts share the first token `'{'` (one overlap group), but
-    // the second token separates them (`a`'s first vs `'}'`), so prediction
-    // resolves token-led: a `peek_kind` dispatch, never the scan tournament.
-    // The per-alt `_parse_r__inner_scan_<n>` helpers would be dead, so they
-    // must not be emitted.
+    // `r`'s alts share the first token `'{'` but split on the second
+    // (`a` vs `'}'`), so prediction resolves token-led: a `peek_kind`
+    // dispatch that never calls a scan helper, leaving the per-alt
+    // `_parse_r__inner_scan_<n>` helpers dead.
     let input = "grammar T;
 r : '{' a '}' | '{' '}' ;
 a : 'x' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    // The overlap group is reached and resolved token-led.
+    // Both alts are reached (the group resolved, not collapsed)...
     assert str_contains(&output, &"fn _parse_r__inner_alt_0(");
     assert str_contains(&output, &"fn _parse_r__inner_alt_1(");
-    // No scan helper for either alt — the dispatch never calls one.
+    // ...but neither scan helper is emitted.
     assert !str_contains(&output, &"fn _parse_r__inner_scan_");
 
-    // A shared-prefix tournament rule still emits its scan helpers (the
-    // dispatch does call them), so the gate is not over-pruning.
+    // A shared-prefix tournament rule still emits its scan helpers, so the
+    // gate is not over-pruning.
     let tinput = "grammar T;
 s : X s Y? | X ;
 X : 'X' ;
