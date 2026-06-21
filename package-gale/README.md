@@ -5,11 +5,9 @@ You write a grammar, point a Wado `use` at it, and the compiler hands you a
 parser — lexer, recursive-descent parser, and an error-resilient parse tree —
 with no runtime to install and no version to keep in sync.
 
-This document is a user manual. It assumes you know Wado but not ANTLR4: the
-tutorial teaches the small slice of the `.g4` format it uses as it goes. The
-`.g4` format itself is ANTLR4's; for the full grammar language, ANTLR4's
-[documentation](https://github.com/antlr/antlr4/tree/master/doc) is the
-reference, and Gale aims to accept the same grammars.
+The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
+[documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale aims to
+accept the same grammars.
 
 ## Design
 
@@ -262,8 +260,7 @@ config.
 Gale targets the ANTLR4 `.g4` syntax; target-language action bodies
 (`{ ... }`, semantic predicates `{ ... }?`, `@header`/`@members`, …) are
 recognized so real-world grammars parse, but their host-language contents are
-skipped. The compatibility contract and its test corpus are documented
-separately.
+skipped.
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility
