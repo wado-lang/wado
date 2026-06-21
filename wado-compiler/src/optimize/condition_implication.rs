@@ -32,10 +32,11 @@
 //! every later query (no node is re-queried after being rewritten and no new
 //! nodes are allocated).
 
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
+use crate::nir_arena::{Body, BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
 
 /// A guard fact: `var + max_offset < bound`, with the variable and bound
 /// captured as `ValueGraph` identities at the guard's program point.
@@ -332,8 +333,346 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
+    reseed_loop_stable_operands(engine);
     let root = engine.body.root;
     process_block(engine, root)
+}
+
+// ---------------------------------------------------------------------------
+// Loop-stable operand re-seed
+//
+// The guard / check matching reads the live (build-once, maintained) value
+// graph. Across `licm`'s structural edits the maintenance drops the leaf value
+// of every read of a reassigned local (`drop_local_readers`): the induction
+// variable (`i = i + 1`) and the hoisted bound (`let _licm_used = arr.used`)
+// both go value-less, so no comparison resolves. A fresh build would value
+// them — but rebuilding violates build-once.
+//
+// Restore them incrementally: a local whose value is constant across the reads
+// being matched (a *loop-stable* local — never reassigned in the body except as
+// the final induction update, never `&mut`-escaped) holds one value at every
+// such read. Re-seed each dropped read of such a local with a single stable
+// identity (`canonical_local`), so the guard's and the check's copies share a
+// `ValueId`. A field copy (`let L = src.field`) is re-seeded to the source
+// field's identity instead, so two copies of the same `src.field` hoisted in
+// different fixed-point iterations still match.
+//
+// Sound by construction: a re-seed only adds an equality the reads already
+// satisfy (refines a fresh build — `WADO_VERIFY_VG` is the oracle); a
+// reassigned / `&mut`-escaped local is excluded, so a guard variable or bound
+// the program actually mutates between guard and check is never merged.
+// ---------------------------------------------------------------------------
+
+fn reseed_loop_stable_operands(engine: &mut Engine) {
+    // Unbuilt graph: the upcoming first query builds it fresh (already correct);
+    // only a present, maintenance-degraded graph needs the re-seed.
+    if engine.body.value_graph.is_none() {
+        return;
+    }
+    let maps = build_reseed_maps(engine.body);
+    // An existing value for a `recv.field` (from a copy whose read the
+    // maintenance left intact): a dropped copy of the same `recv.field` re-seeds
+    // to it, so a guard copy that survived and a check copy that was dropped
+    // share one identity (the canonical synthetic value is only the fallback
+    // when every copy was dropped).
+    let recv_values = collect_recv_field_values(engine, &maps);
+    reseed_scan_block(engine, engine.body.root, &maps, &recv_values);
+}
+
+fn collect_recv_field_values(
+    engine: &Engine,
+    maps: &ReseedMaps,
+) -> IndexMap<(RecvKey, u32), ValueId> {
+    let mut out: IndexMap<(RecvKey, u32), ValueId> = IndexMap::default();
+    let Some(graph) = engine.body.value_graph.as_ref() else {
+        return out;
+    };
+    for (e, enode) in engine.body.exprs.iter() {
+        if let ExprKind::Local { index, .. } = enode.kind
+            && let Some((recv, field, _)) = maps.field_copies.get(&index)
+            && let Some(&v) = graph.value_of.get(&e)
+        {
+            out.entry((recv.clone(), *field)).or_insert(v);
+        }
+    }
+    out
+}
+
+/// The receiver of a field copy: the value whose `.field` a `let L = recv.field`
+/// binds. Two copies of the same receiver + field share a re-seed identity.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum RecvKey {
+    /// `let L = src.field` over a local `src`.
+    Local(u32),
+    /// `let L = global.field` over a `GlobalVarGet` (e.g. a const-object).
+    Global(String),
+}
+
+/// The copy classification the re-seed needs, computed once per function.
+struct ReseedMaps {
+    /// `local → (receiver, field_index, receiver_type)` for `let L = recv.field`
+    /// (a loop-invariant field copy, e.g. licm's `_licm_used = arr.used`); both
+    /// copies of one `recv.field` re-seed to the same identity.
+    field_copies: IndexMap<u32, (RecvKey, u32, crate::tir::TypeId)>,
+    /// `(local, binding_expr)` for `let L = <pure Binary/Unary/Cast>` (e.g. the
+    /// `let __cond = i < used` a bounds check binds), in definition order. Such
+    /// a copy re-seeds to the value of its binding once the leaves it reads are
+    /// seeded — so the comparison keeps its arithmetic shape, not a flat opaque.
+    derived_lets: Vec<(u32, ExprId)>,
+}
+
+fn build_reseed_maps(body: &Body) -> ReseedMaps {
+    // Reassigned / `&mut`-escaped locals are excluded: a copy classification is
+    // only valid for a single-assignment binding.
+    let mut reassigned: IndexSet<u32> = IndexSet::default();
+    for (_, enode) in body.exprs.iter() {
+        match &enode.kind {
+            ExprKind::Assign { target, .. } => {
+                if let ExprKind::Local { index, .. } = body.exprs[*target].kind {
+                    reassigned.insert(index);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } => {
+                if let Some(ie) = expr.as_expr()
+                    && let ExprKind::Local { index, .. } = body.exprs[ie].kind
+                {
+                    reassigned.insert(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut field_copies = IndexMap::default();
+    let mut derived_lets = Vec::new();
+    for (_, node) in body.stmts.iter() {
+        let StmtKind::Let {
+            local_index,
+            value: Operand::Expr(v),
+            ..
+        } = &node.kind
+        else {
+            continue;
+        };
+        if reassigned.contains(local_index) {
+            continue;
+        }
+        match &body.exprs[*v].kind {
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                ..
+            } => {
+                if let Some(ie) = inner.as_expr() {
+                    let recv_ty = body.exprs[ie].type_id;
+                    let recv = match &body.exprs[ie].kind {
+                        ExprKind::Local { index, .. } => Some(RecvKey::Local(*index)),
+                        ExprKind::GlobalVarGet {
+                            module_source,
+                            name,
+                        } => Some(RecvKey::Global(format!("{module_source:?}\u{1}{name}"))),
+                        _ => None,
+                    };
+                    if let Some(recv) = recv {
+                        field_copies.insert(*local_index, (recv, *field_index, recv_ty));
+                    }
+                }
+            }
+            ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. } => {
+                derived_lets.push((*local_index, *v));
+            }
+            _ => {}
+        }
+    }
+    ReseedMaps {
+        field_copies,
+        derived_lets,
+    }
+}
+
+/// Walk the body, re-seeding each loop's stable operands. Recurses into nested
+/// loops (an inner loop's stable set is computed against its own body).
+fn reseed_scan_block(
+    engine: &mut Engine,
+    block: BlockId,
+    maps: &ReseedMaps,
+    recv_values: &IndexMap<(RecvKey, u32), ValueId>,
+) {
+    for s in engine.body.blocks[block].stmts.clone() {
+        match &engine.body.stmts[s].kind {
+            StmtKind::Loop { body: lb } => {
+                let lb = *lb;
+                reseed_loop(engine, lb, maps, recv_values);
+                reseed_scan_block(engine, lb, maps, recv_values);
+            }
+            StmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                let (tb, eb) = (*then_block, *else_block);
+                reseed_scan_block(engine, tb, maps, recv_values);
+                if let Some(eb) = eb {
+                    reseed_scan_block(engine, eb, maps, recv_values);
+                }
+            }
+            StmtKind::LabeledBlock { block, .. } => {
+                let b = *block;
+                reseed_scan_block(engine, b, maps, recv_values);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn has_value(engine: &Engine, read: ExprId) -> bool {
+    engine
+        .body
+        .value_graph
+        .as_ref()
+        .is_some_and(|g| g.value_of.contains_key(&read))
+}
+
+fn reseed_loop(
+    engine: &mut Engine,
+    loop_body: BlockId,
+    maps: &ReseedMaps,
+    recv_values: &IndexMap<(RecvKey, u32), ValueId>,
+) {
+    let unstable = loop_unstable_locals(engine.body, loop_body);
+    let reads = collect_local_reads(engine.body, loop_body);
+    // Pass 1: leaf reads (induction variables, params) and field copies — the
+    // values the maintenance cannot re-derive.
+    for &(read, local) in &reads {
+        if unstable.contains(&local) || has_value(engine, read) {
+            continue;
+        }
+        if maps.derived_lets.iter().any(|(l, _)| *l == local) {
+            continue; // pass 2
+        }
+        let ty = engine.body.exprs[read].type_id;
+        let value = match maps.field_copies.get(&local) {
+            Some((recv, field, recv_ty)) => {
+                // Prefer the value a surviving copy of this `recv.field` already
+                // holds; only synthesize the canonical field value when every
+                // copy was dropped.
+                if let Some(&v) = recv_values.get(&(recv.clone(), *field)) {
+                    v
+                } else {
+                    let recv_val = match recv {
+                        RecvKey::Local(src) => engine.body.values.canonical_local(*src, *recv_ty),
+                        RecvKey::Global(key) => engine.body.values.canonical_global(key, *recv_ty),
+                    };
+                    let fv =
+                        engine
+                            .body
+                            .values
+                            .field_access(recv_val, *field, HeapVersion::INITIAL);
+                    engine.body.values.set_type(fv, ty);
+                    fv
+                }
+            }
+            None => engine.body.values.canonical_local(local, ty),
+        };
+        engine.set_value(read, value);
+    }
+    // Pass 2: derived `let L = <pure expr>` copies, in definition order, so a
+    // copy reading an earlier copy resolves. The binding's value is recomputed
+    // from the now-seeded leaves.
+    for &(local, binding) in &maps.derived_lets {
+        if unstable.contains(&local) {
+            continue;
+        }
+        let Some(v) = engine.value(binding) else {
+            continue;
+        };
+        for &(read, l) in &reads {
+            if l == local && !has_value(engine, read) {
+                engine.set_value(read, v);
+            }
+        }
+    }
+}
+
+/// Locals not loop-stable: reassigned or `&mut`-escaped anywhere in the body,
+/// except the induction update (the final top-level statement's direct
+/// `Local = …` assign target — every read precedes its effect, so all reads see
+/// the loop-top value).
+fn loop_unstable_locals(body: &Body, loop_body: BlockId) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    let stmts = &body.blocks[loop_body].stmts;
+    for (i, &s) in stmts.iter().enumerate() {
+        let is_final = i + 1 == stmts.len();
+        if is_final
+            && let StmtKind::Expr(op) = &body.stmts[s].kind
+            && let Some(e) = op.as_expr()
+            && let ExprKind::Assign { target, value } = &body.exprs[e].kind
+            && matches!(body.exprs[*target].kind, ExprKind::Local { .. })
+        {
+            // Induction update: skip the direct target, scan its value for any
+            // other mutation.
+            if let Some(ve) = value.as_expr() {
+                collect_mutated_node(body, NodeRef::Expr(ve), &mut out);
+            }
+            continue;
+        }
+        collect_mutated_node(body, NodeRef::Stmt(s), &mut out);
+    }
+    out
+}
+
+/// Collect every local that node (recursively) reassigns (`Assign` target) or
+/// `&mut`-escapes (a `MutRef` of a `Local`). Descends into nested loops too — a
+/// nested mutation of `L` still makes `L` unstable in the outer loop.
+fn collect_mutated_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
+    if let NodeRef::Expr(e) = node {
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => {
+                if let ExprKind::Local { index, .. } = body.exprs[*target].kind {
+                    out.insert(index);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } => {
+                if let Some(ie) = expr.as_expr()
+                    && let ExprKind::Local { index, .. } = body.exprs[ie].kind
+                {
+                    out.insert(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_mutated_node(body, c, out);
+    }
+}
+
+/// Every `(read_expr, local_index)` of a bare `Local` read reachable from
+/// `block` (including nested loops/blocks).
+fn collect_local_reads(body: &Body, block: BlockId) -> Vec<(ExprId, u32)> {
+    let mut out = Vec::new();
+    collect_local_reads_node(body, NodeRef::Block(block), &mut out);
+    out
+}
+
+fn collect_local_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprId, u32)>) {
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::Local { index, .. } = body.exprs[e].kind
+    {
+        out.push((e, index));
+    }
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        collect_local_reads_node(body, c, out);
+    }
 }
 
 fn process_block(engine: &mut Engine, block: BlockId) -> bool {
@@ -645,6 +984,28 @@ impl ConditionEliminator {
             .iter()
             .any(|d| d.implies_false(engine, condition))
     }
+
+    /// Eliminate a panic guard `if cond { panic }` whose condition the active
+    /// guards prove false. Shared by the statement and expression `If` arms — a
+    /// bounds check inlined into value position (`sum + index(arr, i)`) is an
+    /// `ExprKind::If`, not a `StmtKind::If`.
+    fn try_eliminate_panic(
+        &self,
+        engine: &mut Engine,
+        condition: Operand,
+        then_block: BlockId,
+        else_block: Option<BlockId>,
+    ) -> bool {
+        if let Some(ce) = condition.as_expr()
+            && else_block.is_none()
+            && is_panic_block(engine, then_block)
+            && self.implied_false(engine, ce)
+        {
+            set_false(engine, ce);
+            return true;
+        }
+        false
+    }
 }
 
 impl ArenaOptVisitor for ConditionEliminator {
@@ -660,12 +1021,7 @@ impl ArenaOptVisitor for ConditionEliminator {
         if let Some((condition, then_block, else_block)) = if_ids {
             let condition_e = condition.as_expr();
             // Check if this statement is a bounds check that can be eliminated.
-            if let Some(ce) = condition_e
-                && else_block.is_none()
-                && is_panic_block(engine, then_block)
-                && self.implied_false(engine, ce)
-            {
-                set_false(engine, ce);
+            if self.try_eliminate_panic(engine, condition, then_block, else_block) {
                 return true;
             }
 
@@ -699,6 +1055,10 @@ impl ArenaOptVisitor for ConditionEliminator {
             _ => None,
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
+            // A bounds check inlined into value position is an `ExprKind::If`.
+            if self.try_eliminate_panic(engine, condition, then_branch, else_branch) {
+                return true;
+            }
             let mut changed = condition
                 .as_expr()
                 .is_some_and(|ce| self.visit_expr(engine, ce));

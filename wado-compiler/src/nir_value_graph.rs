@@ -231,6 +231,14 @@ pub struct ValuePool {
     /// scheduled skeleton expression (a call result kept in the skeleton).
     /// Empty for opaques minted without a recorded source.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
+    /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
+    /// (e.g. a loop-stability re-seed of a local's reads after maintenance
+    /// dropped them) share a single identity — the precondition for matching the
+    /// guard's and check's copies of an induction variable or a hoisted bound.
+    canonical_locals: IndexMap<u32, ValueId>,
+    /// Same, for a global receiver (keyed by module + name); see
+    /// [`ValuePool::canonical_global`].
+    canonical_globals: IndexMap<String, ValueId>,
 }
 
 /// How the extractor re-emits an [`OpaqueId`]'s value (see
@@ -514,6 +522,35 @@ impl ValuePool {
     #[inline]
     pub fn opaque_source(&self, opaque: OpaqueId) -> Option<OpaqueSource> {
         self.opaque_sources.get(&opaque).copied()
+    }
+
+    /// A stable `Opaque(Local idx)` for `idx`, the same value on every call.
+    /// Models "the value of `idx`" where the local holds one value across the
+    /// reads being re-seeded (a loop-stable local); two reads of the same local
+    /// — or two field copies of the same source — then share an identity.
+    pub fn canonical_local(&mut self, idx: u32, ty: TypeId) -> ValueId {
+        if let Some(&v) = self.canonical_locals.get(&idx) {
+            return v;
+        }
+        let v = self.fresh_opaque_with_source(OpaqueSource::Local(idx));
+        self.set_type(v, ty);
+        self.canonical_locals.insert(idx, v);
+        v
+    }
+
+    /// A stable opaque for a global, keyed by `key` (module + name). Like
+    /// [`ValuePool::canonical_local`] but for a `GlobalVarGet` receiver, so two
+    /// field copies of the same `global.field` share a receiver identity. The
+    /// opaque has no extraction source — it appears only as a re-seed receiver,
+    /// never promoted into an operand slot.
+    pub fn canonical_global(&mut self, key: &str, ty: TypeId) -> ValueId {
+        if let Some(&v) = self.canonical_globals.get(key) {
+            return v;
+        }
+        let v = self.fresh_opaque();
+        self.set_type(v, ty);
+        self.canonical_globals.insert(key.to_string(), v);
+        v
     }
 
     /// Every local index named by an `OpaqueSource::Local` (a promoted value
