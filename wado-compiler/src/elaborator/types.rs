@@ -1390,16 +1390,79 @@ impl<'a> TypeLookup<'a> {
                 .is_some_and(|m| m.contains_key(name))
     }
 
+    /// Resolve `name` keyed strictly by `module_source`: the local override
+    /// matches only when its own module agrees, then the per-module table is
+    /// indexed directly. Unlike [`Self::lookup_ref`] there is no
+    /// import-precedence or global-scan fallback, so a resolved `ResolvedType`
+    /// (which carries its `module_source`) can never resolve to a same-named
+    /// type from another module (issue #1416). The bare-name lookups are for
+    /// names written in source, where import precedence is the right policy.
+    fn lookup_ref_in<V>(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+        local: &'a IndexMap<String, V>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+        module_of: impl Fn(&V) -> &ModuleSource,
+    ) -> Option<&'a V> {
+        local
+            .get(name)
+            .filter(|v| *module_of(v) == *module_source)
+            .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
+    }
+
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
         self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
+    }
+
+    pub(super) fn struct_fields_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a StructFieldInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_struct_fields,
+            self.all_struct_fields,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
         self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
     }
 
+    pub(super) fn variant_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a VariantInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_variant_cases,
+            self.all_variant_cases,
+            |info| &info.module_source,
+        )
+    }
+
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
         self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+    }
+
+    pub(super) fn enum_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a EnumInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_enum_cases,
+            self.all_enum_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {

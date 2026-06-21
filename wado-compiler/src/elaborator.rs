@@ -953,28 +953,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Look up struct field info by (name, `module_source`).
-    ///
-    /// Disambiguates same-named structs across modules by also matching the
-    /// owning `module_source`. Falls back to scanning the shared `all_*`
-    /// table when the visible projection (current module + locally created
-    /// anonymous structs) doesn't have the entry.
     pub(super) fn lookup_struct_fields_in(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.sem
-            .decls
-            .local_struct_fields
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.tysys
-                    .all_struct_fields
-                    .get(module_source)
-                    .and_then(|m| m.get(name))
-            })
+        self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    pub(super) fn lookup_variant_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&VariantInfo> {
+        self.type_lookup().variant_case_in(name, module_source)
+    }
+
+    pub(super) fn lookup_enum_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&EnumInfo> {
+        self.type_lookup().enum_case_in(name, module_source)
     }
 
     /// Build effect name → module source map from a module's import declarations.

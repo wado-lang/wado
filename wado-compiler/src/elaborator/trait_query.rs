@@ -406,8 +406,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Collect the members to walk as owned (label, member type) pairs,
         // releasing the field/case borrow before the conformance recursion.
         let members: Vec<(String, TypeId)> = match &resolved {
-            ResolvedType::Struct { name, .. } if is_eq_or_ord => {
-                let Some(info) = self.lookup_struct_fields(name) else {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } if is_eq_or_ord => {
+                let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
                     return;
                 };
                 info.fields
@@ -416,9 +420,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             }
             ResolvedType::GenericInstance {
-                name, type_args, ..
+                name,
+                module_source,
+                type_args,
             } if is_eq_or_ord => {
-                let Some(info) = self.lookup_struct_fields(name) else {
+                let Some(info) = self.lookup_struct_fields_in(name, module_source) else {
                     return;
                 };
                 let param_map: IndexMap<TypeId, TypeId> = info
@@ -435,8 +441,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
                     .collect()
             }
-            ResolvedType::Variant { name, .. } if is_eq => {
-                let Some(info) = self.lookup_variant_case(name) else {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } if is_eq => {
+                let Some(info) = self.lookup_variant_case_in(name, module_source) else {
                     return;
                 };
                 info.cases
@@ -519,9 +528,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Variants auto-implement Eq when all payload types implement Eq
-        if let ResolvedType::Variant { name, .. } = &resolved
+        if let ResolvedType::Variant {
+            name,
+            module_source,
+        } = &resolved
             && is_eq(trait_name)
-            && let Some(info) = self.lookup_variant_case(name)
+            && let Some(info) = self.lookup_variant_case_in(name, module_source)
         {
             let all_impl = info.cases.iter().all(|c| {
                 c.payload == TypeTable::UNIT
@@ -533,9 +545,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Structs auto-implement Eq/Ord when all fields implement the trait
-        if let ResolvedType::Struct { name, .. } = &resolved
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = &resolved
             && is_eq_or_ord(trait_name)
-            && let Some(info) = self.lookup_struct_fields(name)
+            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
         {
             let field_types: Vec<TypeId> = info.fields.iter().map(|(_, tid, _)| *tid).collect();
             let all_impl = field_types
@@ -560,10 +576,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Generic structs auto-implement Eq/Ord when all fields implement the trait
         // (with type params substituted by concrete type args)
         if let ResolvedType::GenericInstance {
-            name, type_args, ..
+            name,
+            module_source,
+            type_args,
         } = &resolved
             && is_eq_or_ord(trait_name)
-            && let Some(info) = self.lookup_struct_fields(name)
+            && let Some(info) = self.lookup_struct_fields_in(name, module_source)
         {
             // Build type param -> concrete type arg mapping
             let param_map: IndexMap<TypeId, TypeId> = info
@@ -584,10 +602,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Generic variants auto-implement Eq when all payload types implement Eq
         // (with type params substituted by concrete type args)
         if let ResolvedType::GenericInstance {
-            name, type_args, ..
+            name,
+            module_source,
+            type_args,
         } = &resolved
             && is_eq(trait_name)
-            && let Some(info) = self.lookup_variant_case(name)
+            && let Some(info) = self.lookup_variant_case_in(name, module_source)
         {
             let param_map: IndexMap<TypeId, TypeId> = info
                 .type_param_type_ids

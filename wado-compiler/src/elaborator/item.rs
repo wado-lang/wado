@@ -498,25 +498,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::tir::ResolvedType::Newtype { base_type, .. } => {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
-            crate::tir::ResolvedType::Struct { name, .. } => {
+            crate::tir::ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => {
                 // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
                 let field_types: Vec<TypeId> = self
-                    .lookup_struct_fields(name)
+                    .lookup_struct_fields_in(name, module_source)
                     .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
                     .unwrap_or_default();
                 field_types
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
-            crate::tir::ResolvedType::Variant { name, .. } => {
-                // `ResolvedType::Variant` carries only the name; the per-case
-                // payload types live in `all_variant_cases`. Look them up so
-                // a variant case payload containing a closure type fails the
-                // CM boundary check too.
+            crate::tir::ResolvedType::Variant {
+                name,
+                module_source,
+            } => {
+                // The per-case payload types live in `all_variant_cases`; look
+                // them up so a variant case payload containing a closure type
+                // fails the CM boundary check too.
                 let payloads: Vec<TypeId> = self
-                    .lookup_variant_case(name)
+                    .lookup_variant_case_in(name, module_source)
                     .map(|info| info.cases.iter().map(|c| c.payload).collect())
                     .unwrap_or_default();
                 payloads

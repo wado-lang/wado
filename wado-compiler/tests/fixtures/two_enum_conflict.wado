@@ -1,0 +1,29 @@
+//! Regression test (issue #1416, enum analog): two independent modules each
+//! define a same-named `Dir` enum with shared case names but reversed case
+//! order, so the discriminants differ. Matching a `b::Dir` value by bare case
+//! name must resolve against B's enum (the scrutinee's own module), not A's
+//! first-registered same-named enum — otherwise a case name maps to the wrong
+//! discriminant index and the wrong arm fires at runtime.
+
+use a from "./sub/two_enum_a.wado";
+use b from "./sub/two_enum_b.wado";
+
+fn rank(d: b::Dir) -> i32 {
+    match d {
+        North => return 0,
+        South => return 1,
+        East => return 2,
+        West => return 3,
+    }
+}
+
+test "two enums with same-named cases coexist" {
+    // `a` must be imported for the collision to fire; A registers `Dir` first.
+    let _ = a::east();
+    // `b::east()` is B's `East`. With B's case order it ranks 2; picking A's
+    // enum would route the value to the `South` arm and return 1.
+    assert rank(b::east()) == 2;
+}
+
+__DATA__
+{"test": {}}
