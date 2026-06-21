@@ -409,13 +409,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 );
                 let imported_type_sources = import_scope.sources;
                 let import_original_names = import_scope.original_names;
+                let namespace_imports = import_scope.namespace_imports;
                 let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
                 let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
                 let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -432,7 +432,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             current_module_source: module_source,
                             imported_type_sources: &imported_type_sources,
                             import_original_names: &import_original_names,
-                            namespace_imports: &empty_ns,
+                            namespace_imports: &namespace_imports,
                             all_newtypes: &all_newtypes,
                             all_struct_fields: &all_struct_fields,
                             all_variant_cases: &all_variant_cases,
@@ -509,6 +509,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
             let imported_type_sources = import_scope.sources;
             let import_original_names = import_scope.original_names;
+            let namespace_imports = import_scope.namespace_imports;
 
             // Helper closure: build a fresh TypeLookup pointed at the
             // current state of the shared tables. Recreated per call site so
@@ -520,14 +521,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
             let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
             let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-            let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
-                    namespace_imports: &empty_ns,
+                    namespace_imports: &namespace_imports,
                     all_newtypes: &all_newtypes,
                     all_struct_fields: &all_struct_fields,
                     all_variant_cases: &all_variant_cases,
@@ -1244,12 +1244,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
-                    namespace_imports: &empty_ns,
+                    namespace_imports: &namespace_imports,
                     all_newtypes: &state.tysys.all_newtypes,
                     all_struct_fields: &state.tysys.all_struct_fields,
                     all_variant_cases: &state.tysys.all_variant_cases,

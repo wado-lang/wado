@@ -1,0 +1,16 @@
+//! A namespace-qualified type used in a struct *field* declaration must resolve
+//! to the canonical cross-module type, not `unknown`. The decl pre-pass that
+//! builds `all_struct_fields` once resolved field types with an empty
+//! namespace-import map, so `mini::CstNode` resolved to `unknown` and any field
+//! access errored with "expected 'unknown'" (sibling of issue #1415).
+
+use mini from "./wir_xmodule_return_parser.wado";
+
+pub struct Wrapper {
+    pub node: mini::CstNode,
+}
+
+pub fn wrap(input: &String) -> Wrapper {
+    let r = mini::parse(input);
+    return Wrapper { node: r.root };
+}
