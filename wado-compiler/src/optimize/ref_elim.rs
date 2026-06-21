@@ -110,10 +110,11 @@ impl Rule for RefElimRule {
         match &engine.body.exprs[id].kind {
             // `r.field` for an eliminable ref `r` → resolved referent.
             ExprKind::FieldAccess { expr: inner, .. } => {
-                let inner = *inner;
-                let ExprKind::Local { index, .. } =
-                    &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
-                else {
+                // A promoted `Operand::Value` receiver is no eliminable ref local.
+                let Some(inner_e) = inner.as_expr() else {
+                    return false;
+                };
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind else {
                     return false;
                 };
                 let index = *index;
@@ -126,7 +127,7 @@ impl Rule for RefElimRule {
                 // keeping `inner`'s type_id / span — the surrounding code was
                 // sized to the ref-type tag `r` had at this position.
                 let kind = engine.body.exprs[resolved].kind.clone();
-                engine.replace_expr_kind(inner.as_expr().expect("skeleton operand"), kind);
+                engine.replace_expr_kind(inner_e, kind);
                 true
             }
             // `*r` for a single-use deref-only ref `r` → inline the literal.
