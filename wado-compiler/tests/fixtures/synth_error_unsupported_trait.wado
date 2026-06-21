@@ -1,0 +1,17 @@
+// `impl Trait for Type;` (a synthesis request) is only valid for the
+// compiler-synthesizable traits From / Serialize / Deserialize. Requesting it
+// for any other trait must be a clean compile error, not a panic.
+trait Greet {
+    fn greet(&self) -> i32;
+}
+
+struct Widget {
+    size: i32,
+}
+
+impl Greet for Widget;
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "cannot synthesize trait `Greet`"}

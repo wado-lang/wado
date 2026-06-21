@@ -145,6 +145,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         // `with E` clauses (which the elaborator also canonicalises to the
         // defining module).
         let owner_sources = effect_owner_module_sources(&project.tir_modules);
+        // Keyed by the qualified `interface::method` effect name — the same key
+        // call sites are rewritten against.
         let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
         // Auxiliary functions returned alongside an adapter (e.g. the
         // per-import `__cm_lift__*` for async imports). Not used for
@@ -154,8 +156,6 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
         for qualified_name in &seen_effects {
             if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
                 let func_info = func_info.clone();
-                let binding_name =
-                    binding_func_name(&func_info.interface_name, &func_info.method_name);
                 let owner_module = lookup_effect_owner(
                     &owner_sources,
                     &func_info.interface_name,
@@ -171,40 +171,30 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                     &entry_source,
                 );
                 auxiliary_functions.extend(produced.auxiliary);
-                let adapter = produced.adapter;
-                adapters.insert(qualified_name.clone(), adapter.clone());
-                // Also index by binding function name for lookup
-                adapters.insert(binding_name, adapter);
+                adapters.insert(qualified_name.clone(), produced.adapter);
             }
         }
 
         // Step 3: Add binding functions (and their auxiliaries) to the entry module
         if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
-            for (key, adapter_rc) in &adapters {
-                // Only add each adapter once (skip the duplicate keyed by binding_name)
-                if key.contains("::") {
-                    entry_module.functions.push(adapter_rc.clone());
-                }
+            for adapter_rc in adapters.values() {
+                entry_module.functions.push(adapter_rc.clone());
             }
             for aux in auxiliary_functions {
                 entry_module.functions.push(aux);
             }
         }
 
-        // Step 4: Rewrite effect-like call nodes to target adapters
-        let adapter_map: IndexMap<String, Rc<RefCell<TirFunction>>> = adapters
-            .iter()
-            .filter(|(k, _)| k.contains("::"))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
+        // Step 4: Rewrite effect-like call nodes to target adapters. Call sites
+        // are keyed by qualified `interface::method` name, exactly how
+        // `adapters` is keyed.
         for module in project.tir_modules.values() {
             for func_rc in &module.functions {
                 let mut func = func_rc.borrow_mut();
                 if let Some(body) = &mut func.body {
                     rewrite_calls_in_block(
                         body,
-                        &adapter_map,
+                        &adapters,
                         &entry_source,
                         project.cm_interface_registry,
                         &entry_type_table,

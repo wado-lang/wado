@@ -1158,7 +1158,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
     let span = synth_span();
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = format_parameterized_name(&base_name, &type_arg_names);
+        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
         if ctx.has_impl(&mangled, &inspect_name) {
             continue;
         }
@@ -1197,7 +1197,8 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
 
     // `Fn` dispatch stubs — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = format_parameterized_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled =
+            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
         if ctx.has_impl(&mangled, &inspect_name) {
             continue;
         }
@@ -2253,7 +2254,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // in `core:prelude/tuple.wado`. Opaque resource types delegate to their
     // `Inspect` counterpart. `Fn` signatures are handled separately below.
     for (type_id, base_name, type_arg_names) in collect_parameterized_types(&tt) {
-        let mangled = format_parameterized_name(&base_name, &type_arg_names);
+        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
         if ctx.has_impl(&mangled, &inspect_alt_name) || !has_inspect(&mangled, ctx) {
             continue;
         }
@@ -2290,7 +2291,8 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     // delegate would let the optimizer collapse InspectAlt to Inspect
     // before WIR build runs, defeating the per-literal source dispatch.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = format_parameterized_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled =
+            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
         if ctx.has_impl(&mangled, &inspect_alt_name) || !has_inspect(&mangled, ctx) {
             continue;
         }
@@ -3085,7 +3087,7 @@ fn generate_fallback_impls(
         if base_name == TypeTable::TUPLE_TYPE_NAME {
             continue;
         }
-        let mangled = format_parameterized_name(&base_name, &type_arg_names);
+        let mangled = crate::name::mangle_generic_name(&base_name, &type_arg_names);
         if ctx.has_impl(&mangled, &pair.target_trait) {
             continue;
         }
@@ -3122,7 +3124,8 @@ fn generate_fallback_impls(
 
     // `Fn` dispatch-stub fallbacks — one per canonical `(arity, return_type)`.
     for sig in collect_canonical_fn_signatures(&tt) {
-        let mangled = format_parameterized_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
+        let mangled =
+            crate::name::mangle_generic_name(crate::name::CLOSURE_FN_TRAIT, &sig.type_arg_names);
         if ctx.has_impl(&mangled, &pair.target_trait) {
             continue;
         }
@@ -3223,8 +3226,9 @@ fn decompose_type_for_method_name(
             return_type,
             ..
         } => {
-            let args = vec![params.len().to_string(), tt.mangle_type_name(*return_type)];
-            ("Fn".to_string(), false, args)
+            let args =
+                crate::name::fn_type_arg_names(params.len(), &tt.mangle_type_name(*return_type));
+            (crate::name::CLOSURE_FN_TRAIT.to_string(), false, args)
         }
         ResolvedType::GenericResource {
             name, type_args, ..
@@ -3387,9 +3391,9 @@ struct FnSignature {
     repr_type_id: TypeId,
     arity: usize,
     return_type: TypeId,
-    /// `[arity.to_string(), mangle_type_name(return_type)]` — the form
-    /// consumed by `format_parameterized_name` and the dispatch-stub
-    /// emitters.
+    /// `[arity, mangle_type_name(return_type)]` (see
+    /// [`crate::name::fn_type_arg_names`]) — the form consumed by
+    /// [`crate::name::mangle_generic_name`] and the dispatch-stub emitters.
     type_arg_names: Vec<String>,
 }
 
@@ -3418,19 +3422,13 @@ fn collect_canonical_fn_signatures(tt: &TypeTable) -> Vec<FnSignature> {
             repr_type_id: id,
             arity,
             return_type: *return_type,
-            type_arg_names: vec![arity.to_string(), tt.mangle_type_name(*return_type)],
+            type_arg_names: crate::name::fn_type_arg_names(
+                arity,
+                &tt.mangle_type_name(*return_type),
+            ),
         });
     }
     result
-}
-
-/// Format a parameterized type's mangled name from base name and type arg names.
-fn format_parameterized_name(base_name: &str, type_arg_names: &[String]) -> String {
-    if type_arg_names.is_empty() {
-        base_name.to_string()
-    } else {
-        format!("{}<{}>", base_name, type_arg_names.join(","))
-    }
 }
 
 /// Generate `EnumName^Eq::eq(&self, &Self) -> bool`

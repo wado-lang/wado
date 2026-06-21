@@ -44,7 +44,7 @@ The K-prefix caller-side mask analysis halts at a multi-alt `RuleRef` because th
 
 Grammars whose alt selection needs arbitrary-length lookahead through ambiguous prefixes cannot be decided by static FOLLOW + K-prefix. The static path will always have edges — this is not a tuning gap but a decidability one: the lookahead language of a recursive ambiguous prefix is non-regular, so the per-decision lookahead DFA built by subset construction over the ATN does not converge to a finite machine. ANTLR3's static LL(\*) failed here; ANTLR4 replaced it with a **runtime** simulator that builds the decision DFA lazily, driven by the actual input (ALL(\*)). Runtime-ness is what makes the answer complete.
 
-The remaining ATN-class case on the board (with a pinned fixture, see "Stage A gaps" below): recursive lexer wildcard (`RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`).
+The lexer side of this is done — recursive non-greedy wildcard rules run on a runtime lexer simulator (`src/runtime/latn.wado`); see `antlr4-compatibility.md`. What remains is the parser side, below.
 
 #### Decided design — hybrid runtime ATN simulator
 
@@ -62,18 +62,18 @@ The static parser/non-greedy `??`/LR loop-entry pieces of this design are in pla
 #### Remaining work
 
 - **General multi-alt `Ambiguous` group / multiple `??` per rule.** A genuinely multi-alt Ambiguous group (3+ alts, overlapping first-sets) and `>1` exit-first decision per rule need a compile-time decision-number correspondence between `build_atn` and the emitter (stamp the ATN decision number on the surface group/repeat node, thread it onto the GIR op, emit `atn_predict_with_stack(sim, decision, …)`). This retires the `atn_ng_optional_enter` "unique exit-first BlockStart" heuristic.
-- **Per-`Parser` DFA cache** (perf), once more decisions route through the simulator.
-- **P5 — lexer ATN + non-greedy wildcard.** Flip `RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` (`[stage_a_todo]`).
+- **Per-`Parser` DFA cache** (perf), once more decisions route through the simulator. Lowest priority: this is a pure speed lever — the simulator is already correct without it, so the cache never changes a prediction outcome. Defer until profiling shows simulator closures are hot.
 
 The Stage B′ JVM oracle (see below) is the measurement axis: each ATN-class fix flips its pinned `[stage_b_oracle_todo]` / `[stage_a_todo]` test green.
 
+#### Lexer ATN follow-ups (perf, optional)
+
+The lexer simulator is correct and shipped; these are speed/size levers only:
+
+- The lexer ATN reuses the parser blob format + `atn_decode`, so a lexer-only ATN grammar inlines the (otherwise unused) parser simulator as dead code. Split the shared decode / `AtnSim` into its own fragment if generated size matters there.
+- `latn_match` interns nothing — stacks are value-copied `List<i32>` and the per-step visited set is string-keyed. Fine at the cold lexer sites; intern stacks (like the parser `CtxArena`) if a hot recursive-comment workload shows up.
+
 To triage which static edge a concrete fix must close, `gale dump` surfaces each unresolvable decision as `Ambiguous([alt N, alt M]) — <reason>` (`AmbiguityReason` in `prediction.wado`), with the per-site LR `loop-entry:` dispatch (`conflict-min` + suffix-first overlap groups) and follow-variant `k-prefix=` masks alongside.
-
-## Stage A gaps — Gale bugs surfaced by descriptor drivers
-
-Marked `[stage_a_todo]` (or `[stage_b_oracle_todo]`) in `status.toml`, each shipping a `#[TODO]` test. All are ATN-class (see above) and Stage-C-independent.
-
-- **Recursive lexer rule with `.+?` / `.*?` wildcard.** `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`: nested `/* /*...*/ */` comments mistokenize because the recursive call doesn't re-enter under the non-greedy bound. Matching ANTLR4's NFA→DFA result requires bounding the recursive call against the non-greedy suffix without backtracking; the static single-pass emitter over-consumes.
 
 ## Stage B′ — JVM-oracle integration
 
