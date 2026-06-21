@@ -1560,6 +1560,54 @@ below), where there is no separate build-once graph to diverge; widening
 promotion past constants to in-loop `FieldAccess` is the remaining recovery lever
 for the BCE / `licm_immut_ref` clusters (non-constant forwarded field values).
 
+## The ideal end state, and the one root cause to remove
+
+Two recovery walls remain — the BCE field bound (`arr.len()` inlines to
+`arr.used`, whose promotion needs the correct heap version) and the loop
+induction variable (which `cse`/`copy_prop` fragments into a temporary, so a
+naive `let _iv = i` materialiser does not unify guard and check and miscompiled
+`array_bounds_elim_oob_guard_var_mutated`). Both have one root cause:
+
+> `inline`'s `value_of.clear()` destroys the flow context (heap versions,
+> reaching defs) that the values were correct under.
+
+Every workaround tried — a query-time `value()` fallback over leaves, a
+fresh-heap `build_scoped`, a per-pass loop-var materialiser — is an attempt to
+reconstruct that lost context after the fact, and each is unsound or fragile.
+The fallback is a smell: it signals the side-table `value_of` is the wrong home
+for pure values under build-once, because the one pass that cannot maintain it
+(`inline`, which splices through the arena and reshapes control flow) tears it
+down.
+
+The ideal removes the root cause rather than patching symptoms:
+
+- [x] Pure-node maintenance through the clear (`Binary`/`Unary`/`Cast` recomputed
+      from operands; never a leaf). The legitimate half of the fallback.
+- [x] Same-block shared `FieldAccess` materialisation (one load for many uses).
+- [ ] Born-as-operands: pure values live in the skeleton as `Operand::Value`, not
+      in a side-table. `inline`'s arena splice then carries them for free —
+      there is nothing to clear.
+- [ ] `inline` carries and **remaps** spliced operands instead of clear+regrow:
+      callee opaque locals → caller arg values (`seed` already has this), callee
+      heap versions → the caller's version at the call site.
+- [ ] The caller's version at the call site, without a rebuild: the one build
+      already computes it. Persist the `FlowSnapshot` (`current_value` + the
+      `HeapSnapshot` + `ref_targets`) at each `Call` expr in `ValueGraphBuild`,
+      and seed `build_scoped` with it (today it uses a fresh `INITIAL` heap, which
+      is why two inlined `arr.used` reads collapse to one version and
+      `array_bounds_elim_oob_bound_shrunk` would over-merge). With the correct
+      seed, spliced `FieldAccess` reads carry the caller's version and promote
+      soundly — the field-bound wall dissolves.
+- [ ] Migrate the value passes off `value_of` to operand / pool queries, then
+      delete `value_of` and `nir_value_graph::builder` (criterion 3). The
+      loop-var wall dissolves too: with the graph never cleared, the induction
+      variable keeps its `LoopPhi` identity across `cse`'s copies, so guard and
+      check resolve to it without a materialiser.
+
+Build redness during the migration is accepted: the side-table's removal is the
+point, not its preservation. The persisted-snapshot seed is the next concrete
+step and is independent of the rest (inert until `build_scoped` consumes it).
+
 ## See also
 
 - [Worklist-Driven NIR Rewrite Engine](./wep-2026-06-05-worklist-rewrite-engine.md) — the direction; equality saturation stays deferred there.

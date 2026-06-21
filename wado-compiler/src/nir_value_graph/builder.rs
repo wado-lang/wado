@@ -150,8 +150,8 @@ impl HeapState {
     }
 }
 
-#[derive(Clone)]
-struct HeapSnapshot {
+#[derive(Clone, Debug)]
+pub(crate) struct HeapSnapshot {
     per_slot: IndexMap<(u32, u32), HeapVersion>,
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
@@ -203,6 +203,17 @@ pub struct ValueGraphBuild {
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// Per-`Call`-expr snapshot of the heap version state at the call site (after
+    /// argument evaluation, before the call's own effects). The build computes
+    /// the caller's correct field versions here; persisting them lets the inline
+    /// splice re-value the callee body with the caller's heap context — seeding
+    /// [`build_scoped`] with this instead of a fresh `INITIAL` heap — so a spliced
+    /// `FieldAccess` (e.g. `arr.len()` → `arr.used`) carries the version a fresh
+    /// whole-function build would assign, the prerequisite for promoting it to an
+    /// operand without a rebuild (see the WEP "ideal end state"). Inert until
+    /// `build_scoped` consumes it (the next step of the ideal migration).
+    #[allow(dead_code)]
+    pub(crate) call_site_heap: IndexMap<ExprId, HeapSnapshot>,
     /// The build config (param seeding + alias sets) this graph was produced
     /// with, so the `WADO_VERIFY_VG` oracle rebuilds with *this* config (not the
     /// consuming session's) — a config-view difference is not mistaken for an
@@ -258,17 +269,18 @@ pub fn build(
     // and write it back. `body.values` is the one persistent pool — ids stay
     // stable across builds (it only grows), the prerequisite for build-once.
     let seed = std::mem::take(&mut body.values);
-    let (pool, value_of, loop_entry_values) = {
+    let (pool, value_of, loop_entry_values, call_site_heap) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.seed_params(param_locals);
         b.walk_block(body.root);
-        (b.pool, b.value_of, b.loop_entry_values)
+        (b.pool, b.value_of, b.loop_entry_values, b.call_site_heap)
     };
     body.values = pool;
     ValueGraphBuild {
         value_of,
         analysis_only: crate::hashmap::IndexSet::default(),
         loop_entry_values,
+        call_site_heap,
         config: BuildConfig {
             param_locals: param_locals.to_vec(),
             aliased: aliased.clone(),
@@ -471,6 +483,8 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// Per-`Call`-expr heap snapshots. See [`ValueGraphBuild::call_site_heap`].
+    call_site_heap: IndexMap<ExprId, HeapSnapshot>,
 }
 
 impl<'a> Builder<'a> {
@@ -495,6 +509,7 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
+            call_site_heap: IndexMap::default(),
         }
     }
 
@@ -1148,6 +1163,11 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a.expr);
                 }
+                // Heap version state the callee body would observe, captured
+                // after argument evaluation and before this call's own effects —
+                // persisted so the inline splice can re-value the callee with the
+                // caller's field versions ([`ValueGraphBuild::call_site_heap`]).
+                self.call_site_heap.insert(expr, self.heap_state.snapshot());
                 self.bump_call_effects();
                 None
             }
