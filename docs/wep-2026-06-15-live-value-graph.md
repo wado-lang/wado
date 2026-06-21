@@ -56,7 +56,11 @@ throughout; the `mut_escaped` gate + loop-free gate keep the invariant-field
 re-seed off any mutated bound and off loop functions (where it clashed with the
 loop-scoped re-seed).
 
-The 8 still failing all need the **forwarded store value itself**, which the
+Two more — `store_to_load_forwarding`, `field_forward_snapshot_after_mutation` —
+are now green via the post-SROA bare-scalar grow (below), taking the default
+`-O2` e2e to 6 failing.
+
+The remaining failures still need the **forwarded store value itself**, which the
 re-seed cannot supply. The re-seed restores _consistency_ — it gives the guard's
 and check's copies of a dropped operand one shared identity (a `canonical_local`
 / `field_access` opaque), which is all guard matching needs. Store-to-load
@@ -70,10 +74,20 @@ preservation, owned by the maintenance / store-load-forward passes:
   `optimize_bitmask_bce`: need `arr.used == N` from `List::filled(N)`'s inlined
   `result.used = N` store, dropped from the maintained graph.
 - **Store-to-load forwarding** — `store_to_load_forwarding`,
-  `field_forward_snapshot_after_mutation`: a bare-local / field store (`x = 99`)
-  whose value `const_fold` / `store_load_forward` no longer reads back (the
-  store value was dropped; `const_fold` deliberately drops mutable locals to
-  `NonConst`, relying on the value graph for the forward).
+  `field_forward_snapshot_after_mutation`: **resolved** (`Engine::grow_bare_local_constants`).
+  The real root cause was not `drop_local_readers` but that the build-once graph
+  is built (and by `inline` coarsened) **before** SROA: SROA turns heap fields
+  into bare scalars (`__sroa_x = 99; … __sroa_x`), and the new reads carry no
+  value, so forwarding misses them. The post-loop `store_load_forward` now
+  re-derives each safe bare scalar's reaching constant through a scratch
+  `build_scoped` re-walk (the same splice-point growth `inline` uses — no live
+  rebuild) and seeds it; `const_fold_post_global` then folds `C == C → true` and
+  prunes the dead assert. Bare-local forwarding is immune to the call/heap bumps
+  that defeat the pre-SROA field form, so the constant is recoverable. The grow
+  runs with the session's real alias sets (sound by refinement) and only over an
+  already-built graph — building it under SROA's empty alias config wrongly
+  forwarded an escaping field (`counter.total` after `&mut counter`), so that
+  variant was dropped.
 - **Other passes** — `opt_hfs_defer_callclean_writeback`,
   `wir_optimize_brif_select`, plus the pre-existing optimization-independent
   `bug_store_load_forward_mut_method_receiver` (fails at `-O0` too).
@@ -81,7 +95,9 @@ preservation, owned by the maintenance / store-load-forward passes:
 Direction: the maintenance must keep a reassigned local's / stored field's value
 where it is statically a constant (or re-derive it on the consuming read),
 rather than `drop_local_readers` wiping it — the precise-drop refinement that
-helps every store-load consumer, not just the guard cluster.
+helps every store-load consumer, not just the guard cluster. The bare-scalar
+re-derivation above is the first instance; the field-store cases
+(`le_guard_wir`, `bitmask`: `result.used == N`) still need it for `FieldAccess`.
 
 The decisive root cause (traced on the minimal reproducer below): **the value
 graph `condition_implication` reads has no `ValueId` for the operands it must
