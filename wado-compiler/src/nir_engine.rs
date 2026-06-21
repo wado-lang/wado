@@ -180,7 +180,59 @@ impl<'a> Engine<'a> {
     /// A query reflects the maintained state.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        self.body.value_graph.as_ref()?.value_of.get(&expr).copied()
+        if let Some(v) = self.body.value_graph.as_ref()?.value_of.get(&expr).copied() {
+            return Some(v);
+        }
+        // Build-once pure-node maintenance. After a structural pass (`inline`)
+        // clears `value_of`, a **pure** node's value is recomputable from its
+        // operands: a promoted `Operand::Value` survives the clear, and a skeleton
+        // operand resolves recursively. This re-derives only `Binary` / non-address
+        // `Unary` / `Cast` — never a leaf (`Local` / `FieldAccess`), whose value is
+        // flow-dependent and must come from promotion, not query-time guessing — so
+        // the maintained graph still refines a fresh build (an unpromoted leaf stays
+        // `None`, never a wrong identity). Caches the result.
+        self.maintain_pure_node(expr)
+    }
+
+    /// Re-derive `expr`'s value from its operands for the [`Engine::value`]
+    /// build-once fallback. Operand-determined kinds only (`Binary`, non-address
+    /// `Unary`, `Cast`); every other kind — and any node with an unresolved
+    /// operand — yields `None`. Recurses through [`Engine::operand_value`] so a
+    /// pure subtree over promoted leaves resolves whole; caches in `value_of`.
+    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.body.value_graph.as_ref()?;
+        let kind = self.body.exprs[expr].kind.clone();
+        let result_ty = self.body.exprs[expr].type_id;
+        let v = match kind {
+            ExprKind::Binary { left, op, right } => {
+                let lhs = self.operand_value(left)?;
+                let rhs = self.operand_value(right)?;
+                self.body.values.binary(op, lhs, rhs, result_ty)
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                use crate::nir::NirUnaryOp;
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                    return None;
+                }
+                let operand = self.operand_value(inner)?;
+                self.body.values.unary(op, operand, result_ty)
+            }
+            ExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                let operand = self.operand_value(inner)?;
+                self.body.values.cast(operand, target_type)
+            }
+            _ => return None,
+        };
+        self.body
+            .value_graph
+            .as_mut()
+            .unwrap()
+            .value_of
+            .insert(expr, v);
+        Some(v)
     }
 
     /// The [`ValueId`] of an operand: the promoted value directly, or the
