@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782038296320,
+  "lastUpdate": 1782039017966,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34553,6 +34553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/15f590b10bad1bcc445e28763c2792d7e8a0f0f9"
         },
         "date": 1782038295713,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 309238,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d8c3944dbc39baca32578ab9daa3723ea2fa3b8",
+          "message": "Merge pull request #1422 from wado-lang/claude/gale-test-performance-8e42rl\n\nfix(cli): share Kiln generator AOT cache across a `wado test` run",
+          "timestamp": "2026-06-21T19:33:53+09:00",
+          "tree_id": "cebbdf3f63f61127cbf36e085eb2d49fe82a0e8d",
+          "url": "https://github.com/wado-lang/wado/commit/5d8c3944dbc39baca32578ab9daa3723ea2fa3b8"
+        },
+        "date": 1782039017360,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
