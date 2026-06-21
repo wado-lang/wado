@@ -16,30 +16,65 @@ stays out of scope.
 
 Operand promotion + build-once is the default (`b6bb675a9`); `rebuilds = 0` is
 met. The remaining gate to all three acceptance criteria is a **green default
-`-O2` e2e** — currently **21 failing fixtures**:
+`-O2` e2e**. The **6 P0 runtime miscompiles are fixed** (`6bd41a28d`); the
+remaining failures are **missed optimizations under promotion**, not
+miscompiles — every program runs correctly, the `wir_expect` / `wir_not_expect`
+assertions just no longer see the optimization fire.
 
-- 15 are `wir_expect` / `wir_not_expect` WIR-shape assertions whose shape
-  legitimately changed under promotion. Fixture updates (confirm each new shape
-  is equal-or-better), not bugs.
-- 6 are **P0 runtime miscompiles**, the real blocker: `newtype_array_sort`
-  (unsorted at -O2), `closure_3` (sort traps), `value_copy_demote` /
-  `value_copy_demote_mixed_sites` (off-by-one), + 2 in the cluster.
+### Done: the 6 P0 miscompiles (`6bd41a28d`)
 
-Start here. `newtype_array_sort` is the smallest reproducer
-(`wado run -O2 …/newtype_array_sort.wado` → unsorted; -O0 correct). Decisive
-bisection: `WADO_SKIP_PASS=nir/inline` **or** `nir/licm` restores it. Root cause
-(hypothesis, code-pinned): `licm::value_is_invariant` (licm.rs:1954) treats a
-read rooted at the never-reassigned array local as loop-invariant and hoists it,
-but the array _contents_ are mutated by the in-loop swaps — the value's class
-carries no heap dependence (no `LoopPhi` / heap edge through the `Index` store).
-Fix direction: the invariance check must reject a value whose heap version is
-bumped inside the loop. Validate the fix clears all 6 miscompiles with no
-regression across the full default suite.
+Root cause was **not** `value_is_invariant` (that earlier hypothesis was
+wrong — the `_licm_repr` field hoist is a sound reference alias). It was
+`cse_loop_body` (licm.rs): it materialised the CSE temp by cloning `occs[0]`'s
+skeleton at `min_i` without checking the clone's `Local` leaves are in scope
+there. When the value graph unified an inner-scope local (`let a = start +
+width*2` inside a nested `if`) with its arithmetic value, `occs[0]` could be a
+bare `a` read, so the inserted `let __cse = a` landed before `a`'s definition
+and read the stale loop-carried value. Fix: pick the clone source from
+occurrences whose skeleton leaves are all loop-entry locals or top-level `let`s
+before `min_i` (the value graph already proves all occurrences equal, so any
+in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
+`value_copy_demote`, `value_copy_demote_mixed_sites`,
+`value_copy_demote_element_mut` at -O2, no regression.
+
+### Next: ~15 missed optimizations under promotion (BCE cluster)
+
+The remaining `-O2` failures are guard-based bounds-check elimination and
+store/forward/branchless assertions (`array_bounds_elim_loop_guard` /
+`_offset_chain` / `_le_guard_wir`, `optimize_bce_if_guard` / `_ref_param` /
+`_field_access_equiv`, `optimize_bitmask_bce`, `tir_optimize_*`,
+`store_to_load_forwarding`, `field_forward_snapshot_after_mutation`,
+`wir_optimize_branchless_increment` / `_brif_select`, `opt_hfs_defer_*`). All
+run correctly; the optimization no longer fires.
+
+Two real root causes found in `condition_implication` (value-based fix drafted,
+reverted as incomplete — see dead ends):
+
+1. **Guard extractors match the skeleton.** `extract_loop_guard`,
+   `extract_early_exit_guard`, `extract_dominating_guard` pattern-match
+   `condition.as_expr()` → `ExprKind::Unary{Not}` / `Binary{GtEq|Lt}`. Under
+   promotion the guard condition (e.g. the `(i < n)` inside `!(i < n)`) is an
+   `Operand::Value`, so `as_expr()` is `None` and no fact is built. Fix:
+   resolve via `engine.operand_value` + the existing value-level helpers
+   (`lt_of_value`, `ge_operands_of_value`).
+2. **`ConditionEliminator::visit_expr` lacks panic-check elimination.** A bounds
+   check inlined into value position (`sum + index(arr, i)`) is an
+   `ExprKind::If`, but only `visit_stmt` rewrites the panic guard. Factor the
+   elimination into a shared helper called from both.
+
+Open question blocking the end-to-end fix: with both fixes, the check still was
+not eliminated for `array_bounds_elim_loop_guard`, and instrumentation showed
+the loop body the eliminator walked at `condition_implication` time did not
+contain the `sum = sum + {check}` assign — the optimizer's fixed-point loop runs
+`condition_implication` against an evolving NIR, so the guard and the inlined
+check are not in their final forms in the same iteration. Cracking this needs a
+mid-pipeline (not final-NIR) trace of when the guard and check co-exist — likely
+a pass-ordering or re-run condition, not another matcher.
 
 `WADO_PROMOTE_FIELDS` (materialise pure `FieldAccess` values) is a _separate,
 further-out_ experiment — its optimizer-pass `skeleton operand` migration is
-done (guards landed; its failures 38 → 21) but it is **not** on the critical
-path to the green default.
+done (guards landed) but it is **not** on the critical path to the green
+default.
 
 ### Dead ends (tried, measured, reverted — do not retry as-is)
 
@@ -58,6 +93,19 @@ path to the green default.
 - **Persisted/maintained side-table** as the build-once route. Cannot retire
   `value_of` and re-introduces over-merge mechanisms; only operand promotion
   retires it. (Detailed in the pivot sections below.)
+- **Value-based `condition_implication` guard extraction + `visit_expr` panic
+  elimination** (the BCE-cluster fix above). Both sub-fixes are correct and
+  necessary, but alone they did not eliminate `array_bounds_elim_loop_guard`'s
+  check: the guard and the inlined check are not in their final forms in the
+  same fixed-point iteration. Reverted as incomplete; re-land together with the
+  pass-ordering / re-run change that makes them co-exist, validated end-to-end.
+- **LICM modified-vars: marking `&mut x.field` as field-modified** (route
+  `Unary{MutRef, FieldAccess}` through `mark_assignment_target_as_modified`).
+  Sound but unnecessary — the sort miscompile was the `cse_loop_body` scope bug,
+  not the field hoist (hoisting `self.repr` and redirecting `&mut self.repr`
+  writes to the alias is correct, since the field is never reassigned). The
+  change also suppressed the legitimate `_licm_repr_` hoist that
+  `newtype_basic`'s `wir_expect:O2` pins, regressing it. Dropped.
 
 ## Goal
 
