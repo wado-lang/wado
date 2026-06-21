@@ -1607,17 +1607,27 @@ The ideal removes the root cause rather than patching symptoms:
       `arr.used`). Sound: a mutating call (`pop()`) is impure and still bumps, so
       all `array_bounds_elim_oob_*` fixtures trap and the oracle is clean; no
       regressions on the optimization corpus.
-- [ ] The remaining link: the spliced field value reaches `value_of`
-      (analysis_only) at the right version, but `condition_implication` still does
-      not fold the bound. The value of the _binding read_ the check queries
-      (`__v1` in `let __v1 = arr.used; … pos < __v1`, or the `licm` / `copy_prop`
-      hoist a loop bound mints) is not the surfaced one — the build_scoped entry is
-      for the spliced `arr.used` expr, while the consumer reads a later copy. This
-      is the pass-maintenance / born-as-operands half: the field value must live in
-      an `Operand::Value` the copy carries, not a `value_of` entry the copy orphans.
-      The shared `FieldAccess` materialiser (already landed) is the surfacing
-      mechanism — extend it to consume these build_scoped-surfaced field values and
-      pin one `let _av` the guard and check both read.
+- [ ] The remaining link, pinned exactly: at `condition_implication` for
+      `safe_get`, **both** operands of the guard `pos >= arr.used` resolve to
+      `None` — not just the field, but the **parameter** `pos`. `inline` clears
+      `value_of` for the _whole function_, while `build_scoped` only re-grows the
+      _inlined blocks_, so the caller's own code (the guard, the `pos` read) is
+      orphaned, and `arr.used`'s build_scoped value is also lost when `peephole`
+      collapses the inlined `len()` `LabeledBlock`. The fix is born-as-operands for
+      the caller's entry-stable leaves: the early freeze (pre-`inline`) promotes a
+      value-position immutable-parameter read to `Operand::Value(Opaque(Local p))`
+      — a re-emittable `local.get p` that survives the clear, so `pos` resolves at
+      the consumer (sound promotion, not the query-time leaf derivation that was
+      the smell). With `pos` promoted and the inlined field surfaced as an operand
+      the `peephole` collapse carries, the guard and check resolve and the bound
+      folds. Measured (this session): promoting every immutable-parameter read at
+      the early freeze is sound (the verify oracle stays clean, no over-merges) but
+      **not** byte-neutral — it is the WEP's P4 "born-as-operands default flip" and
+      churns ~40 `wir_expect` fixtures (the promoted `Operand::Value(Opaque param)`
+      re-emits the same `local.get` but reshapes the WIR the goldens pin). So leaf
+      promotion must land as a coordinated unit (promote leaves + surface the
+      inlined field + refresh the goldens), not piecemeal: promoting `pos` alone
+      churns broadly without recovering, since `arr.used` is still orphaned.
 - [ ] Migrate the value passes off `value_of` to operand / pool queries, then
       delete `value_of` and `nir_value_graph::builder` (criterion 3). The
       loop-var wall dissolves too: with the graph never cleared, the induction
