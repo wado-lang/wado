@@ -39,33 +39,39 @@ in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
 
 ### Next: missed optimizations under promotion (BCE cluster)
 
-The loop-stable operand re-seed (decision (a) below) is landed and sound
-(`6e42241cc` + copy-chain `4944baa98`); it took the default `-O2` e2e from
-17 → 11 failing fixtures by greening the loop-guard BCE cluster:
-`array_bounds_elim_loop_guard` (+`_wir`), `optimize_bce_if_guard` /
-`_ref_param` / `_field_access_equiv`, `wir_optimize_branchless_increment`. No
-regression (`array_bounds_elim_oob_*` + `WADO_VERIFY_VG` green).
+The re-seed (decision (a) below) is landed and sound; it took the default `-O2`
+e2e from 17 → 9 failing fixtures, greening the whole guard cluster:
 
-The 11 still failing fall in three buckets:
+- Loop-stable re-seed + copy-chain (`6e42241cc`, `4944baa98`):
+  `array_bounds_elim_loop_guard` (+`_wir`), `optimize_bce_if_guard` /
+  `_ref_param` / `_field_access_equiv`, `wir_optimize_branchless_increment`.
+- Function-invariant field re-seed (`99980cbec`): the non-loop early-exit /
+  short-circuit guards `tir_optimize_early_exit_guard`,
+  `tir_optimize_short_circuit_bounds`.
 
-- **Non-loop early-exit / short-circuit guards** (`tir_optimize_early_exit_guard`,
-  `_short_circuit_bounds`, `array_bounds_elim_offset_chain`). The re-seed is
-  loop-scoped, but these are straight-line (`if pos >= arr.len() { return };
-  arr[pos]`). The guard bound is a _direct_ `arr.used` (operand value dropped,
-  not a `let`-copy snapshot the re-seed can restore). Re-seeding a direct field
-  access to a canonical value is **unsound** without a field-invariance gate:
-  it would defeat the write detection `array_bounds_elim_oob_bound_shrunk` pins
-  (a `pop()` between guard and check). Sound extension: re-seed a direct
-  `recv.field` only when `recv.field` is never written in the function (receiver
-  never `&mut`-escaped, field never assigned), keyed to the same canonical value
-  the snapshot copies use — validate with the oob suite + `WADO_VERIFY_VG`.
-- **`array_bounds_elim_le_guard_wir`, `optimize_bitmask_bce`.** `le_guard` needs
-  `arr.used == limit + 1` (the array was `List::filled(limit + 1)`) — a relation
-  only construction tracking proves; bitmask is its own matcher.
-- **Other passes** (`store_to_load_forwarding`, `field_forward_snapshot_after_mutation`,
-  `opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`) and the
-  pre-existing optimization-independent `bug_store_load_forward_mut_method_receiver`
-  (fails at `-O0` too). Not `condition_implication` — separate promotion work.
+No regression — `array_bounds_elim_oob_*` (14) and `WADO_VERIFY_VG` stay green
+throughout; the `mut_escaped` gate + loop-free gate keep the invariant-field
+re-seed off any mutated bound and off loop functions (where it clashed with the
+loop-scoped re-seed).
+
+The 9 still failing fall in three buckets, all deeper than the re-seed:
+
+- **Construction tracking** — `array_bounds_elim_le_guard_wir`,
+  `optimize_bitmask_bce`. Both need `arr.used == N` from the constructor
+  (`List::filled(limit + 1)` / `filled(32768)`): the guard / bitmask bound is a
+  literal, the check bound is the `.used` field, and only propagating the
+  constructor length to `.used` unifies them.
+- **Promoted-operand chained cursor** — `array_bounds_elim_offset_chain`. The
+  guard bound's variable side is a _promoted_ `pos + 3` operand carrying the
+  build's `pos` value, while the check's `q = (pos+1)+2` re-seeds its `pos`
+  reads to a fresh `canonical_local` — different identities (the param has no
+  surviving read to pin the build value). Needs the promoted operand's variable
+  value extracted and reused for the leaf re-seed.
+- **Other passes** — `store_to_load_forwarding`,
+  `field_forward_snapshot_after_mutation`, `opt_hfs_defer_callclean_writeback`,
+  `wir_optimize_brif_select`, plus the pre-existing optimization-independent
+  `bug_store_load_forward_mut_method_receiver` (fails at `-O0` too). Not
+  `condition_implication` — separate promotion work.
 
 The decisive root cause (traced on the minimal reproducer below): **the value
 graph `condition_implication` reads has no `ValueId` for the operands it must
