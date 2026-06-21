@@ -605,6 +605,33 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
       `FieldAccess` sound (load pinned at its source heap version) **and** keeps the
       receiver-position migration surface from opening. The same shape covers
       `Select` (materialise at the merge) and shared `Binary` (materialise once).
+
+      Receiver-broadening probe (run, measured, reverted). The source-point
+      materialiser currently gates `FieldAccess` promotion on a **parameter**
+      receiver. The obvious next step — drop that gate, keeping only the
+      `value_fully_reemittable_locally(recv)` check (single-assignment leaf
+      locals) and the single-block placement — was implemented and measured under
+      `WADO_PROMOTE_FIELDS`. Baseline (param-only) is **38 failing** e2e fixtures
+      (the flag is itself WIP: `inspect_*` / `httpbin_*` hit the unmigrated
+      `skeleton operand` sites; `closure_3` already traps). Dropping the gate adds
+      **7 new miscompiles** — `match_ergonomics`, `nested_variant_match_ref_test`,
+      the three `serde_*` reference-receiver tests, `newtype_string_coercion` (a
+      `wir_build` panic), `template_string_precision`. Every new failure is a
+      **reference / match-ergonomics-bound / variant-payload receiver**. So the
+      `recv_param` gate is **load-bearing, not merely conservative**: a local
+      `FieldAccess` receiver can be a `&T` (or an ergonomics ref-binding) whose
+      pointee aliases a mutation the value graph's `heap_ver` does not pin to that
+      `let`, so the shared-version assumption breaks and a stale field is read.
+      A param is by-value (deeply copied at the call boundary), so it has no such
+      alias. The sound broadening is therefore not "drop the gate" but a
+      **receiver-stability predicate**: admit a non-param local receiver only when
+      its root is an **owned value** (non-reference type), **not address-taken**
+      (`address_taken_locals`), and **non-`mut`** — i.e. no `&`/`&mut` alias and no
+      reassignment can change the pointee across the span. That predicate, plus the
+      existing single-block placement, is the next concrete P2 step; it must be
+      re-validated against the full `WADO_PROMOTE_FIELDS` corpus, since
+      `newtype_string_coercion` shows at least one value-type receiver also needs
+      an extraction fix, not just the alias gate.
 - [ ] **P3 — migrate the value passes to operands.** `cse` / `licm` /
       `const_fold` / `condition_implication` / `store_load_forward` read
       `engine.operand_value(operand)` instead of `engine.value(expr)`; structural
