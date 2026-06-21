@@ -8,30 +8,30 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };
 use crate::tir::{
-    SynthesisRequest, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeTable,
+    SynthTrait, SynthesisRequest, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeId,
+    TypeTable,
 };
 
 pub fn synthesize_from(module: &mut TirModule) {
-    // Resolve the canonical `From` trait name via the compiler-item
-    // registry so a stdlib rename of the trait still routes synthesis
-    // through the same anchor. The `From<T>` mangled form keeps the
-    // registered name as its prefix; build the prefix from the
-    // registry-driven name and drain matching requests in one pass.
+    // Resolve the canonical `From` trait name via the compiler-item registry
+    // so a stdlib rename of the trait still routes synthesis through the same
+    // anchor. The request carries its source type as a resolved `TypeId`
+    // (`SynthTrait::From`), so draining is a structural match — no `From<…>`
+    // string parsing.
     let from_trait_name = module
         .type_table
         .borrow()
         .compiler_items()
         .trait_name(CompilerItem::From)
         .to_string();
-    let from_prefix = format!("{from_trait_name}<");
     let requests: Vec<SynthesisRequest> = module
         .synthesis_requests
-        .extract_if(.., |r| r.trait_name.starts_with(from_prefix.as_str()))
+        .extract_if(.., |r| matches!(r.trait_ref, SynthTrait::From { .. }))
         .collect();
     if requests.is_empty() {
         return;
@@ -41,26 +41,24 @@ pub fn synthesize_from(module: &mut TirModule) {
     let mut generated = Vec::new();
 
     for req in &requests {
-        let from_type_name = extract_from_type_name(&req.trait_name, &from_prefix);
-        let from_trait = format!("{from_trait_name}<{from_type_name}>");
+        let SynthTrait::From { source } = req.trait_ref else {
+            continue;
+        };
+        // Build the `From<Source>` trait spelling from the source type via the
+        // type table — the canonical naming authority — rather than echoing a
+        // pre-mangled request string.
+        let source_name = module.type_table.borrow().type_name(source);
+        let from_trait = mangle_generic_name(&from_trait_name, &[source_name]);
         let key = MethodName::format_local(&req.target_type_name, Some(&from_trait), "from");
         if existing.contains(&key) {
             continue;
         }
-        if let Some(func) = generate_variant_from(module, req, &from_type_name) {
+        if let Some(func) = generate_variant_from(module, req, source, &from_trait) {
             generated.push(Rc::new(RefCell::new(func)));
         }
     }
 
     module.functions.extend(generated);
-}
-
-fn extract_from_type_name(trait_name: &str, from_prefix: &str) -> String {
-    trait_name
-        .strip_prefix(from_prefix)
-        .and_then(|s| s.strip_suffix('>'))
-        .unwrap_or(trait_name)
-        .to_string()
 }
 
 fn collect_existing_from_methods(
@@ -94,24 +92,24 @@ fn collect_existing_from_methods(
 fn generate_variant_from(
     module: &TirModule,
     req: &SynthesisRequest,
-    from_type_name: &str,
+    source: TypeId,
+    from_trait: &str,
 ) -> Option<TirFunction> {
     let variant_def = module
         .variants
         .iter()
         .find(|v| v.name == req.target_type_name)?;
 
-    let tt = module.type_table.borrow();
-
+    // Match the case by resolved type identity, not by type-name string, so two
+    // distinct same-named payload types never collide.
     let matching_case = variant_def
         .cases
         .iter()
-        .find(|c| c.payload != TypeTable::UNIT && tt.type_name(c.payload) == from_type_name)?;
+        .find(|c| c.payload != TypeTable::UNIT && c.payload == source)?;
 
     let case_name = matching_case.name.clone();
     let case_index = matching_case.index;
     let from_type = matching_case.payload;
-    drop(tt);
 
     let span = synth_span();
     let variant_type = req.target_type_id;
@@ -130,14 +128,12 @@ fn generate_variant_from(
     let body = block(vec![return_stmt(Some(variant_construct))]);
     let locals = vec![param_local("value", from_type, false)];
 
-    let from_trait_with_arg = format!("From<{from_type_name}>");
     let method_info = LocalMethodName::new(
         req.target_type_name.clone(),
-        Some(from_trait_with_arg.clone()),
+        Some(from_trait.to_string()),
         "from".to_string(),
     );
-    let qualified_name =
-        MethodName::format_local(&req.target_type_name, Some(&from_trait_with_arg), "from");
+    let qualified_name = MethodName::format_local(&req.target_type_name, Some(from_trait), "from");
 
     Some(make_synthetic_method(
         qualified_name,

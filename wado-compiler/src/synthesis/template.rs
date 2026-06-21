@@ -435,7 +435,7 @@ fn build_template_block(
         .to_string();
     let with_capacity_qualified =
         crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");
-    let label = "__tmpl".to_string();
+    let label = crate::name::TEMPLATE_BLOCK_LABEL.to_string();
 
     // Estimate capacity: sum of literal lengths + 16 per interpolation
     let capacity_estimate: i64 = parts
@@ -479,7 +479,7 @@ fn build_template_block(
     );
     let mut stmts = vec![TirStmt::new(
         TirStmtKind::Let {
-            name: "__r".to_string(),
+            name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
             local_index: buf_index,
             is_mut: true,
             is_reactive: false,
@@ -503,7 +503,7 @@ fn build_template_block(
                 let buf_ref = TirExpr::new(
                     TirExprKind::Local {
                         index: buf_index,
-                        name: "__r".to_string(),
+                        name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
                     },
                     string_type,
                     span,
@@ -555,7 +555,7 @@ fn build_template_block(
                     let buf_ref = TirExpr::new(
                         TirExprKind::Local {
                             index: buf_index,
-                            name: "__r".to_string(),
+                            name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
                         },
                         string_type,
                         span,
@@ -674,7 +674,7 @@ fn build_template_block(
                             target: Box::new(TirExpr::new(
                                 TirExprKind::Local {
                                     index: idx,
-                                    name: "__f".to_string(),
+                                    name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
                                 },
                                 formatter_type,
                                 span,
@@ -700,7 +700,7 @@ fn build_template_block(
                     );
                     stmts.push(TirStmt::new(
                         TirStmtKind::Let {
-                            name: "__f".to_string(),
+                            name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
                             local_index: idx,
                             is_mut: true,
                             is_reactive: false,
@@ -719,7 +719,7 @@ fn build_template_block(
                         expr: Box::new(TirExpr::new(
                             TirExprKind::Local {
                                 index: fmt_index,
-                                name: "__f".to_string(),
+                                name: crate::name::TEMPLATE_FORMATTER_LOCAL.to_string(),
                             },
                             formatter_type,
                             span,
@@ -772,7 +772,7 @@ fn build_template_block(
     let buf_final = TirExpr::new(
         TirExprKind::Local {
             index: buf_index,
-            name: "__r".to_string(),
+            name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
         },
         string_type,
         span,
@@ -813,7 +813,7 @@ fn build_formatter_expr(
             expr: Box::new(TirExpr::new(
                 TirExprKind::Local {
                     index: buf_index,
-                    name: "__r".to_string(),
+                    name: crate::name::TEMPLATE_RESULT_LOCAL.to_string(),
                 },
                 string_type,
                 span,
@@ -1135,19 +1135,19 @@ fn method_name_for_type(
             return_type,
             ..
         } => {
-            // Match the mangling used by `synthesis/traits::generate_fn_inspect_fn`:
-            // base struct is `Fn`, type args are `[<arity>, <return-type-mangled>]`.
-            // Without this arm, the `_` fallback below would call
-            // `LocalMethodName::new("Fn<N,Ret>", ...)` whose debug_assert
-            // rejects struct names containing `<`.
-            let arity = params.len().to_string();
-            let ret_name = tt_ref.mangle_type_name(return_type);
+            // A `Fn` receiver mangles as base struct `Fn` with the canonical
+            // `[arity, return-type]` args (shared with trait synthesis through
+            // `name::fn_type_arg_names`). Without this arm the `_` fallback
+            // would call `LocalMethodName::new("Fn<N,Ret>", ...)` whose
+            // debug_assert rejects struct names containing `<`.
+            let type_args =
+                crate::name::fn_type_arg_names(params.len(), &tt_ref.mangle_type_name(return_type));
             LocalMethodName::new(
                 crate::name::CLOSURE_FN_TRAIT.to_string(),
                 Some(trait_name.to_string()),
                 method_name.to_string(),
             )
-            .with_struct_type_args(&[arity, ret_name])
+            .with_struct_type_args(&type_args)
         }
         _ => {
             let name = tt_ref.mangle_type_name(type_id);

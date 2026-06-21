@@ -253,7 +253,7 @@ fn build_module_init_function(
     TirFunction {
         module_source,
         is_async: false,
-        name: "__initialize_module".to_string(),
+        name: crate::name::MODULE_INIT_FUNCTION.to_string(),
         is_pub: true,
         is_export: false,
         type_params: Vec::new(),
@@ -670,7 +670,8 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let mut seen = IndexSet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        if func.name == "__initialize_module" && seen.insert(func.module_source.clone()) {
+        if func.name == crate::name::MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone())
+        {
             modules_with_init.push(func.module_source.clone());
         }
     }
@@ -746,7 +747,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
             TirExprKind::Call {
                 func: FunctionRef {
                     module_source: module_source.clone(),
-                    name: "__initialize_module".to_string(),
+                    name: crate::name::MODULE_INIT_FUNCTION.to_string(),
                     monomorph_info: None,
                     method_info: None,
                 },
@@ -783,7 +784,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let init_modules_func = TirFunction {
         module_source: entry_source.clone(),
         is_async: false,
-        name: "__initialize_modules".to_string(),
+        name: crate::name::MODULES_INIT_FUNCTION.to_string(),
         is_pub: false,
         is_export: false,
         type_params: Vec::new(),
@@ -823,7 +824,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         TirExprKind::Call {
             func: FunctionRef {
                 module_source: entry_source.clone(),
-                name: "__initialize_modules".to_string(),
+                name: crate::name::MODULES_INIT_FUNCTION.to_string(),
                 monomorph_info: None,
                 method_info: None,
             },
