@@ -363,7 +363,6 @@ fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
     return out;
 }
 
-/// A literal is a sequence of single-char atoms (case-folded under `ci`).
 fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
     let chars: List<char> = text.chars().collect();
     let from = b.new_state(ATN_BASIC);
@@ -382,8 +381,8 @@ fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
 }
 
 /// `entry --Atom[lo,hi]--> exit` for every range (their union — any range
-/// admits the char). Empty range list yields a dead segment that never
-/// matches (an unresolved / empty negated set).
+/// admits the char). An empty range list yields a dead segment that never
+/// matches (e.g. `~.`, the complement of every char).
 fn ranges_segment(b: &mut LatnBuilder, ranges: &List<[i32, i32]>) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC);
     let to = b.new_state(ATN_BASIC);
