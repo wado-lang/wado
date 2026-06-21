@@ -61,11 +61,19 @@ pub(super) fn module_import_scope(
                 match use_item {
                     ast::UseItem::Simple { name, alias, .. } => {
                         let local_name = alias.as_ref().unwrap_or(name);
-                        scope.sources.insert(local_name.clone(), source.clone());
-                        if alias.is_some() {
-                            scope
-                                .original_names
-                                .insert(local_name.clone(), name.clone());
+                        // Resolve through re-export chains so a name imported
+                        // from a `pub use` barrel records its true definer
+                        // module — not the barrel, which doesn't register the
+                        // type and would force `lookup_ref` into its
+                        // global-scan fallback (wrong when a same-named type
+                        // lives in another module, issue #1416).
+                        let (def_source, def_name) = symbols
+                            .lookup_in_module(&source, name)
+                            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
+                            .unwrap_or_else(|| (source.clone(), name.clone()));
+                        scope.sources.insert(local_name.clone(), def_source);
+                        if local_name != &def_name {
+                            scope.original_names.insert(local_name.clone(), def_name);
                         }
                     }
                     ast::UseItem::Namespace { name: ns } => {

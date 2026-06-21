@@ -1,0 +1,23 @@
+//! Regression test (issue #1416, re-export variant): a type imported from a
+//! `pub use` barrel must resolve to its true definer module, even when a
+//! same-named type exists in another loaded module.
+//!
+//! The bug: the barrel doesn't register `Widget` itself, so resolving the
+//! `Widget` annotation fell through `lookup_ref`'s global-scan fallback, which
+//! picked module A's first-registered `Widget` (2 fields) instead of B's
+//! (3 fields). Fixed by resolving `use` items through the symbol table's
+//! re-export chain so the import scope records the definer (module B).
+
+use { mk_a } from "./sub/reexport_collision_a.wado";
+use { Widget, mk_b } from "./sub/reexport_collision_barrel.wado";
+
+test "re-exported type resolves to its definer despite a same-named struct" {
+    let _ = mk_a();
+    let w: Widget = mk_b();
+    assert w.x == 10;
+    assert w.y == 20;
+    assert w.z == 30;
+}
+
+__DATA__
+{"test": {}}
