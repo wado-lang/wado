@@ -21,6 +21,7 @@ use wasmtime::component::{Component, Linker};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, OptLevel};
+use crate::compiler_host::KilnComponentCache;
 use crate::discover;
 use crate::manifest as project_manifest;
 use crate::runtime::{self, WasiState};
@@ -762,11 +763,16 @@ async fn compile_artifact(
     flags: Arc<CompileFlags>,
     overall_start: Instant,
     observer: Arc<StageObserver>,
+    kiln_cache: Arc<KilnComponentCache>,
 ) -> CompileOutcome {
     let compile_start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(compile::try_compile(&path, &flags))
-        .catch_unwind()
-        .await;
+    let panic_or_result = AssertUnwindSafe(compile::try_compile_with_kiln_cache(
+        &path,
+        &flags,
+        Some(kiln_cache),
+    ))
+    .catch_unwind()
+    .await;
     let compile_duration = compile_start.elapsed();
     observer.add_work(compile_duration);
     let elapsed = format_duration(overall_start.elapsed());
@@ -940,6 +946,7 @@ async fn run_compile_stage(
     artifact_tx: mpsc::Sender<CompiledArtifact>,
     todo_tx: mpsc::Sender<TodoCompileError>,
     cfail_tx: mpsc::Sender<CompileFailure>,
+    kiln_cache: Arc<KilnComponentCache>,
 ) -> usize {
     let mut compiled_count = 0_usize;
 
@@ -949,6 +956,7 @@ async fn run_compile_stage(
             let flags = Arc::clone(&flags);
             let observer_inner = Arc::clone(&observer);
             let cpu_budget = Arc::clone(&cpu_budget);
+            let kiln_cache = Arc::clone(&kiln_cache);
             // Spawn each per-fixture worker as an independent task so
             // its progress is not gated by `buffer_unordered`'s outer
             // polling state. If the outer loop is briefly parked on
@@ -976,6 +984,7 @@ async fn run_compile_stage(
                             flags,
                             overall_start,
                             observer_inner,
+                            kiln_cache,
                         )),
                         Ok(Err(e)) => {
                             let elapsed = format_duration(overall_start.elapsed());
@@ -1375,6 +1384,8 @@ async fn run_pipeline(
     let epoch_ticker = (!no_run).then(|| Arc::new(EpochTicker::start()));
 
     let paths_owned: Vec<String> = paths.to_vec();
+    // Shared across fixtures so each generator is AOT-compiled once per run.
+    let kiln_cache = Arc::new(KilnComponentCache::new());
     let compile_future = run_compile_stage(
         paths_owned,
         flags.clone(),
@@ -1385,6 +1396,7 @@ async fn run_pipeline(
         artifact_tx,
         todo_tx,
         cfail_tx,
+        kiln_cache,
     );
 
     let load_future: Pin<Box<dyn Future<Output = usize> + Send>> =
