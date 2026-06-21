@@ -538,6 +538,18 @@ impl ValuePool {
         v
     }
 
+    /// The build's existing `Opaque(Local idx)` value if one was minted (a
+    /// parameter's `seed_params` opaque). Reusing it — rather than a fresh
+    /// `canonical_local` — lets a re-seeded leaf read match a *promoted* operand
+    /// that survived carrying the same build value (`pos + k` over the param's
+    /// `pos`). `None` when no such opaque exists (a non-param leaf).
+    pub fn existing_local_opaque(&mut self, idx: u32) -> Option<ValueId> {
+        let oid = self.opaque_sources.iter().find_map(|(&oid, src)| {
+            matches!(src, OpaqueSource::Local(i) if *i == idx).then_some(oid)
+        })?;
+        Some(self.intern(ValueKind::Opaque(oid)))
+    }
+
     /// A stable opaque for a global, keyed by `key` (module + name). Like
     /// [`ValuePool::canonical_local`] but for a `GlobalVarGet` receiver, so two
     /// field copies of the same `global.field` share a receiver identity. The

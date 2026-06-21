@@ -422,7 +422,11 @@ fn reseed_invariant_fields(engine: &mut Engine) {
             continue;
         }
         let ty = engine.body.exprs[read].type_id;
-        let v = engine.body.values.canonical_local(local, ty);
+        let v = engine
+            .body
+            .values
+            .existing_local_opaque(local)
+            .unwrap_or_else(|| engine.body.values.canonical_local(local, ty));
         engine.set_value(read, v);
     }
     let mut groups: IndexMap<(RecvKey, u32), (crate::tir::TypeId, Vec<ExprId>)> =
