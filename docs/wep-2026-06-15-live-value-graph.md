@@ -701,6 +701,44 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
 Each phase is `WADO_VERIFY_VG`- and e2e-checkable with the flag on while the
 default stays green; the criteria flip together at P4.
 
+#### P4 frontier — the default-path regression set (current)
+
+Operand promotion + build-once is **already the default** (commit `b6bb675a9`
+removed the flag). The default `-O2` e2e is **not yet green**: 21 fixtures fail,
+the genuine P4 frontier. They split cleanly:
+
+- 15 are `wir_expect` / `wir_not_expect` WIR-shape assertions whose shape
+  legitimately changed under promotion — `array_bounds_elim_*_wir`,
+  `optimize_bce_*`, `tir_optimize_*`, `wir_optimize_*`,
+  `store_to_load_forwarding`, `field_forward_snapshot_after_mutation`. These are
+  fixture updates (verify each new shape is an equal-or-better optimization),
+  not miscompiles.
+- 6 are **runtime miscompiles** (P0): `newtype_array_sort` (array comes out
+  unsorted at -O2, correct at -O0), `closure_3` (sort-by-descending traps),
+  `value_copy_demote` / `value_copy_demote_mixed_sites` (count off by one),
+  and two more in the same cluster.
+
+Root-cause handle (decisive bisection on `newtype_array_sort`): `WADO_SKIP_PASS`
+of **either `nir/inline` or `nir/licm`** restores the correct sort; every other
+pass is neutral. So the miscompile is the inline×licm interaction under
+promotion — `licm` hoists a value out of the sort loop that is in fact
+loop-variant. The array _local_ is never reassigned, so it is in `entry_locals`
+and `value_is_invariant` (licm.rs:1954) treats reads rooted at it as invariant —
+but the array _contents_ are mutated by the in-loop element swaps, which the
+operand value's class does not register as a dependence (no `LoopPhi` / heap
+edge through the `Index` store). The WEP's named hazard — "loop-invariant iff
+the class does not transitively depend on that loop's `LoopPhi`" — is unmet for
+heap-rooted reads: the invariance check must additionally exclude a value whose
+heap version is bumped inside the loop. This is the load-bearing
+inline/sroa/licm graph-maintenance correctness surface, and it is the gating P0
+for a green default (hence for the three acceptance criteria).
+
+The `WADO_PROMOTE_FIELDS` flag is a _separate, further-out_ experiment
+(materialise pure `FieldAccess` values); its panic-surface migration is largely
+done (the optimizer-pass `skeleton operand` guards landed this round, dropping
+its failures 38 → 21), but it is not on the critical path to a green default —
+the 6 runtime miscompiles above are.
+
 ### Per-pass attribution, and an incremental route under fix-while-advancing
 
 Fresh `WADO_MEASURE_VG` on `benchmark/zlib/zlib_bench.wado -O2` (a stable
