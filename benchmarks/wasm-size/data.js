@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782006930148,
+  "lastUpdate": 1782029356667,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34485,6 +34485,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fbcdbc3629f4653e82900bb197952288fc8a80be",
+          "message": "Merge pull request #1419 from wado-lang/claude/package-gale-readme-refresh-w6tjrv\n\nfeat(gale): consumer-facing parser API, cross-module Kiln, worked examples, and a user-manual README",
+          "timestamp": "2026-06-21T16:59:21+09:00",
+          "tree_id": "4a62ffb3885ddc889e2fa46b9de4491a336ab4f5",
+          "url": "https://github.com/wado-lang/wado/commit/fbcdbc3629f4653e82900bb197952288fc8a80be"
+        },
+        "date": 1782029356063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 309238,
             "unit": "bytes"
           }
         ]
