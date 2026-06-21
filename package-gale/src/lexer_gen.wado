@@ -59,7 +59,7 @@ pub fn resolve_ci(grammar_opts: &List<GrammarOption>, rule_opts: &List<GrammarOp
 /// case-insensitively. The original range is always included. When the range
 /// intersects ASCII letters, the opposing-case sub-range is appended.
 /// Non-letter chars are not folded (ANTLR4 only does one-length transforms).
-fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
+pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     out.push(CharRange { start, end });
     if start <= 'z' && end >= 'a' {
         let lo = if start < 'a' { 'a' } else { start };
@@ -291,12 +291,7 @@ fn rule_name_exists(lexer_rules: &List<LexerRule>, name: &String) -> bool {
     return false;
 }
 
-pub fn gen_lexer(
-    w: &mut CodeWriter,
-    grammar: &Grammar,
-    lit_tokens: &List<LitToken>,
-    atn_class: &TreeMap<String, i32>,
-) {
+pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, atn_class: &TreeMap<String, i32>) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);

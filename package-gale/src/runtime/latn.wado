@@ -55,7 +55,23 @@ fn latn_sig(state: i32, stack: &List<i32>) -> String {
 /// dedups by (state, stack) so epsilon cycles terminate. A `RULE`
 /// transition pushes its return state and jumps to the callee start; a
 /// `RULE_STOP` pops (or accepts when the stack is empty).
-fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<String>, state: i32, stack: &List<i32>) {
+///
+/// `open` holds the callee rule-start states already entered on this
+/// epsilon path. A `RULE` edge back to an already-open rule is a
+/// *non-consuming* re-entry (closure runs at one input position) — pure
+/// epsilon left-recursion (`R : (R | 'a')*? 'b'`). Pruning it terminates
+/// the closure and loses no match length: any input the re-entry could
+/// consume is already reachable through the first entry. Bounds the return
+/// stack to the rule count, so the (state, stack) `visited` keys stay
+/// finite even for recursive grammars.
+fn latn_closure(
+    sim: &AtnSim,
+    out: &mut List<LThread>,
+    visited: &mut TreeSet<String>,
+    state: i32,
+    stack: &List<i32>,
+    open: &List<i32>,
+) {
     let key = latn_sig(state, stack);
     if visited.contains(key) {
         return;
@@ -71,7 +87,7 @@ fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<Str
             for let mut i = 0; i < stack.len() - 1; i += 1 {
                 rest.push(stack[i]);
             }
-            latn_closure(sim, out, visited, ret, &rest);
+            latn_closure(sim, out, visited, ret, &rest, open);
         }
         return;
     }
@@ -79,6 +95,9 @@ fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<Str
     let ts = sim.state_tr_start[state];
     let tc = sim.state_tr_count[state];
     if tc > 0 {
+        // States are homogeneous by construction (`src/latn.wado`): a state's
+        // transitions are all consuming (atom/wildcard) xor all epsilon/rule,
+        // so the first transition's kind classifies the whole state.
         let k0 = sim.tr_kind[ts];
         if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
             out.push(LThread { state, stack: *stack, accept: false });
@@ -93,11 +112,18 @@ fn latn_closure(sim: &AtnSim, out: &mut List<LThread>, visited: &mut TreeSet<Str
                 // Unresolved rule reference — a dead edge, skip it.
                 continue;
             }
+            if open.iter().any(|o: i32| o == target) {
+                // Epsilon left-recursion: re-entering an open rule without
+                // consuming. Prune (see the `open` doc above).
+                continue;
+            }
             let mut ns: List<i32> = *stack;
             ns.push(sim.tr_follow[idx]);
-            latn_closure(sim, out, visited, target, &ns);
+            let mut open2: List<i32> = *open;
+            open2.push(target);
+            latn_closure(sim, out, visited, target, &ns, &open2);
         } else {
-            latn_closure(sim, out, visited, target, stack);
+            latn_closure(sim, out, visited, target, stack, open);
         }
     }
 }
@@ -111,7 +137,8 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32)
     let mut clist: List<LThread> = [];
     let mut seed = TreeSet::<String>::new();
     let empty: List<i32> = [];
-    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty);
+    let no_open: List<i32> = [];
+    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty, &no_open);
 
     let mut pos = start;
     loop {
@@ -147,7 +174,7 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32)
                         false;
                     };
                     if matched {
-                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack);
+                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack, &no_open);
                     }
                 }
             }

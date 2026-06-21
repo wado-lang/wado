@@ -16,7 +16,7 @@ use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
-use { build_latn, grammar_needs_latn, lexer_rule_is_atn_class, LatnResult } from "./latn.wado";
+use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
@@ -114,15 +114,17 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // `atn_class_map` carries each such rule's `name -> latn rule index`
     // so the lexer emit routes its `try_*` body to `latn_match`.
     let needs_latn = grammar_needs_latn(grammar);
-    let mut latn = LatnResult { atn: empty_atn(), rule_index: TreeMap::<String, i32>::new() };
+    let mut latn = LatnResult {
+        atn: empty_atn(),
+        rule_index: TreeMap::<String, i32>::new(),
+        atn_class_rules: [],
+    };
     let mut atn_class_map = TreeMap::<String, i32>::new();
     if needs_latn {
         latn = build_latn(grammar);
-        for let rule of &grammar.lexer_rules {
-            if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
-                if let Some(idx) = latn.rule_index.get(rule.name) {
-                    atn_class_map[rule.name] = idx;
-                }
+        for let name of &latn.atn_class_rules {
+            if let Some(idx) = latn.rule_index.get(*name) {
+                atn_class_map[*name] = idx;
             }
         }
     }
@@ -174,22 +176,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 /// whole-grammar ATN the inlined runtime decodes once into the module-level
 /// `ATN_SIM`.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    let blob = serialize_atn(atn);
-    let mut body = String::with_capacity(blob.len() * 6);
-    for let mut i = 0; i < blob.len(); i += 1 {
-        if i > 0 {
-            body.push_str(&", ");
-        }
-        body.push_str(&`{blob[i]}`);
-    }
-    w.line(&`global ATN_DATA: List<i32> = [{body}];`);
-    // The whole-grammar ATN is decoded exactly once, into a module-level
-    // global shared by both sides: the parse side reads `&ATN_SIM` (the
-    // `Parser` no longer carries its own decoded copy) and the scan side
-    // reads it too (`scan_*` functions take no `Parser`). This single decode
-    // replaces the former per-`Parser::new` decode plus a separate scan-only
-    // global.
-    w.line(&"global ATN_SIM: AtnSim = atn_decode(&ATN_DATA);");
+    emit_atn_blob_global(w, atn, &"ATN_DATA", &"ATN_SIM");
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -205,6 +192,15 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
 /// for the runtime lexer simulator. Same blob format and decoder as the
 /// parser ATN; only the atom semantics differ (char ranges vs token kinds).
 fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
+    emit_atn_blob_global(w, atn, &"LATN_DATA", &"LATN_SIM");
+    w.blank();
+}
+
+/// Emit `global <data_name>: List<i32> = [...serialized blob...];` and
+/// `global <sim_name>: AtnSim = atn_decode(&<data_name>);`. Shared by the
+/// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
+/// decoder; only the atom semantics differ.
+fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_name: &String) {
     let blob = serialize_atn(atn);
     let mut body = String::with_capacity(blob.len() * 6);
     for let mut i = 0; i < blob.len(); i += 1 {
@@ -213,9 +209,8 @@ fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
         }
         body.push_str(&`{blob[i]}`);
     }
-    w.line(&`global LATN_DATA: List<i32> = [{body}];`);
-    w.line(&"global LATN_SIM: AtnSim = atn_decode(&LATN_DATA);");
-    w.blank();
+    w.line(&`global {*data_name}: List<i32> = [{body}];`);
+    w.line(&`global {*sim_name}: AtnSim = atn_decode(&{*data_name});`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {

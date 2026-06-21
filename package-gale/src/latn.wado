@@ -18,8 +18,9 @@
 //! start/end, EBNF loop states), greedy vs non-greedy encoded purely by
 //! the order of a loop's epsilon edges, exactly like `atn.wado`.
 
-use { Grammar, LexerRule, LexerAlternative, LexerElement, LexerRepeatElement, CharClass, RepeatKind } from "./ir.wado";
+use { Grammar, LexerRule, LexerAlternative, LexerElement, CharClass, CharRange, RepeatKind } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
+use { resolve_ci, fold_range_ci } from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -39,12 +40,15 @@ use { TreeMap } from "core:collections";
 /// Highest Unicode scalar value; the upper bound of a `.` / negated set.
 global CHAR_MAX: i32 = 0x10FFFF;
 
-/// Result of building the lexer ATN: the NFA plus a `name -> latn rule
-/// index` map so codegen can emit `latn_match(&LATN_SIM, <idx>, …)` for
-/// each ATN-class rule.
+/// Result of building the lexer ATN: the NFA, a `name -> latn rule index`
+/// map (every reachable rule, so RuleRef targets resolve), and the names of
+/// the rules that are themselves ATN-class (the `try_*` bodies codegen must
+/// route to `latn_match`). `atn_class_rules` is computed here so codegen
+/// need not re-run `lexer_rule_is_atn_class`.
 pub struct LatnResult {
     pub atn: Atn,
     pub rule_index: TreeMap<String, i32>,
+    pub atn_class_rules: List<String>,
 }
 
 /// True when the grammar has at least one ATN-class lexer rule (a
@@ -59,10 +63,23 @@ pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
     return false;
 }
 
-/// A lexer rule is ATN-class when a non-greedy repeat in its body has an
-/// inner element that transitively references the rule itself — the
+/// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
+/// has an inner element that transitively references the rule itself — the
 /// nested-recursion case static lexing cannot decide. Plain non-greedy
 /// (`.*? '*/'`) and non-recursive rule refs stay on the static path.
+///
+/// Deliberately narrow (cf. the documented static-prediction edges in
+/// AGENTS.md, "Failed Approaches" — broadening a trigger past today's
+/// grammar set has repeatedly broken real grammars):
+/// - The recursive repeat must be non-greedy. A *greedy* recursive repeat
+///   is not routed here; no corpus grammar needs it, and the runtime VM is
+///   greedy/non-greedy agnostic, so the trigger can be widened with a
+///   fixture if one appears.
+/// - The repeat must sit in the rule's own body, not behind a `RuleRef`
+///   into another rule (a fragment-decomposed `'/*' FRAG '*/'` where FRAG
+///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
+///   handling this means flagging the owning token rule as the entry; left
+///   for when a grammar needs it.
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     return scan_recursive_ng(&rule.name, &rule.body, all_rules);
 }
@@ -160,12 +177,15 @@ fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerR
     return null;
 }
 
-/// Mutable accumulator during construction.
+/// Mutable accumulator during construction. `ci` is the case-insensitivity
+/// of the rule currently being built (set per rule in `build_latn`), so
+/// literals and char sets fold case to match the static lexer path.
 struct LatnBuilder {
     states: List<AtnState>,
     rule_start: List<i32>,
     rule_stop: List<i32>,
     name_to_idx: TreeMap<String, i32>,
+    ci: bool,
 }
 
 impl LatnBuilder {
@@ -190,8 +210,10 @@ impl LatnBuilder {
 pub fn build_latn(grammar: &Grammar) -> LatnResult {
     let mut incl: List<String> = [];
     let mut seen: List<String> = [];
+    let mut atn_class_rules: List<String> = [];
     for let rule of &grammar.lexer_rules {
         if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
+            atn_class_rules.push(rule.name);
             collect_reachable(&rule.name, &grammar.lexer_rules, &mut incl, &mut seen);
         }
     }
@@ -201,6 +223,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
         rule_start: [],
         rule_stop: [],
         name_to_idx: TreeMap::<String, i32>::new(),
+        ci: false,
     };
     for let mut i = 0; i < incl.len(); i += 1 {
         b.name_to_idx[incl[i]] = i;
@@ -211,6 +234,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
     }
     for let mut i = 0; i < incl.len(); i += 1 {
         if let Some(rule) = find_lexer_rule(&grammar.lexer_rules, &incl[i]) {
+            b.ci = resolve_ci(&grammar.options, &rule.options);
             let body = build_alternation(&mut b, &rule.body);
             b.add_eps(b.rule_start[i], body.0);
             b.add_eps(body.1, b.rule_stop[i]);
@@ -225,7 +249,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
         num_tokens: 0,
         call_site_returns: [],
     };
-    return LatnResult { atn, rule_index: b.name_to_idx };
+    return LatnResult { atn, rule_index: b.name_to_idx, atn_class_rules };
 }
 
 /// Add `name` and every rule it transitively references to `incl` (build
@@ -298,21 +322,48 @@ fn build_sequence(b: &mut LatnBuilder, elements: &List<LexerElement>) -> [i32, i
 fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
     return match *elem {
         Literal(s) => build_literal(b, &s),
-        CharRange(r) => ranges_segment(b, &[
-            [r.0 as i32, r.1 as i32],
-        ]),
-        CharClass(cc) => ranges_segment(b, &class_ranges(&cc)),
+        CharRange(r) => ranges_segment(b, &ci_ranges(b.ci, r.0, r.1)),
+        CharClass(cc) => ranges_segment(b, &class_ranges(&cc, b.ci)),
         AnyChar => ranges_segment(b, &[
             [0, CHAR_MAX],
         ]),
-        Not(n) => ranges_segment(b, &complement_ranges(&positive_ranges(&n.element))),
+        Not(n) => {
+            let pos = positive_ranges(&n.element, b.ci);
+            // `~AnyChar` legitimately yields []/dead; an empty positive set
+            // from a non-single-char inner (multi-char literal, RuleRef)
+            // would complement to match-anything — reject loudly instead.
+            assert !pos.is_empty(), "gale: `~(...)` over a non-single-char element is unsupported";
+            ranges_segment(b, &complement_ranges(&pos));
+        },
         RuleRef(name) => rule_segment(b, &name),
         Group(g) => build_alternation(b, &g),
         Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element),
     };
 }
 
-/// A literal is a sequence of single-char atoms.
+/// Unicode-scalar ranges for the char span `[lo, hi]`, folding case when
+/// `ci` so the lexer ATN matches both cases like the static path
+/// (`fold_range_ci`). An inverted span (`lo > hi`, e.g. `[z-a]`) yields no
+/// range — a dead, never-matching atom.
+fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
+    if lo as i32 > hi as i32 {
+        return [];
+    }
+    if !ci {
+        return [
+            [lo as i32, hi as i32],
+        ];
+    }
+    let mut folded: List<CharRange> = [];
+    fold_range_ci(lo, hi, &mut folded);
+    let mut out: List<[i32, i32]> = [];
+    for let f of &folded {
+        out.push([f.start as i32, f.end as i32]);
+    }
+    return out;
+}
+
+/// A literal is a sequence of single-char atoms (case-folded under `ci`).
 fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
     let chars: List<char> = text.chars().collect();
     let from = b.new_state(ATN_BASIC);
@@ -322,8 +373,9 @@ fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
     let mut cur = from;
     for let c of chars {
         let nxt = b.new_state(ATN_BASIC);
-        let code = c as i32;
-        b.add_trans(cur, AtnTransition { kind: ATN_TR_ATOM, target: nxt, label: code, follow: code });
+        for let r of &ci_ranges(b.ci, c, c) {
+            b.add_trans(cur, AtnTransition { kind: ATN_TR_ATOM, target: nxt, label: r.0, follow: r.1 });
+        }
         cur = nxt;
     }
     return [from, cur];
@@ -409,31 +461,27 @@ fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: 
 /// Positive (non-negated) Unicode-scalar ranges a single-char element
 /// admits. Used for atoms inside `~(...)`; an element that is not a
 /// single-char matcher yields an empty list.
-fn positive_ranges(elem: &LexerElement) -> List<[i32, i32]> {
+fn positive_ranges(elem: &LexerElement, ci: bool) -> List<[i32, i32]> {
     return match *elem {
-        CharRange(r) => [
-            [r.0 as i32, r.1 as i32],
-        ],
-        CharClass(cc) => class_ranges(&cc),
+        CharRange(r) => ci_ranges(ci, r.0, r.1),
+        CharClass(cc) => class_ranges(&cc, ci),
         AnyChar => [
             [0, CHAR_MAX],
         ],
         Literal(s) => {
             let chars: List<char> = s.chars().collect();
             if chars.len() == 1 {
-                [
-                    [chars[0] as i32, chars[0] as i32],
-                ];
+                ci_ranges(ci, chars[0], chars[0]);
             } else {
                 [];
             }
         },
-        Not(n) => complement_ranges(&positive_ranges(&n.element)),
+        Not(n) => complement_ranges(&positive_ranges(&n.element, ci)),
         Group(alts) => {
             let mut out: List<[i32, i32]> = [];
             for let alt of alts {
                 if alt.elements.len() == 1 {
-                    let inner = positive_ranges(&alt.elements[0]);
+                    let inner = positive_ranges(&alt.elements[0], ci);
                     for let r of &inner {
                         out.push(*r);
                     }
@@ -445,11 +493,14 @@ fn positive_ranges(elem: &LexerElement) -> List<[i32, i32]> {
     };
 }
 
-/// Ranges of a char class, complemented when the class is negated.
-fn class_ranges(cc: &CharClass) -> List<[i32, i32]> {
+/// Ranges of a char class (case-folded under `ci`), complemented when the
+/// class is negated.
+fn class_ranges(cc: &CharClass, ci: bool) -> List<[i32, i32]> {
     let mut ranges: List<[i32, i32]> = [];
     for let r of &cc.ranges {
-        ranges.push([r.start as i32, r.end as i32]);
+        for let x of &ci_ranges(ci, r.start, r.end) {
+            ranges.push(*x);
+        }
     }
     if cc.negated {
         return complement_ranges(&ranges);
@@ -462,7 +513,10 @@ fn class_ranges(cc: &CharClass) -> List<[i32, i32]> {
 fn complement_ranges(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
     let mut sorted: List<[i32, i32]> = [];
     for let r of ranges {
-        sorted.push(*r);
+        // Skip inverted ranges (lo > hi) so they cannot corrupt the gap walk.
+        if r.0 <= r.1 {
+            sorted.push(*r);
+        }
     }
     // Insertion sort by low bound (small range sets; mirrors `sort_ctx_edges`).
     for let mut i = 1; i < sorted.len(); i += 1 {
