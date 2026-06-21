@@ -21,7 +21,9 @@
 //!
 //! # Module Path Canonicalization
 //!
-//! Module paths are canonicalized using URI path normalization (RFC 3986) to ensure:
+//! Module paths are filesystem representations, not URIs: they are canonicalized
+//! by lexical normalization (`crate::path::normalize`, RFC 3986 §5.2.4
+//! dot-segment semantics) — never percent-encoded — to ensure:
 //! - Same file imported via different paths resolves to same identity
 //! - Always uses `/` separator (platform-agnostic, even on Windows)
 //! - Resolves `.` and `..` segments
@@ -768,19 +770,15 @@ pub fn build_core_internal_name(
     FreeFunctionName::from_strs(interner, &["core", "internal"], name)
 }
 
-/// Validate that a module path is a valid URI reference.
+/// Validate that a string can name a module.
+///
+/// A module path is a filesystem representation, not a URI, so URI-unsafe
+/// characters such as spaces are valid; only content that cannot name a file
+/// (a NUL byte) is rejected. Special prefixes (`core:` / `wasi:` /
+/// `http(s)://`) are opaque identifiers and always valid. The analyzer calls
+/// this before loading to surface a clean error message.
 ///
 /// Returns `Ok(())` if the path is valid, or `Err(message)` if invalid.
-///
-/// This should be called by the analyzer before attempting to load a module
-/// to provide better error messages.
-///
-/// # Arguments
-/// * `path` - The module path to validate
-///
-/// # Returns
-/// * `Ok(())` - The path is valid
-/// * `Err(String)` - The path is invalid, with an error message
 pub fn validate_module_path(path: &str) -> Result<(), String> {
     // Special prefixes are opaque identifiers (URIs / scheme-qualified names).
     if has_special_prefix(path) {
