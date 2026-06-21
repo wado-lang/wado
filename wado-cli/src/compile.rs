@@ -464,7 +464,8 @@ pub(crate) async fn maybe_run_pipeline(
             .map(std::path::Path::to_path_buf)
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
-    let inline = collect_inline_invocations_for_entry(entry_file, &probe_manifest_root);
+    let (inline, identities) =
+        collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
 
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
@@ -479,8 +480,14 @@ pub(crate) async fn maybe_run_pipeline(
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
-    crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
-        .await
+    let mut outcome =
+        crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
+            .await?;
+    // The index is keyed by `decl_site.module` (the harvest key, a full path);
+    // rewrite those keys to the loader identities so a redirect from a
+    // transitively-imported module matches.
+    remap_index_decl_files(&mut outcome.invocations, &identities);
+    Ok(outcome)
 }
 
 /// Rewrite each inline invocation whose `module` is a bare
@@ -591,31 +598,132 @@ pub fn collect_inline_invocations_for_entry(
     entry_file: &Path,
     manifest_root: &Path,
 ) -> Vec<wado_compiler::kiln::Invocation> {
-    let Ok(source) = fs::read_to_string(entry_file) else {
-        return Vec::new();
-    };
-    // `parse` is resilient; if the entry has recovered lex or parse errors
-    // the AST is partial. Refuse to harvest kiln invocations from a partial
-    // tree so a mid-edit source can't trigger surprising codegen side
-    // effects — matches the prior fail-on-parse-error behaviour.
-    let Ok(parsed) = wado_compiler::parse(&source).into_fail_fast() else {
-        return Vec::new();
-    };
+    collect_inline_invocations_for_entry_with_identities(entry_file, manifest_root).0
+}
+
+/// Harvest inline Kiln invocations from `entry_file` *and its transitive local
+/// `.wado` imports*, plus the map needed to fix up the redirect index.
+///
+/// Kiln generation runs as a pre-pass before the loader, so a
+/// `with { generator: ... }` clause in an imported module (not just the entry)
+/// must be discovered here; otherwise that module's grammar `use` falls through
+/// to the Wado lexer.
+///
+/// Two distinct module identities are at play, and a non-entry module needs a
+/// different one for each:
+///
+/// - The **harvest key** keys `decl_site.module`, which Kiln resolves the
+///   `module` / `output_dir` paths against (relative to the manifest root). It
+///   must be the module's full path, exactly as the entry's is — so it is built
+///   by `resolve_module_path` chaining from the entry's full path.
+/// - The **loader identity** is the `ModuleSource::Local.path` the loader feeds
+///   into `InvocationIndex::redirect`. The loader resolves the entry's own
+///   imports through its `EntryPoint` branch (`normalize_module_path`) and
+///   deeper imports through its `Local` branch (`resolve_module_path`), so the
+///   identity is base-path-relative (`./eval.wado`), not the full path.
+///
+/// The returned map is `harvest_key → loader_identity`; the caller rewrites the
+/// generated index's `decl_file` keys through it (see `remap_index_decl_files`).
+/// For the entry the two coincide (its `EntryPoint.filename` is the full path),
+/// so it maps to itself.
+pub(crate) fn collect_inline_invocations_for_entry_with_identities(
+    entry_file: &Path,
+    manifest_root: &Path,
+) -> (
+    Vec<wado_compiler::kiln::Invocation>,
+    std::collections::HashMap<String, String>,
+) {
+    use std::collections::VecDeque;
+    use wado_compiler::name::{normalize_module_path, resolve_module_path};
+
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
-    // Key by the full path so `decl_site.module` here matches the
-    // `decl_file` the loader feeds into `InvocationIndex::redirect`;
-    // otherwise the inline redirect misses.
-    let entry_name = entry_file.to_string_lossy().to_string();
-    modules.insert(entry_name, parsed.ast);
+    let mut identities: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+
+    // (harvest_key, loader_identity, filesystem_path, is_entry)
+    let mut queue: VecDeque<(String, String, std::path::PathBuf, bool)> = VecDeque::new();
+    let entry_key = entry_file.to_string_lossy().to_string();
+    queue.push_back((entry_key.clone(), entry_key, entry_file.to_path_buf(), true));
+
+    while let Some((key, loader_id, fs_path, is_entry)) = queue.pop_front() {
+        if modules.contains_key(&key) {
+            continue;
+        }
+        let Ok(source) = fs::read_to_string(&fs_path) else {
+            continue;
+        };
+        // `parse` is resilient; if a module has recovered lex or parse errors
+        // the AST is partial. Refuse to harvest from a partial tree so a
+        // mid-edit source can't trigger surprising codegen side effects —
+        // matches the prior fail-on-parse-error behaviour.
+        let Ok(parsed) = wado_compiler::parse(&source).into_fail_fast() else {
+            continue;
+        };
+        let ast = parsed.ast;
+
+        let parent_dir = fs_path
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_default();
+        for item in &ast.items {
+            let wado_compiler::ast::Item::Use(use_decl) = item else {
+                continue;
+            };
+            let src = use_decl.source.as_str();
+            // Only follow local `.wado` modules. Non-`.wado` schemas (`.g4`,
+            // …) are the Kiln targets themselves, and `core:` / `wasi:` /
+            // bare dependency imports are not consumer modules to scan.
+            if !(src.starts_with("./") || src.starts_with("../"))
+                || !src.to_ascii_lowercase().ends_with(".wado")
+            {
+                continue;
+            }
+            let child_key = resolve_module_path(&key, src);
+            let child_loader_id = if is_entry {
+                normalize_module_path(src)
+            } else {
+                resolve_module_path(&loader_id, src)
+            };
+            if !modules.contains_key(&child_key) {
+                queue.push_back((child_key, child_loader_id, parent_dir.join(src), false));
+            }
+        }
+        identities.insert(key.clone(), loader_id);
+        modules.insert(key, ast);
+    }
+
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    wado_compiler::kiln::collect_inline_invocations(
+    let invocations = wado_compiler::kiln::collect_inline_invocations(
         modules.iter().map(|(k, v)| (k.as_str(), v)),
         &descriptors,
         &manifest_root_str,
     )
-    .unwrap_or_default()
+    .unwrap_or_default();
+    (invocations, identities)
+}
+
+/// Rewrite the redirect index's `decl_file` keys from the harvest key (a
+/// module's full path) to the loader identity the loader will present at
+/// resolve time. Entries whose `decl_file` is not in `identities` (the entry
+/// itself, or anything already in loader form) pass through unchanged.
+pub(crate) fn remap_index_decl_files(
+    index: &mut wado_compiler::kiln::InvocationIndex,
+    identities: &std::collections::HashMap<String, String>,
+) {
+    let rewritten: Vec<(String, String, String)> = index
+        .entries()
+        .map(|(decl, from, uri)| {
+            let decl = identities.get(decl).map_or(decl, String::as_str);
+            (decl.to_string(), from.to_string(), uri.to_string())
+        })
+        .collect();
+    let mut fresh = wado_compiler::kiln::InvocationIndex::new();
+    for (decl, from, uri) in rewritten {
+        fresh.insert(&decl, &from, &uri);
+    }
+    *index = fresh;
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns
@@ -791,5 +899,74 @@ mod kiln_dir_module_tests {
         }
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn transitive_import_harvests_kiln_clause_and_maps_loader_identity() {
+        // The Kiln `with` clause lives in an *imported* module, not the entry.
+        // The harvester must still discover it, key it by its full path
+        // (`decl_site.module`), and map that to the loader identity
+        // (`./eval.wado`) the loader will present for the redirect.
+        let root = unique_tmp("transitive");
+        let _ = std::fs::remove_dir_all(&root);
+        let example = root.join("example");
+        std::fs::create_dir_all(&example).unwrap();
+        std::fs::write(
+            example.join("main.wado"),
+            "use { evaluate } from \"./eval.wado\";\nexport fn run() { let _ = evaluate(); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            example.join("eval.wado"),
+            "use arith from \"./Arith.g4\"\n    with { generator: { module: \"../src/generator.wado\" } };\n\
+             pub fn evaluate() -> bool { return false; }\n",
+        )
+        .unwrap();
+
+        let entry = example.join("main.wado");
+        let (invs, identities) =
+            collect_inline_invocations_for_entry_with_identities(&entry, &root);
+
+        assert_eq!(invs.len(), 1, "should harvest the imported module's clause");
+        let inv = &invs[0];
+        assert!(inv.from.as_str().ends_with("Arith.g4"), "from: {}", inv.from.as_str());
+        assert!(
+            inv.decl_site.module.ends_with("example/eval.wado"),
+            "decl_site.module should be eval.wado's full path, got {}",
+            inv.decl_site.module
+        );
+        assert_eq!(
+            identities.get(&inv.decl_site.module).map(String::as_str),
+            Some("./eval.wado"),
+            "harvest key must map to the loader identity"
+        );
+        // The entry maps to itself (its `EntryPoint.filename` is the full path).
+        let entry_key = entry.to_string_lossy().to_string();
+        assert_eq!(identities.get(&entry_key).map(String::as_str), Some(entry_key.as_str()));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn remap_index_decl_files_swaps_to_loader_identity() {
+        use wado_compiler::kiln::InvocationIndex;
+
+        let mut idx = InvocationIndex::new();
+        idx.insert("/abs/example/eval.wado", "./Arith.g4", "kiln:file:///g/arith.wado");
+
+        let mut identities = std::collections::HashMap::new();
+        identities.insert("/abs/example/eval.wado".to_string(), "./eval.wado".to_string());
+
+        remap_index_decl_files(&mut idx, &identities);
+
+        assert!(
+            idx.redirect("/abs/example/eval.wado", "./Arith.g4").is_none(),
+            "the harvest-key decl_file must no longer redirect"
+        );
+        assert_eq!(
+            idx.redirect("./eval.wado", "./Arith.g4"),
+            Some("kiln:file:///g/arith.wado"),
+            "the loader identity must redirect to the same URI"
+        );
     }
 }
