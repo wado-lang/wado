@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781989571208,
+  "lastUpdate": 1782003960486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34377,6 +34377,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6a6c61ad243e4eb492e2f0a62ca76d2a0b84b58a"
         },
         "date": 1781989570836,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac29dd9c8ee9aff2c5a5e378cfc3469e79fde8a5",
+          "message": "Merge pull request #1413 from wado-lang/claude/synthesis-phase-smell-32p23q\n\nrefactor(synthesis): replace name-format heuristics with metadata, and dedup serde deserialize",
+          "timestamp": "2026-06-21T09:55:48+09:00",
+          "tree_id": "9ce5fff35e173e846314ee1e1bc0cc6b5e6375ba",
+          "url": "https://github.com/wado-lang/wado/commit/ac29dd9c8ee9aff2c5a5e378cfc3469e79fde8a5"
+        },
+        "date": 1782003959946,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
