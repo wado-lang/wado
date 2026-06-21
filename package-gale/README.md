@@ -17,16 +17,16 @@ ambiguity resolution, same parse trees. A `.g4` that the upstream `antlr4`
 tool accepts should parse identically through Gale.
 
 Self-contained output, no version drift. Gale inlines its entire runtime into
-every generated parser. There is no `gale-runtime` package to depend on and
-keep aligned with the generator: each generated file carries the exact runtime
-it was built with. Upgrading Gale and regenerating upgrades the runtime too.
+every generated parser. There is no `gale-runtime` package to keep aligned with
+the generator: each generated file carries the exact runtime it was built with,
+and regenerating upgrades it.
 
 Adaptive LL with a runtime ATN simulator. Most decisions are resolved with
 fast static lookahead. When a decision genuinely needs unbounded,
 full-context lookahead — the ALL(\*) cases that defeat any fixed-`k` LL parser
-— Gale falls back to a runtime ATN simulator for exactly those decisions,
-leaving the rest of the parser on the fast static path. You write the grammar;
-Gale decides where the simulator is needed. (See the ALL(\*) example below.)
+— Gale emits a runtime ATN simulator for exactly those decisions and leaves
+the rest of the parser on the fast static path. (See the ALL(\*) example
+below.)
 
 Error-resilient parsing. A generated parser never bails on a syntax error. It
 always returns a tree plus a list of diagnostics, recovering locally and
@@ -231,10 +231,9 @@ Every generated parser module exports, at minimum:
 
 ## The `gale` command
 
-Gale ships as a Wado package. During development the CLI is
-`wado run package-gale <subcommand> …` (`gale` is shorthand). Most users never
-call it directly — the `use ... with { generator: ... }` above is the
-recommended path — but it is useful for ad-hoc generation and debugging.
+During development the CLI is `wado run package-gale <subcommand> …` (`gale` is
+shorthand). The `use ... with { generator: ... }` above is the usual path; the
+CLI is for ad-hoc generation and debugging.
 
 ```sh
 # Generate a parser to stdout, or to a file with -o.
@@ -257,10 +256,9 @@ config.
 
 ## Compatibility and further reading
 
-Gale targets the ANTLR4 `.g4` syntax; target-language action bodies
-(`{ ... }`, semantic predicates `{ ... }?`, `@header`/`@members`, …) are
-recognized so real-world grammars parse, but their host-language contents are
-skipped.
+Gale accepts the full ANTLR4 `.g4` syntax but ignores host-language action
+bodies and semantic predicates (`{ ... }`, `{ ... }?`, `@header`/`@members`),
+since the generated parser is target-agnostic.
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility
