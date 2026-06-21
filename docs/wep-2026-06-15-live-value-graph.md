@@ -75,12 +75,42 @@ fn sum_list(arr: &List<i32>) -> i32 {
 }
 ```
 
-`wado dump --nir -O2` keeps one `index out of bounds` trap; the guard
-`if !(i < _licm_used_N)` and check `i < _licm_used_N` use the same hoisted
-local, so they _would_ match if both resolved to a `ValueId`.
+Under `-f bare-asserts` (strips the panic-formatting machinery, leaving only
+`sum_list`'s loop), the NIR is exactly:
 
-Two secondary issues, real but downstream of the above (both must also be
-fixed for a green result, neither is sufficient alone):
+```
+let _licm_used_4: i32 = arr.used;     // hoisted for the guard
+let _licm_used_12: i32 = arr.used;    // hoisted for the check — a SECOND local
+let _licm_repr_13: Array<i32> = arr.repr;
+loop {
+  if !(i < _licm_used_4) { break }          // guard reads _licm_used_4
+  sum = (sum + { let __cond = (i < _licm_used_12);   // check reads _licm_used_12
+                 if !__cond { unreachable }; array_get(&_licm_repr_13, i) });
+  i = (i + 1);
+}
+```
+
+`arr.used` is hoisted **twice** (the guard's copy in one fixed-point iteration,
+the check's copy a later one — the check's `arr.used` only appears after
+`index_value` inlines). In a fresh build both `_licm_used_*` lets resolve to the
+same `field_access(value(arr), used, V0)`, so guard.bound == check.bound. The
+maintained graph drops both.
+
+The exact drop mechanism (`WADO_DBG` on `drop_local_readers`): two calls fire,
+`local = _licm_used_4` and `local = i`. `maintain_value_after_edit` calls
+`drop_local_readers(L)` whenever the value feeding `let L = v` / `L = v` changes,
+which **removes the `value_of` entry of every read of `L` and its ancestors**.
+The hoist `let _licm_used_4 = arr.used` and the increment `i = i + 1` each trip
+it, so the guard/check comparisons over `_licm_used_*` and `i` all go value-less.
+It is conservative-correct (avoids stale over-merge) but imprecise.
+
+Confirmed oracle: forcing `engine.body.value_graph = None` at the top of
+`eliminate_at_root` (fresh rebuild) makes **every** operand resolve and BCE fire
+(0 traps); the maintained graph leaves the induction-variable operand `None` on
+every failing loop. So the target state is exactly a fresh build's values.
+
+Two secondary issues, real but downstream of the above (also needed, neither
+sufficient alone):
 
 1. **Guard extractors match the skeleton.** `extract_loop_guard`,
    `extract_early_exit_guard`, `extract_dominating_guard` pattern-match
@@ -92,18 +122,30 @@ fixed for a green result, neither is sufficient alone):
    `ExprKind::If`; only `visit_stmt` rewrites the panic guard. Factor it into a
    shared helper called from both.
 
-Fix direction (the real work): the maintained graph must keep a stable
-`ValueId` for licm-hoisted locals and loop-carried variables, _or_
-`condition_implication` must run on a graph where it can. Tried, did not
-suffice (see dead ends): giving each hoist local a stable `Opaque(Local N)` via
-`set_value` at rewrite — `set_value` no-ops when the graph is not yet built at
-hoist time, and even when set it does not restore the induction variable's lost
-value. The clean options are (a) a maintenance pass that re-seeds loop-variable
-and hoist-local values after licm's structural edits, or (b) move
-`condition_implication` to its own pass with a fresh build (costs one rebuild
-per function — weigh against the `rebuilds = 0` criterion; it may be acceptable
-since BCE precision is a correctness-of-output-quality gate). Whichever, the
-oracle is the minimal reproducer above resolving both operands to a `ValueId`.
+Decision: **(a) re-seed the maintained graph, preserving build-once** (chosen
+over rebuilding for `condition_implication`). The hard constraint is that the
+re-seed must restore the dropped _flow-dependent_ values — the loop-carried
+variable's loop-phi value and the hoist locals' `field_access` value — and there
+is **no sound shortcut** (each was tried and is unsound or unavailable):
+
+- A canonical `Opaque(Local idx)` per local over-merges: the induction variable
+  is reassigned (`i += 1`), so its reads at different versions are _not_ equal;
+  one opaque for all of them is the over-merge `WADO_VERIFY_VG` rejects.
+- Query-time leaf re-derivation in `maintain_pure_node` is the already-removed
+  dead end (over-merges generally).
+- `build_scoped` (the existing scoped re-valuation) only surfaces caller-rooted
+  re-emittable values and **drops walk-local opaques**, which is exactly the
+  loop-phi value `i` needs — so it cannot re-seed the induction variable.
+
+The correct implementation is therefore new infrastructure: a **scoped flow
+re-analysis that re-walks the edited loop region and merges its flow-derived
+values (including walk-local loop-phi opaques) back into the live graph**, run
+after licm's structural edits, gated to fire only when a region's values were
+dropped (so it stays a re-seed, not a per-pass rebuild — `rebuilds` must stay
+0). Also fix the duplicate hoist (reuse an existing pre-header `_licm_X =
+src.field` instead of creating a second local). Oracle: the minimal reproducer
+above resolving both operands to a `ValueId` with `WADO_VERIFY_VG` green and
+`WADO_MEASURE_VG` still reporting `rebuilds = 0`.
 
 `WADO_PROMOTE_FIELDS` (materialise pure `FieldAccess` values) is a _separate,
 further-out_ experiment — its optimizer-pass `skeleton operand` migration is
