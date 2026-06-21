@@ -5,13 +5,11 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
-use crate::module_source::ModuleSource;
 use crate::nir::FunctionRef;
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{
-    CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirFuncId, WirInstr,
-    WirType,
+    CanonicalIntrinsic, CmFuturePayload, CmStreamPayload, WirFuncId, WirInstr, WirType,
 };
 
 use super::translate::FunctionTranslator;
@@ -75,34 +73,15 @@ impl FunctionTranslator<'_, '_> {
     // Canonical resource method dispatch
     // =========================================================================
 
-    /// Map a primitive type to its CM scalar type.
-    ///
-    /// Returns `Some(CmScalarType::S32)` for i32, `Some(CmScalarType::U8)` for u8, etc.
-    /// Returns `None` for non-CM-scalar types (f32, f64 are included as float32/float64).
-    fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
-        match prim {
-            PrimitiveType::I8 => Some(CmScalarType::S8),
-            PrimitiveType::I16 => Some(CmScalarType::S16),
-            PrimitiveType::I32 => Some(CmScalarType::S32),
-            PrimitiveType::I64 => Some(CmScalarType::S64),
-            PrimitiveType::U8 => Some(CmScalarType::U8),
-            PrimitiveType::U16 => Some(CmScalarType::U16),
-            PrimitiveType::U32 => Some(CmScalarType::U32),
-            PrimitiveType::U64 => Some(CmScalarType::U64),
-            PrimitiveType::F32 => Some(CmScalarType::F32),
-            PrimitiveType::F64 => Some(CmScalarType::F64),
-            PrimitiveType::Bool => Some(CmScalarType::Bool),
-            PrimitiveType::Char => Some(CmScalarType::Char),
-            _ => None,
-        }
-    }
-
     /// Get the CM future payload type from `MonomorphInfo` (for static methods like `Future::new`).
     fn cm_future_payload_from_monomorph(&self, func: &FunctionRef) -> CmFuturePayload {
         if let Some(ref info) = func.monomorph_info
             && !info.impl_type_args.is_empty()
         {
-            return self.classify_future_payload(info.impl_type_args[0]);
+            return crate::component_model::classify_future_payload(
+                self.type_table,
+                info.impl_type_args[0],
+            );
         }
         CmFuturePayload::Trailers
     }
@@ -117,54 +96,9 @@ impl FunctionTranslator<'_, '_> {
         if let ResolvedType::GenericResource { type_args, .. } = self.type_table.get(inner_type_id)
             && !type_args.is_empty()
         {
-            return self.classify_future_payload(type_args[0]);
+            return crate::component_model::classify_future_payload(self.type_table, type_args[0]);
         }
         CmFuturePayload::Trailers
-    }
-
-    /// Classify a future's type argument into the CM future payload category.
-    ///
-    /// - Primitive scalar → `Scalar(s)`
-    /// - `Result<(), E>` (unit Ok type) → `Transmission` (HTTP transmission result)
-    /// - Anything else → `Trailers` (HTTP trailers pattern)
-    fn classify_future_payload(&self, type_arg: TypeId) -> CmFuturePayload {
-        match self.type_table.get(type_arg) {
-            ResolvedType::Primitive(prim) => {
-                if let Some(scalar) = Self::primitive_to_cm_scalar(prim) {
-                    return CmFuturePayload::Scalar(scalar);
-                }
-            }
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == "Result" && type_args.len() >= 2 => {
-                if matches!(self.type_table.get(type_args[0]), ResolvedType::Unit) {
-                    // Determine ErrorCode source from the error type's package
-                    let source = self.error_code_source(type_args[1]);
-                    return CmFuturePayload::Transmission(source);
-                }
-            }
-            _ => {}
-        }
-        CmFuturePayload::Trailers
-    }
-
-    /// Determine the WASI package source for an `ErrorCode` type.
-    ///
-    /// Extracts the package name from the type's `ModuleSource::Wasi { interface }`
-    /// (e.g. `"http/types.wado"` → `"http"`). Falls back to `"cli"` if the error
-    /// type is not a WASI-defined enum or variant.
-    fn error_code_source(&self, error_type_id: TypeId) -> String {
-        let module_source = match self.type_table.get(error_type_id) {
-            ResolvedType::Enum { module_source, .. }
-            | ResolvedType::Variant { module_source, .. } => module_source,
-            _ => return "cli".to_string(),
-        };
-        if let ModuleSource::Wasi { interface } = module_source {
-            // interface format is "{package}/..." (e.g., "http/types.wado")
-            interface.split('/').next().unwrap_or("cli").to_string()
-        } else {
-            "cli".to_string()
-        }
     }
 
     /// Dispatch canonical resource methods based on `#[cm("...")]` attribute.

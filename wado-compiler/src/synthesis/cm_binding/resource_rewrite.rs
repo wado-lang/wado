@@ -31,8 +31,7 @@ use crate::synthesis::common::{
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
     return_stmt, synth_span,
 };
-use crate::tir::PrimitiveType;
-use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType};
+use crate::wir::{CanonicalIntrinsic, CmFuturePayload};
 
 use super::synthesize_lift;
 use super::types::{LiftContext, binary_add, type_id_to_ast_type};
@@ -217,61 +216,6 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     )
 }
 
-/// Classify a future payload type into its CM future category, selecting the
-/// payload-parameterized canonical name.
-fn classify_future_payload(tt: &TypeTable, payload_type_id: TypeId) -> CmFuturePayload {
-    match tt.get(payload_type_id) {
-        ResolvedType::Primitive(prim) => {
-            if let Some(scalar) = primitive_to_cm_scalar(prim) {
-                return CmFuturePayload::Scalar(scalar);
-            }
-        }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Result" && type_args.len() >= 2 => {
-            if matches!(tt.get(type_args[0]), ResolvedType::Unit) {
-                return CmFuturePayload::Transmission(error_code_source(tt, type_args[1]));
-            }
-        }
-        _ => {}
-    }
-    CmFuturePayload::Trailers
-}
-
-fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
-    Some(match prim {
-        PrimitiveType::I8 => CmScalarType::S8,
-        PrimitiveType::I16 => CmScalarType::S16,
-        PrimitiveType::I32 => CmScalarType::S32,
-        PrimitiveType::I64 => CmScalarType::S64,
-        PrimitiveType::U8 => CmScalarType::U8,
-        PrimitiveType::U16 => CmScalarType::U16,
-        PrimitiveType::U32 => CmScalarType::U32,
-        PrimitiveType::U64 => CmScalarType::U64,
-        PrimitiveType::F32 => CmScalarType::F32,
-        PrimitiveType::F64 => CmScalarType::F64,
-        PrimitiveType::Bool => CmScalarType::Bool,
-        PrimitiveType::Char => CmScalarType::Char,
-        _ => return None,
-    })
-}
-
-/// WASI package owning an `ErrorCode` type (e.g. `"filesystem"`), used to
-/// select the per-package transmission canonical. Falls back to `"cli"`.
-fn error_code_source(tt: &TypeTable, error_type_id: TypeId) -> String {
-    let module_source = match tt.get(error_type_id) {
-        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
-            module_source
-        }
-        _ => return "cli".to_string(),
-    };
-    if let ModuleSource::Wasi { interface } = module_source {
-        interface.split('/').next().unwrap_or("cli").to_string()
-    } else {
-        "cli".to_string()
-    }
-}
-
 /// CM package scope for lifting a future payload (biases named-type source
 /// resolution in `synthesize_lift`).
 fn future_payload_package(payload: &CmFuturePayload) -> String {
@@ -292,7 +236,7 @@ fn synthesize_future_read_func(
     let (func_name, read_name, cm_package, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
-        let payload = classify_future_payload(&tt, payload_type_id);
+        let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone()).import_name();
         let cm_package = future_payload_package(&payload);
         let payload_ast = type_id_to_ast_type(payload_type_id, &tt, cm_interface_registry);
