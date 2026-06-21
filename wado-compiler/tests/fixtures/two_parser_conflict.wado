@@ -1,0 +1,36 @@
+#![TODO]
+//! Known bug (issue #1416): two independent modules that each define a same-named type
+//! (here `CstNode` / `CstChild`, as every Gale-generated parser does) cannot
+//! coexist in one program. Matching module B's `CstChild::Node` case binds a
+//! value typed as module A's `CstNode` instead of B's, so a recursive walk
+//! over B's tree fails to type-check:
+//!
+//!   error: type mismatch: expected '&CstNode', found '&CstNode'
+//!
+//! Surfaced while building a subcommand CLI that drove two Gale parsers
+//! (`package-gale/example`). A struct/variant type referenced inside one
+//! imported module's own definitions resolves by bare name and picks the
+//! other imported module's same-named type. Drop `#![TODO]` once fixed.
+
+use a from "./sub/two_parser_a.wado";
+use b from "./sub/two_parser_b.wado";
+
+fn count_b(node: &b::CstNode) -> i32 {
+    let mut n = 0;
+    for let child of &node.children {
+        if let Node(c) = *child {
+            n += count_b(&c);
+        } else {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+test "two parsers with same-named types coexist" {
+    let _ = a::root();
+    assert count_b(&b::root()) == 0;
+}
+
+__DATA__
+{"test": {}}
