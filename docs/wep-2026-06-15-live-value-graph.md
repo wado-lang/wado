@@ -1641,28 +1641,28 @@ The ideal removes the root cause rather than patching symptoms:
       thread the receiver's `ValueId` into the binding) — the same born-as-operands
       obligation, one level up.
 
-      Recovery proven achievable (this session, then reverted as unhardened). With
-      (a) immutable-parameter promotion at the early freeze, (b) `entry_values`
-      (persisted param opaques), and (c) an entry materialiser that *computes*
-      `field_access(entry_value(root), field, INITIAL)` for `recv.field` whose
-      receiver `resolve_param_root`s — through the inlined `let self = arr` copy —
-      to a non-`mut_escaped` parameter (guarded by field-never-written + no
-      `bump_all`), pinning one `let _av = param.field` at entry and rewriting the
-      reads to a promoted `Opaque(Local _av)`: **`safe_get` recovers and runs
-      correctly** (`b` / `?`), as do `tir_optimize_short_circuit_bounds` and
-      `array_bounds_elim_offset_chain` — the param-guard BCE cluster — and **every
-      `oob_*` fixture still traps, the verify oracle clean**. Two hardening bugs
-      remain before it can land (they caused ~165 failures, incl. one WIR-build
-      trap): the materialiser (1) must exclude **reference/aggregate** fields (a
-      pinned `Array`/`List`/struct changes value-copy / aliasing semantics and
-      miscompiled `array_index_1` — but a naive `prim_of` scalar gate also dropped
-      the `.used` recovery, so the type test needs care), and (2) must be
-      **idempotent across optimize iterations** (it re-fired per iteration, minting
-      duplicate `_av` for the same value so a guard inlined one iteration and its
-      check another never share an `_av`). The loop-guard cluster additionally
-      needs the loop induction variable resolved (a separate materialiser). This is
-      the WEP's "maintain through every structural pass" core: confirmed multi-link
-      and recovering by implementation, blocked only on the two hardening points.
+      An entry-`FieldAccess` materialiser was implemented and reverted; the
+      attempt **disproved the simple model** and pins the real obstacle. The
+      materialiser computes `field_access(entry_value(root), field, INITIAL)` for a
+      `recv.field` whose receiver `resolve_param_root`s to a parameter, pins one
+      `let _av = param.field` at entry, and promotes the reads. It miscompiled ~165
+      fixtures — a pinned **reference/aggregate** field (`Array`/`List`/struct)
+      changes value-copy / aliasing semantics and *traps* `array_index_1` — and it
+      re-fired per optimize iteration, minting duplicate `_av`. Restricting to
+      scalar fields (`prim_of`) is sound but **recovers nothing**, because tracing
+      `safe_get` at the materialiser shows its only candidates are a `MutRef` and a
+      `BuiltinArray` field — **the `.used` bound is not a bare `param.field` read at
+      all** after `len()` inlines (it sits inside the `len()` `LabeledBlock`, its
+      receiver a wrapped/inlined `self`, not the parameter). So the earlier
+      "`safe_get` recovers correctly" was a *false positive*: the correct output
+      came from the unsound reference-field materialisation that happened not to
+      trap there, not from a sound i32-bound promotion. Conclusion: a sound
+      field-bound recovery is **not** a entry-materialiser over `param.field`; the
+      bound's post-inline shape (LabeledBlock-wrapped, receiver an inlined `self`)
+      must be normalised first — i.e. it really does require maintaining the value
+      through the inline splice and the `peephole` collapse (the born-as-operands /
+      all-pass-maintenance core), not a post-hoc materialiser. The loop-guard
+      cluster additionally needs the induction variable resolved.
 - [ ] Migrate the value passes off `value_of` to operand / pool queries, then
       delete `value_of` and `nir_value_graph::builder` (criterion 3). The
       loop-var wall dissolves too: with the graph never cleared, the induction
