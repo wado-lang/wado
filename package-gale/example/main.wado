@@ -1,10 +1,12 @@
-//! CLI front end for the calculator: `arith <expression>` prints the result.
+//! CLI for the arithmetic interpreter: `arith <expression>` prints the result.
 //!
-//! `eval.wado` does the Kiln `use ... with { generator: ... }`, so building
-//! this entry (re)generates the parser from `Arith.g4` as part of the
-//! compile. Run it straight from source:
+//!   wado run package-gale/example/main.wado '2 * (3 + 4)'   # -> 14
 //!
-//!   wado run package-gale/example/main.wado '2 * (3 + 4)'
+//! The `between`/`and`/`or` ALL(*) example (`logic.wado`) is exercised by its
+//! own test rather than this CLI: a single program cannot yet import two
+//! independent Gale parsers, because their generated `CstNode` types share a
+//! name and collide in cross-module type resolution (issue #1416). Once that
+//! is fixed this entry can grow into a subcommand CLI driving both.
 
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { eval } from "./eval.wado";

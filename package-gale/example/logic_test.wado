@@ -1,0 +1,37 @@
+//! Tests for the ALL(*) `between`/`and`/`or` interpreter. The `between LO and
+//! HI` cases only parse because Gale's runtime ATN simulator binds the shared
+//! `and` correctly; a purely static LL parser would let `LO` swallow the `and`
+//! and starve `between`.
+
+use { eval } from "./logic.wado";
+
+fn assert_eval(input: &String, expected: i64) {
+    match eval(input) {
+        Ok(v) => { assert v == expected, `{*input} = {v}, expected {expected}`; },
+        Err(m) => { assert false, `{*input}: unexpected error: {m}`; },
+    }
+}
+
+test "literals and logical operators" {
+    assert_eval(&"5", 5);
+    assert_eval(&"1 and 1", 1);
+    assert_eval(&"1 and 0", 0);
+    assert_eval(&"0 or 2", 1);
+    assert_eval(&"0 or 0", 0);
+}
+
+test "between binds its mandatory 'and' (needs ALL(*))" {
+    assert_eval(&"between 1 and 5", 1);   // 1 <= 5
+    assert_eval(&"between 5 and 1", 0);   // 5 > 1
+}
+
+test "the shared 'and' is disambiguated by full context" {
+    // Parses as `between 1 and (5 and 0)`: `5 and 0` = 0, then `1 <= 0` = 0.
+    assert_eval(&"between 1 and 5 and 0", 0);
+    // Parses as `between 1 and (5 and 1)`: `5 and 1` = 1, then `1 <= 1` = 1.
+    assert_eval(&"between 1 and 5 and 1", 1);
+}
+
+test "a syntax error is reported, not trapped" {
+    assert eval(&"between 1 and") matches { Err(_) };
+}
