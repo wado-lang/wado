@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782039017966,
+  "lastUpdate": 1782051997856,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34597,6 +34597,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5d8c3944dbc39baca32578ab9daa3723ea2fa3b8"
         },
         "date": 1782039017360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 309238,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1250c044b66dafac6780f8eed4404e40ece14bfe",
+          "message": "Merge pull request #1424 from wado-lang/claude/normalize-module-path-panic-vz4hen\n\nfix: normalize module paths as filesystem strings, not URIs (#1417)",
+          "timestamp": "2026-06-21T23:16:47+09:00",
+          "tree_id": "bd452efe5f419535cc0353b90f39876249b3e010",
+          "url": "https://github.com/wado-lang/wado/commit/1250c044b66dafac6780f8eed4404e40ece14bfe"
+        },
+        "date": 1782051997226,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
