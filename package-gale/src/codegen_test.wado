@@ -105,6 +105,28 @@ test "node-kind constants are pub so consumers can dispatch on CstNode.kind" {
     assert !str_contains(&output, &"\nglobal RK_");
 }
 
+test "duplicate same-rule alt labels coalesce to one enum case (valid in ANTLR4)" {
+    // ANTLR4 accepts a `# Label` repeated within one rule: the alternatives
+    // share one alternative kind (one context class). The generated
+    // `<Rule>Alt` enum must emit the label once — a duplicate variant would
+    // not compile — while the accessor maps every alt index to it.
+    let input = "grammar Test;
+e : e '+' e # Bin | e '-' e # Bin | INT # Num ;
+INT : [0-9]+ ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, &"pub enum EAlt {");
+    // The shared label appears once (no `Bin,\n    Bin,` duplicate variant).
+    assert !str_contains(&output, &"    Bin,\n    Bin,");
+    assert str_contains(&output, &"    Num,");
+    // Both `# Bin` alternatives (indices 0 and 1) dispatch to the same case.
+    assert str_contains(&output, &"0 => EAlt::Bin,");
+    assert str_contains(&output, &"1 => EAlt::Bin,");
+    assert str_contains(&output, &"2 => EAlt::Num,");
+}
+
 test "generate wildcard element" {
     let mut grammar = Grammar {
         name: "Test",

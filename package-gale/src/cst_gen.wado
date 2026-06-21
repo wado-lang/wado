@@ -87,10 +87,24 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     }
     let enum_name = `{to_pascal_case(&rule.name)}Alt`;
 
+    // Several alternatives may share one `# Label` (valid in ANTLR4: they
+    // denote the same alternative kind), so emit each distinct label once —
+    // a repeated variant would not compile. The accessor below still maps
+    // every alt index to its label, so the shared alts dispatch to one case.
     w.begin(&`pub enum {enum_name}`);
+    let mut seen: List<String> = [];
     for let alt of &rule.alternatives {
         if let Some(label) = &alt.label {
-            w.line(&`{*label},`);
+            let mut dup = false;
+            for let s of &seen {
+                if *s == *label {
+                    dup = true;
+                }
+            }
+            if !dup {
+                seen.push(*label);
+                w.line(&`{*label},`);
+            }
         }
     }
     w.end();
