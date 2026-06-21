@@ -1627,7 +1627,21 @@ The ideal removes the root cause rather than patching symptoms:
       re-emits the same `local.get` but reshapes the WIR the goldens pin). So leaf
       promotion must land as a coordinated unit (promote leaves + surface the
       inlined field + refresh the goldens), not piecemeal: promoting `pos` alone
-      churns broadly without recovering, since `arr.used` is still orphaned.
+      churns broadly without recovering, since `arr.used` is still orphaned. The
+      full chain was traced end to end this session (param promotion + an entry
+      cross-block field materialiser, both built, validated sound, then reverted):
+      with `pos` promoted, the guard's left operand resolves, but the field still
+      does not, because the **inlined receiver** `arr` is itself unvalued after the
+      clear — it is a _receiver-position_ read (a place, excluded from leaf
+      promotion), so `operand_value_in` returns `None` for the inline `seed`, and
+      `build_scoped` mints a _fresh_ opaque for `len()`'s `self` and another for
+      `index_value()`'s `self`. The two `arr.used` then carry different receiver
+      opaques and never share a value to group on. So the coordinated unit also
+      needs the inlined call's receiver value seeded (promote receiver reads, or
+      thread the receiver's `ValueId` into the binding) — the same born-as-operands
+      obligation, one level up. This is the WEP's "maintain through every
+      structural pass" core, confirmed multi-link by implementation, not a single
+      surgical change.
 - [ ] Migrate the value passes off `value_of` to operand / pool queries, then
       delete `value_of` and `nir_value_graph::builder` (criterion 3). The
       loop-var wall dissolves too: with the graph never cleared, the induction
