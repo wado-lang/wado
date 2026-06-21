@@ -408,26 +408,11 @@ fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
 /// keying in `register_struct`. The `kiln:/path` form has no internal
 /// `//`, so the qualified-name boundary stays unambiguous.
 ///
-/// The URI is RFC 3986–valid (single-segment scheme followed by an
-/// absolute-path reference), so `fluent_uri::UriRef::parse` accepts it
-/// and the loader's `strip_kiln_scheme` recovers the absolute path.
-/// Relative paths are not supported; the caller must canonicalize
-/// first.
+/// Delegates to [`wado_compiler::loader::path_to_kiln_uri`] — the single
+/// producer shared with the LSP — which normalizes and percent-encodes the
+/// path. Relative paths are not supported; the caller must canonicalize first.
 fn path_to_kiln_uri(path: &Path) -> String {
-    // `Path::display` is sufficient on Unix where every absolute path is
-    // a `/`-separated UTF-8 string. The CLI is host-only, so any
-    // platform-specific path quirk is the kiln_driver's problem to
-    // solve, not the wasm32-compatible compiler crate's.
-    let s = wado_compiler::path::normalize(&path.display().to_string());
-    if s.starts_with('/') {
-        format!("kiln:{s}")
-    } else {
-        // Relative-path fallback. The leading `/` keeps the URI
-        // RFC 3986–valid even though the loader will fail to find the
-        // file at runtime — a useful diagnostic shape for callers that
-        // forgot to canonicalize.
-        format!("kiln:/{s}")
-    }
+    wado_compiler::loader::path_to_kiln_uri(&path.display().to_string())
 }
 
 /// Outcome of comparing a [`Metadata`] record to the current state of
