@@ -1,19 +1,10 @@
-#![TODO]
-//! Known bug (issue #1418): consuming a `Future<Result<(), ErrorCode>>` and
-//! materializing its unit `Ok(())` payload ICEs the WIR pipeline in the CLI
-//! world:
-//!
-//!   Internal compiler error: WIR pipeline generated invalid core Wasm module
-//!   Validation error: type mismatch: values remaining on stack at end of block
-//!
-//! The future is the completion handle of `write_via_stream` /
-//! `read_via_stream`. Matching only `Some(Err(_))` compiles; materializing the
-//! `Some(Ok(_))` arm — lifting the unit-payload result across the CM boundary —
-//! is what trips it. Same family as the `Exit::exit(Result<(), ()>)` ICE.
-//!
-//! This blocks `gale gen -o` (package-gale/src/main.wado) and the descriptor
-//! extractor from awaiting their writes to detect a partial/failed write, so
-//! both drop the completion future unread today. Drop `#![TODO]` once fixed.
+//! Regression (issue #1418): consuming a `Future<Result<(), ErrorCode>>` and
+//! materializing its unit `Ok(())` payload used to ICE the WIR pipeline in the
+//! CLI world ("values remaining on stack at end of block"). The future is the
+//! completion handle of `write_via_stream` / `read_via_stream`. Matching the
+//! `Some(Ok(_))` arm extracts the unit `Ok` payload; that extraction must
+//! produce no operand-stack value. See `variant_unit_payload_match.wado` for
+//! the minimal, CM-independent case.
 
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { eprintln, Stderr } from "core:cli";
@@ -41,4 +32,7 @@ export fn run() with Preopens, Stderr {
 }
 
 __DATA__
-{"preopened_dirs": [["", "/work"]]}
+{
+    "preopened_dirs": [["", "/work"]],
+    "stderr": ""
+}
