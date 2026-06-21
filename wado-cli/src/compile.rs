@@ -480,9 +480,15 @@ pub(crate) async fn maybe_run_pipeline(
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
-    let mut outcome =
-        crate::kiln_driver::run_pipeline(&manifest, &manifest_root, host, &provider, inline, no_cache)
-            .await?;
+    let mut outcome = crate::kiln_driver::run_pipeline(
+        &manifest,
+        &manifest_root,
+        host,
+        &provider,
+        inline,
+        no_cache,
+    )
+    .await?;
     // The index is keyed by `decl_site.module` (the harvest key, a full path);
     // rewrite those keys to the loader identities so a redirect from a
     // transitively-imported module matches.
@@ -929,7 +935,11 @@ mod kiln_dir_module_tests {
 
         assert_eq!(invs.len(), 1, "should harvest the imported module's clause");
         let inv = &invs[0];
-        assert!(inv.from.as_str().ends_with("Arith.g4"), "from: {}", inv.from.as_str());
+        assert!(
+            inv.from.as_str().ends_with("Arith.g4"),
+            "from: {}",
+            inv.from.as_str()
+        );
         assert!(
             inv.decl_site.module.ends_with("example/eval.wado"),
             "decl_site.module should be eval.wado's full path, got {}",
@@ -942,7 +952,10 @@ mod kiln_dir_module_tests {
         );
         // The entry maps to itself (its `EntryPoint.filename` is the full path).
         let entry_key = entry.to_string_lossy().to_string();
-        assert_eq!(identities.get(&entry_key).map(String::as_str), Some(entry_key.as_str()));
+        assert_eq!(
+            identities.get(&entry_key).map(String::as_str),
+            Some(entry_key.as_str())
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -952,15 +965,23 @@ mod kiln_dir_module_tests {
         use wado_compiler::kiln::InvocationIndex;
 
         let mut idx = InvocationIndex::new();
-        idx.insert("/abs/example/eval.wado", "./Arith.g4", "kiln:file:///g/arith.wado");
+        idx.insert(
+            "/abs/example/eval.wado",
+            "./Arith.g4",
+            "kiln:file:///g/arith.wado",
+        );
 
         let mut identities = std::collections::HashMap::new();
-        identities.insert("/abs/example/eval.wado".to_string(), "./eval.wado".to_string());
+        identities.insert(
+            "/abs/example/eval.wado".to_string(),
+            "./eval.wado".to_string(),
+        );
 
         remap_index_decl_files(&mut idx, &identities);
 
         assert!(
-            idx.redirect("/abs/example/eval.wado", "./Arith.g4").is_none(),
+            idx.redirect("/abs/example/eval.wado", "./Arith.g4")
+                .is_none(),
             "the harvest-key decl_file must no longer redirect"
         );
         assert_eq!(
