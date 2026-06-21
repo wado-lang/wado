@@ -40,7 +40,7 @@ in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
 ### Next: missed optimizations under promotion (BCE cluster)
 
 The re-seed (decision (a) below) is landed and sound; it took the default `-O2`
-e2e from 17 → 9 failing fixtures, greening the whole guard cluster:
+e2e from 17 → 8 failing fixtures, greening the whole guard cluster:
 
 - Loop-stable re-seed + copy-chain (`6e42241cc`, `4944baa98`):
   `array_bounds_elim_loop_guard` (+`_wir`), `optimize_bce_if_guard` /
@@ -48,25 +48,27 @@ e2e from 17 → 9 failing fixtures, greening the whole guard cluster:
 - Function-invariant field re-seed (`99980cbec`): the non-loop early-exit /
   short-circuit guards `tir_optimize_early_exit_guard`,
   `tir_optimize_short_circuit_bounds`.
+- Build-param-opaque reuse in the leaf re-seed (`8a3afe62f`): the
+  promoted-operand chained cursor `array_bounds_elim_offset_chain`.
 
 No regression — `array_bounds_elim_oob_*` (14) and `WADO_VERIFY_VG` stay green
 throughout; the `mut_escaped` gate + loop-free gate keep the invariant-field
 re-seed off any mutated bound and off loop functions (where it clashed with the
 loop-scoped re-seed).
 
-The 9 still failing fall in three buckets, all deeper than the re-seed:
+The 8 still failing fall in two buckets, both beyond the re-seed (which restores
+values the maintenance _dropped_; it cannot _derive_ a value the build never
+forwarded into the maintained graph):
 
 - **Construction tracking** — `array_bounds_elim_le_guard_wir`,
   `optimize_bitmask_bce`. Both need `arr.used == N` from the constructor
   (`List::filled(limit + 1)` / `filled(32768)`): the guard / bitmask bound is a
-  literal, the check bound is the `.used` field, and only propagating the
-  constructor length to `.used` unifies them.
-- **Promoted-operand chained cursor** — `array_bounds_elim_offset_chain`. The
-  guard bound's variable side is a _promoted_ `pos + 3` operand carrying the
-  build's `pos` value, while the check's `q = (pos+1)+2` re-seeds its `pos`
-  reads to a fresh `canonical_local` — different identities (the param has no
-  surviving read to pin the build value). Needs the promoted operand's variable
-  value extracted and reused for the leaf re-seed.
+  literal `N`, the check bound is the `.used` field. A fresh build forwards
+  `result.used = N` (the inlined constructor's store) to the read; the
+  maintained graph dropped that store→load, and the re-seed only synthesizes a
+  canonical `field_access` opaque, not the constant `N`. Needs the constructor's
+  field store kept (or re-derived) through the edits — store-load-forwarding
+  work, not `condition_implication`.
 - **Other passes** — `store_to_load_forwarding`,
   `field_forward_snapshot_after_mutation`, `opt_hfs_defer_callclean_writeback`,
   `wir_optimize_brif_select`, plus the pre-existing optimization-independent
