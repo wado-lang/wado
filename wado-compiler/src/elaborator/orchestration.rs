@@ -1218,10 +1218,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            // Build this module's full import scope (type sources, original
-            // names, and namespace imports — namespace type members already
-            // expanded into the first two). The namespace function members are
-            // collected separately into `imported_functions` below.
+            // Full import scope; namespace *type* members are already expanded
+            // here, namespace *function* members into `imported_functions` below.
             let import_scope = Self::build_imported_type_sources(
                 &mut state.interner.borrow_mut(),
                 module,
@@ -1279,9 +1277,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
-            // Collect imported function names from use declarations. Namespace
-            // type members were already expanded into `import_scope` above; here
-            // we only add the namespace's public *function* members.
+            // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
             for item in &module.items {
                 if let Item::Use(use_decl) = item {

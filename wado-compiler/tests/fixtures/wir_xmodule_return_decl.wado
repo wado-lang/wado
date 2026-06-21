@@ -1,11 +1,7 @@
-//! A namespace-qualified type used in a struct *field* declaration
-//! (`Wrapper.node: mini::CstNode`) must resolve to the canonical cross-module
-//! struct.
-//!
-//! The decl pre-pass that builds `all_struct_fields` resolved field types with
-//! an empty namespace-import map, so `mini::CstNode` resolved to `unknown` and
-//! reading `w.node.kind` errored with "expected 'unknown'" (sibling of issue
-//! #1415's return-type miscompile).
+//! A namespace-qualified struct *field* type (`Wrapper.node: mini::CstNode`)
+//! must resolve to the canonical cross-module struct. The decl pre-pass building
+//! `all_struct_fields` once dropped namespace imports, so the field resolved to
+//! `unknown` and `w.node.kind` errored "expected 'unknown'" (issue #1415).
 
 use { wrap } from "./sub/wir_xmodule_return_decl.wado";
 use mini from "./sub/wir_xmodule_return_parser.wado";

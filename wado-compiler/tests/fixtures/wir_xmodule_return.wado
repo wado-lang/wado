@@ -1,14 +1,9 @@
 //! Regression test (issue #1415): an imported (non-entry) module that returns a
-//! cross-module struct (here an imported Gale parser's `CstNode`) *by value* and
-//! then borrows + recurses on it used to lower the binding's local as `i32`
-//! instead of a GC ref, producing invalid core Wasm ("expected i32, found (ref
-//! $type)").
-//!
-//! Root cause: `Elaborator::lookup_function_return_type` re-resolved the
-//! return-type AST for a callee in the module currently being walked through a
-//! reconstructed import scope that dropped namespace imports, yielding a
-//! non-canonical `TypeId` for the cross-module struct. It now resolves a
-//! same-module callee's signature in the live scope instead.
+//! cross-module struct (an imported Gale parser's `CstNode`) by value, then
+//! borrows + recurses on it, used to type the binding's local as `i32` instead
+//! of a GC ref ("expected i32, found (ref $type)"). `lookup_function_return_type`
+//! now resolves a same-module callee's signature in the live scope instead of a
+//! reconstructed one that dropped namespace imports.
 
 use { depth } from "./sub/wir_xmodule_return_eval.wado";
 

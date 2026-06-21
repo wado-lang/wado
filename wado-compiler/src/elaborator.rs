@@ -291,16 +291,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with the elaborator's "current module" perspective swapped to
-    /// `module_source` and the supplied import `scope`. Locals are cleared
-    /// because they describe in-progress resolution, not the target module's
-    /// pre-existing definitions; they are restored on return.
-    ///
-    /// The `scope`'s `namespace_imports` is swapped in alongside the type
-    /// sources so `ns::Type` return / parameter types resolve canonically when
-    /// reconstructing a foreign module's perspective (issue #1415).
-    ///
-    /// Replaces the legacy pattern of cloning per-module flat maps via
-    /// `build_module_map` and swapping six fields in/out.
+    /// `module_source` and the supplied import `scope` (type sources *and*
+    /// namespace imports, so `ns::Type` types resolve canonically — issue
+    /// #1415). Locals are cleared because they describe in-progress resolution,
+    /// not the target module's definitions; everything is restored on return.
     pub(super) fn with_module_perspective<R>(
         &mut self,
         module_source: ModuleSource,

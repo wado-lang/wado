@@ -17,21 +17,18 @@ use crate::name;
 use crate::tir::{TypeId, TypeTable};
 
 /// A module's type-name import scope, derived once from its `use`
-/// declarations. The single source of truth for "how does this module resolve
-/// a type name", shared by the per-module body walk and by every site that
-/// reconstructs a foreign module's perspective to resolve its signatures.
+/// declarations. The single source of truth for how a module resolves a type
+/// name, shared by its body walk and by sites that reconstruct its perspective.
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ModuleImportScope {
-    /// In-scope type name → declaring module. Includes the `ns$Type` aliases
-    /// minted for each namespace import's public type members.
+    /// In-scope type name → declaring module, including `ns$Type` aliases for
+    /// each namespace import's public type members.
     pub(super) sources: IndexMap<String, ModuleSource>,
-    /// Aliased local name → original declaration name (`use { A as B }`, and
-    /// the `ns$Type` → `Type` namespace-member aliases).
+    /// Aliased local name → original declaration name (`use { A as B }` and the
+    /// `ns$Type` → `Type` namespace-member aliases).
     pub(super) original_names: IndexMap<String, String>,
     /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
-    /// Drives `ns::Type` resolution; reconstructing a perspective without it
-    /// dropped namespace-qualified return types to a non-canonical `TypeId`
-    /// (issue #1415).
+    /// Drives `ns::Type` resolution (issue #1415).
     pub(super) namespace_imports: IndexMap<String, ModuleSource>,
 }
 
@@ -72,9 +69,7 @@ pub(super) fn module_import_scope(
                         }
                     }
                     ast::UseItem::Namespace { name: ns } => {
-                        // Expand each public type member to its `ns$Type` alias
-                        // so a reconstructed perspective resolves `ns::Type` the
-                        // same way the namespace-importing module does.
+                        // Expand each public type member to its `ns$Type` alias.
                         for sym in symbols.get_module_symbols(&source) {
                             if matches!(
                                 sym.kind,

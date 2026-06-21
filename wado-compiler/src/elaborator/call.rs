@@ -1380,20 +1380,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.register_generic_params(&type_params, 0);
 
                 let resolved = if in_current_module {
-                    // The callee lives in the module currently being walked, so
-                    // its signature resolves in the live scope — which already
-                    // carries the namespace imports a cross-module struct return
-                    // needs. Reconstructing a perspective here would overwrite
-                    // that live scope with a lossier copy that drops namespace
-                    // imports, yielding a non-canonical `TypeId` (issue #1415).
+                    // Resolve in the live scope. Reconstructing a perspective for
+                    // the module already being walked would only replace it with
+                    // a lossier copy that drops namespace imports (issue #1415).
                     scope.resolve_type(&return_type_ast)
                 } else {
-                    // Foreign callee: swap the elaborator's perspective onto the
-                    // callee module so type names in its signature resolve to the
-                    // callee's types, not the caller's (which may have same-named
-                    // different types). The reconstructed scope carries the
-                    // callee's namespace imports too, so a return type qualified
-                    // through one (`ns::Type`) stays canonical (issue #1415).
+                    // Swap to the callee's perspective so its signature's type
+                    // names resolve to the callee's types, not same-named caller
+                    // types; the scope carries the callee's namespace imports.
                     let callee_scope = scope.tysys.trait_env.import_scope(callee_module);
                     scope.with_module_perspective(callee_module.clone(), callee_scope, |s| {
                         s.resolve_type(&return_type_ast)
