@@ -232,10 +232,13 @@ pub(super) fn freeze_pure_arith(
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = mut_escaped.clone();
+        let pure_calls =
+            super::alias::pure_calls(body, &type_table, &first_param_types, &call_immutability);
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
+        engine.set_pure_calls(pure_calls);
 
         // Phase 1: decide every freeze on the clean, unedited graph. A value
         // query never mutates the skeleton, so the verify oracle (which fires

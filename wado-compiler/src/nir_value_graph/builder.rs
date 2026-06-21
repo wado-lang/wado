@@ -258,6 +258,11 @@ pub struct BuildConfig {
     pub aliased: crate::hashmap::IndexSet<u32>,
     pub untrackable: crate::hashmap::IndexSet<u32>,
     pub mut_escaped: crate::hashmap::IndexSet<u32>,
+    /// `ExprId` indices of calls that mutate no caller local
+    /// ([`crate::optimize::alias::pure_calls`]); `bump_call_effects` skips the
+    /// `mut_escaped` per-call bump for these. In the config so the verify oracle's
+    /// rebuild reproduces the same versions as the maintained graph.
+    pub pure_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -285,12 +290,14 @@ pub struct BuildConfig {
 /// receiver, or a `stores` stash). [`Builder::bump_call_effects`] bumps only
 /// these across a call; a reference-aliased local whose every escape is an
 /// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
+#[allow(clippy::too_many_arguments)]
 pub fn build(
     body: &mut Body,
     param_locals: &[u32],
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
+    pure_calls: &crate::hashmap::IndexSet<ExprId>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -300,6 +307,7 @@ pub fn build(
     let seed = std::mem::take(&mut body.values);
     let (pool, value_of, loop_entry_values, call_site_heap) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
+        b.pure_calls = pure_calls.clone();
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.value_of, b.loop_entry_values, b.call_site_heap)
@@ -315,6 +323,7 @@ pub fn build(
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
+            pure_calls: pure_calls.clone(),
         },
     }
 }
@@ -585,6 +594,9 @@ struct Builder<'a> {
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
     /// Per-`Call`-expr heap snapshots. See [`ValueGraphBuild::call_site_heap`].
     call_site_heap: IndexMap<ExprId, HeapSnapshot>,
+    /// `ExprId` indices of calls that mutate no caller local. See
+    /// [`BuildConfig::pure_calls`].
+    pure_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 impl<'a> Builder<'a> {
@@ -610,6 +622,7 @@ impl<'a> Builder<'a> {
             type_table,
             loop_entry_values: IndexMap::default(),
             call_site_heap: IndexMap::default(),
+            pure_calls: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -811,8 +824,23 @@ impl<'a> Builder<'a> {
     /// call's arguments. Non-`mut_escaped` locals (non-aliased, or aliased only
     /// through an immutable `&v`) cannot be mutated by any callee, so their
     /// fields survive the call.
-    fn bump_call_effects(&mut self) {
-        for &l in &self.mut_escaped {
+    /// Invalidate the locals a call at `call` may mutate. A call proven to mutate
+    /// no caller local ([`BuildConfig::pure_calls`]) bumps only the `untrackable`
+    /// (stashed) locals any call can reach; otherwise every `mut_escaped` local is
+    /// bumped (conservative). Skipping the bump for a pure accessor keeps a
+    /// `mut_escaped` receiver's field version stable across it.
+    fn bump_call_effects(&mut self, call: ExprId) {
+        let pure = self.pure_calls.contains(&call);
+        let targets: Vec<u32> = if pure {
+            self.mut_escaped
+                .iter()
+                .filter(|l| self.untrackable.contains(*l))
+                .copied()
+                .collect()
+        } else {
+            self.mut_escaped.iter().copied().collect()
+        };
+        for l in targets {
             self.heap_state.bump_local(l);
             // A `&mut`-escaped local's *scalar* value can also be overwritten by
             // the callee (`set_bool(&mut c, false)`), not only its heap fields, so
@@ -1268,7 +1296,7 @@ impl<'a> Builder<'a> {
                 // persisted so the inline splice can re-value the callee with the
                 // caller's field versions ([`ValueGraphBuild::call_site_heap`]).
                 self.call_site_heap.insert(expr, self.heap_state.snapshot());
-                self.bump_call_effects();
+                self.bump_call_effects(expr);
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
@@ -1284,7 +1312,7 @@ impl<'a> Builder<'a> {
                 for a in args {
                     self.walk_operand(a.expr);
                 }
-                self.bump_call_effects();
+                self.bump_call_effects(expr);
                 None
             }
             ExprKind::IndirectCall { callee, args } => {

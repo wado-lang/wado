@@ -117,6 +117,11 @@ pub struct Engine<'a> {
     /// passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
+    /// `ExprId` indices of calls that mutate no caller local
+    /// ([`crate::optimize::alias::pure_calls`]); the build skips their per-call
+    /// `mut_escaped` bump. Empty (conservative — every call bumps) unless a pass
+    /// supplies it via [`Engine::set_pure_calls`] before the first value query.
+    pure_calls: IndexSet<crate::nir_arena::ExprId>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
@@ -152,6 +157,7 @@ impl<'a> Engine<'a> {
             untrackable_locals: IndexSet::default(),
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
+            pure_calls: IndexSet::default(),
             vg_type_table: None,
             manual_union_applied: false,
         };
@@ -413,6 +419,14 @@ impl<'a> Engine<'a> {
         self.param_locals = locals;
     }
 
+    /// Record the `ExprId` indices of calls that mutate no caller local, so the
+    /// one build-once construction skips their per-call `mut_escaped` bump. Supply
+    /// before the first value query (the build is lazy); the persisted config
+    /// carries it so the verify oracle rebuilds consistently.
+    pub fn set_pure_calls(&mut self, pure_calls: IndexSet<crate::nir_arena::ExprId>) {
+        self.pure_calls = pure_calls;
+    }
+
     /// Record the function's reference-aliased and `stores`-aliased locals so
     /// the value graph invalidates field forwarding for them at the right
     /// granularity. Used by the one build-once construction. Without it the
@@ -455,6 +469,7 @@ impl<'a> Engine<'a> {
             &self.aliased_locals,
             &self.untrackable_locals,
             &self.mut_escaped_locals,
+            &self.pure_calls,
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
@@ -480,6 +495,7 @@ impl<'a> Engine<'a> {
             &cfg.aliased,
             &cfg.untrackable,
             &cfg.mut_escaped,
+            &cfg.pure_calls,
             self.vg_type_table,
         );
         let maintained = self.body.value_graph.as_ref().unwrap();

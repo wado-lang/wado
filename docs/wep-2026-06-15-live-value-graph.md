@@ -1590,14 +1590,34 @@ The ideal removes the root cause rather than patching symptoms:
 - [ ] `inline` carries and **remaps** spliced operands instead of clear+regrow:
       callee opaque locals → caller arg values (`seed` already has this), callee
       heap versions → the caller's version at the call site.
-- [ ] The caller's version at the call site, without a rebuild: the one build
-      already computes it. Persist the `FlowSnapshot` (`current_value` + the
-      `HeapSnapshot` + `ref_targets`) at each `Call` expr in `ValueGraphBuild`,
-      and seed `build_scoped` with it (today it uses a fresh `INITIAL` heap, which
-      is why two inlined `arr.used` reads collapse to one version and
-      `array_bounds_elim_oob_bound_shrunk` would over-merge). With the correct
-      seed, spliced `FieldAccess` reads carry the caller's version and promote
-      soundly — the field-bound wall dissolves.
+- [x] The caller's version at the call site, without a rebuild: persist the
+      `HeapSnapshot` at each `Call` expr (`ValueGraphBuild::call_site_heap`) and
+      seed `build_scoped` with it instead of a fresh `INITIAL` heap. `build_scoped`
+      now also keeps every caller-rooted re-emittable value (not just constants),
+      re-interned into the live pool at its true version (`reintern_live_rooted`).
+      Sound: the per-call snapshots distinguish versions a fresh `INITIAL` would
+      collapse, so `array_bounds_elim_oob_bound_shrunk` still traps and the oracle
+      is clean.
+- [x] Call-immutability-aware `bump_call_effects`. `alias::pure_calls` flags every
+      call that mutates no caller local (no `&mut`/by-value-reference arg, an
+      immutable receiver per `method_mutates_receiver`); the build (config-carried,
+      so the oracle rebuilds consistently) skips such a call's `mut_escaped` bump,
+      bumping only any `untrackable` stash. A `mut_escaped` receiver's field
+      version is now stable across a pure accessor (`arr.len()` no longer splits
+      `arr.used`). Sound: a mutating call (`pop()`) is impure and still bumps, so
+      all `array_bounds_elim_oob_*` fixtures trap and the oracle is clean; no
+      regressions on the optimization corpus.
+- [ ] The remaining link: the spliced field value reaches `value_of`
+      (analysis_only) at the right version, but `condition_implication` still does
+      not fold the bound. The value of the _binding read_ the check queries
+      (`__v1` in `let __v1 = arr.used; … pos < __v1`, or the `licm` / `copy_prop`
+      hoist a loop bound mints) is not the surfaced one — the build_scoped entry is
+      for the spliced `arr.used` expr, while the consumer reads a later copy. This
+      is the pass-maintenance / born-as-operands half: the field value must live in
+      an `Operand::Value` the copy carries, not a `value_of` entry the copy orphans.
+      The shared `FieldAccess` materialiser (already landed) is the surfacing
+      mechanism — extend it to consume these build_scoped-surfaced field values and
+      pin one `let _av` the guard and check both read.
 - [ ] Migrate the value passes off `value_of` to operand / pool queries, then
       delete `value_of` and `nir_value_graph::builder` (criterion 3). The
       loop-var wall dissolves too: with the graph never cleared, the induction

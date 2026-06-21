@@ -336,6 +336,70 @@ use super::arena_query::projection_root_local;
 /// mutates), while `copy_prop`'s copy-propagation guard passes `false` (it has
 /// its own receiver-type guards). Shared so the two analyses agree on the
 /// known-callee verdict.
+/// Call exprs that **mutate no caller local**: a free `Call` or `&self`
+/// `MethodCall` whose every argument is safe — not `mut`, an immutable `&`
+/// borrow, or a by-value value of a call-immutable type (a deep copy the callee
+/// cannot reach back through). The value graph can skip a `mut_escaped`
+/// receiver's per-call bump for these, so a field read keeps its version across a
+/// pure accessor (`arr.len()` does not split `arr.used`'s version) — the
+/// precondition for promoting a spliced `FieldAccess` (WEP: the field-bound
+/// recovery). Unknown callees stay impure for a `MethodCall` receiver
+/// (`method_mutates_receiver`'s conservative default); a free `Call` is pure when
+/// its args are all safe, since a callee can only mutate what it is handed
+/// mutably.
+pub(super) fn pure_calls(
+    body: &Body,
+    type_table: &TypeTable,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    call_immutability: &CallImmutability,
+) -> IndexSet<crate::nir_arena::ExprId> {
+    let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
+        if arg.is_mut {
+            return false;
+        }
+        let Some(ae) = arg.expr.as_expr() else {
+            return true; // a promoted constant operand mutates nothing
+        };
+        match &body.exprs[ae].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                ..
+            } => true,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                ..
+            } => false,
+            _ => call_immutability.is_call_immutable(body.exprs[ae].type_id),
+        }
+    };
+    // Walk reachable nodes only: `body.exprs` also holds orphaned nodes left by
+    // earlier promotion, whose stale `type_id`s are no longer in the table.
+    let mut out = IndexSet::default();
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        let NodeRef::Expr(e) = node else {
+            return;
+        };
+        let pure = match &body.exprs[e].kind {
+            ExprKind::Call { args, .. } => args.iter().all(&arg_safe),
+            ExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                receiver.as_expr().is_some_and(|re| {
+                    !method_mutates_receiver(body, re, func, first_param_types, type_table, true)
+                }) && args.iter().all(&arg_safe)
+            }
+            _ => false,
+        };
+        if pure {
+            out.insert(e);
+        }
+    });
+    out
+}
+
 pub(super) fn method_mutates_receiver(
     body: &Body,
     receiver: crate::nir_arena::ExprId,
