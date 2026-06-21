@@ -16,6 +16,8 @@ use { GenContext, sets_overlap } from "./gen_context.wado";
 use { CodeWriter, StructSpec, VariantSpec, EnumSpec } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, serialize_atn, Atn, empty_atn, lr_loop_entry_decision } from "./atn.wado";
+use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
+use { TreeMap } from "core:collections";
 use {
     LoweredGrammar,
     Diagnostic,
@@ -107,6 +109,25 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         }
         ctx.set_lr_loop_entry_decisions(&lr_decs);
     }
+    // Lexer ATN: built when a lexer rule's non-greedy body recurses into
+    // itself (the nested-comment class static lexing cannot decide). The
+    // `atn_class_map` carries each such rule's `name -> latn rule index`
+    // so the lexer emit routes its `try_*` body to `latn_match`.
+    let needs_latn = grammar_needs_latn(grammar);
+    let mut latn = LatnResult {
+        atn: empty_atn(),
+        rule_index: TreeMap::<String, i32>::new(),
+        atn_class_rules: [],
+    };
+    let mut atn_class_map = TreeMap::<String, i32>::new();
+    if needs_latn {
+        latn = build_latn(grammar);
+        for let name of &latn.atn_class_rules {
+            if let Some(idx) = latn.rule_index.get(*name) {
+                atn_class_map[*name] = idx;
+            }
+        }
+    }
     gen_header(&mut w, grammar);
     if options.trace {
         // Trace logging writes to stderr via the ambient logger.
@@ -118,10 +139,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // needs a longest-match tournament; the FOLLOW runtime / mask globals only
     // when lowering built a caller-FOLLOW gate (`emit_follow`).
     let ef = ctx.emit_follow();
-    gen_runtime(&mut w, ef, ctx.needs_atn(), options.highlight);
+    gen_runtime(&mut w, ef, ctx.needs_atn(), needs_latn, options.highlight);
     gen_token_kind(&mut w, &grammar.lexer_rules);
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
-    gen_lexer(&mut w, grammar, &lit_tokens);
+    gen_lexer(&mut w, grammar, &lit_tokens, &atn_class_map);
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_parser(&mut w, grammar, &lowered, &mut ctx);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
@@ -140,6 +161,11 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if ctx.needs_atn() {
         gen_atn_data_global(&mut w, &atn, ctx.needs_scan_atn());
     }
+    // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
+    // runtime lexer simulator (`latn_match`).
+    if needs_latn {
+        gen_latn_data_global(&mut w, &latn.atn);
+    }
     return GeneratedOutput {
         source: w.to_string(),
         diagnostics: lowered.diagnostics,
@@ -150,22 +176,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
 /// whole-grammar ATN the inlined runtime decodes once into the module-level
 /// `ATN_SIM`.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
-    let blob = serialize_atn(atn);
-    let mut body = String::with_capacity(blob.len() * 6);
-    for let mut i = 0; i < blob.len(); i += 1 {
-        if i > 0 {
-            body.push_str(&", ");
-        }
-        body.push_str(&`{blob[i]}`);
-    }
-    w.line(&`global ATN_DATA: List<i32> = [{body}];`);
-    // The whole-grammar ATN is decoded exactly once, into a module-level
-    // global shared by both sides: the parse side reads `&ATN_SIM` (the
-    // `Parser` no longer carries its own decoded copy) and the scan side
-    // reads it too (`scan_*` functions take no `Parser`). This single decode
-    // replaces the former per-`Parser::new` decode plus a separate scan-only
-    // global.
-    w.line(&"global ATN_SIM: AtnSim = atn_decode(&ATN_DATA);");
+    emit_atn_blob_global(w, atn, &"ATN_DATA", &"ATN_SIM");
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
@@ -175,6 +186,31 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
         w.line(&"global SCAN_STACK: List<i32> = [];");
     }
     w.blank();
+}
+
+/// Emit `global LATN_DATA: List<i32> = [...]` and the decoded `LATN_SIM`
+/// for the runtime lexer simulator. Same blob format and decoder as the
+/// parser ATN; only the atom semantics differ (char ranges vs token kinds).
+fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
+    emit_atn_blob_global(w, atn, &"LATN_DATA", &"LATN_SIM");
+    w.blank();
+}
+
+/// Emit `global <data_name>: List<i32> = [...serialized blob...];` and
+/// `global <sim_name>: AtnSim = atn_decode(&<data_name>);`. Shared by the
+/// parser (`ATN_*`) and lexer (`LATN_*`) ATN blobs — same wire format and
+/// decoder; only the atom semantics differ.
+fn emit_atn_blob_global(w: &mut CodeWriter, atn: &Atn, data_name: &String, sim_name: &String) {
+    let blob = serialize_atn(atn);
+    let mut body = String::with_capacity(blob.len() * 6);
+    for let mut i = 0; i < blob.len(); i += 1 {
+        if i > 0 {
+            body.push_str(&", ");
+        }
+        body.push_str(&`{blob[i]}`);
+    }
+    w.line(&`global {*data_name}: List<i32> = [{body}];`);
+    w.line(&`global {*sim_name}: AtnSim = atn_decode(&{*data_name});`);
 }
 
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
@@ -224,7 +260,7 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
 /// generated module (in dependency order — `lex` first, then `diag`, then
 /// `tree`, which references both), where such imports are both redundant and
 /// unresolvable.
-fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight: bool) {
+fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, needs_latn: bool, highlight: bool) {
     gen_runtime_fragment(w, &#include_str("./runtime/lex.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/diag.wado"));
     gen_runtime_fragment(w, &#include_str("./runtime/tree.wado"));
@@ -234,11 +270,15 @@ fn gen_runtime(w: &mut CodeWriter, emit_follow: bool, needs_atn: bool, highlight
     if emit_follow {
         gen_runtime_fragment(w, &#include_str("./runtime/follow.wado"));
     }
-    // Prediction emits ATN-simulator calls (`AtnSim`, `atn_decode`,
-    // `atn_predict_with_stack`, …) for ATN-class decisions; inline the runtime
-    // so the generated parser resolves them.
-    if needs_atn {
+    // The ATN runtime (`AtnSim`, `atn_decode`, the simulator) is shared by
+    // both the parser prediction path (`needs_atn`) and the lexer simulator
+    // (`needs_latn`, which decodes its own `LATN_SIM` with the same decoder).
+    if needs_atn || needs_latn {
         gen_runtime_fragment(w, &#include_str("./runtime/atn.wado"));
+    }
+    // The lexer Pike-VM (`latn_match`) for ATN-class lexer rules.
+    if needs_latn {
+        gen_runtime_fragment(w, &#include_str("./runtime/latn.wado"));
     }
     if highlight {
         gen_runtime_fragment(w, &#include_str("./runtime/highlight.wado"));

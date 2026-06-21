@@ -1,0 +1,546 @@
+//! Lexer ATN builder — the codegen-side NFA for ATN-class lexer rules.
+//!
+//! The runtime lexer simulator (`runtime/latn.wado`) walks this NFA over
+//! the input characters. We build it only for lexer rules the static
+//! single-pass emitter cannot handle: a rule whose non-greedy repeat body
+//! recurses into itself (nested comments, `CMT : '/*' (CMT | .)+? '*' '/'`).
+//!
+//! Reuses the `Atn` / `AtnState` / `AtnTransition` structs and the
+//! `serialize_atn` blob format from `atn.wado` (the runtime decodes both
+//! the parser and lexer blobs with the same `atn_decode`). The only
+//! difference is the alphabet: lexer atoms are Unicode scalar *ranges*
+//! carried in `ATN_TR_ATOM` as `label` = low, `follow` = high (the parser
+//! uses `label` = token kind, `follow` = -1). `num_tokens` / decisions are
+//! unused — the Pike VM keys priority off transition order, not decision
+//! numbers.
+//!
+//! Clean-room: textbook Thompson construction (rule start/stop, block
+//! start/end, EBNF loop states), greedy vs non-greedy encoded purely by
+//! the order of a loop's epsilon edges, exactly like `atn.wado`.
+
+use { Grammar, LexerRule, LexerAlternative, LexerElement, CharClass, CharRange, RepeatKind } from "./ir.wado";
+use { Atn, AtnState, AtnTransition } from "./atn.wado";
+use { resolve_ci, fold_range_ci } from "./lexer_gen.wado";
+use {
+    ATN_BASIC,
+    ATN_RULE_START,
+    ATN_RULE_STOP,
+    ATN_BLOCK_START,
+    ATN_BLOCK_END,
+    ATN_STAR_LOOP_ENTRY,
+    ATN_STAR_LOOP_BACK,
+    ATN_PLUS_LOOP_BACK,
+    ATN_LOOP_END,
+    ATN_TR_EPSILON,
+    ATN_TR_ATOM,
+    ATN_TR_RULE,
+} from "./runtime/atn.wado";
+use { TreeMap } from "core:collections";
+
+/// Highest Unicode scalar value; the upper bound of a `.` / negated set.
+global CHAR_MAX: i32 = 0x10FFFF;
+
+/// Result of building the lexer ATN: the NFA, a `name -> latn rule index`
+/// map (every reachable rule, so RuleRef targets resolve), and the names of
+/// the rules that are themselves ATN-class (the `try_*` bodies codegen must
+/// route to `latn_match`). `atn_class_rules` is computed here so codegen
+/// need not re-run `lexer_rule_is_atn_class`.
+pub struct LatnResult {
+    pub atn: Atn,
+    pub rule_index: TreeMap<String, i32>,
+    pub atn_class_rules: List<String>,
+}
+
+/// True when the grammar has at least one ATN-class lexer rule (a
+/// non-greedy repeat whose body recurses into its owning rule). Gates the
+/// whole lexer-ATN path: builder, blob, runtime fragment.
+pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
+    for let rule of &grammar.lexer_rules {
+        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
+/// has an inner element that transitively references the rule itself — the
+/// nested-recursion case static lexing cannot decide. Plain non-greedy
+/// (`.*? '*/'`) and non-recursive rule refs stay on the static path.
+///
+/// Deliberately narrow (cf. the documented static-prediction edges in
+/// AGENTS.md, "Failed Approaches" — broadening a trigger past today's
+/// grammar set has repeatedly broken real grammars):
+/// - The recursive repeat must be non-greedy. A *greedy* recursive repeat
+///   is not routed here; no corpus grammar needs it, and the runtime VM is
+///   greedy/non-greedy agnostic, so the trigger can be widened with a
+///   fixture if one appears.
+/// - The repeat must sit in the rule's own body, not behind a `RuleRef`
+///   into another rule (a fragment-decomposed `'/*' FRAG '*/'` where FRAG
+///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
+///   handling this means flagging the owning token rule as the entry; left
+///   for when a grammar needs it.
+pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    return scan_recursive_ng(&rule.name, &rule.body, all_rules);
+}
+
+fn scan_recursive_ng(name: &String, alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if scan_recursive_ng_elem(name, elem, all_rules) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn scan_recursive_ng_elem(name: &String, elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+    match *elem {
+        Repeat(rep) => {
+            if rep.non_greedy {
+                let mut visited: List<String> = [];
+                if elem_refs_rule(name, &rep.element, all_rules, &mut visited) {
+                    return true;
+                }
+            }
+            return scan_recursive_ng_elem(name, &rep.element, all_rules);
+        },
+        Group(alts) => {
+            return scan_recursive_ng(name, &alts, all_rules);
+        },
+        Not(n) => {
+            return scan_recursive_ng_elem(name, &n.element, all_rules);
+        },
+        _ => {
+        },
+    }
+    return false;
+}
+
+/// Does `elem` transitively reference the rule named `target` (directly or
+/// through other lexer rules / fragments)? `visited` guards rule cycles.
+fn elem_refs_rule(target: &String, elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
+    match *elem {
+        RuleRef(rn) => {
+            if rn == *target {
+                return true;
+            }
+            for let v of visited {
+                if *v == rn {
+                    return false;
+                }
+            }
+            visited.push(rn);
+            if let Some(r) = find_lexer_rule(all_rules, &rn) {
+                return refs_rule_in_alts(target, &r.body, all_rules, visited);
+            }
+            return false;
+        },
+        Group(alts) => {
+            return refs_rule_in_alts(target, &alts, all_rules, visited);
+        },
+        Repeat(rep) => {
+            return elem_refs_rule(target, &rep.element, all_rules, visited);
+        },
+        Not(n) => {
+            return elem_refs_rule(target, &n.element, all_rules, visited);
+        },
+        _ => {
+        },
+    }
+    return false;
+}
+
+fn refs_rule_in_alts(
+    target: &String,
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    visited: &mut List<String>,
+) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if elem_refs_rule(target, elem, all_rules, visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> {
+    for let rule of all_rules {
+        if rule.name == *name {
+            return Option::<&LexerRule>::Some(rule);
+        }
+    }
+    return null;
+}
+
+/// Mutable accumulator during construction. `ci` is the case-insensitivity
+/// of the rule currently being built (set per rule in `build_latn`), so
+/// literals and char sets fold case to match the static lexer path.
+struct LatnBuilder {
+    states: List<AtnState>,
+    rule_start: List<i32>,
+    rule_stop: List<i32>,
+    name_to_idx: TreeMap<String, i32>,
+    ci: bool,
+}
+
+impl LatnBuilder {
+    fn new_state(&mut self, kind: i32) -> i32 {
+        let id = self.states.len();
+        self.states.push(AtnState { kind, rule: -1, decision: -1, transitions: [] });
+        return id;
+    }
+
+    fn add_eps(&mut self, from: i32, to: i32) {
+        self.states[from].transitions.push(AtnTransition { kind: ATN_TR_EPSILON, target: to });
+    }
+
+    fn add_trans(&mut self, from: i32, t: AtnTransition) {
+        self.states[from].transitions.push(t);
+    }
+}
+
+/// Build the lexer ATN over every rule reachable from an ATN-class rule
+/// (the rule itself plus everything it references), so recursion and any
+/// referenced fragment / rule resolve. Non-reachable rules are left out.
+pub fn build_latn(grammar: &Grammar) -> LatnResult {
+    let mut incl: List<String> = [];
+    let mut seen: List<String> = [];
+    let mut atn_class_rules: List<String> = [];
+    for let rule of &grammar.lexer_rules {
+        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
+            atn_class_rules.push(rule.name);
+            collect_reachable(&rule.name, &grammar.lexer_rules, &mut incl, &mut seen);
+        }
+    }
+
+    let mut b = LatnBuilder {
+        states: [],
+        rule_start: [],
+        rule_stop: [],
+        name_to_idx: TreeMap::<String, i32>::new(),
+        ci: false,
+    };
+    for let mut i = 0; i < incl.len(); i += 1 {
+        b.name_to_idx[incl[i]] = i;
+        let start = b.new_state(ATN_RULE_START);
+        let stop = b.new_state(ATN_RULE_STOP);
+        b.rule_start.push(start);
+        b.rule_stop.push(stop);
+    }
+    for let mut i = 0; i < incl.len(); i += 1 {
+        if let Some(rule) = find_lexer_rule(&grammar.lexer_rules, &incl[i]) {
+            b.ci = resolve_ci(&grammar.options, &rule.options);
+            let body = build_alternation(&mut b, &rule.body);
+            b.add_eps(b.rule_start[i], body.0);
+            b.add_eps(body.1, b.rule_stop[i]);
+        }
+    }
+
+    let atn = Atn {
+        states: b.states,
+        rule_start: b.rule_start,
+        rule_stop: b.rule_stop,
+        decision_state: [],
+        num_tokens: 0,
+        call_site_returns: [],
+    };
+    return LatnResult { atn, rule_index: b.name_to_idx, atn_class_rules };
+}
+
+/// Add `name` and every rule it transitively references to `incl` (build
+/// order; `seen` dedups).
+fn collect_reachable(name: &String, all_rules: &List<LexerRule>, incl: &mut List<String>, seen: &mut List<String>) {
+    for let s of seen {
+        if *s == *name {
+            return;
+        }
+    }
+    seen.push(*name);
+    let rule = find_lexer_rule(all_rules, name);
+    if rule matches { None } {
+        return;
+    }
+    incl.push(*name);
+    if let Some(r) = rule {
+        let mut refs: List<String> = [];
+        collect_refs_in_alts(&r.body, &mut refs);
+        for let rn of refs {
+            collect_reachable(&rn, all_rules, incl, seen);
+        }
+    }
+}
+
+fn collect_refs_in_alts(alts: &List<LexerAlternative>, out: &mut List<String>) {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            collect_refs_in_elem(elem, out);
+        }
+    }
+}
+
+fn collect_refs_in_elem(elem: &LexerElement, out: &mut List<String>) {
+    match *elem {
+        RuleRef(rn) => out.push(rn),
+        Group(alts) => collect_refs_in_alts(&alts, out),
+        Repeat(rep) => collect_refs_in_elem(&rep.element, out),
+        Not(n) => collect_refs_in_elem(&n.element, out),
+        _ => {
+        },
+    }
+}
+
+fn build_alternation(b: &mut LatnBuilder, alts: &List<LexerAlternative>) -> [i32, i32] {
+    let start = b.new_state(ATN_BLOCK_START);
+    let end = b.new_state(ATN_BLOCK_END);
+    for let alt of alts {
+        let seg = build_sequence(b, &alt.elements);
+        b.add_eps(start, seg.0);
+        b.add_eps(seg.1, end);
+    }
+    if alts.is_empty() {
+        b.add_eps(start, end);
+    }
+    return [start, end];
+}
+
+fn build_sequence(b: &mut LatnBuilder, elements: &List<LexerElement>) -> [i32, i32] {
+    let entry = b.new_state(ATN_BASIC);
+    let mut cursor = entry;
+    for let elem of elements {
+        let seg = build_element(b, elem);
+        b.add_eps(cursor, seg.0);
+        cursor = seg.1;
+    }
+    return [entry, cursor];
+}
+
+fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
+    return match *elem {
+        Literal(s) => build_literal(b, &s),
+        CharRange(r) => ranges_segment(b, &ci_ranges(b.ci, r.0, r.1)),
+        CharClass(cc) => ranges_segment(b, &class_ranges(&cc, b.ci)),
+        AnyChar => ranges_segment(b, &[
+            [0, CHAR_MAX],
+        ]),
+        Not(n) => {
+            let pos = positive_ranges(&n.element, b.ci);
+            // `~AnyChar` legitimately yields []/dead; an empty positive set
+            // from a non-single-char inner (multi-char literal, RuleRef)
+            // would complement to match-anything — reject loudly instead.
+            assert !pos.is_empty(), "gale: `~(...)` over a non-single-char element is unsupported";
+            ranges_segment(b, &complement_ranges(&pos));
+        },
+        RuleRef(name) => rule_segment(b, &name),
+        Group(g) => build_alternation(b, &g),
+        Repeat(rep) => build_repeat(b, rep.kind, rep.non_greedy, &rep.element),
+    };
+}
+
+/// Unicode-scalar ranges for the char span `[lo, hi]`, folding case when
+/// `ci` so the lexer ATN matches both cases like the static path
+/// (`fold_range_ci`). An inverted span (`lo > hi`, e.g. `[z-a]`) yields no
+/// range — a dead, never-matching atom.
+fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
+    if lo as i32 > hi as i32 {
+        return [];
+    }
+    if !ci {
+        return [
+            [lo as i32, hi as i32],
+        ];
+    }
+    let mut folded: List<CharRange> = [];
+    fold_range_ci(lo, hi, &mut folded);
+    let mut out: List<[i32, i32]> = [];
+    for let f of &folded {
+        out.push([f.start as i32, f.end as i32]);
+    }
+    return out;
+}
+
+fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
+    let chars: List<char> = text.chars().collect();
+    let from = b.new_state(ATN_BASIC);
+    if chars.is_empty() {
+        return [from, from];
+    }
+    let mut cur = from;
+    for let c of chars {
+        let nxt = b.new_state(ATN_BASIC);
+        for let r of &ci_ranges(b.ci, c, c) {
+            b.add_trans(cur, AtnTransition { kind: ATN_TR_ATOM, target: nxt, label: r.0, follow: r.1 });
+        }
+        cur = nxt;
+    }
+    return [from, cur];
+}
+
+/// `entry --Atom[lo,hi]--> exit` for every range (their union — any range
+/// admits the char). An empty range list yields a dead segment that never
+/// matches (e.g. `~.`, the complement of every char).
+fn ranges_segment(b: &mut LatnBuilder, ranges: &List<[i32, i32]>) -> [i32, i32] {
+    let from = b.new_state(ATN_BASIC);
+    let to = b.new_state(ATN_BASIC);
+    for let r of ranges {
+        b.add_trans(from, AtnTransition { kind: ATN_TR_ATOM, target: to, label: r.0, follow: r.1 });
+    }
+    return [from, to];
+}
+
+fn rule_segment(b: &mut LatnBuilder, name: &String) -> [i32, i32] {
+    let from = b.new_state(ATN_BASIC);
+    let to = b.new_state(ATN_BASIC);
+    let ri = if let Some(idx) = b.name_to_idx.get(*name) {
+        idx;
+    } else {
+        -1;
+    };
+    let tstart = if ri >= 0 { b.rule_start[ri] } else { -1 };
+    b.add_trans(from, AtnTransition { kind: ATN_TR_RULE, target: tstart, label: ri, follow: to });
+    return [from, to];
+}
+
+/// EBNF repeat. Greedy vs non-greedy is encoded by the ORDER of the
+/// decision's epsilon edges: the Pike VM prefers the earlier edge, so
+/// greedy puts enter/loop first and non-greedy puts exit first.
+fn build_repeat(b: &mut LatnBuilder, kind: RepeatKind, non_greedy: bool, inner: &LexerElement) -> [i32, i32] {
+    return match kind {
+        Optional => {
+            let start = b.new_state(ATN_BLOCK_START);
+            let end = b.new_state(ATN_BLOCK_END);
+            let seg = build_element(b, inner);
+            if non_greedy {
+                b.add_eps(start, end);
+                b.add_eps(start, seg.0);
+            } else {
+                b.add_eps(start, seg.0);
+                b.add_eps(start, end);
+            }
+            b.add_eps(seg.1, end);
+            [start, end];
+        },
+        Star => {
+            let entry = b.new_state(ATN_STAR_LOOP_ENTRY);
+            let end = b.new_state(ATN_LOOP_END);
+            let seg = build_element(b, inner);
+            let back = b.new_state(ATN_STAR_LOOP_BACK);
+            if non_greedy {
+                b.add_eps(entry, end);
+                b.add_eps(entry, seg.0);
+            } else {
+                b.add_eps(entry, seg.0);
+                b.add_eps(entry, end);
+            }
+            b.add_eps(seg.1, back);
+            b.add_eps(back, entry);
+            [entry, end];
+        },
+        Plus => {
+            let seg = build_element(b, inner);
+            let back = b.new_state(ATN_PLUS_LOOP_BACK);
+            let end = b.new_state(ATN_LOOP_END);
+            b.add_eps(seg.1, back);
+            if non_greedy {
+                b.add_eps(back, end);
+                b.add_eps(back, seg.0);
+            } else {
+                b.add_eps(back, seg.0);
+                b.add_eps(back, end);
+            }
+            [seg.0, end];
+        },
+    };
+}
+
+/// Positive (non-negated) Unicode-scalar ranges a single-char element
+/// admits. Used for atoms inside `~(...)`; an element that is not a
+/// single-char matcher yields an empty list.
+fn positive_ranges(elem: &LexerElement, ci: bool) -> List<[i32, i32]> {
+    return match *elem {
+        CharRange(r) => ci_ranges(ci, r.0, r.1),
+        CharClass(cc) => class_ranges(&cc, ci),
+        AnyChar => [
+            [0, CHAR_MAX],
+        ],
+        Literal(s) => {
+            let chars: List<char> = s.chars().collect();
+            if chars.len() == 1 {
+                ci_ranges(ci, chars[0], chars[0]);
+            } else {
+                [];
+            }
+        },
+        Not(n) => complement_ranges(&positive_ranges(&n.element, ci)),
+        Group(alts) => {
+            let mut out: List<[i32, i32]> = [];
+            for let alt of alts {
+                if alt.elements.len() == 1 {
+                    let inner = positive_ranges(&alt.elements[0], ci);
+                    for let r of &inner {
+                        out.push(*r);
+                    }
+                }
+            }
+            out;
+        },
+        _ => [],
+    };
+}
+
+/// Ranges of a char class (case-folded under `ci`), complemented when the
+/// class is negated.
+fn class_ranges(cc: &CharClass, ci: bool) -> List<[i32, i32]> {
+    let mut ranges: List<[i32, i32]> = [];
+    for let r of &cc.ranges {
+        for let x of &ci_ranges(ci, r.start, r.end) {
+            ranges.push(*x);
+        }
+    }
+    if cc.negated {
+        return complement_ranges(&ranges);
+    }
+    return ranges;
+}
+
+/// Complement of a range set over `[0, CHAR_MAX]`: sort, merge overlaps,
+/// emit the gaps. Used for `~` and negated classes.
+fn complement_ranges(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
+    let mut sorted: List<[i32, i32]> = [];
+    for let r of ranges {
+        // Skip inverted ranges (lo > hi) so they cannot corrupt the gap walk.
+        if r.0 <= r.1 {
+            sorted.push(*r);
+        }
+    }
+    // Insertion sort by low bound (small range sets; mirrors `sort_ctx_edges`).
+    for let mut i = 1; i < sorted.len(); i += 1 {
+        let cur = sorted[i];
+        let mut j = i - 1;
+        while j >= 0 && sorted[j].0 > cur.0 {
+            sorted[j + 1] = sorted[j];
+            j -= 1;
+        }
+        sorted[j + 1] = cur;
+    }
+    let mut out: List<[i32, i32]> = [];
+    let mut next = 0;
+    for let r of sorted {
+        let lo = r.0;
+        let hi = r.1;
+        if lo > next {
+            out.push([next, lo - 1]);
+        }
+        if hi + 1 > next {
+            next = hi + 1;
+        }
+    }
+    if next <= CHAR_MAX {
+        out.push([next, CHAR_MAX]);
+    }
+    return out;
+}

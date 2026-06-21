@@ -269,7 +269,11 @@ generated parser carries only the fragments it needs:
 - `follow.wado` only when lowering built a caller-FOLLOW gate (`emit_follow`).
 - `highlight.wado` + `highlight_walk.wado` only when the `highlight` generator
   option is on.
-- `atn.wado` only when lowering needs the runtime simulator (`needs_atn`).
+- `atn.wado` when lowering needs the parser runtime simulator (`needs_atn`)
+  or a lexer rule needs the lexer simulator (`needs_latn` reuses its
+  `AtnSim` / `atn_decode`).
+- `latn.wado` only for ATN-class lexer rules (`grammar_needs_latn`): the
+  lexer Pike VM, decoded once into `LATN_SIM`.
 
 Each fragment is a real module for dev/test and imports its siblings via
 `use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` strips those
@@ -321,6 +325,20 @@ by the builder in `src/atn.wado`. See [WEP: Compile-Time File Inclusion](../docs
   future grammar exercises the complex shape AND the inner does compete
   with the suffix, generalise the peek emitters rather than widening
   the trigger blindly.
+- **ATN-class lexer rules escape to a runtime simulator.** A rule whose
+  non-greedy repeat body recurses into itself (nested comments,
+  `CMT : '/*' (CMT | .)+? '*' '/'`) cannot be decided single-pass: whether
+  an inner `/*` opens a nested rule or is wildcard text needs unbounded
+  lookahead. `lexer_rule_is_atn_class` (`src/latn.wado`) detects it and
+  `gen_lexer_match_fn` emits the rule's `try_*` body as a call to
+  `latn_match` (`src/runtime/latn.wado`) over a dedicated lexer ATN
+  (`build_latn`, char-range atoms). The simulator is an ordered-thread
+  Pike VM (leftmost-first / PCRE priority — still no backtracking) with a
+  per-thread rule-call return stack; greedy/non-greedy is loop-edge order,
+  as in the parser ATN. Semantics were pinned clean-room against the
+  published jar (License hygiene: black-box only). Regression fixtures:
+  `tests/antlr4-compat/.../RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`
+  plus `src/latn_test.wado`.
 
 ## LL Prediction
 

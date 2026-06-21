@@ -1,0 +1,88 @@
+use { parse } from "./g4/parser.wado";
+use { build_latn } from "./latn.wado";
+use { serialize_atn } from "./atn.wado";
+use { atn_decode } from "./runtime/atn.wado";
+use { latn_match } from "./runtime/latn.wado";
+
+// Build the nested-comment lexer ATN, round-trip it through the blob, and
+// match a rule against an input string. Returns the end position of the
+// `CMT` match (or -1). Expectations are the published-ANTLR4 oracle's
+// behaviour, characterized as a black box (see runtime/latn.wado).
+fn cmt_match(grammar_src: String, input: String) -> i32 {
+    return match_rule(grammar_src, "CMT", input);
+}
+
+fn match_rule(grammar_src: String, rule: String, input: String) -> i32 {
+    let g = parse(grammar_src).unwrap();
+    let built = build_latn(&g);
+    let blob = serialize_atn(&built.atn);
+    let sim = atn_decode(&blob);
+    let idx = built.rule_index.get(rule).unwrap();
+    let chars: List<char> = input.chars().collect();
+    return latn_match(&sim, idx, &chars, 0);
+}
+
+global PLUS_G: String = "lexer grammar L;
+CMT : '/*' (CMT | .)+? '*' '/' ;
+WS : (' '|'\\n')+;
+";
+
+test "latn: simple comment" {
+    assert cmt_match(PLUS_G, "/* */") == 5;
+}
+
+test "latn: one nested, no trailing — stays flat" {
+    // The inner `/*` is wildcard text; the outer closes at the first `*/`.
+    assert cmt_match(PLUS_G, "/* /* */") == 8;
+}
+
+test "latn: one nested, trailing close — recurses" {
+    // The higher-priority recursion completes, so it wins over the flat 0:8.
+    assert cmt_match(PLUS_G, "/* /* */ */") == 11;
+}
+
+test "latn: recursion vs flat decided by what follows" {
+    assert cmt_match(PLUS_G, "/* /* */ x */") == 13;
+}
+
+test "latn: tight nesting" {
+    assert cmt_match(PLUS_G, "/*/**/*/") == 6;
+}
+
+test "latn: two nested then close" {
+    assert cmt_match(PLUS_G, "/* /* */ /* */ */") == 17;
+}
+
+test "latn: no match" {
+    assert cmt_match(PLUS_G, "xyz") == -1;
+}
+
+// Epsilon left-recursion (nullable prefix re-enters the rule without
+// consuming). The closure must prune the cycle and terminate rather than
+// recurse forever; completing within the test timeout is the assertion.
+test "latn: epsilon left-recursion terminates" {
+    let g = "lexer grammar L;
+R : (R | 'a')*? 'b' ;
+";
+    let n = match_rule(g, "R", "b");
+    assert n >= -1;
+}
+
+// caseInsensitive must fold case on the ATN path like the static path:
+// 'a'/'z' match 'A'/'Z'.
+global CI_G: String = "lexer grammar L;
+options { caseInsensitive = true; }
+C : 'a' (C | .)+? 'z' ;
+WS : (' '|'\\n')+;
+";
+
+test "latn: caseInsensitive folds literal delimiters" {
+    assert match_rule(CI_G, "C", "AxZ") == 3;
+    assert match_rule(CI_G, "C", "axz") == 3;
+}
+
+test "latn: cross-line nested (descriptor input)" {
+    // The first `/*` on line 2 swallows line 3, closing at the final `*/`.
+    let input = "/* /* */\n/* /*nested*/ */";
+    assert cmt_match(PLUS_G, input) == 25;
+}
