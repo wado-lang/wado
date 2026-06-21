@@ -1,0 +1,42 @@
+//! Stage 2b migration: `pattern : path '(' ... ')' | IDENT` is a shared-prefix
+//! tournament — a bare ident vs a variant pattern that starts with the same
+//! IDENT. The longest-match scan must pick the variant only when
+//! the `'('` follows.
+
+use g from "./grammars/alt_shared_ident_prefix.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_alt_shared_ident_prefix",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "alt-shared: bare-ident pattern" {
+    assert_tree(&"match c { a => z }", &"(prog (matchExpr match c { (arm (pattern a) => z) }))");
+}
+test "alt-shared: variant pattern (regression)" {
+    assert_tree(
+        &"match c { N ( n ) => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))",
+    );
+}
+test "alt-shared: variant then bare-ident arm" {
+    assert_tree(
+        &"match c { N ( n ) => z , a => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) , (arm (pattern a) => z) }))",
+    );
+}
+test "alt-shared: nested variant pattern" {
+    assert_tree(
+        &"match c { N ( M ( x ) ) => z }",
+        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z) }))",
+    );
+}

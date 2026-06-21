@@ -1,0 +1,16 @@
+//! Stage 2b migration: a shared-prefix tournament where both alternatives must
+//! remain reachable.
+
+use overlap from "./grammars/ll_overlap_tournament.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_overlap_tournament",
+        },
+    };
+
+test "overlap-tournament: both alts parse" {
+    assert overlap::parse(&"a b").ok();
+    assert overlap::parse(&"a c").ok();
+}

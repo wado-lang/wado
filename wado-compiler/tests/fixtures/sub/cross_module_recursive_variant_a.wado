@@ -1,0 +1,36 @@
+//! Module A of the cross-module recursive-variant regression.
+//!
+//! Defines a mutually-recursive `Child` / `Node` pair (a variant whose payload
+//! is the struct that contains a `List` of the variant). Module B defines a
+//! type pair with the *same names*. Compiling both into one program used to
+//! ICE in WIR lowering ("expected (ref null $type), found (ref $type)").
+
+pub variant Child {
+    Leaf(i32),
+    Node(Node),
+}
+
+pub struct Node {
+    pub kind: i32,
+    pub children: List<Child>,
+}
+
+pub fn make_a() -> Node {
+    return Node {
+        kind: 1,
+        children: [Child::Leaf(10), Child::Node(Node { kind: 2, children: [] })],
+    };
+}
+
+/// Walk the tree, summing `kind` over every `Node`. The `if let Node(inner)`
+/// payload extraction (binding `inner: &Node`) is the construct that tripped
+/// the cross-module ICE.
+pub fn sum_a(n: &Node) -> i32 {
+    let mut total = n.kind;
+    for let c of &n.children {
+        if let Node(inner) = c {
+            total += sum_a(inner);
+        }
+    }
+    return total;
+}

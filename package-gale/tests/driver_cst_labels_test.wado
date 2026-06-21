@@ -1,0 +1,37 @@
+//! Stage 2 corpus migration: element labels (`key = ID`, `value = STRING`)
+//! and list labels (`rest += ID`) are transparent in the tree —
+//! they bind names in the typed CST but add no node here, so the tree is just
+//! the underlying tokens / rules. Non-ATN (the three `stmt` alts have disjoint
+//! first tokens: ID / PAIR / LIST).
+
+use lbl from "./grammars/label_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_labels",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = lbl::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = lbl::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "labels: element labels are transparent" {
+    assert_tree(&"x = \"v\" ;", &"(program (stmt (assign_stmt x = \"v\" ;)))");
+}
+
+test "labels: list label `+=` adds no node" {
+    assert_tree(&"list a , b , c ;", &"(program (stmt (mix_stmt list a , b , c ;)))");
+}
+
+test "labels: a labelled rule reference still nests its rule node" {
+    assert_tree(&"pair x : y ;", &"(program (stmt (pair_stmt pair (key_rule x) : y ;)))");
+}
+
+test "labels: several statements in sequence" {
+    assert_tree(&"x = \"v\" ; list a ;", &"(program (stmt (assign_stmt x = \"v\" ;)) (stmt (mix_stmt list a ;)))");
+}

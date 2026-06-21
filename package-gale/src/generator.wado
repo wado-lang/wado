@@ -70,7 +70,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     };
 
-    let gen_opts = GenerateOptions { highlight: req.options.highlight, trace: req.options.trace };
+    let gen_opts = GenerateOptions {
+        highlight: req.options.highlight,
+        trace: req.options.trace,
+    };
     let generated = codegen_generate(&mut grammar, &gen_opts);
     // Surface Gale's prediction-strategy diagnostics through the Kiln host so
     // they appear as normal compile warnings. The Kiln surface is the

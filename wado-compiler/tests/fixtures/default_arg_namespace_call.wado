@@ -1,0 +1,21 @@
+//! Regression: a namespace-qualified free-function call (`g::make`) that omits
+//! a defaulted trailing arg must reify the default. Previously
+//! `reify_pad_args_with_defaults` bailed on any `::`-containing callee, so the
+//! TIR call kept only the explicit args while annotate type-checked the padded
+//! arity — WIR then lowered a call with a missing trailing operand and the core
+//! Wasm validator rejected it (ICE: "expected i32, found (ref ...)").
+
+use g from "./sub/default_arg_ns_lib.wado";
+
+test "namespace call omitting a default arg reifies the default" {
+    let r = g::make();
+    assert r.n == i32::MAX;
+}
+
+test "namespace call passing the arg explicitly still works" {
+    let r = g::make(7);
+    assert r.n == 7;
+}
+
+__DATA__
+{"test": {}}

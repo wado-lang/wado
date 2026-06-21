@@ -311,7 +311,7 @@ pub struct "Box<f32>" {
     value: f32,
 }
 
-pub struct "Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>>" {
+pub struct "Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>" {
     value: Result<i32, IntErrorKind>,
 }
 
@@ -351,11 +351,11 @@ pub struct "Box<u64>" {
     value: u64,
 }
 
-pub struct "Box<Option<T>>" {
+pub struct "Box<core:prelude/types.wado/Option<T>>" {
     value: Option<T>,
 }
 
-pub struct "Box<Result<T,E>>" {
+pub struct "Box<core:prelude/types.wado/Result<T,E>>" {
     value: Result<T, E>,
 }
 
@@ -411,15 +411,15 @@ pub struct "Box<Fn<2,Tuple<I::Item,J::Item>>>" {
     value: fn mut([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item],
 }
 
-pub struct "Box<SpecialKind>" {
+pub struct "Box<core:prelude/fpfmt.wado/SpecialKind>" {
     value: SpecialKind,
 }
 
-pub struct "Box<IntErrorKind>" {
+pub struct "Box<core:prelude/intparse.wado/IntErrorKind>" {
     value: IntErrorKind,
 }
 
-pub struct "Box<FloatErrorKind>" {
+pub struct "Box<core:prelude/intparse.wado/FloatErrorKind>" {
     value: FloatErrorKind,
 }
 
@@ -431,11 +431,11 @@ pub struct "Box<Fn<1,T>>" {
     value: fn(i32) -> T,
 }
 
-pub struct "Box<ErrorCode>" {
+pub struct "Box<wasi:cli/types.wado/ErrorCode>" {
     value: ErrorCode,
 }
 
-pub struct "Box<Ordering>" {
+pub struct "Box<core:prelude/traits.wado/Ordering>" {
     value: Ordering,
 }
 
@@ -443,7 +443,7 @@ pub struct "Box<Fn<1,U>>" {
     value: fn mut(I::Item) -> U,
 }
 
-pub struct "Box<Alignment>" {
+pub struct "Box<core:prelude/format.wado/Alignment>" {
     value: Alignment,
 }
 
@@ -4149,11 +4149,11 @@ pub fn parse_text(s: &String) -> Option<f64> {
     return "core::prelude/fpfmt.wado::parse_text_range"(s, 0, s.String::len());
 }
 
-pub fn "SpecialKind^Eq::eq"(self: Box<SpecialKind>, other: Box<SpecialKind>) -> bool {
+pub fn "SpecialKind^Eq::eq"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, other: Box<core:prelude/fpfmt.wado/SpecialKind>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "SpecialKind^Ord::cmp"(self: Box<SpecialKind>, other: Box<SpecialKind>) -> Ordering {
+pub fn "SpecialKind^Ord::cmp"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, other: Box<core:prelude/fpfmt.wado/SpecialKind>) -> Ordering {
     let a: SpecialKind = self.value;
     let b: SpecialKind = other.value;
     if (a < b) {
@@ -4213,7 +4213,7 @@ pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ord
     return Ordering::Equal;
 }
 
-pub fn "SpecialKind^Inspect::inspect"(self: Box<SpecialKind>, f: &mut Formatter) {
+pub fn "SpecialKind^Inspect::inspect"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"SpecialKind::NotSpecial");
     } else {
@@ -4299,7 +4299,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "SpecialKind^InspectAlt::inspect_alt"(self: Box<SpecialKind>, f: &mut Formatter) {
+pub fn "SpecialKind^InspectAlt::inspect_alt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
 
@@ -4380,7 +4380,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "SpecialKind^Display::fmt"(self: Box<SpecialKind>, f: &mut Formatter) {
+pub fn "SpecialKind^Display::fmt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
 }
 
@@ -4460,7 +4460,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: Box<SpecialKind>, f: &mut Formatter) {
+pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^InspectAlt::inspect_alt"(f);
 }
 
@@ -4565,7 +4565,7 @@ pub fn u128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) 
         },
         _ => (),
     };
-    let digit_start: i32 = Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>> { value: prefix }."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
+    let digit_start: i32 = Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>> { value: prefix }."Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"();
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
         Ok(v) => Result<u128, ParseIntError>::Ok(v),
         Err(k) => Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k)),
@@ -5943,11 +5943,11 @@ pub fn parse_f64_from_str(s: &String) -> Result<f64, ParseFloatError> {
     return "core::prelude/intparse.wado::parse_f64_from_str_range"(s, 0, s.String::len());
 }
 
-pub fn "IntErrorKind^Eq::eq"(self: Box<IntErrorKind>, other: Box<IntErrorKind>) -> bool {
+pub fn "IntErrorKind^Eq::eq"(self: Box<core:prelude/intparse.wado/IntErrorKind>, other: Box<core:prelude/intparse.wado/IntErrorKind>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "IntErrorKind^Ord::cmp"(self: Box<IntErrorKind>, other: Box<IntErrorKind>) -> Ordering {
+pub fn "IntErrorKind^Ord::cmp"(self: Box<core:prelude/intparse.wado/IntErrorKind>, other: Box<core:prelude/intparse.wado/IntErrorKind>) -> Ordering {
     let a: IntErrorKind = self.value;
     let b: IntErrorKind = other.value;
     if (a < b) {
@@ -5959,11 +5959,11 @@ pub fn "IntErrorKind^Ord::cmp"(self: Box<IntErrorKind>, other: Box<IntErrorKind>
     return Ordering::Equal;
 }
 
-pub fn "FloatErrorKind^Eq::eq"(self: Box<FloatErrorKind>, other: Box<FloatErrorKind>) -> bool {
+pub fn "FloatErrorKind^Eq::eq"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, other: Box<core:prelude/intparse.wado/FloatErrorKind>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "FloatErrorKind^Ord::cmp"(self: Box<FloatErrorKind>, other: Box<FloatErrorKind>) -> Ordering {
+pub fn "FloatErrorKind^Ord::cmp"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, other: Box<core:prelude/intparse.wado/FloatErrorKind>) -> Ordering {
     let a: FloatErrorKind = self.value;
     let b: FloatErrorKind = other.value;
     if (a < b) {
@@ -5976,11 +5976,11 @@ pub fn "FloatErrorKind^Ord::cmp"(self: Box<FloatErrorKind>, other: Box<FloatErro
 }
 
 pub fn "ParseIntError^Eq::eq"(self: &ParseIntError, other: &ParseIntError) -> bool {
-    return Box<IntErrorKind> { value: self.kind }."IntErrorKind^Eq::eq"(Box<IntErrorKind> { value: other.kind });
+    return Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^Eq::eq"(Box<core:prelude/intparse.wado/IntErrorKind> { value: other.kind });
 }
 
 pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> Ordering {
-    let c: Ordering = Box<IntErrorKind> { value: self.kind }."IntErrorKind^Ord::cmp"(Box<IntErrorKind> { value: other.kind });
+    let c: Ordering = Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^Ord::cmp"(Box<core:prelude/intparse.wado/IntErrorKind> { value: other.kind });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -5988,18 +5988,18 @@ pub fn "ParseIntError^Ord::cmp"(self: &ParseIntError, other: &ParseIntError) -> 
 }
 
 pub fn "ParseFloatError^Eq::eq"(self: &ParseFloatError, other: &ParseFloatError) -> bool {
-    return Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Eq::eq"(Box<FloatErrorKind> { value: other.kind });
+    return Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^Eq::eq"(Box<core:prelude/intparse.wado/FloatErrorKind> { value: other.kind });
 }
 
 pub fn "ParseFloatError^Ord::cmp"(self: &ParseFloatError, other: &ParseFloatError) -> Ordering {
-    let c: Ordering = Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Ord::cmp"(Box<FloatErrorKind> { value: other.kind });
+    let c: Ordering = Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^Ord::cmp"(Box<core:prelude/intparse.wado/FloatErrorKind> { value: other.kind });
     if (c != Ordering::Equal) {
         return c;
     }
     return Ordering::Equal;
 }
 
-pub fn "IntErrorKind^Inspect::inspect"(self: Box<IntErrorKind>, f: &mut Formatter) {
+pub fn "IntErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"IntErrorKind::Empty");
     } else {
@@ -6017,7 +6017,7 @@ pub fn "IntErrorKind^Inspect::inspect"(self: Box<IntErrorKind>, f: &mut Formatte
     };
 }
 
-pub fn "FloatErrorKind^Inspect::inspect"(self: Box<FloatErrorKind>, f: &mut Formatter) {
+pub fn "FloatErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"FloatErrorKind::Empty");
     } else {
@@ -6030,14 +6030,14 @@ pub fn "FloatErrorKind^Inspect::inspect"(self: Box<FloatErrorKind>, f: &mut Form
 pub fn "ParseIntError^Inspect::inspect"(self: &ParseIntError, f: &mut Formatter) {
     f.Formatter::write_str(&"ParseIntError { ");
     f.Formatter::write_str(&"kind: ");
-    Box<IntErrorKind> { value: self.kind }."IntErrorKind^Inspect::inspect"(f);
+    Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
 }
 
 pub fn "ParseFloatError^Inspect::inspect"(self: &ParseFloatError, f: &mut Formatter) {
     f.Formatter::write_str(&"ParseFloatError { ");
     f.Formatter::write_str(&"kind: ");
-    Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^Inspect::inspect"(f);
+    Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
 }
 
@@ -6079,11 +6079,11 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: Box<IntErrorKind>, f: &mut Formatter) {
+pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
 }
 
-pub fn "FloatErrorKind^InspectAlt::inspect_alt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
+pub fn "FloatErrorKind^InspectAlt::inspect_alt"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^Inspect::inspect"(f);
 }
 
@@ -6091,7 +6091,7 @@ pub fn "ParseIntError^InspectAlt::inspect_alt"(self: &ParseIntError, f: &mut For
     f.Formatter::open_brace("ParseIntError {");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"kind: ");
-    Box<IntErrorKind> { value: self.kind }."IntErrorKind^InspectAlt::inspect_alt"(f);
+    Box<core:prelude/intparse.wado/IntErrorKind> { value: self.kind }."IntErrorKind^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::close_brace("}");
 }
@@ -6100,7 +6100,7 @@ pub fn "ParseFloatError^InspectAlt::inspect_alt"(self: &ParseFloatError, f: &mut
     f.Formatter::open_brace("ParseFloatError {");
     f.Formatter::write_newline_indent();
     f.Formatter::write_str(&"kind: ");
-    Box<FloatErrorKind> { value: self.kind }."FloatErrorKind^InspectAlt::inspect_alt"(f);
+    Box<core:prelude/intparse.wado/FloatErrorKind> { value: self.kind }."FloatErrorKind^InspectAlt::inspect_alt"(f);
     f.Formatter::write_str(&",");
     f.Formatter::close_brace("}");
 }
@@ -6143,11 +6143,11 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "IntErrorKind^Display::fmt"(self: Box<IntErrorKind>, f: &mut Formatter) {
+pub fn "IntErrorKind^Display::fmt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
 }
 
-pub fn "FloatErrorKind^Display::fmt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
+pub fn "FloatErrorKind^Display::fmt"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^Inspect::inspect"(f);
 }
 
@@ -6223,11 +6223,11 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: Box<IntErrorKind>, f: &mut Formatter) {
+pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "FloatErrorKind^DisplayAlt::fmt_alt"(self: Box<FloatErrorKind>, f: &mut Formatter) {
+pub fn "FloatErrorKind^DisplayAlt::fmt_alt"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, f: &mut Formatter) {
     self."FloatErrorKind^InspectAlt::inspect_alt"(f);
 }
 
@@ -14678,11 +14678,11 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn "ErrorCode^Eq::eq"(self: Box<ErrorCode>, other: Box<ErrorCode>) -> bool {
+pub fn "ErrorCode^Eq::eq"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box<wasi:cli/types.wado/ErrorCode>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "ErrorCode^Ord::cmp"(self: Box<ErrorCode>, other: Box<ErrorCode>) -> Ordering {
+pub fn "ErrorCode^Ord::cmp"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box<wasi:cli/types.wado/ErrorCode>) -> Ordering {
     let a: ErrorCode = self.value;
     let b: ErrorCode = other.value;
     if (a < b) {
@@ -14694,7 +14694,7 @@ pub fn "ErrorCode^Ord::cmp"(self: Box<ErrorCode>, other: Box<ErrorCode>) -> Orde
     return Ordering::Equal;
 }
 
-pub fn "ErrorCode^Inspect::inspect"(self: Box<ErrorCode>, f: &mut Formatter) {
+pub fn "ErrorCode^Inspect::inspect"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"ErrorCode::Io");
     } else {
@@ -14746,7 +14746,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "ErrorCode^InspectAlt::inspect_alt"(self: Box<ErrorCode>, f: &mut Formatter) {
+pub fn "ErrorCode^InspectAlt::inspect_alt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
 }
 
@@ -14788,7 +14788,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "ErrorCode^Display::fmt"(self: Box<ErrorCode>, f: &mut Formatter) {
+pub fn "ErrorCode^Display::fmt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
 }
 
@@ -14856,7 +14856,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: Box<ErrorCode>, f: &mut Formatter) {
+pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^InspectAlt::inspect_alt"(f);
 }
 
@@ -14928,11 +14928,11 @@ pub fn ConvertError::new(message: String) -> ConvertError {
     return ConvertError { message: message };
 }
 
-pub fn "Ordering^Eq::eq"(self: Box<Ordering>, other: Box<Ordering>) -> bool {
+pub fn "Ordering^Eq::eq"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "Ordering^Ord::cmp"(self: Box<Ordering>, other: Box<Ordering>) -> Ordering {
+pub fn "Ordering^Ord::cmp"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> Ordering {
     let a: Ordering = self.value;
     let b: Ordering = other.value;
     if (a < b) {
@@ -14956,7 +14956,7 @@ pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ord
     return Ordering::Equal;
 }
 
-pub fn "Ordering^Inspect::inspect"(self: Box<Ordering>, f: &mut Formatter) {
+pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"Ordering::Less");
     } else {
@@ -15015,7 +15015,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<Ordering>, f: &mut Formatter) {
+pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
 
@@ -15066,7 +15066,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Ordering^Display::fmt"(self: Box<Ordering>, f: &mut Formatter) {
+pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
 }
 
@@ -15138,7 +15138,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<Ordering>, f: &mut Formatter) {
+pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^InspectAlt::inspect_alt"(f);
 }
 
@@ -15535,11 +15535,11 @@ pub fn "String^InspectAlt::inspect_alt"(self: &String, f: &mut Formatter) {
     self."String^Inspect::inspect"(f);
 }
 
-pub fn "Alignment^Eq::eq"(self: Box<Alignment>, other: Box<Alignment>) -> bool {
+pub fn "Alignment^Eq::eq"(self: Box<core:prelude/format.wado/Alignment>, other: Box<core:prelude/format.wado/Alignment>) -> bool {
     return (self.value == other.value);
 }
 
-pub fn "Alignment^Ord::cmp"(self: Box<Alignment>, other: Box<Alignment>) -> Ordering {
+pub fn "Alignment^Ord::cmp"(self: Box<core:prelude/format.wado/Alignment>, other: Box<core:prelude/format.wado/Alignment>) -> Ordering {
     let a: Alignment = self.value;
     let b: Alignment = other.value;
     if (a < b) {
@@ -15552,7 +15552,7 @@ pub fn "Alignment^Ord::cmp"(self: Box<Alignment>, other: Box<Alignment>) -> Orde
 }
 
 pub fn "Formatter^Eq::eq"(self: &Formatter, other: &Formatter) -> bool {
-    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && Box<Alignment> { value: self.align }."Alignment^Eq::eq"(Box<Alignment> { value: other.align })) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut core:prelude/string.wado/String^Eq::eq"(&other.buf));
+    return (((((((Box<char> { value: self.fill }."char^Eq::eq"(Box<char> { value: other.fill }) && Box<core:prelude/format.wado/Alignment> { value: self.align }."Alignment^Eq::eq"(Box<core:prelude/format.wado/Alignment> { value: other.align })) && Box<bool> { value: self.sign_plus }."bool^Eq::eq"(Box<bool> { value: other.sign_plus })) && Box<bool> { value: self.zero_pad }."bool^Eq::eq"(Box<bool> { value: other.zero_pad })) && Box<i32> { value: self.width }."i32^Eq::eq"(Box<i32> { value: other.width })) && Box<i32> { value: self.precision }."i32^Eq::eq"(Box<i32> { value: other.precision })) && Box<i32> { value: self.indent }."i32^Eq::eq"(Box<i32> { value: other.indent })) && self.buf."&mut core:prelude/string.wado/String^Eq::eq"(&other.buf));
 }
 
 pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
@@ -15560,7 +15560,7 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
     if (c != Ordering::Equal) {
         return c;
     }
-    let c: Ordering = Box<Alignment> { value: self.align }."Alignment^Ord::cmp"(Box<Alignment> { value: other.align });
+    let c: Ordering = Box<core:prelude/format.wado/Alignment> { value: self.align }."Alignment^Ord::cmp"(Box<core:prelude/format.wado/Alignment> { value: other.align });
     if (c != Ordering::Equal) {
         return c;
     }
@@ -15591,7 +15591,7 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
     return Ordering::Equal;
 }
 
-pub fn "Alignment^Inspect::inspect"(self: Box<Alignment>, f: &mut Formatter) {
+pub fn "Alignment^Inspect::inspect"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"Alignment::Left");
     } else {
@@ -15643,7 +15643,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::I
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Alignment^InspectAlt::inspect_alt"(self: Box<Alignment>, f: &mut Formatter) {
+pub fn "Alignment^InspectAlt::inspect_alt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
 
@@ -15685,7 +15685,7 @@ pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i
 
 pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
 
-pub fn "Alignment^Display::fmt"(self: Box<Alignment>, f: &mut Formatter) {
+pub fn "Alignment^Display::fmt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
 }
 
@@ -15753,7 +15753,7 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,
     self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
 }
 
-pub fn "Alignment^DisplayAlt::fmt_alt"(self: Box<Alignment>, f: &mut Formatter) {
+pub fn "Alignment^DisplayAlt::fmt_alt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     self."Alignment^InspectAlt::inspect_alt"(f);
 }
 
@@ -15975,7 +15975,7 @@ fn "List<u8>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<u8> {
 
 fn "core/builtin/array_get<u8>"(arr: &Array<u8>, idx: i32) -> u8;
 
-pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
+pub fn "Result<i32,core:prelude/intparse.wado/IntErrorKind>::unwrap"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     let __match_2: Result<i32, IntErrorKind> = self.value;
     match __match_2 {
         Ok(v) => {

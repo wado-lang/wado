@@ -1,0 +1,20 @@
+// Hello World using the raw wasi:cli interface.
+//
+// Unlike `hello.wado`, this bypasses `core:cli` (println) and the internal
+// stream helpers, talking to the `wasi:cli/stdout` Component Model interface
+// directly.
+
+use { Stdout } from "wasi:cli";
+
+export fn run() with Stdout {
+    let message: List<u8> = "Hello, world!\n".bytes().collect();
+
+    // wasi:cli/stdout writes through a CM stream. Create a [readable, writable]
+    // pair, hand the readable end to write_via_stream, push the bytes into the
+    // writable end, then drop both ends to signal completion.
+    let [rx, tx] = Stream::<u8>::new();
+    let pending = Stdout::write_via_stream(rx);
+    tx.write(message);
+    tx.drop();
+    pending.drop();
+}

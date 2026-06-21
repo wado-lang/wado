@@ -1,0 +1,24 @@
+use g from "./grammars/multiple_eof.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_multiple_eof",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+// Two consecutive `EOF` references at the end of a rule must both match.
+test "multiple EOF references: alt 'x'" {
+    assert_tree(&"x", &"(prog x)");
+}
+
+test "multiple EOF references: alt 'x y'" {
+    assert_tree(&"xy", &"(prog x y)");
+}

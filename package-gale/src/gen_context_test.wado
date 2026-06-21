@@ -74,7 +74,7 @@ test "kind_check_str: multi-token uses helper call" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_FOO", "TK_BAR"];
     let s = ctx.kind_check_str(&toks, &"k");
-    assert s == "_gale_kind_set_0(k)", `expected helper call, got "{s}"`;
+    assert s == "_kind_set_0(k)", `expected helper call, got "{s}"`;
     assert ctx.kind_sets().len() == 1;
 }
 
@@ -188,7 +188,7 @@ test "kind_negate_check_str: multi-token uses negated helper" {
     let mut ctx = mk_ctx();
     let toks: List<String> = ["TK_A", "TK_B"];
     let s = ctx.kind_negate_check_str(&toks, &"k");
-    assert s == "!_gale_kind_set_0(k)", `expected negated helper, got "{s}"`;
+    assert s == "!_kind_set_0(k)", `expected negated helper, got "{s}"`;
     assert ctx.kind_sets().len() == 1;
 }
 
@@ -198,8 +198,8 @@ test "kind_negate_check_str: shares ids with kind_check_str" {
     let pos = ctx.kind_check_str(&toks, &"k");
     let neg = ctx.kind_negate_check_str(&toks, &"k");
     // Both reference the same helper id, just with/without the leading `!`.
-    assert pos == "_gale_kind_set_0(k)";
-    assert neg == "!_gale_kind_set_0(k)";
+    assert pos == "_kind_set_0(k)";
+    assert neg == "!_kind_set_0(k)";
     assert ctx.kind_sets().len() == 1, "positive and negative must share";
 }
 

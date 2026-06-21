@@ -37,7 +37,7 @@ fn read_file(path: String) -> String with Preopens {
 
 test "smoke" {
     // Tiny inline statement; no Preopens needed.
-    assert sqlite::parse(&"SELECT 1;").is_ok();
+    assert sqlite::parse(&"SELECT 1;").ok();
 }
 
 export fn run() with Stdout, MonotonicClock, Preopens {
@@ -48,8 +48,9 @@ export fn run() with Stdout, MonotonicClock, Preopens {
     };
 
     b.run("", || {
-        if let Err(e) = sqlite::parse(&sql) {
-            panic(`sqlite::parse failed: {e.message}`);
+        let result = sqlite::parse(&sql);
+        if !result.ok() {
+            panic(`sqlite::parse failed: {result.diagnostics[0].message}`);
         }
     });
 }

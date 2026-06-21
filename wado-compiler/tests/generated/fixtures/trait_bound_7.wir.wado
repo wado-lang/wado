@@ -6,7 +6,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>> {  // TypeId(1)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>> {  // TypeId(1)
     mut value: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>",
 }
 
@@ -134,7 +134,7 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min" = fn(ref "core:prelude//List<i32>") -> i32;  // TypeId(51)
 
-type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(52)
+type "functype//core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq" = fn(ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>", ref "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>") -> bool;  // TypeId(52)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
@@ -173,13 +173,13 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/trait_bound_result_eq"() wit
     b = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 42 };
     c = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } };
     d = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 105, 108), used: 4 } };
-    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: b }) {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: b }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok == Ok"), used: 8 });
     }
-    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: c }) == 0 {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: a }, struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: c }) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Ok != Err"), used: 9 });
     }
-    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: c }, struct.new "core:prelude/types.wado//Box<Result<i32,core:prelude/string.wado/String>>" { value: d }) {
+    if "core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^Eq::eq"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: c }, struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" { value: d }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Err == Err"), used: 10 });
     }
 }

@@ -193,7 +193,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                     }
                 }
                 if !found {
-                    return Result::<(), ParseError>::Err(
+                    return Result::Err(
                         ParseError::new(
                             `reference to undefined rule "{r.referenced_name}" in "{r.containing_rule}"`,
                             r.span,
@@ -220,7 +220,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                     }
                 }
                 if !found {
-                    return Result::<(), ParseError>::Err(
+                    return Result::Err(
                         ParseError::new(
                             `reference to undefined token "{r.referenced_name}" in "{r.containing_rule}"`,
                             r.span,
@@ -247,7 +247,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
                     }
                 }
                 if !found {
-                    return Result::<(), ParseError>::Err(
+                    return Result::Err(
                         ParseError::new(
                             `reference to undefined lexer rule "{r.referenced_name}" in "{r.containing_rule}"`,
                             r.span,
@@ -258,7 +258,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
             },
         }
     }
-    return Result::<(), ParseError>::Ok(());
+    return Result::Ok(());
 }
 
 pub global DEFAULT_MODE: i32 = 0;

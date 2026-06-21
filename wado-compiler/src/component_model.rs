@@ -2154,7 +2154,7 @@ impl CmInterfaceRegistry {
                 })
             }
             // TypePackSpread is only valid inside tuple types — pass through
-            Type::TypePackSpread(..) | Type::Error(_) => ty.clone(),
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => ty.clone(),
         }
     }
 }

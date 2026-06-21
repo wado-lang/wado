@@ -71,8 +71,8 @@ WS : ' ' -> skip ;
 
 test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
     // A lexer-only grammar has no parser rules, so the generated module has
-    // no `parse` / `walk_*`. The highlight fn must fall back to tokenizing
-    // instead of emitting an invalid `walk_(...)` call.
+    // no `parse` / tree walk. The highlight fn must fall back to tokenizing
+    // instead of emitting an invalid `highlight_walk(...)` call.
     let out = highlight_output("lexer grammar L;
 B : 'b' ;
 WS : ' ' -> skip ;

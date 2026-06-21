@@ -37,10 +37,11 @@ use {
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape } from "./lexer.wado";
+use { scan_balanced } from "./scan.wado";
 
 pub struct G4Parser {
     tokens: List<Token>,
-    /// Snapshot of the source as a char array. Used by `rescan_balanced` to
+    /// Snapshot of the source as a char array. Used by `scan_balanced` to
     /// re-scan host-language regions (ARG_ACTION, action bodies) that the
     /// byte-level lexer cannot delimit on its own — those need bracket
     /// balance plus string-/comment-awareness, which only matters in
@@ -450,40 +451,42 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// Parse `channels { NAME, NAME, ... }` and collect channel names into
-    /// `self.channels`. Duplicate declarations collapse silently — ANTLR4
-    /// also tolerates repeated channels blocks; the name list is the union.
-    /// Unclosed blocks (EOF before `}`) are rejected.
-    fn parse_channels_block(&mut self) -> Result<(), ParseError> {
+    /// Parse a `{ NAME (, NAME)* }` block — the shape shared by the
+    /// `tokens` and `channels` prequels — and return the names in
+    /// declaration order. ANTLR3-style `NAME = INT` assignments are
+    /// tolerated (the integer is discarded; Gale assigns ids by order).
+    /// Unknown tokens are skipped so malformed input cannot hang the loop.
+    /// `kw` names the keyword for the diagnostics. Unclosed blocks (EOF
+    /// before `}`) are rejected.
+    fn parse_id_list_block(&mut self, kw: &String) -> Result<List<String>, ParseError> {
+        let mut names: List<String> = [];
         if !self.is_kind(G4Token::LBrace) {
             let tok = self.peek();
-            return Result::<(), ParseError>::Err(
-                ParseError::new(
-                    "expected `{` after `channels`",
-                    tok.span,
-                    ["{"],
-                ),
+            let mut msg = String::with_capacity(24);
+            msg.push_str(&"expected `{` after `");
+            msg.push_str(kw);
+            msg.push_str(&"`");
+            return Result::<List<String>, ParseError>::Err(
+                ParseError::new(msg, tok.span, ["{"]),
             );
         }
         let brace_span = self.peek().span;
         self.advance();  // skip '{'
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
             if self.is_kind(G4Token::Identifier) {
-                let name = self.peek().text.to_string();
-                let mut dup = false;
-                for let existing of &self.channels {
-                    if *existing == name {
-                        dup = true;
+                names.push(self.peek().text.to_string());
+                self.advance();
+                // Tolerate ANTLR3-style `= INT` assignments.
+                if self.is_kind(G4Token::Assign) {
+                    self.advance();
+                    if self.is_kind(G4Token::IntLit) {
+                        self.advance();
                     }
                 }
-                if !dup {
-                    self.channels.push(name);
-                }
-                self.advance();
             } else {
                 // Unknown token — advance to avoid an infinite loop on
-                // malformed input, mirroring `parse_tokens_block`. Channel
-                // bodies are not semantically meaningful beyond the names.
+                // malformed input. Block bodies are not semantically
+                // meaningful to Gale beyond the names.
                 self.advance();
             }
             if self.is_kind(G4Token::Comma) {
@@ -491,15 +494,35 @@ impl G4Parser {
             }
         }
         if !self.is_kind(G4Token::RBrace) {
-            return Result::<(), ParseError>::Err(
-                ParseError::new(
-                    "unterminated `channels { ... }` block — expected `}` before end of file",
-                    brace_span,
-                    ["}"],
-                ),
+            let mut msg = String::with_capacity(56);
+            msg.push_str(&"unterminated `");
+            msg.push_str(kw);
+            msg.push_str(&" { ... }` block — expected `}` before end of file");
+            return Result::<List<String>, ParseError>::Err(
+                ParseError::new(msg, brace_span, ["}"]),
             );
         }
         self.advance();
+        return Result::<List<String>, ParseError>::Ok(names);
+    }
+
+    /// Parse `channels { NAME, NAME, ... }` and collect channel names into
+    /// `self.channels`. Duplicate declarations collapse silently — ANTLR4
+    /// also tolerates repeated channels blocks; the name list is the union.
+    /// Unclosed blocks (EOF before `}`) are rejected.
+    fn parse_channels_block(&mut self) -> Result<(), ParseError> {
+        let names = self.parse_id_list_block(&"channels")?;
+        for let name of names {
+            let mut dup = false;
+            for let existing of &self.channels {
+                if *existing == name {
+                    dup = true;
+                }
+            }
+            if !dup {
+                self.channels.push(name);
+            }
+        }
         return Result::<(), ParseError>::Ok(());
     }
 
@@ -645,51 +668,10 @@ impl G4Parser {
     /// The assigned integer is discarded — Gale assigns token ids based on
     /// declaration order internally.
     fn parse_tokens_block(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
-        if !self.is_kind(G4Token::LBrace) {
-            let tok = self.peek();
-            return Result::<(), ParseError>::Err(
-                ParseError::new(
-                    "expected `{` after `tokens`",
-                    tok.span,
-                    ["{"],
-                ),
-            );
+        let names = self.parse_id_list_block(&"tokens")?;
+        for let name of names {
+            virtual_tokens.push(name);
         }
-        let brace_span = self.peek().span;
-        self.advance();  // skip '{'
-        while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
-            if self.is_kind(G4Token::Identifier) {
-                virtual_tokens.push(self.peek().text.to_string());
-                self.advance();
-                // Tolerate ANTLR3-style `= INT` assignments.
-                if self.is_kind(G4Token::Assign) {
-                    self.advance();
-                    if self.is_kind(G4Token::IntLit) {
-                        self.advance();
-                    }
-                }
-            } else {
-                // Unknown token — advance to avoid infinite loop on malformed
-                // input. The compatibility principle prefers permissive
-                // parsing, and `tokens { }` bodies are not semantically
-                // meaningful to Gale beyond the names.
-                self.advance();
-            }
-            // Skip commas between token names
-            if self.is_kind(G4Token::Comma) {
-                self.advance();
-            }
-        }
-        if !self.is_kind(G4Token::RBrace) {
-            return Result::<(), ParseError>::Err(
-                ParseError::new(
-                    "unterminated `tokens { ... }` block — expected `}` before end of file",
-                    brace_span,
-                    ["}"],
-                ),
-            );
-        }
-        self.advance();
         return Result::<(), ParseError>::Ok(());
     }
 
@@ -697,11 +679,11 @@ impl G4Parser {
     /// of the host language, so a literal `}` inside a string or comment in
     /// the action body would terminate `skip_braced_block` early if we walked
     /// the token stream. Instead, re-scan from the source char array, which
-    /// `rescan_balanced` does with full string-/char-/comment-awareness.
+    /// `scan_balanced` does with full string- and comment-awareness.
     fn skip_braced_block(&mut self) {
         let tok = self.peek();
         let start = tok.span.start;
-        let end = rescan_balanced(&self.chars, start, '{', '}');
+        let end = scan_balanced_or_end(&self.chars, start, '{', '}');
         self.advance();  // consume the original `{` token
         // Advance past every token whose start lies inside the re-scanned
         // range. The lexer may have produced multiple tokens (and Error
@@ -717,7 +699,7 @@ impl G4Parser {
     fn extract_braced_body(&mut self) -> String {
         let tok = self.peek();
         let start = tok.span.start;
-        let end = rescan_balanced(&self.chars, start, '{', '}');
+        let end = scan_balanced_or_end(&self.chars, start, '{', '}');
         self.advance();
         while !self.at_eof() && self.tokens[self.pos].span.start < end {
             self.pos += 1;
@@ -742,7 +724,7 @@ impl G4Parser {
     fn skip_arg_action(&mut self) {
         let tok = self.peek();
         let start = tok.span.start;
-        let end = rescan_balanced(&self.chars, start, '[', ']');
+        let end = scan_balanced_or_end(&self.chars, start, '[', ']');
         self.advance();  // consume the original CharClass token
         while !self.at_eof() && self.tokens[self.pos].span.start < end {
             self.pos += 1;
@@ -1176,44 +1158,38 @@ impl G4Parser {
         return options;
     }
 
+    /// Recognize a trailing EBNF repetition operator (`*`, `+`, `?`) plus
+    /// an optional non-greedy `?`. Returns `[kind, non_greedy]`, or `None`
+    /// when the next token is not a repetition operator. Shared by the
+    /// parser-side and lexer-side postfix parsers, which differ only in the
+    /// element type they wrap.
+    fn parse_repeat_op(&mut self) -> Option<[RepeatKind, bool]> {
+        let kind = if self.is_kind(G4Token::Star) {
+            RepeatKind::Star;
+        } else if self.is_kind(G4Token::Plus) {
+            RepeatKind::Plus;
+        } else if self.is_kind(G4Token::Question) {
+            RepeatKind::Optional;
+        } else {
+            return null;
+        };
+        self.advance();
+        let non_greedy = if self.is_kind(G4Token::Question) {
+            self.advance();
+            true;
+        } else {
+            false;
+        };
+        return Option::<[RepeatKind, bool]>::Some([kind, non_greedy]);
+    }
+
     fn parse_postfix(&mut self, elem: Element) -> Result<Element, ParseError> {
-        if self.is_kind(G4Token::Star) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Star, element: elem, non_greedy: ng }),
-            );
-        }
-        if self.is_kind(G4Token::Plus) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Plus, element: elem, non_greedy: ng }),
-            );
-        }
-        if self.is_kind(G4Token::Question) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<Element, ParseError>::Ok(
-                Element::Repeat(RepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: ng }),
-            );
-        }
-        return Result::<Element, ParseError>::Ok(elem);
+        return match self.parse_repeat_op() {
+            Some(rep) => Result::<Element, ParseError>::Ok(
+                Element::Repeat(RepeatElement { kind: rep.0, element: elem, non_greedy: rep.1 }),
+            ),
+            None => Result::<Element, ParseError>::Ok(elem),
+        };
     }
 
     fn parse_lexer_rule(
@@ -1498,45 +1474,12 @@ impl G4Parser {
     }
 
     fn parse_lexer_postfix(&mut self, elem: LexerElement) -> Result<LexerElement, ParseError> {
-        if self.is_kind(G4Token::Star) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Star, element: elem, non_greedy: ng }),
-            );
-        }
-        if self.is_kind(G4Token::Plus) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(LexerRepeatElement { kind: RepeatKind::Plus, element: elem, non_greedy: ng }),
-            );
-        }
-        if self.is_kind(G4Token::Question) {
-            self.advance();
-            let ng = if self.is_kind(G4Token::Question) {
-                self.advance();
-                true;
-            } else {
-                false;
-            };
-            return Result::<LexerElement, ParseError>::Ok(
-                LexerElement::Repeat(
-                    LexerRepeatElement { kind: RepeatKind::Optional, element: elem, non_greedy: ng },
-                ),
-            );
-        }
-        return Result::<LexerElement, ParseError>::Ok(elem);
+        return match self.parse_repeat_op() {
+            Some(rep) => Result::<LexerElement, ParseError>::Ok(
+                LexerElement::Repeat(LexerRepeatElement { kind: rep.0, element: elem, non_greedy: rep.1 }),
+            ),
+            None => Result::<LexerElement, ParseError>::Ok(elem),
+        };
     }
 }
 
@@ -1691,61 +1634,14 @@ fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {
     return mode_names.len() - 1;
 }
 
-/// Re-scan the source `chars` starting at `start` (which must point at
-/// `open_char`) and return the position just after the matching `close_char`.
-/// Tracks nesting depth and skips over single-/double-quoted strings (with
-/// `\` escapes), line comments (`//...`) and block comments (`/* ... */`).
-///
-/// This is needed because the G4 lexer cannot delimit host-language code
-/// regions (action bodies `{...}`, ARG_ACTION `[...]`) on its own — the
-/// host language may put the closing delimiter inside a string literal or
-/// nest the brackets (`int[] arr` in Java).
-fn rescan_balanced(chars: &List<char>, start: i32, open_char: char, close_char: char) -> i32 {
-    let n = chars.len();
-    let mut pos = start + 1;  // skip opening delimiter
-    let mut depth = 1;
-    while pos < n {
-        let c = chars[pos];
-        if c == '"' || c == '\'' {
-            let quote = c;
-            pos += 1;
-            while pos < n && chars[pos] != quote {
-                if chars[pos] == '\\' && pos + 1 < n {
-                    pos += 2;
-                } else {
-                    pos += 1;
-                }
-            }
-            if pos < n {
-                pos += 1;  // skip closing quote
-            }
-        } else if c == '/' && pos + 1 < n && chars[pos + 1] == '/' {
-            pos += 2;
-            while pos < n && chars[pos] != '\n' {
-                pos += 1;
-            }
-        } else if c == '/' && pos + 1 < n && chars[pos + 1] == '*' {
-            pos += 2;
-            while pos + 1 < n && !(chars[pos] == '*' && chars[pos + 1] == '/') {
-                pos += 1;
-            }
-            if pos + 1 < n {
-                pos += 2;  // skip `*/`
-            }
-        } else if c == open_char {
-            depth += 1;
-            pos += 1;
-        } else if c == close_char {
-            depth -= 1;
-            pos += 1;
-            if depth == 0 {
-                return pos;
-            }
-        } else {
-            pos += 1;
-        }
-    }
-    return pos;
+/// `scan_balanced` with the parser's unterminated convention: a region
+/// that never closes is consumed to end-of-input, so the caller advances
+/// past every remaining token of the malformed action body.
+fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char) -> i32 {
+    return match scan_balanced(chars, start, open, close) {
+        Some(end) => end,
+        None => chars.len(),
+    };
 }
 
 /// Parse a decimal integer literal token (e.g. "42", "0", "9999"). The lexer
@@ -1787,7 +1683,7 @@ fn parse_int_literal(text: &String) -> i32 {
 pub fn parse(input: String) -> Result<Grammar, ParseError> {
     // Collect the source once and share it between the lexer and the parser.
     // Tokens own their text, so the buffer can be handed off to the parser
-    // (which retains it for `rescan_balanced`) after tokenization.
+    // (which retains it for `scan_balanced`) after tokenization.
     let chars: List<char> = input.chars().collect();
     let tokens = tokenize_chars(&chars);
     let mut parser = G4Parser::new(tokens, chars);

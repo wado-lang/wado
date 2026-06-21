@@ -311,7 +311,7 @@ simulator (which already exists and is correct), not to fail:
 - the mandate yields on a 1-token FIRST match without verifying the
   caller continuation past the shared delimiter (`a and b and )`);
 - two enter edges sharing a first token are decided by FIRST alone;
-- the parse-side scan tournament seeds from an empty `GALE_SCAN_STACK`
+- the parse-side scan tournament seeds from an empty `SCAN_STACK`
   instead of `p.atn_stack`, so an enclosing parser rule's mandatory
   delimiter is invisible to the scan decision when the immediate
   continuation is nullable.
@@ -333,6 +333,34 @@ wado compiler ICE (a nested `for … break` miscompiling to an invalid
 core Wasm module in the full `atn` module context). That compiler bug
 has since been fixed, so the scan is now inlined directly into
 `lr_loop_entry_decision` (no helper indirection).
+
+## Lexer ATN — recursive non-greedy wildcard rules
+
+The lexer has its own ATN-class case: a rule whose non-greedy repeat body
+recurses into itself, the nested-comment pattern
+`CMT : '/*' (CMT | .)+? '*' '/'`. Whether an inner `/*` opens a nested
+rule or is just wildcard text needs unbounded lookahead, so the static
+single-pass emitter cannot decide it (it over-consumes). These are the
+`LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1` descriptors.
+
+`lexer_rule_is_atn_class` (`src/latn.wado`) detects the trigger — a
+non-greedy repeat transitively referencing its owning rule. Such a rule's
+generated `try_*` body becomes a single call to `latn_match`
+(`src/runtime/latn.wado`) over a dedicated lexer ATN (`build_latn`, char-range
+atoms), reusing the parser blob format and `atn_decode`. Non-ATN-class
+rules and grammars are byte-identical to before.
+
+`latn_match` is an ordered-thread Pike VM: a Thompson NFA simulation over
+the input characters with leftmost-first (PCRE) thread priority and a
+per-thread rule-call return stack for the recursion. The winning match is
+the one reached by the highest-priority surviving thread, where priority
+is the order edges are laid down at build time — non-greedy loops emit the
+exit edge first, alternations keep source order — so greedy loops yield
+the longest match and non-greedy the shortest that still lets the rule
+finish. No backtracking, linear in the live thread-set per position. The
+semantics were characterized clean-room against the published jar as a
+black box (License hygiene: run it, never read it); `src/latn_test.wado`
+pins them.
 
 ## The Descriptor Pipeline
 

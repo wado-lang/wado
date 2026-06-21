@@ -1703,9 +1703,9 @@ This design aligns with TypeScript (primary target audience) and enables intuiti
 ```
 
 ```wado
-use config from "./config.json" with { type: "json" };
-// config::point is [i32, i32]
-// config::mixed is [i32, String, bool]
+// A JSON array maps naturally to a tuple:
+let point: [i32, i32] = [10, 20];
+let mixed: [i32, String, bool] = [1, "hello", true];
 ```
 
 See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
@@ -2341,6 +2341,17 @@ For generic function and method calls, explicit turbofish syntax is required:
 fn identity<T>(x: T) -> T { return x; }
 let x = identity::<i32>(42);           // turbofish required (for now)
 // let y = identity(42);               // not yet supported
+```
+
+A `_` inside a turbofish leaves that type-argument slot for inference while the
+others stay explicit, reusing the same inference an omitted turbofish uses. The
+explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
+an omitted turbofish on an uninferable parameter. It is scoped to turbofish
+arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
+
+```wado
+let r = Result::<_, MyErr>::Ok(42);    // infers Ok payload type, pins the error type
+let a = pick::<_, bool>(1, true);      // infers the first type argument
 ```
 
 ### Traits
@@ -3247,42 +3258,48 @@ All entity definitions can have `pub` visibility, including struct fields.
 | Source Type   | Syntax                        | Example                              |
 | ------------- | ----------------------------- | ------------------------------------ |
 | WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
-| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:fmt"`           |
+| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
+| CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
+| Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Remote (HTTP) | `"https://..."`               | `"https://example.com/lib.wado"`     |
 | Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
-| Package       | `"<package-name>"`            | `"parser-lib"`, `"json-utils"`       |
+
+A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `wasi:`/`core:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
 ### Module Path Validation
 
 Module paths are validated before loading to provide clear error messages:
 
-**Namespace Resolution:**
+**Namespace Resolution** (a namespace is reserved iff the compiler bundles it):
 
-1. **Reserved namespaces** (`identifier:`): Paths matching `xxx:` pattern are namespace paths
-   - `core:` - Wado standard library
-   - `wasi:` - WASI interface modules
-   - Unknown namespaces result in compile error: `unknown module namespace 'xxx'; expected 'core' or 'wasi'`
+1. **Bundled namespaces** `core:` / `wasi:` — resolved from embedded stdlib.
 
-2. **Remote modules** (`http://` or `https://`): Delegated to CompilerHost
+2. **Open coordinates** `<ns>:<pkg>` (any other namespace) — resolved from the default registry, or a `with`/manifest source override.
 
-3. **Local modules** (`./` or `../`): Resolved relative to importing module
+3. **Library aliases** `lib:<nick>` — indirection (rename, short name, multiple majors, or a dependency with no public coordinate), resolved via `wado.toml` or an inline `with`.
 
-4. **Invalid paths**: Paths not matching any pattern are rejected
-   - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
+4. **Remote modules** (`http://` or `https://`): Delegated to CompilerHost.
+
+5. **Local modules** (`./` or `../`): Resolved relative to importing module.
+
+6. **Invalid paths**: Paths not matching any pattern are rejected.
+   - Error: `invalid module path 'xxx'; use './' for local modules or a 'namespace:package' coordinate`
+
+Bare names (`"router"`) are rejected. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
 
 ### Import Syntax
 
 ```wado
 // ============================================
 // WIT Package = Wado Module
-// WIT Interface = Wado Effect
+// WIT Interface = Wado interface
 // ============================================
 
 // 1. WASI standard modules (wasi:*)
 use {Stdout, Stderr} from "wasi:cli";
 use {Stdout::{write_via_stream}} from "wasi:cli";
 
-// Effect and its functions together
+// Interface and its members together
 use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
 
 // 2. Core library (core:*)
@@ -3291,14 +3308,16 @@ use {format} from "core:fmt";
 
 // 3. Remote modules (https:)
 use {ApiClient} from "https://example.com/api.wado";
-use config from "https://example.com/data.json" with { type: "json" };
 
 // 4. Local files (relative path, extension required)
 use {Helper} from "./utils.wado";
 use {Config} from "../config.wado";
 
-// 5. Package dependencies (name only)
-use {Parser} from "parser-lib";
+// 5. CM coordinate (resolved via wado.toml or default registry)
+use {Regexp} from "docs:regex";
+
+// 6. Library alias (rename / private / coordinate-less dependency)
+use {Router} from "lib:router";
 ```
 
 ### Import Attributes (`with`)
@@ -3306,11 +3325,13 @@ use {Parser} from "parser-lib";
 Use `with { ... }` to specify import metadata:
 
 ```wado
-// Version specification (optional for standard namespaces)
-use {Stdout} from "wasi:cli" with { version: "0.3.0" };
+// Inline dependency source (single-file scripts; no wado.toml needed).
+// Same vocabulary as a [dependencies] value, with an exact version.
+use {Regexp} from "docs:regex@1.0.0";  // exact pin via the specifier
+use {Router} from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
+use {Parse}  from "lib:rx"     with { registry = "https://wa.dev", package = "docs:regex", version = "1.0.0" };
 
 // Type attribute (REQUIRED for non-.wado imports)
-use config from "./config.json" with { type: "json" };
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
 
 // WIT specification for Wasm imports (optional)
@@ -3320,16 +3341,17 @@ use {foo} from "./external.wasm" with {
 };
 ```
 
+An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an **exact** version — a range there is an error.
+
 **Type Attribute Requirement**:
 
-| Import Source        | `type` Attribute | Notes                          |
-| -------------------- | ---------------- | ------------------------------ |
-| `.wado` files        | Optional         | Type inferred from Wado source |
-| `.wasm` files        | **Required**     | `type: "wasm"`                 |
-| `.json` files        | **Required**     | `type: "json"`                 |
-| `core:*`, `wasi:*`   | Not applicable   | Special namespace handling     |
-| `https:` URLs        | **Required**     | Must specify content type      |
-| Package dependencies | Optional         | Type inferred from package     |
+| Import Source      | `type` Attribute         | Notes                          |
+| ------------------ | ------------------------ | ------------------------------ |
+| `.wado` files      | Optional                 | Type inferred from Wado source |
+| `.wasm` files      | **Required**             | `type: "wasm"`                 |
+| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
+| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
+| CM / `lib:` deps   | Optional                 | Type inferred from package     |
 
 **Rationale**: Explicit type annotations prevent ambiguity and make dependencies clear, aligning with Wado's design philosophy of explicit imports.
 
@@ -3337,7 +3359,7 @@ use {foo} from "./external.wasm" with {
 
 See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
 
-A `use` clause whose source is a non-`.wado`, non-`.wasm`, non-`.json` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
+A `use` clause whose source is a non-`.wado`, non-`.wasm` schema file (e.g. `.g4`, `.proto`, `.graphql`, `.wit`) is processed by **Kiln** — a schema-driven code-generation pipeline that lowers the schema to ordinary Wado source which the compiler then handles like any user-authored module. The `with { generator: { ... } }` clause specifies which generator to invoke:
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
@@ -3402,13 +3424,9 @@ In hosts that cannot execute generators (today's wasm32-bundled LSP / browser pl
 Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
 
 ```wado
-// Import JSON file as a namespace
-use config from "./config.json" with { type: "json" };
-let value = config::key; // not config["key"], as it's analyzed at compile time
-
 // Import a module as a namespace
 use utils from "./utils.wado";
-utils::helper_function();
+utils::helper_function();      // not utils["helper_function"], as it's analyzed at compile time
 ```
 
 A namespace import makes all pub symbols from the source module available. At the source level, symbols are accessed with the `ns::` prefix. Internally, the compiler desugars the prefix away during the desugar phase and registers all pub symbols from the source module as named imports:
@@ -3470,8 +3488,8 @@ Notation distinction:
 ### Renaming Imports
 
 ```wado
-use {write_via_stream as stdout_write} from "wasi:cli/Stdout";
-use {write_via_stream as stderr_write} from "wasi:cli/Stderr";
+use {Stdout::{write_via_stream as stdout_write}} from "wasi:cli";
+use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
 
 fn log() with Stdout, Stderr {
     stdout_write(out_stream);
@@ -3492,8 +3510,8 @@ pub fn cos(x: f64) -> f64 { ... }
 pub use {sin, cos} from "./internal/trig.wado";
 pub use {sin as sine} from "./internal/trig.wado";  // with rename
 
-// user code - import from the facade
-use {sin, cos, sine} from "math";
+// user code - import from the facade (a "math" dependency declared in wado.toml)
+use {sin, cos, sine} from "lib:math";
 ```
 
 Re-export rules:

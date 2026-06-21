@@ -1,0 +1,36 @@
+//! Stage 4 down-payment on the emitter: highlight walks the
+//! `CstNode` tree directly (`highlight_walk`), no typed-CST
+//! visitor. Same JSON highlight contract as the typed path.
+use json_hl from "./grammars/JSON.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: true },
+            output_dir: "tests/generated/cst_json_highlight",
+        },
+    };
+
+test "highlight produces HTML" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert html.len() > 0, "highlight returned empty string";
+}
+test "highlight contains string span" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert html.contains("class=\"string\""), `missing string class in: {html}`;
+}
+test "highlight contains number span" {
+    let html = json_hl::highlight(&"{\"key\": 42}");
+    assert html.contains("class=\"number\""), `missing number class in: {html}`;
+}
+test "highlight contains bracket span" {
+    let html = json_hl::highlight(&"[1, 2]");
+    assert html.contains("class=\"punctuation bracket\""), `missing bracket class in: {html}`;
+}
+test "highlight contains keyword span for true" {
+    let html = json_hl::highlight(&"true");
+    assert html.contains("class=\"constant builtin\""), `missing constant.builtin class in: {html}`;
+}
+test "highlight escapes HTML entities" {
+    let html = json_hl::highlight(&"\"<script>\"");
+    assert html.contains("&lt;"), `missing escaped < in: {html}`;
+}

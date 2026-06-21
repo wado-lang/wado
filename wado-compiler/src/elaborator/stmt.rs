@@ -618,6 +618,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
             | Type::Error(_) => false,
         }
     }
@@ -647,6 +648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
             | Type::Error(_) => return variant_name.to_string(),
         };
         format!("{base}::{variant_name}")
@@ -896,7 +898,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Use expected type for coercion (numeric literals, tuple to array,
         // etc.) and check the value type against the function return type.
         if let Some(expr) = ret_stmt.value.as_ref() {
-            let value_type = self.resolve_expr(expr, ctx, Some(return_type));
+            let mut value_type = self.resolve_expr(expr, ctx, Some(return_type));
+            // Pin a deferred hole that rode a prior binding into the returned
+            // value (`let v = gen()?; return Ok(v)`) against the return type.
+            if self.type_has_infer_hole(value_type) {
+                self.solve_infer_holes_against(value_type, return_type);
+                value_type = self.apply_infer_holes(value_type);
+            }
             self.typecheck_return(value_type, return_type, ret_stmt.span);
         }
     }
@@ -1126,7 +1134,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(&(_ty, mutable)) = self.sem.decls.current_module_globals.get(name)
                         && !mutable
                     {
-                        // Constant-value pattern: introduces no binding.
+                        // Constant-value pattern: introduces no binding, but the
+                        // global is read here — record the use→def edge so it is
+                        // not flagged as dead code (mirrors the expression path).
+                        self.record_item_reference_by_name(*id, name);
                         return Vec::new();
                     }
                     if let Some((_source_module, _original_name, _ty, mutable)) =
@@ -1134,6 +1145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && !*mutable
                     {
                         // Constant-value pattern: introduces no binding.
+                        self.record_item_reference_by_name(*id, name);
                         return Vec::new();
                     }
                 }
@@ -2200,6 +2212,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: None,
                 call_id: None,
                 type_args: vec![],
+                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,
@@ -2260,6 +2273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: None,
                 call_id: None,
                 type_args: vec![],
+                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,
@@ -2680,6 +2694,7 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
         Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
         Type::TypePackSpread(name, _) => format!("..{name}"),
+        Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
     }
 }
@@ -2824,6 +2839,7 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Reference(_)
         | Type::MutReference(_)
         | Type::TypePackSpread(_, _)
+        | Type::Infer(_)
         | Type::Error(_) => return None,
     };
     match (ty_name, const_name) {

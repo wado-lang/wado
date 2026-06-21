@@ -187,6 +187,34 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 }
 
 impl Monomorphizer {
+    /// Drain `self.structs.pending` to fixpoint, instantiating each queued
+    /// struct plus any structs its fields transitively queue. Returns the
+    /// concrete structs produced (the caller appends them to the module).
+    fn drain_pending_structs(
+        &mut self,
+        type_table: &RefCell<TypeTable>,
+        generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
+        valid_struct_names: &IndexSet<String>,
+    ) -> Vec<TirStruct> {
+        let mut new_structs = Vec::new();
+        loop {
+            self.collect_instantiation_sites(&type_table.borrow(), valid_struct_names);
+            if self.structs.pending.is_empty() {
+                break;
+            }
+            while let Some(key) = self.structs.pending.pop() {
+                let struct_key = (key.name.clone(), key.module_source.clone());
+                if let Some(generic_struct) = generic_structs.get(&struct_key)
+                    && let Some(concrete) =
+                        self.instantiate_struct(generic_struct, &key, &mut type_table.borrow_mut())
+                {
+                    new_structs.push(concrete);
+                }
+            }
+        }
+        new_structs
+    }
+
     /// Perform monomorphization on a module, optionally with access to external generic
     /// functions and structs from other modules (e.g., List methods from prelude).
     ///
@@ -214,7 +242,6 @@ impl Monomorphizer {
         // Store in module for later phases
         module.generic_structs.clone_from(&generic_structs);
 
-        // Build set of valid struct names for collection
         let valid_struct_names: IndexSet<String> = generic_structs
             .keys()
             .map(|(name, _)| name.clone())
@@ -224,32 +251,8 @@ impl Monomorphizer {
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
         // may create new GenericInstance types in its fields (like BTreeNode<String,i32>)
         // that also need to be instantiated.
-        let mut new_structs = Vec::new();
-        loop {
-            // Collect instantiation sites from current type table
-            self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
-
-            // If no new structs to instantiate, we're done
-            if self.structs.pending.is_empty() {
-                break;
-            }
-
-            // Process all pending struct instantiations
-            while let Some(key) = self.structs.pending.pop() {
-                let struct_key = (key.name.clone(), key.module_source.clone());
-                if let Some(generic_struct) = generic_structs.get(&struct_key)
-                    && let Some(concrete) = self.instantiate_struct(
-                        generic_struct,
-                        &key,
-                        &mut module.type_table.borrow_mut(),
-                    )
-                {
-                    new_structs.push(concrete);
-                }
-            }
-        }
-
-        // Add monomorphized structs to module
+        let new_structs =
+            self.drain_pending_structs(&module.type_table, &generic_structs, &valid_struct_names);
         module.structs.extend(new_structs);
 
         // Phase 5: Remove generic structs from the concrete struct list
@@ -279,7 +282,7 @@ impl Monomorphizer {
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions);
 
-        // Phase 9: Process function instantiations and generate concrete functions
+        // Phase 9: Process function instantiations and generate concrete functions.
         // Use iterative approach: each newly instantiated function may have method calls
         // that need to be instantiated too (e.g., a generic method calling another generic
         // method on self, like sort() -> sort_by())
@@ -293,11 +296,12 @@ impl Monomorphizer {
                 .map(|(k, v)| (k.clone(), Rc::clone(v)))
                 .collect();
 
-        // Phase 9: Unified instantiation loop
+        // Unified instantiation loop.
         // Process functions and structs together until fixpoint. Function instantiation
         // may create new GenericInstance types that require struct instantiation, which
         // in turn may create new function instantiation sites. Processing them in a
-        // single loop eliminates the need for the separate "Phase 13" second pass.
+        // single loop removes the second function-instantiation pass the pipeline
+        // previously needed.
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         loop {
             let mut made_progress = false;
@@ -414,25 +418,15 @@ impl Monomorphizer {
             // batch. `collect_instantiation_sites` scans the type table —
             // doing it per-function would be `O(N · |type_table|)` and is
             // the source of the historical compiler-time regression.
-            loop {
-                self.collect_instantiation_sites(&module.type_table.borrow(), &valid_struct_names);
-                if self.structs.pending.is_empty() {
-                    break;
-                }
-                while let Some(struct_key) = self.structs.pending.pop() {
-                    let key_pair = (struct_key.name.clone(), struct_key.module_source.clone());
-                    if let Some(generic_struct) = generic_structs.get(&key_pair)
-                        && let Some(s) = self.instantiate_struct(
-                            generic_struct,
-                            &struct_key,
-                            &mut module.type_table.borrow_mut(),
-                        )
-                    {
-                        module.structs.push(s);
-                        made_progress = true;
-                    }
-                }
+            let new_structs = self.drain_pending_structs(
+                &module.type_table,
+                &generic_structs,
+                &valid_struct_names,
+            );
+            if !new_structs.is_empty() {
+                made_progress = true;
             }
+            module.structs.extend(new_structs);
 
             // Steps 3 + 4: rewrite each new body, then collect its call sites.
             for mut concrete in batch {

@@ -514,11 +514,25 @@ fn transform_stmt(
     } else {
         None
     };
+<<<<<<< HEAD
     if let Some((local_index, value)) = let_info
         && let Some(ve) = value.as_expr()
     {
         let tmpl_block = match &engine.body.exprs[ve].kind {
             ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
+||||||| 02b7b8878
+    if let Some((local_index, value)) = let_info {
+        let tmpl_block = match &engine.body.exprs[value].kind {
+            ExprKind::LabeledBlock { label, block, .. } if label == "__tmpl" => Some(*block),
+=======
+    if let Some((local_index, value)) = let_info {
+        let tmpl_block = match &engine.body.exprs[value].kind {
+            ExprKind::LabeledBlock { label, block, .. }
+                if label == crate::name::TEMPLATE_BLOCK_LABEL =>
+            {
+                Some(*block)
+            }
+>>>>>>> origin/main
             _ => None,
         };
         if let Some(tb) = tmpl_block
@@ -678,7 +692,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             value,
             type_id,
             ..
-        } if name == "__r" => {
+        } if name == crate::name::TEMPLATE_RESULT_LOCAL => {
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
@@ -743,12 +757,24 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
+<<<<<<< HEAD
         } if label == "__tmpl" => {
             match &body.exprs[val.as_expr().expect("skeleton operand")].kind {
                 ExprKind::Local { index, .. } if *index == buf_local_index => {}
                 _ => return None,
             }
         }
+||||||| 02b7b8878
+        } if label == "__tmpl" => match &body.exprs[*val].kind {
+            ExprKind::Local { index, .. } if *index == buf_local_index => {}
+            _ => return None,
+        },
+=======
+        } if label == crate::name::TEMPLATE_BLOCK_LABEL => match &body.exprs[*val].kind {
+            ExprKind::Local { index, .. } if *index == buf_local_index => {}
+            _ => return None,
+        },
+>>>>>>> origin/main
         _ => return None,
     }
 

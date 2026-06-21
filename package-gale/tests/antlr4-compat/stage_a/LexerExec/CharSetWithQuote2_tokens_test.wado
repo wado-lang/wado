@@ -17,7 +17,6 @@ use t from "../../grammars/LexerExec/CharSetWithQuote2.g4"
     };
 use { TK_EOF } from "../../grammars/LexerExec/CharSetWithQuote2.g4";
 
-
 // triage: Stage C: descriptor [output] is prefixed by action-print text (<writeln(...)> echoes inside { ... } action bodies); claim (d) actual lacks the prefix.
 #[TODO]
 test "stage_a_tokens: LexerExec/CharSetWithQuote2" {
@@ -27,6 +26,6 @@ test "stage_a_tokens: LexerExec/CharSetWithQuote2" {
 [@1,4:3='<EOF>',<-1>,1:4]
 ";
     let tokens = t::tokenize(&input);
-    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    let actual = t::to_lexer_string(&tokens, TK_EOF);
     assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
 }

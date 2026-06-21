@@ -1,0 +1,38 @@
+use pg from "./grammars/parser_gaps.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_parser_gaps",
+        },
+    };
+fn assert_tree(input: &String, expected: &String) {
+    let result = pg::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = pg::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+test "parser-gaps: list" {
+    assert_tree(&"list a ;", &"(program (stmt (list_stmt list a ;)))");
+}
+test "parser-gaps: list multi" {
+    assert_tree(&"list a , b , c ;", &"(program (stmt (list_stmt list a , b , c ;)))");
+}
+test "parser-gaps: not" {
+    assert_tree(&"not 123 ;", &"(program (stmt (not_stmt not 123 ;)))");
+}
+test "parser-gaps: set" {
+    assert_tree(&"set , ;", &"(program (stmt (not_stmt set , ;)))");
+}
+test "parser-gaps: any foo" {
+    assert_tree(&"any foo ;", &"(program (stmt (any_stmt any foo ;)))");
+}
+test "parser-gaps: any 42" {
+    assert_tree(&"any 42 ;", &"(program (stmt (any_stmt any 42 ;)))");
+}
+test "parser-gaps: sequence" {
+    assert_tree(
+        &"list a , b ; not 1 ; any x ;",
+        &"(program (stmt (list_stmt list a , b ;)) (stmt (not_stmt not 1 ;)) (stmt (any_stmt any x ;)))",
+    );
+}

@@ -1,0 +1,29 @@
+use g from "./grammars/lr_between.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_lr_between",
+        },
+    };
+
+fn assert_parses(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `parse failed for {*input}`;
+}
+
+// The canonical case: between's mandatory `'and'` must survive the binary
+// `and`-loop.
+test "between with trailing and parses" {
+    assert_parses(&"between X1 and X2 and X3 ;");
+}
+
+// Plain binary chains still parse.
+test "binary and/or chain parses" {
+    assert_parses(&"X1 and X2 or X3 and X4 ;");
+}
+
+// between mixed with a binary continuation.
+test "between then or continuation parses" {
+    assert_parses(&"between X1 and X2 or X3 ;");
+}

@@ -1,24 +1,20 @@
-//! `NullableRef` optimization for variant types.
+//! `NullableRef` representation lowering for variant types.
 //!
-//! Rewrites eligible variants (exactly 2 cases: one unit, one with a non-nullable-reference
-//! payload) to use a null-niche representation, eliminating the discriminant struct overhead.
+//! Rewrites a 2-case `{Unit, Payload(T)}` variant whose `T` is a non-nullable
+//! reference to a null-niche shape: unit case → `ref.null none`, payload case →
+//! the payload ref itself, no Wasm types emitted for the variant. Dropping the
+//! discriminant struct is a size win, but the pass is a mandatory lowering, not an
+//! optimization (see `optimize_wir`): the frontend already emits `None` as
+//! `ref.null`, so this makes the WIR type match.
 //!
-//! **Eligibility**: A variant `V` with cases `{Unit, Payload(T)}` qualifies when `T` is a
-//! non-nullable reference (concrete struct/array ref, or abstract struct/array ref).
-//!
-//! **After optimization**:
-//! - Unit case → `ref.null none`
-//! - Payload case → the payload value itself (as a nullable ref)
-//! - No Wasm types are emitted for `V` (base type and case structs become dead)
-//!
-//! The pass runs **before** SROA and other optimizations so that SROA and the rest of the
-//! pipeline see the already-optimized types.
+//! Runs before SROA and the optimization passes so they see the lowered types.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
 
-/// Run the `NullableRef` optimization on the module.
-pub(super) fn optimize_nullable_refs(module: &mut WirPackage) {
+/// Lower eligible variants to the `NullableRef` representation. Mandatory at every
+/// `-O` — not gated like the optimization passes.
+pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
     // Phase 1: Identify eligible variants.
     // nullable_map: variant_base_type_idx -> (payload_case_idx, nullable_payload_WirType)
     let nullable_map = collect_nullable_variants(&module.types);

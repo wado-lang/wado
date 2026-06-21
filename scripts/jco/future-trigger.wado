@@ -1,0 +1,15 @@
+// Harvest trigger for jco-harvest-intrinsics.
+//
+// Released jco only emits the `FutureEnd` / `FutureReadableEnd` /
+// `FutureWritableEnd` runtime classes when a component's intrinsic set pulls in
+// `future.new`. The stdout-only `hello.wado` reaches them solely through the
+// future *drop* path, which upstream jco fails to wire to those classes — so we
+// compile this minimal program (one `Future::<T>::new()`) purely to make
+// released jco emit the classes, then extract them. See SKILL.md.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<i32>::new();
+    tx.write(42);
+    println("ok");
+}

@@ -883,6 +883,7 @@ pub fn walk_type<V: AstVisitor>(v: &mut V, ty: &Type) {
         }
         Type::Reference(t) | Type::MutReference(t) => v.visit_type(t),
         Type::TypePackSpread(_, _) => {}
+        Type::Infer(_) => {}
         Type::Error(_) => {}
     }
 }
@@ -1017,6 +1018,36 @@ pub struct TestDecl {
     pub name: Option<String>,
     pub body: Block,
     pub span: Span,
+}
+
+/// Test attributes resolved from a `TestDecl`'s `#[...]` annotations (plus the
+/// enclosing module's `#[TODO]`). Shared by the annotate and reify walks so the
+/// attribute semantics live in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct TestMetadata {
+    pub expect_trap: bool,
+    pub is_todo: bool,
+    pub timeout_ms: Option<u64>,
+}
+
+impl TestDecl {
+    /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]`
+    /// attributes. `module_is_todo` folds in a module-level `#[TODO]`.
+    pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
+        TestMetadata {
+            expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
+            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
+            timeout_ms: self.attributes.iter().find_map(|a| {
+                if a.name == "timeout_ms" {
+                    a.args
+                        .first()
+                        .and_then(|arg| arg.as_str().parse::<u64>().ok())
+                } else {
+                    None
+                }
+            }),
+        }
+    }
 }
 
 /// Global variable declaration: `global name: Type = expr;`
@@ -2670,6 +2701,10 @@ pub enum Type {
     MutReference(Box<Type>),
     /// Type pack spread inside a tuple: `..T` in `[i32, ..T, bool]`
     TypePackSpread(String, Span),
+    /// Inference placeholder `_` in a type position. Inside a turbofish it
+    /// leaves a type-argument slot for inference (`Result<_, MyErr>`);
+    /// elsewhere it resolves to the elaborator's unknown type.
+    Infer(Span),
     /// Placeholder for a type that failed to parse, emitted by error recovery
     /// (e.g. a broken element in a type-argument or parameter list) so the
     /// surrounding list survives. Resolves to the elaborator's error type; the
@@ -2691,6 +2726,7 @@ impl Type {
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
+            | Type::Infer(_)
             | Type::Error(_) => None,
         }
     }
@@ -2727,6 +2763,7 @@ impl Type {
             Type::Tuple(elems) => elems.first().map(Type::span).unwrap_or_default(),
             Type::Reference(inner) | Type::MutReference(inner) => inner.span(),
             Type::TypePackSpread(_, span) => *span,
+            Type::Infer(span) => *span,
             Type::Error(span) => *span,
         }
     }
@@ -2884,6 +2921,23 @@ pub struct GenericParam {
     /// Default type (e.g., `T = []` or `Effects = []`)
     pub default: Option<Type>,
     pub span: Span,
+}
+
+impl GenericParam {
+    /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
+    /// Such params are erased before codegen, so they occupy no positional
+    /// monomorphization slot.
+    pub fn has_fn_bound(&self) -> bool {
+        self.bounds.iter().any(|b| b.fn_signature.is_some())
+    }
+
+    /// Whether this param occupies a dense, positional slot — the "real" type
+    /// params monomorphization substitutes by index. Excludes effect params
+    /// (`effect E`) and `fn`-bound params (`<F: fn(...)>`). Single source for
+    /// the projection rule shared by the annotate walk and reify.
+    pub fn is_real_type_param(&self) -> bool {
+        !self.is_effect && !self.has_fn_bound()
+    }
 }
 
 #[derive(Debug, Clone)]

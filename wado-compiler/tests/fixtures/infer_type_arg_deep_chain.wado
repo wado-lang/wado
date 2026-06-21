@@ -1,0 +1,50 @@
+// Deferred inference through a deep chain whose intermediate call does not pin
+// the parameter: `g.make().keep().unwrap_box()`. `keep` records `Box<?>::keep`
+// before the LHS `i32` solves the hole; the monomorphizer rebuilds names from
+// the receiver type the module-end sweep concretises, so no stale name leaks.
+
+struct Box<T> {
+    v: T,
+}
+impl<T> Box<T> {
+    fn keep(&self) -> Box<T> {
+        return Box { v: self.v };
+    }
+    fn unwrap_box(&self) -> T {
+        return self.v;
+    }
+}
+
+struct Gen {}
+impl Gen {
+    fn make<U: Default>(&self) -> Box<U> {
+        return Box { v: U::default() };
+    }
+}
+
+fn mk<U: Default>() -> Box<U> {
+    return Box { v: U::default() };
+}
+
+test "deep method chain infers through an intermediate call" {
+    let g = Gen {};
+    let x: i32 = g.make().keep().unwrap_box();
+    assert x == 0;
+}
+
+test "deep free-function chain feeding a binary operand" {
+    // mk() defers, keep() forwards the hole, get-of-element + 1 pins it to i32.
+    let n = mk().keep().unwrap_box() + 1;
+    assert n == 1;
+}
+
+test "a reused holey binding: intermediate use then a solving use" {
+    let b = mk();
+    let k = b.keep(); // records Box<?>::keep before the hole is solved
+    let x: i32 = b.unwrap_box(); // solves the hole = i32
+    assert x == 0;
+    assert k.unwrap_box() == 0;
+}
+
+__DATA__
+{"test": {}}

@@ -13,7 +13,7 @@ use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
 /// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
-/// `_gale_kind_set_<id>(<expr>)`; the body is shared via a single
+/// `_kind_set_<id>(<expr>)`; the body is shared via a single
 /// helper function emitted at the end of the parser section.
 pub struct KindSetEntry {
     pub id: i32,
@@ -89,16 +89,16 @@ pub struct GenContext {
     caller_follow_gate_seen: bool,
     /// Set by lowering when it lowers a non-greedy optional (`??`) or an
     /// ATN-class LR rule. When set, emit includes the runtime ATN simulator
-    /// infrastructure (the serialized `GALE_ATN_DATA` blob, the shared
-    /// `GALE_ATN_SIM` global, the `Parser.atn_stack` field, and the
+    /// infrastructure (the serialized `ATN_DATA` blob, the shared
+    /// `ATN_SIM` global, the `Parser.atn_stack` field, and the
     /// rule-entry stack push/pop) and routes the `??` enter/skip decision
     /// through `atn_ng_optional_enter`. Grammars without either stay
     /// byte-identical. (`*?`/`+?` keep the dedicated non-greedy strategy and
     /// do not set this.)
     needs_atn_seen: bool,
     /// Set by lowering for an ATN-class LR rule. Gates the scan-side caller
-    /// stack (`GALE_SCAN_STACK`) and the scan-side LR loop routing, so a
-    /// non-greedy-`??`-only grammar (which shares the same `GALE_ATN_SIM` but
+    /// stack (`SCAN_STACK`) and the scan-side LR loop routing, so a
+    /// non-greedy-`??`-only grammar (which shares the same `ATN_SIM` but
     /// needs no scan-side LR routing) does not carry a dead scan stack.
     needs_scan_atn_seen: bool,
     /// The ATN call-site → return-state correspondence (`Atn.call_site_returns`,
@@ -140,14 +140,14 @@ impl GenContext {
             parser_rules: *parser_rules,
             lit_tokens: *lit_tokens,
             rule_index,
-            first_cache: TreeMap::<String, List<String>>::new(),
-            single_token_cache: TreeMap::<String, bool>::new(),
-            nullable_cache: TreeMap::<String, bool>::new(),
-            scannable_cache: TreeMap::<String, bool>::new(),
+            first_cache: TreeMap::new(),
+            single_token_cache: TreeMap::new(),
+            nullable_cache: TreeMap::new(),
+            scannable_cache: TreeMap::new(),
             single_alt_owner,
-            kind_set_registry: TreeMap::<String, KindSetEntry>::new(),
-            follow_mask_registry: TreeMap::<String, FollowMaskEntry>::new(),
-            tail_greedy_cache: TreeMap::<String, List<String>>::new(),
+            kind_set_registry: TreeMap::new(),
+            follow_mask_registry: TreeMap::new(),
+            tail_greedy_cache: TreeMap::new(),
             diagnostics: [],
             caller_follow_gate_seen: false,
             needs_atn_seen: false,
@@ -192,7 +192,7 @@ impl GenContext {
     }
 
     /// Whether the generated parser should emit the ATN simulator
-    /// infrastructure (blob + the shared `GALE_ATN_SIM` global,
+    /// infrastructure (blob + the shared `ATN_SIM` global,
     /// `Parser.atn_stack`, rule-entry stack maintenance). True iff lowering
     /// saw a non-greedy `??` or an ATN-class LR rule.
     pub fn needs_atn(&self) -> bool {
@@ -205,9 +205,9 @@ impl GenContext {
         self.needs_scan_atn_seen = true;
     }
 
-    /// Whether to emit the scan-side caller stack (`GALE_SCAN_STACK`) and
+    /// Whether to emit the scan-side caller stack (`SCAN_STACK`) and
     /// route the scan LR loop through the ATN. True iff an ATN-class LR rule
-    /// exists. (`GALE_ATN_SIM` itself is emitted whenever `needs_atn`.)
+    /// exists. (`ATN_SIM` itself is emitted whenever `needs_atn`.)
     pub fn needs_scan_atn(&self) -> bool {
         return self.needs_scan_atn_seen;
     }
@@ -252,7 +252,7 @@ impl GenContext {
         return self.lr_loop_entry_decisions[rule];
     }
 
-    /// The exact ATN return state to push onto `GALE_SCAN_STACK` before a scan
+    /// The exact ATN return state to push onto `SCAN_STACK` before a scan
     /// rule call (from `Atn.call_site_returns`), or -1 when the grammar has no
     /// scan-side ATN routing. Every scan rule call brackets with this push/pop
     /// — mirroring the parse side, where the rule-entry wrapper pushes every
@@ -1013,7 +1013,7 @@ impl GenContext {
     ///   - 0 tokens → `"true"` (the empty set never excludes anything in
     ///     practice; callers that build up first-sets use this).
     ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
-    ///   - ≥2 tokens → `_gale_kind_set_<id>(<expr>)` after interning.
+    ///   - ≥2 tokens → `_kind_set_<id>(<expr>)` after interning.
     ///
     /// Multi-element sets always go through the helper indirection so
     /// duplicate sets across the grammar share a single function body
@@ -1026,7 +1026,7 @@ impl GenContext {
             return `{*expr} == {tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        return `_gale_kind_set_{id}({*expr})`;
+        return `_kind_set_{id}({*expr})`;
     }
 
     /// Sugar for `kind_check_str` against `p.peek_kind()`.
@@ -1137,7 +1137,7 @@ impl GenContext {
     }
 
     /// Render the negation of a token-set membership check —
-    /// `!_gale_kind_set_<id>(<expr>)` for ≥2 tokens, else
+    /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
     pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
         if tokens.is_empty() {
@@ -1147,7 +1147,7 @@ impl GenContext {
             return `{*expr} != {tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
-        return `!_gale_kind_set_{id}({*expr})`;
+        return `!_kind_set_{id}({*expr})`;
     }
 }
 
@@ -1254,20 +1254,6 @@ pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
         }
     }
     return false;
-}
-
-pub fn is_simple_token_group(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        let elem = &alt.elements[0];
-        if let TokenRef(_) | Literal(_) = elem {
-            continue;
-        }
-        return false;
-    }
-    return true;
 }
 
 /// Canonicalise a K-prefix mask: sort each depth's token list so two

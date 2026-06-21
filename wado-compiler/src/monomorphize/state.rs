@@ -148,10 +148,11 @@ pub(super) struct Monomorphizer {
     /// in the substitution map when rewriting static method calls.
     pub current_impl_type_param_count: usize,
     /// Base struct name of the impl block being instantiated (e.g., `TreeMap` for
-    /// `impl<K,V> TreeMap<K,V>`). Used to restrict impl type arg propagation to
-    /// calls on the same struct — calls to other structs within the same impl block
-    /// must not receive these type args.
-    pub current_impl_struct_name: String,
+    /// `impl<K,V> TreeMap<K,V>`), or `None` when the current function is not an
+    /// impl method. Used to restrict impl type arg propagation to calls on the
+    /// same struct — calls to other structs within the same impl block must not
+    /// receive these type args.
+    pub current_impl_struct_name: Option<String>,
     /// Maps each type-parameter *name* of the function currently being
     /// instantiated to its key in the substitution map (impl-level params use
     /// their own index; method-level params are offset past the impl params).
@@ -178,7 +179,7 @@ impl Monomorphizer {
                 trait_env,
             },
             current_impl_type_param_count: 0,
-            current_impl_struct_name: String::new(),
+            current_impl_struct_name: None,
             current_param_substitution_key: IndexMap::default(),
         }
     }
@@ -274,21 +275,19 @@ impl Monomorphizer {
 
     /// Generate instantiated method name
     /// Format: `StructWithImplArgs::methodWithMethodArgs`
-    /// e.g., `Container::transform` with `[i32, i64]` and `impl_type_params_count=1` -> `"Container<i32>::transform<i64>"`
+    /// e.g., `Container::transform` with `[i32, i64]` -> `"Container<i32>::transform<i64>"`
     pub fn method_instantiation_name(
         &self,
         key: &InstantiationKey,
         type_table: &TypeTable,
-        impl_type_params_count: usize,
     ) -> String {
-        self.method_instantiation_name_inner(key, type_table, impl_type_params_count, &[])
+        self.method_instantiation_name_inner(key, type_table, &[])
     }
 
     pub fn method_instantiation_name_inner(
         &self,
         key: &InstantiationKey,
         type_table: &TypeTable,
-        impl_type_params_count: usize,
         impl_type_params: &[crate::tir::TirTypeParam],
     ) -> String {
         // Use method_info metadata instead of parsing key.name
@@ -296,9 +295,6 @@ impl Monomorphizer {
             // Fallback to regular function naming if no method_info
             return self.function_instantiation_name(key, type_table);
         };
-
-        // impl_type_args and method_type_args are now separate in InstantiationKey
-        let _ = impl_type_params_count; // no longer needed for split
 
         let impl_arg_names: Vec<String> = key
             .impl_type_args

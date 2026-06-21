@@ -16,13 +16,11 @@ use t from "../../grammars/Sets/CharSetLiteral.g4"
 use { normalize_tree } from "../../grammars/Sets/CharSetLiteral.g4";
 
 
-// triage: Lexer or grammar shape mismatch — Gale produces `(a)` while the oracle produces `(a A a B b)`. Likely a Gale-side parser bug (rule fails to repeat or EOF is consumed too early). Worth a TDD investigation as a self-contained ATN-class case.
-#[TODO]
 test "stage_b_oracle: Sets/CharSetLiteral" {
     let input = "A a B b";
     let expected = "(a A a B b)";
-    let root = t::parse_a(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_a(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

@@ -1730,6 +1730,30 @@ impl FunctionTranslator<'_, '_> {
     /// that any subsequent type expectations in the same block are vacuously satisfied,
     /// so `never`-typed sub-expressions can appear in any value position (binary
     /// operands, struct fields, array elements, function arguments, …).
+    /// Handle a `FunctionRef` that did not resolve to a generated function. A
+    /// `Type^Trait::method` name is an unsatisfied trait bound that escaped
+    /// earlier checks: record it and emit `Unreachable` so the build finishes
+    /// (the driver reports and bails). Any other name is an internal
+    /// inconsistency — `panic`.
+    fn unresolved_trait_call_or_trap(
+        &mut self,
+        name: &str,
+        span: crate::token::Span,
+        panic_msg: impl FnOnce() -> String,
+    ) -> WirInstr {
+        if crate::name::is_local_trait_method_name(name) {
+            self.ctx
+                .trait_bound_violations
+                .push(crate::wir::TraitBoundViolation {
+                    call_name: name.to_string(),
+                    span,
+                });
+            WirInstr::Unreachable
+        } else {
+            panic!("{}", panic_msg());
+        }
+    }
+
     pub(super) fn translate_expr(&mut self, expr_id: ExprId) -> WirInstr {
         let instr = self.translate_expr_inner(expr_id);
         if self.body.exprs[expr_id].type_id == TypeTable::NEVER && !instr.ends_with_terminator() {
@@ -2103,11 +2127,12 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    panic!(
-                        "[WIR] unresolved Call: name={:?} builtin={:?}",
-                        func.name.clone(),
-                        builtin
-                    );
+                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
+                        format!(
+                            "[WIR] unresolved Call: name={:?} builtin={:?}",
+                            func.name, builtin
+                        )
+                    })
                 }
             }
             ExprKind::MethodCall {
@@ -2140,19 +2165,13 @@ impl FunctionTranslator<'_, '_> {
                         func_id,
                         args: translated_args,
                     }
-                } else if let Some(mi) = func.method_info.clone() {
-                    panic!(
-                        "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
-                        func.name.clone(),
-                        func.module_source,
-                        mi
-                    );
                 } else {
-                    panic!(
-                        "[WIR] unresolved MethodCall: name={:?} module={}",
-                        func.name.clone(),
-                        func.module_source
-                    );
+                    self.unresolved_trait_call_or_trap(&func.name, expr.span, || {
+                        format!(
+                            "[WIR] unresolved MethodCall: name={:?} module={} method_info={:?}",
+                            func.name, func.module_source, func.method_info
+                        )
+                    })
                 }
             }
 

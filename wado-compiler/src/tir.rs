@@ -1848,6 +1848,11 @@ impl TypeTable {
                 // resolution once the underlying type is fully concrete.
                 let concrete = self.substitute_type_params(param_id, substitution);
                 if !self.contains_type_param(concrete) {
+                    // Associated types are inherited through references (mirrors
+                    // method-call auto-deref), so peel `&`/`&mut` before
+                    // projecting: a `D` inferred as `&mut MyDe` still projects
+                    // `D::Acc` to `MyDe`'s associated type.
+                    let concrete = self.peel_refs(concrete);
                     if let Some(resolved) = self.resolve_assoc_type(concrete, &assoc_name) {
                         return resolved;
                     }
@@ -2049,6 +2054,112 @@ impl TypeTable {
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
                 type_args.iter().any(|t| self.contains_type_param(*t))
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `id` (recursively) mentions a `TypeParam` / `TypePack` whose
+    /// `index` equals `index`. Used to tell whether a method type parameter is
+    /// inferable from an argument position (it appears in a value-parameter's
+    /// type) versus only from the return type.
+    pub fn contains_type_param_index(&self, id: TypeId, index: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {
+                *i == index
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_type_param_index(*inner, index),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params
+                    .iter()
+                    .any(|p| self.contains_type_param_index(*p, index))
+                    || self.contains_type_param_index(*return_type, index)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .any(|t| self.contains_type_param_index(*t, index)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
+                self.contains_type_param_index(*param_id, index)
+                    || assoc_type_bindings
+                        .iter()
+                        .any(|(_, t)| self.contains_type_param_index(*t, index))
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
+    /// `allowed` (by `TypeId`). A type with no type parameters trivially holds.
+    /// Used to decide whether an inference hole may be solved against an
+    /// expected type: only when that type's parameters are outer-scope generics
+    /// (not a callee's own, still-being-inferred method parameters).
+    pub fn type_params_all_in(&self, id: TypeId, allowed: &[TypeId]) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.type_params_all_in(*inner, allowed),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().all(|p| self.type_params_all_in(*p, allowed))
+                    && self.type_params_all_in(*return_type, allowed)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
+                .iter()
+                .all(|t| self.type_params_all_in(*t, allowed)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
+                self.type_params_all_in(*param_id, allowed)
+                    && assoc_type_bindings
+                        .iter()
+                        .all(|(_, t)| self.type_params_all_in(*t, allowed))
+            }
+            _ => true,
+        }
+    }
+
+    /// Whether `id` (recursively) contains an inference-hole `TypeParam` — one
+    /// whose `index >= base` (see `elaborator::infer_hole`).
+    pub fn contains_infer_hole(&self, id: TypeId, base: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                *index >= base
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.contains_infer_hole(*inner, base),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                params.iter().any(|p| self.contains_infer_hole(*p, base))
+                    || self.contains_infer_hole(*return_type, base)
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().any(|t| self.contains_infer_hole(*t, base))
             }
             _ => false,
         }
@@ -3940,10 +4051,23 @@ pub struct TirImpl {
     pub span: Span,
 }
 
+/// Which compiler-synthesizable trait an `impl Trait for Type;` request names.
+///
+/// The set is closed: the elaborator classifies the requested trait at the
+/// syntax boundary and rejects anything else with a diagnostic, so downstream
+/// synthesis never needs to re-parse a trait-name string. `From` carries its
+/// source type as a resolved [`TypeId`] rather than a mangled `From<…>` name.
+#[derive(Debug, Clone)]
+pub enum SynthTrait {
+    From { source: TypeId },
+    Serialize,
+    Deserialize,
+}
+
 /// `impl Trait for Type;` — request the compiler to synthesize the trait implementation.
 #[derive(Debug, Clone)]
 pub struct SynthesisRequest {
-    pub trait_name: String,
+    pub trait_ref: SynthTrait,
     pub target_type_name: String,
     pub target_type_id: TypeId,
     /// Type parameters: `(name, index, type_id)`

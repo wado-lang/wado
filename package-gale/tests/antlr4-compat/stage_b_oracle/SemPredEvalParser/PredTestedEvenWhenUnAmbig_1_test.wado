@@ -18,8 +18,8 @@ use { normalize_tree } from "../../grammars/SemPredEvalParser/PredTestedEvenWhen
 test "stage_b_oracle: SemPredEvalParser/PredTestedEvenWhenUnAmbig_1" {
     let input = "abc";
     let expected = "(primary abc)";
-    let root = t::parse_primary(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_primary(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

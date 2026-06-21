@@ -221,7 +221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
             }
-            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx),
+            Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
             Expr::Range(range) => self.resolve_range(range, ctx),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
             Expr::Resume(r) => self.resolve_resume(r, ctx),
@@ -487,6 +487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &case_data,
                             None,
                             expected_type,
+                            &[],
+                            &[],
                         )
                     };
 
@@ -675,8 +677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let real_type_param_count = func
             .type_params
             .iter()
-            .filter(|p| !p.is_effect)
-            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .count();
         if type_args.is_empty() && real_type_param_count != 0 {
             return None;
@@ -773,8 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let real_type_param_count = func_ast
             .type_params
             .iter()
-            .filter(|p| !p.is_effect)
-            .filter(|p| !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .count();
 
         // (a) Turbofish on the identifier: `name::<T, ...>`.
@@ -1376,9 +1376,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // First, try Index trait (returns reference)
             // Try the direct name first, then fall back to base type name for newtypes
-            let index_trait_info = self
-                .find_index_trait_impl(&struct_name, base_type_id, index_type)
-                .or_else(|| self.find_index_trait_impl(&lookup_name, lookup_type_id, index_type));
+            let index_trait_info = self.index_lookup_or_newtype_base(
+                &struct_name,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_trait_impl(n, t, index_type),
+            );
             if let Some(trait_info) = index_trait_info {
                 // Generate: *expr.index(index_expr)
                 let mangled_method_name =
@@ -1423,11 +1427,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Fallback: try IndexValue trait (returns value by copy)
-            let index_value_info = self
-                .find_index_value_trait_impl(&struct_name, base_type_id, index_type)
-                .or_else(|| {
-                    self.find_index_value_trait_impl(&lookup_name, lookup_type_id, index_type)
-                });
+            let index_value_info = self.index_lookup_or_newtype_base(
+                &struct_name,
+                base_type_id,
+                &lookup_name,
+                lookup_type_id,
+                |s, n, t| s.find_index_value_trait_impl(n, t, index_type),
+            );
             if let Some(trait_info) = index_value_info {
                 // Generate: expr.index_value(index_expr)
                 let mangled_method_name = MethodName::format_local(
@@ -1876,16 +1882,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        let scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
+        let mut scrutinee_type = self.resolve_expr(&match_expr.expr, ctx, None);
 
         // Resolve each arm for its facts (binding + guard + body). Surface only
         // the arm bodies' `(type_id, span)` — reify rebuilds the match node, so
         // no `TirMatchArm` is retained.
-        let arm_bodies: Vec<(TypeId, Span)> = match_expr
+        let mut arm_bodies: Vec<(TypeId, Span)> = match_expr
             .arms
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
+
+        // A hole from a generic scrutinee (`match gen() { … }`) flows through
+        // the bindings into the arm bodies (same `TypeId`). Solve it against the
+        // expected type or a concrete sibling arm and concretise before the
+        // result-type selection below.
+        if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
+            || self.type_has_infer_hole(scrutinee_type)
+        {
+            let target = expected_type
+                .filter(|&t| t != TypeTable::UNKNOWN && !self.type_has_infer_hole(t))
+                .or_else(|| {
+                    arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
+                        t != TypeTable::NEVER
+                            && !self.type_has_infer_hole(t)
+                            && !self.tysys.type_table.borrow().contains_unknown(t)
+                    })
+                });
+            if let Some(target) = target {
+                for &(arm_type, _) in &arm_bodies {
+                    self.solve_infer_holes_against(arm_type, target);
+                }
+            }
+            for (t, _) in &mut arm_bodies {
+                *t = self.apply_infer_holes(*t);
+            }
+            scrutinee_type = self.apply_infer_holes(scrutinee_type);
+        }
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
@@ -3559,12 +3592,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// For `Option<T>` in a function returning `Option<U>`:
     ///   match expr { Some(v) => v, None => return null }
+    /// Reconstruct the operand's expected type for `?` from the `?`-stripped
+    /// expected payload `u` and the function's return type: `Option<u>` or
+    /// `Result<u, F>`. `None` when there is no payload or the return type is not
+    /// an Option/Result (a `?`-misuse `resolve_question_mark` reports).
+    fn question_mark_operand_expected(
+        &mut self,
+        expected_payload: Option<TypeId>,
+        return_type: TypeId,
+    ) -> Option<TypeId> {
+        let u = expected_payload?;
+        if u == TypeTable::UNKNOWN || u == TypeTable::ERROR {
+            return None;
+        }
+        // `None` error slot => Option wrapper; `Some(err)` => Result<_, err>.
+        let result_err = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.as_option(return_type).is_some() {
+                None
+            } else if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = tt.get(return_type)
+                && name == "Result"
+                && type_args.len() == 2
+            {
+                Some(type_args[1])
+            } else {
+                return None;
+            }
+        };
+        let mut tt = self.tysys.type_table.borrow_mut();
+        Some(match result_err {
+            None => tt.make_option(u),
+            Some(err) => tt.make_result(u, err),
+        })
+    }
+
     pub(super) fn resolve_question_mark(
         &mut self,
         qm: &ast::TryOpExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        let inner_type = self.resolve_expr(&qm.expr, ctx, None);
+        // Propagate the `?`-stripped expected type backward to the operand, so a
+        // generic call whose `T` is only in the Ok/Some payload infers from an
+        // LHS annotation (`let v: U = call()?`) without a turbofish.
+        let operand_expected = self.question_mark_operand_expected(expected_type, ctx.return_type);
+        let inner_type = self.resolve_expr(&qm.expr, ctx, operand_expected);
         let tt = self.tysys.type_table.borrow();
         let type_name = tt.type_name(inner_type);
 

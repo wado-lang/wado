@@ -38,6 +38,10 @@ pub(super) struct MethodCallInput<'a> {
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
+    /// Per-position `_` mask for `type_args` (see `call::turbofish_holes`).
+    /// Empty when the caller supplied no `_` placeholders (synthetic callers
+    /// and fully-explicit turbofish), which leaves inference untriggered.
+    pub type_arg_holes: Vec<bool>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
     pub span: Span,
@@ -67,12 +71,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.receiver.span(),
         );
 
-        // Resolve explicit type arguments (method-level type args)
+        // A `_` resolves to UNKNOWN here; its position is recorded in the hole
+        // mask below so the dispatch fills it from inference.
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+        // Build the mask only for the `_` case; an empty vec (no allocation)
+        // marks "no holes" for the fully-explicit common path.
+        let type_arg_holes = if super::call::turbofish_has_hole(&method_call.type_args) {
+            super::call::turbofish_holes(&method_call.type_args)
+        } else {
+            Vec::new()
+        };
 
         self.resolve_method_call_with(
             MethodCallInput {
@@ -81,6 +93,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
                 type_args,
+                type_arg_holes,
                 args: &method_call.args,
                 expected_type,
                 span: method_call.span,
@@ -110,6 +123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_id,
             call_id,
             type_args,
+            type_arg_holes,
             args: args_ast,
             expected_type,
             span,
@@ -117,8 +131,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
-        // Get the base (non-ref) type for method lookup and struct name extraction
-        let base_type_id = self.tysys.get_base_type(receiver.type_id);
+        // Base (non-ref) type for method lookup. `mut`: deferred-inference may
+        // concretise the receiver below.
+        let mut base_type_id = self.tysys.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
@@ -544,7 +559,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Check each argument against expected parameter type
-        for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
+        for (i, (arg, &expected_type)) in
+            args.iter_mut().zip(expected_param_types.iter()).enumerate()
+        {
+            // Pin a deferred hole that rode a prior binding into this argument
+            // (`let v = gen()?; out.push(v)`) against the parameter type.
+            if self.type_has_infer_hole(arg.type_id) && self.hole_pinnable_against(expected_type) {
+                self.solve_infer_holes_against(arg.type_id, expected_type);
+                arg.type_id = self.apply_infer_holes(arg.type_id);
+            }
             let arg_span = args_ast.get(i).map_or(span, super::ast::Expr::span);
             self.typecheck(arg.type_id, expected_type, arg_span);
         }
@@ -631,11 +654,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Then add method-level type args with the correct offset
-        // If no explicit type args, try to infer from arguments
-        let method_type_args = if type_args.is_empty() {
-            // Try to infer method type args from actual arguments and expected return type
-            self.infer_method_type_args(MethodInferenceInput {
+        // Inference runs when the turbofish is omitted entirely or carries an
+        // explicit `_` placeholder; in the latter case the inferred holes are
+        // merged into the explicit args, which always win.
+        let has_hole = type_arg_holes.iter().any(|&h| h);
+        let (method_type_args, reuse_params) = if type_args.is_empty() || has_hole {
+            let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver.type_id,
                 method_name,
                 impl_offset,
@@ -644,14 +668,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 raw_args: args_ast,
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
+                trait_name: trait_name.as_deref(),
                 span,
-            })
+            });
+            if type_args.is_empty() {
+                (inferred.type_args, inferred.bound_check_params)
+            } else {
+                let mut merged = type_args;
+                super::call::merge_turbofish_type_args(
+                    &mut merged,
+                    &type_arg_holes,
+                    &inferred.type_args,
+                );
+                (merged, inferred.bound_check_params)
+            }
         } else {
-            type_args
+            (type_args, None)
         };
 
         if !method_type_args.is_empty() {
             subst_ctx = subst_ctx.with_method_args(&method_type_args, impl_offset);
+            // Enforce the method's type-arg bounds (shared rule); a violating
+            // concrete arg would otherwise trap WIR build. Hole args are skipped
+            // and re-checked in `finalize_infer_holes`. Reuse the params
+            // `infer_method_type_args` already looked up; the explicit-turbofish
+            // path (no inference) falls back to a fresh lookup.
+            match reuse_params {
+                Some(params) => self.enforce_type_arg_bounds(&params, &method_type_args, span),
+                None => self.check_method_type_arg_bounds(
+                    &struct_name,
+                    &struct_module,
+                    method_name,
+                    trait_name.as_deref(),
+                    &method_type_args,
+                    span,
+                ),
+            }
         }
 
         // Apply unified substitution
@@ -659,6 +711,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type =
                 subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
+
+        // Deferred-inference solve point: a hole that flowed in from an
+        // uninferred generic receiver (`p.get()` in `p.get().unwrap()`) is
+        // solved against this call's expected type and concretised *before* the
+        // mangling/recording below embeds the receiver type in a name a later
+        // TypeId sweep could not fix.
+        if let Some(expected) = expected_type
+            && (self.type_has_infer_hole(return_type) || self.type_has_infer_hole(receiver.type_id))
+        {
+            self.solve_infer_holes_against(return_type, expected);
+            receiver.type_id = self.apply_infer_holes(receiver.type_id);
+            return_type = self.apply_infer_holes(return_type);
+            base_type_id = self.tysys.get_base_type(receiver.type_id);
+        }
+        // A hole may still ride the receiver (a deep chain's intermediate call,
+        // `gen().keep().unwrap()`): the recorded name embeds `Type<?hole>`, but
+        // the monomorphizer rebuilds names from the receiver type, which the
+        // module-end sweep concretises once the hole is solved further out.
 
         // Re-coerce literal-number args and typecheck each arg against the substituted
         // parameter type. This catches inference conflicts such as
@@ -1203,6 +1273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .enumerate()
                     .find(|(_, c)| c.name == static_call.method)
+                    .map(|(i, c)| (i, c.clone()))
                 {
                     // Each variant case has exactly one payload.
                     let payload_is_unit = matches!(
@@ -1220,22 +1291,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
-                    // Check payload type against the variant case's expected type
-                    if !args.is_empty()
-                        && let Some(&expected_type) = param_types.first()
-                    {
-                        let span = static_call
-                            .args
-                            .first()
-                            .map_or(static_call.span, super::ast::Expr::span);
-                        self.typecheck(args[0].type_id, expected_type, span);
+                    // Refine `_` placeholders in the turbofish (`Result::<_,
+                    // MyErr>::Ok(7)`): infer the hole slots from the payload
+                    // while the explicit args stay pinned. Without holes the
+                    // explicitly-resolved `target_type_id` is already complete.
+                    let has_target_hole = matches!(
+                        &static_call.target_type,
+                        ast::Type::Generic(g) if super::call::turbofish_has_hole(&g.args)
+                    );
+                    let result_type = if has_target_hole {
+                        let target_holes = match &static_call.target_type {
+                            ast::Type::Generic(g) => super::call::turbofish_holes(&g.args),
+                            _ => Vec::new(),
+                        };
+                        let explicit_args = match self.tysys.type_table.borrow().get(target_type_id)
+                        {
+                            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                            _ => Vec::new(),
+                        };
+                        self.infer_variant_type_args(
+                            &name,
+                            &variant_info,
+                            &case_data,
+                            args.first(),
+                            None,
+                            &explicit_args,
+                            &target_holes,
+                        )
+                    } else {
+                        target_type_id
+                    };
+
+                    // Check payload type against the variant case's payload
+                    // type, substituted with the (possibly refined) type args.
+                    if !args.is_empty() {
+                        let result_args = match self.tysys.type_table.borrow().get(result_type) {
+                            ResolvedType::GenericInstance { type_args, .. } => {
+                                Some(type_args.clone())
+                            }
+                            _ => None,
+                        };
+                        let expected_payload = match result_args {
+                            Some(args_vec) => {
+                                Some(self.substitute_type_params(case_data.payload, &args_vec))
+                            }
+                            None => param_types.first().copied(),
+                        };
+                        if let Some(expected_type) = expected_payload {
+                            let span = static_call
+                                .args
+                                .first()
+                                .map_or(static_call.span, super::ast::Expr::span);
+                            self.typecheck(args[0].type_id, expected_type, span);
+                        }
                     }
 
                     // Stage 7-B: reify rebuilds the `VariantConstruct` from
                     // the AST + variant info; the combined walk projects only
                     // the result type. The payload was already resolved (and
                     // typechecked) above for its fact-recording side effects.
-                    return target_type_id;
+                    return result_type;
                 }
                 // If no matching case, fall through to general method lookup
                 // (e.g., trait methods like `Result::<T, E>::from(e)`)
@@ -2362,37 +2477,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
+    /// Impl blocks on `struct_name`, current-module-first. `all_impl_index` is
+    /// already in global order, so the partition needs no per-call sort.
+    fn impl_blocks_for_type<'b>(&'b self, struct_name: &str) -> Vec<&'b ast::ImplBlock> {
+        let Some(keys) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
+            return Vec::new();
+        };
+        let mut current: Vec<&ast::ImplBlock> = Vec::new();
+        let mut others: Vec<&ast::ImplBlock> = Vec::new();
+        for key in keys {
+            let Some(Item::Impl(impl_block)) = self
+                .loaded_modules
+                .get(&key.0)
+                .and_then(|m| m.items.get(key.1))
+            else {
+                continue;
+            };
+            if key.0 == self.current_module_source {
+                current.push(impl_block);
+            } else {
+                others.push(impl_block);
+            }
+        }
+        current.extend(others);
+        current
+    }
+
     /// Look up whether each non-self parameter of an instance method is `mut`.
     /// Returns empty vec (conservative) for unknown methods.
     fn lookup_method_param_is_mut(&self, struct_name: &str, method_name: &str) -> Vec<bool> {
-        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
-            items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            if method.name == method_name {
-                                let is_muts: Vec<bool> = method
-                                    .params
-                                    .iter()
-                                    .filter(|p| p.self_kind == ast::SelfKind::None)
-                                    .map(|p| p.is_mut)
-                                    .collect();
-                                return Some(is_muts);
-                            }
-                        }
-                    }
+        for impl_block in self.impl_blocks_for_type(struct_name) {
+            for method in &impl_block.methods {
+                if method.name == method_name {
+                    return method
+                        .params
+                        .iter()
+                        .filter(|p| p.self_kind == ast::SelfKind::None)
+                        .map(|p| p.is_mut)
+                        .collect();
                 }
-                None
-            })
-        };
-
-        if let Some(result) = find_in_items(self.current_module_items) {
-            return result;
-        }
-        for module in self.loaded_modules.values() {
-            if let Some(result) = find_in_items(&module.items) {
-                return result;
             }
         }
         Vec::new()
@@ -2405,32 +2528,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<bool> {
-        let find_in_items = |items: &[Item]| -> Option<Vec<bool>> {
-            items.iter().find_map(|item| {
-                if let Item::Impl(impl_block) = item {
-                    let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            let has_self = method
-                                .params
-                                .iter()
-                                .any(|p| p.self_kind != ast::SelfKind::None);
-                            if method.name == method_name && !has_self {
-                                return Some(method.params.iter().map(|p| p.is_mut).collect());
-                            }
-                        }
-                    }
+        for impl_block in self.impl_blocks_for_type(struct_name) {
+            for method in &impl_block.methods {
+                let has_self = method
+                    .params
+                    .iter()
+                    .any(|p| p.self_kind != ast::SelfKind::None);
+                if method.name == method_name && !has_self {
+                    return method.params.iter().map(|p| p.is_mut).collect();
                 }
-                None
-            })
-        };
-
-        if let Some(result) = find_in_items(self.current_module_items) {
-            return result;
-        }
-        for module in self.loaded_modules.values() {
-            if let Some(result) = find_in_items(&module.items) {
-                return result;
             }
         }
         Vec::new()

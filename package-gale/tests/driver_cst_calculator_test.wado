@@ -1,0 +1,41 @@
+//! Stage 2 corpus migration: the real-world `calculator.g4` (grammars-v4,
+//! BSD) parses through the emitter. Exercises nested rules,
+//! `(PLUS | MINUS)` token groups, `*` repeats, multi-alt Direct dispatch, and
+//! prefix recursion (`signedAtom : PLUS signedAtom`) — all non-ATN.
+
+use calc from "./grammars/calculator.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_calculator",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = calc::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = calc::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "calculator: a relational equation nests every expression layer" {
+    assert_tree(
+        &"1 = 2",
+        &"(equation (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))))",
+    );
+}
+
+test "calculator: prefix sign, `*` precedence repeat, and a constant" {
+    assert_tree(
+        &"-3 + 4 * 5 = pi",
+        &"(equation (expression (multiplyingExpression (powExpression (signedAtom - (signedAtom (atom (scientific 3)))))) + (multiplyingExpression (powExpression (signedAtom (atom (scientific 4)))) * (powExpression (signedAtom (atom (scientific 5)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (constant pi)))))))",
+    );
+}
+
+test "calculator: a parenthesised call with comma args" {
+    assert_tree(
+        &"sin ( 1 , 2 ) > 3",
+        &"(equation (expression (multiplyingExpression (powExpression (signedAtom (func_ (funcname sin) ( (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) , (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))) )))))) (relop >) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))",
+    );
+}

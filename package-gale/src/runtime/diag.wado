@@ -1,0 +1,128 @@
+//! Diagnostics emitted by the error-resilient parser. A parse always returns a
+//! tree; `Diagnostic`s say where and how it was repaired. Inlined into every
+//! generated parser alongside the recovery runtime. Imports `Span` from
+//! `lex.wado`; that import is stripped at `#include_str` time.
+
+use { Span } from "./lex.wado";
+
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+    Hint,
+}
+
+impl Severity {
+    pub fn label(&self) -> String {
+        return match *self {
+            Error => "error",
+            Warning => "warning",
+            Info => "info",
+            Hint => "hint",
+        };
+    }
+}
+
+/// What went wrong, independent of the specific tokens. Tooling can switch on
+/// this without parsing the human message.
+pub enum DiagnosticCode {
+    UnexpectedToken,  // a token that fits nowhere in the current rule
+    MissingToken,  // a required terminal was absent (one was inserted)
+    ExtraToken,  // a spurious terminal was deleted
+    NoViableAlternative,  // alternative dispatch found no match
+    UnterminatedConstruct,  // EOF reached inside a rule (missing closer)
+    LexError,  // a char run matched no lexer rule (TK_ERROR)
+}
+
+impl DiagnosticCode {
+    pub fn name(&self) -> String {
+        return match *self {
+            UnexpectedToken => "unexpected-token",
+            MissingToken => "missing-token",
+            ExtraToken => "extra-token",
+            NoViableAlternative => "no-viable-alternative",
+            UnterminatedConstruct => "unterminated-construct",
+            LexError => "lex-error",
+        };
+    }
+}
+
+/// The repair the parser applied at this site, so a fixit/IDE can describe it.
+pub enum RecoveryAction {
+    Inserted,  // synthesised a missing terminal
+    Deleted,  // skipped one spurious terminal
+    SkippedTo,  // skipped a run up to a synchronizing token
+    FilledMissing,  // hit EOF; filled remaining required terminals
+    None,  // reported only, no edit
+}
+
+/// A secondary location attached to a diagnostic, e.g. "'(' opened here" for an
+/// unterminated group.
+pub struct RelatedInfo {
+    pub message: String,
+    pub span: Span,
+}
+
+/// A single parse diagnostic. `expected`/`found` carry token-kind ids (not
+/// names) so tooling reuses the grammar's own name tables; `message` is the
+/// pre-rendered human text. `line`/`col` are 1-based line and 0-based column
+/// (ANTLR4 `Token` convention) resolved from `span.start`.
+pub struct Diagnostic {
+    pub severity: Severity,
+    pub code: DiagnosticCode,
+    pub message: String,
+    pub span: Span,
+    pub line: i32 = 1,
+    pub col: i32 = 0,
+    pub expected: List<i32> = [],
+    pub found: i32 = -1,
+    pub rule_stack: List<String> = [],
+    pub recovery: RecoveryAction = RecoveryAction::None,
+    pub related: List<RelatedInfo> = [],
+}
+
+impl Diagnostic {
+    /// A bare error diagnostic with position resolved; callers fill the
+    /// optional fields (`expected`, `rule_stack`, `related`, ...) as needed.
+    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+        return Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span,
+            line,
+            col,
+        };
+    }
+
+    pub fn is_error(&self) -> bool {
+        return self.severity matches { Error };
+    }
+}
+
+impl Display for Diagnostic {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`{self.severity.label()}[{self.code.name()}] at {self.line}:{self.col}: {self.message}`);
+        for let r of &self.related {
+            f.write_str(&`\n  note: {r.message}`);
+        }
+    }
+}
+
+/// Resolve a char index to (line, column): 1-based line, 0-based column
+/// (ANTLR4 `Token` convention). A linear scan; the parser resolves at most a
+/// handful of positions per parse, so this stays off the hot path.
+pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
+    let mut line = 1;
+    let mut col = 0;
+    let cap = if pos < chars.len() { pos } else { chars.len() };
+    for let mut i = 0; i < cap; i += 1 {
+        if chars[i] == '\n' {
+            line += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    return [line, col];
+}

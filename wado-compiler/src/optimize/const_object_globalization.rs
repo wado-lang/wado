@@ -102,10 +102,10 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     let base = project
         .globals
         .iter()
-        .filter(|g| g.name.starts_with("__const_obj_"))
+        .filter(|g| g.name.starts_with(crate::name::CONST_OBJ_GLOBAL_PREFIX))
         .count();
     for (n, cand) in (base..).zip(candidates) {
-        let name = format!("__const_obj_{n}");
+        let name = format!("{}{n}", crate::name::CONST_OBJ_GLOBAL_PREFIX);
 
         let mut func = project.functions[cand.func_idx].borrow_mut();
         let body = func.body.as_mut().expect("candidate function has a body");
@@ -146,7 +146,8 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
 fn skip_function(f: &NirFunction) -> bool {
     f.is_cm_binding
         || f.is_dispatch_wrapper
-        || f.name.starts_with("__initialize")
+        || f.name == crate::name::MODULE_INIT_FUNCTION
+        || f.name == crate::name::MODULES_INIT_FUNCTION
         || f.value_copy_type().is_some()
 }
 

@@ -910,7 +910,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_param_names: Vec<String> = func
             .type_params
             .iter()
-            .filter(|p| !p.is_effect && !p.bounds.iter().any(|b| b.fn_signature.is_some()))
+            .filter(|p| p.is_real_type_param())
             .map(|p| p.name.clone())
             .collect();
 
@@ -1008,7 +1008,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .function_effects
                 .get(&func.id)
                 .cloned()
-                .unwrap_or_else(|| self.reify_effects(&func.effects)),
+                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -1258,10 +1258,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // eagerly to the bound's function type (already baked into the
             // recorded param/return types), so they must not consume a
             // positional type-param slot or the real method params shift index.
-            if p.is_effect
-                || p.bounds.iter().any(|b| b.fn_signature.is_some())
-                || type_param_names.iter().any(|n| n == &p.name)
-            {
+            if !p.is_real_type_param() || type_param_names.iter().any(|n| n == &p.name) {
                 continue;
             }
             if type_param_names.len() <= next_idx {
@@ -1438,7 +1435,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .function_effects
                 .get(&func.id)
                 .cloned()
-                .unwrap_or_else(|| self.reify_effects(&func.effects)),
+                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             stores: func.stores.clone(),
             body,
             span: func.span,
@@ -1478,38 +1475,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<(TirFunction, TirTest)> {
         use crate::tir::{FunctionKind, InlineHint, ReturnAbi, TypeTable};
 
-        let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
-        let is_todo = module_is_todo || test_decl.attributes.iter().any(|a| a.name == "TODO");
-        let timeout_ms = test_decl.attributes.iter().find_map(|a| {
-            if a.name == "timeout_ms" {
-                a.args
-                    .first()
-                    .and_then(|arg| arg.as_str().parse::<u64>().ok())
-            } else {
-                None
-            }
-        });
-
-        let prefix = match (is_todo, expect_trap, timeout_ms) {
-            (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
-            (true, _, None) => "__test_todo".to_string(),
-            (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
-            (_, true, None) => "__test_trap".to_string(),
-            (_, _, Some(ms)) => format!("__test_tm{ms}"),
-            (_, _, None) => "__test".to_string(),
-        };
-        let function_name = match &test_decl.name {
-            // Use the shared ASCII-only snake conversion: non-ASCII letters
-            // must collapse to `_` so the segment downgrades losslessly into
-            // a Component Model kebab-case export name. A Unicode-aware
-            // `is_alphanumeric` here would leak multibyte letters into the
-            // export name and crash Wasm validation (matches item.rs).
-            Some(name) => {
-                let snake_name = crate::name::test_name_to_snake(name);
-                format!("{prefix}_{test_index}_{snake_name}")
-            }
-            None => format!("{prefix}_{test_index}"),
-        };
+        let meta = test_decl.metadata(module_is_todo);
+        let ast::TestMetadata {
+            expect_trap,
+            is_todo,
+            timeout_ms,
+        } = meta;
+        let function_name =
+            crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
@@ -6368,12 +6341,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         callee_name: &str,
         ctx: &mut FunctionContext,
     ) {
-        let ast::Expr::Ident(ident) = callee else {
+        // Only an ident callee names a free function with defaults. A
+        // namespace-qualified callee (`g::make`) is still a free function —
+        // `callee_module` / `callee_name` already carry its resolved home and
+        // name — so do NOT bail on `::` here; `lookup_free_func_params` returns
+        // empty for anything that is not a free function in `callee_module`.
+        let ast::Expr::Ident(_) = callee else {
             return;
         };
-        if ident.name.contains("::") {
-            return;
-        }
         let func_params = self.lookup_free_func_params(callee_module, callee_name);
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
@@ -6935,7 +6910,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `is_mut` per-arg are still handled elsewhere (`coercions`); see
             // `arg_is_unannotated_closure` for why the forward is restricted.
             let call_param_types = self.ann_call_param_types(call.id);
-            let args: Vec<CallArg> = call
+            let mut args: Vec<CallArg> = call
                 .args
                 .iter()
                 .enumerate()
@@ -6951,6 +6926,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, false)
                 })
                 .collect();
+
+            // Pad omitted trailing args with the callee's declared defaults,
+            // matching annotate's `pad_args_with_defaults` (call.rs). Without
+            // this the type checker sees the padded arity but the TIR keeps
+            // only the explicit args, so WIR lowers a call with a missing
+            // trailing operand.
+            self.reify_pad_args_with_defaults(
+                &call.callee,
+                &mut args,
+                &callee_module,
+                &callee_name,
+                ctx,
+            );
 
             return TirExpr::new(
                 TirExprKind::Call {
@@ -7691,16 +7679,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 _ => None,
             })
         {
-            // 7-A: the global's declared type was resolved by `annotate_decls`
-            // and lives on `current_module_globals`; read it back (same source
-            // as `reify_global`), re-resolving only if unrecorded.
-            let ty = self
-                .sem
-                .decls
-                .current_module_globals
-                .get(&ident.name)
-                .map(|(t, _)| *t)
-                .unwrap_or_else(|| self.resolve_type(&global_decl.ty));
+            // The fact is genuinely absent here: branch 2 above already
+            // returned for any global present in `current_module_globals`, and
+            // this branch only fires for a snapshot-rehydrated callee module,
+            // which carries no `current_module_globals`. So resolve the declared
+            // type from the AST — the one documented reify type re-resolution
+            // (WEP 2026-05-26 §"Stage 7"). Everywhere else reify reads a fact.
+            let ty = self.resolve_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),

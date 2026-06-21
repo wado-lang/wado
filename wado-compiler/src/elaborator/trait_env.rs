@@ -239,17 +239,14 @@ pub(crate) type TraitImplModuleIndex = IndexMap<(String, String), Vec<ModuleSour
 pub struct TraitEnv {
     /// Type name → impl blocks that implement traits for that type.
     pub(super) impl_index: TraitImplIndex,
-    /// Type name → **inherent** impl blocks (`impl Type { … }`, no trait) for
-    /// that type. The inherent counterpart of [`Self::impl_index`]. Lets
-    /// instance-method lookup fetch only the candidate impls for a receiver
-    /// type instead of scanning every item in every loaded module — the
-    /// dominant cost for module-less receivers (primitives, `Array<T>`,
-    /// `unit`) whose inherent methods previously triggered a full
-    /// `O(modules × items)` sweep. Keyed by the same bare type name as
-    /// `impl_index` (via `get_type_name_static`), so two same-named types in
-    /// different modules share a bucket and are disambiguated by the
-    /// per-entry `ModuleSource` at the call site.
-    pub(super) inherent_impl_index: TraitImplIndex,
+    /// Type name → **every** impl block (inherent and trait) on that type, in
+    /// global build order (matching `impl_headers`'s insertion order), so
+    /// candidate scans iterate directly with no per-call sort. Keyed like
+    /// `impl_index` (bare name via `get_type_name_static`); same-named types in
+    /// different modules share a bucket, disambiguated by the per-entry
+    /// `ModuleSource`. The inherent subset is the `trait_name.is_none()` filter
+    /// ([`Self::inherent_impl_keys`]).
+    pub(super) all_impl_index: TraitImplIndex,
     /// Trait name → trait declaration location.
     pub(super) decl_index: TraitDeclIndex,
     /// Effect name → effect declaration location.
@@ -423,7 +420,7 @@ impl TraitEnv {
             );
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
-        let mut inherent_impl_index: TraitImplIndex = IndexMap::default();
+        let mut all_impl_index: TraitImplIndex = IndexMap::default();
         let mut decl_index: TraitDeclIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexMap::default();
@@ -665,6 +662,12 @@ impl TraitEnv {
                         associated_types: impl_block.associated_types.clone(),
                     },
                 );
+                // Joins `all_impl_index` before the trait/inherent split, so its
+                // order matches `impl_headers`'s global insertion order.
+                all_impl_index
+                    .entry(type_name.clone())
+                    .or_default()
+                    .push((module_source.clone(), item_idx));
                 if let Some(trait_type) = &impl_block.trait_type {
                     let trait_name = get_type_name_static(trait_type);
                     let is_blanket = impl_block
@@ -725,14 +728,8 @@ impl TraitEnv {
                         }
                     }
                 } else {
-                    // Non-trait (inherent) impl block: index the block by its
-                    // receiver type name so instance-method lookup can fetch
-                    // just these candidates instead of scanning all modules.
-                    inherent_impl_index
-                        .entry(type_name.clone())
-                        .or_default()
-                        .push((module_source.clone(), item_idx));
-                    // Also index static methods.
+                    // Inherent impl: already in `all_impl_index`; here only its
+                    // static methods need the dedicated index.
                     let recv_key = canonical_key(module_source, &type_name);
                     for (method_idx, method) in impl_block.methods.iter().enumerate() {
                         let has_self = method
@@ -760,7 +757,7 @@ impl TraitEnv {
         (
             Arc::new(Self {
                 impl_index,
-                inherent_impl_index,
+                all_impl_index,
                 decl_index,
                 effect_decl_index,
                 resource_decl_index,
@@ -803,6 +800,25 @@ impl TraitEnv {
         self.module_import_scopes
             .get(module)
             .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Keys of the **inherent** impls on `type_name`, in global build order —
+    /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
+    /// instance-method lookup, which must not treat trait impls as inherent.
+    pub(super) fn inherent_impl_keys(&self, type_name: &str) -> Vec<(ModuleSource, usize)> {
+        self.all_impl_index
+            .get(type_name)
+            .map(|keys| {
+                keys.iter()
+                    .filter(|key| {
+                        self.impl_headers
+                            .get(*key)
+                            .is_some_and(|h| h.trait_name.is_none())
+                    })
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -1027,6 +1043,7 @@ fn classify_position(
         Type::Function(_)
         | Type::NamespacedGeneric(_)
         | Type::TypePackSpread(..)
+        | Type::Infer(_)
         | Type::Error(_) => PositionKind::ForeignType,
     }
 }

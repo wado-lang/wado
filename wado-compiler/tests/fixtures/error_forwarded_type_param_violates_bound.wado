@@ -1,0 +1,29 @@
+// A forwarded type param that violates a bound must produce a clean trait-bound
+// error, not trap WIR build. `outer<U>` forwards `U` to `needs::<U>()`
+// (requires `U: Producer`) without declaring the bound; `outer::<String>()`
+// leaves `String^Producer::make` unresolved.
+
+use { println, Stdout } from "core:cli";
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 1; }
+}
+
+fn needs<T: Producer>() -> T {
+    return T::make();
+}
+
+fn outer<U>() -> U {
+    return needs::<U>();
+}
+
+export fn run() with Stdout {
+    let x: String = outer::<String>();
+    println(x);
+}
+
+__DATA__
+{"compile_error": "does not implement trait `Producer`"}

@@ -305,18 +305,29 @@ alone_ — literal kinds, the syntactic shape of a node (`Index` vs
 mangling-sensitive. Anything that depends on resolution is a recorded
 decision, not a re-computation.
 
-Implementation note (the Stage 7 gap): the _current_ reify violates
-this rule in two places — it re-runs `resolve_type` /
-`resolve_type_with_self` for type annotations, `Self`, and impl type
-args, and it re-computes mangled method / struct names. Both are
-decisions (they depend on the impl's positional type-param indexing and
-on name mangling), and both have drifted from `annotate` and been fixed
-one bug at a time (`TreeMap<String, V>` self-type indexing, the
-`&T`-blanket `&^Inspect` name). Stage 7 closes the gap structurally:
-`annotate` records the resolved types and the impl identity / mangled
-name, and reify reads them. Once reify re-derives nothing
-decision-bearing it cannot drift — the parity-bug class disappears by
-construction.
+Implementation note (the Stage 7 gap — closed): the gap reify once had —
+re-running `resolve_type` / `resolve_type_with_self` for type
+annotations, `Self`, and impl type args, and re-computing mangled
+method / struct names — drifted from `annotate` and was fixed one bug at
+a time (`TreeMap<String, V>` self-type indexing, the `&T`-blanket
+`&^Inspect` name). Stage 7 closed it structurally: `annotate` records the
+resolved types and the impl identity / mangled name (`ann_fn_param_types`,
+`ann_fn_return_type`, `ann_decl_type_params`, `ImplFacts::self_type` /
+`struct_name`, `ann_method_names`, `GenericInstantiation::mangled_name`),
+and reify reads them via `.expect(...)` — a missing fact is a loud panic,
+not a silent recompute. Two boundary invariants keep the gap closed by
+construction:
+
+- Fail-loud, not fail-safe. Reify does not fall back to recomputation when
+  a fact is absent; every decision-bearing read is an `.expect`. The sole
+  surviving `resolve_type` call is the global read for a snapshot-rehydrated
+  callee module, whose `ModuleSemantics` legitimately carries no
+  `current_module_globals` — a documented exception, not a fallback.
+- Single source for the projection rule. The "dense, real type params"
+  predicate (`!effect && !fn-bound`) that fixes positional monomorph slots
+  lives once, as `ast::GenericParam::is_real_type_param`; the annotate walk
+  and reify both call it instead of re-spelling the filter (it was inlined
+  at ~15 sites, the original drift vector for index-shift bugs).
 
 ### DCE / Liveness
 
@@ -447,8 +458,9 @@ analysis layer alongside `liveness`, reading the same facts
 (`function_effects`, `effect_ops`, `method_dispatch`, …). This is the
 same TIR→AST+facts move Stage 7 made for control-flow / missing-return,
 and it lets the LSP surface effect and stores diagnostics too (it builds
-no TIR). Until that move lands, reify passes `None` as its live set
-(gating off); `liveness` is still computed and feeds the
+no TIR). That move has landed (the effect / stores / purity checks read
+`Semantics`, not the emitted TIR), so reify now passes `Some(live_items)`
+and gates dead free-function emission; `liveness` also feeds the
 `DeadFunction` / `DeadGlobal` diagnostics. The policy is owned by
 [`wep-2026-05-16-unused-diagnostics.md`](./wep-2026-05-16-unused-diagnostics.md)
 (Phase 3b).
@@ -463,25 +475,26 @@ The change touches every file under `elaborator/` and lands incrementally,
 with the suite (E2E, WIR golden, LSP query) green at every step, in
 dependency order. Stages are guidelines, not PR boundaries.
 
-Phase 1 (Stages 1–5, 7a, 7-A, 7-B) is DONE: `TypeSystem` / `ModuleSemantics` /
+Phase 1 (Stages 1–6, 7a, 7-A, 7-B) is DONE: `TypeSystem` / `ModuleSemantics` /
 per-`AstId` `TypeAnnotations` extracted from the God Object; `reify` split out
 as the sole TIR producer reading recorded facts; the combined `annotate` walk
 builds no TIR (every `resolve_*` returns a `TypeId`), so LSP runs `annotate`
 alone. The premise the WEP existed to fix — LSP building and discarding TIR —
 is resolved. Detail in the Status section below and in git.
 
-Remaining in Phase 1:
+Stage 6 — the piece that landed last — closes Phase 1:
 
-**Stage 6 — Liveness and DCE.** `liveness::compute(&Semantics)` and the
+Stage 6 — Liveness and DCE. `liveness::compute(&Semantics)` and the
 `Liveness` field on `Semantics` have landed (computed in WEP phase order; the
-`DeadFunction` / `DeadGlobal` diagnostics consume `dead_items`). The reify
-gate on `live_items` is wired but **disabled** (`None` live set) pending two
-prerequisites: (1) every semantic diagnostic that can fire on dead code is
-produced from `Semantics` rather than the emitted TIR (the "diagnostics from
-`Semantics`" move — see the Prerequisite section above and
-`wep-2026-05-16-unused-diagnostics.md` Phase 3b), and (2) cross-module graph
-completeness. Until both land, reify passes `None` (gating off) while
-`liveness` still feeds the dead-code diagnostics. Independent of Phase 2.
+`DeadFunction` / `DeadGlobal` diagnostics consume `dead_items`). The reify gate
+is now enabled: `build_tir_from_state` passes `Some(&liveness.live_items)` and
+`reify_module` skips dead user free functions (globals stay ungated — an
+initializer can trap or have effects; `optimize/dce.rs` removes genuinely pure
+dead ones). Both prerequisites landed: (1) the semantic diagnostics that can
+fire on dead code (effect / stores / purity) are produced from `Semantics`
+rather than the emitted TIR, so dropping a dead function suppresses no
+diagnostic; (2) the cross-module graph resolves the dispatch facts that leave
+no `references` edge. Independent of Phase 2.
 
 Each stage keeps `mise run test`, the WIR golden fixtures, and the LSP query
 tests green. Performance is not tracked during migration; see Trade-offs.
@@ -508,8 +521,10 @@ null/unknown reader had to be ported before the block-result-type reader.
       `default_method_semantics`).
 - [x] **Stage 7a** — routing removed; the combined walk survives only as the
       `annotate` fact-recorder.
-- [~] **Stage 6** — Liveness / DCE: landed but the reify gate is disabled (see
-  the Migration Plan "Remaining in Phase 1" above for the two prerequisites).
+- [x] **Stage 6** — Liveness / DCE: landed and the reify gate is enabled
+      (`reify_module` skips dead user free functions; globals stay ungated). Both
+      prerequisites — diagnostics from `Semantics`, cross-module graph
+      completeness — are in place.
 - [x] **Stage 7-A — reify is mechanical.** Every decision-bearing read goes
       through a recorded fact (signatures, effect/resource ops, decl type-param
       defaults, struct field types, method-call/free-call type args, const and

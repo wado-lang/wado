@@ -23,12 +23,6 @@ TypeScript developers expect `[...]` syntax for tuples.
 
 ### JSON Interoperability
 
-Wado supports importing JSON modules:
-
-```wado
-use config from "./config.json" with { type: "json" };
-```
-
 JSON arrays use `[...]` syntax and are inherently heterogeneous:
 
 ```json

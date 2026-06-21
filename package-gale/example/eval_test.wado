@@ -1,0 +1,57 @@
+//! Tests for the calculator. Each case parses with the Gale-generated parser
+//! (built from `Arith.g4` by Kiln at compile time) and folds the resulting
+//! tree to an integer via `eval`.
+
+use { eval } from "./eval.wado";
+
+fn assert_eval(input: &String, expected: i64) {
+    match eval(input) {
+        Ok(v) => {
+            assert v == expected, `{*input} = {v}, expected {expected}`;
+        },
+        Err(m) => {
+            assert false, `{*input}: unexpected error: {m}`;
+        },
+    }
+}
+
+test "single integer" {
+    assert_eval(&"42", 42);
+}
+
+test "addition folds left to right" {
+    assert_eval(&"1 + 2 + 3", 6);
+}
+
+test "multiplication binds tighter than addition" {
+    assert_eval(&"1 + 2 * 3", 7);
+}
+
+test "subtraction is left-associative" {
+    assert_eval(&"10 - 3 - 2", 5);
+}
+
+test "same-precedence operators associate left" {
+    assert_eval(&"6 / 2 * 3", 9);
+}
+
+test "parentheses override precedence" {
+    assert_eval(&"(1 + 2) * 3", 9);
+}
+
+test "integer division truncates" {
+    assert_eval(&"20 / 3", 6);
+}
+
+test "nested groups and mixed operators" {
+    assert_eval(&"2 * (3 + 4 * (5 - 1))", 38);
+}
+
+test "a syntax error is reported, not trapped" {
+    assert eval(&"1 +") matches { Err(_) };
+}
+
+test "division by zero is reported, not trapped" {
+    assert eval(&"1 / 0") matches { Err(_) };
+    assert eval(&"6 / (3 - 3)") matches { Err(_) };
+}

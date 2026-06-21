@@ -18,7 +18,7 @@ struct core:prelude/types.wado//Box<i64> {  // TypeId(3)
     mut value: i64,
 }
 
-struct core:prelude/types.wado//Box<Option<i32>> {  // TypeId(4)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>> {  // TypeId(4)
     mut value: ref "core:prelude/types.wado//Option<i32>",
 }
 
@@ -348,14 +348,14 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_struct"() with Stdo
 }
 
 fn "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_variant"() with Stdout {
-    let c: ref "core:prelude/types.wado//Box<Option<i32>>";
+    let c: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>";
     let __sroa_b_value: ref "core:prelude/types.wado//Option<i32>";
     let __sroa_a_value: ref "core:prelude/types.wado//Option<i32>";
     __sroa_a_value = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
     __sroa_b_value = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     "core:cli/println"("wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(__sroa_a_value));
     "core:cli/println"("wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(__sroa_b_value));
-    c = struct.new "core:prelude/types.wado//Box<Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
+    c = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     "core:cli/println"("wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(c.value));
     c.value = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     "core:cli/println"("wado-compiler/tests/fixtures/ref_1.wado/maybe_read"(c.value));

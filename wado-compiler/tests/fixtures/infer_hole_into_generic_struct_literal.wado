@@ -1,0 +1,39 @@
+// A deferred inference hole (from a return-only method type param) can flow
+// into a generic struct literal field with no expected type, so the struct's
+// type arg — and the mangled struct name frozen onto the literal — is the hole
+// (`Wrapper<?hole>`). The hole is solved only later at the `return` sink. The
+// end-of-module hole sweep must rebuild that frozen mangled name from the
+// resolved type, or reify emits `Wrapper<?hole>` and codegen fails.
+
+struct Wrapper<T> {
+    value: T,
+}
+
+trait Access {
+    fn payload<T: Default>(&mut self) -> T;
+}
+
+struct VA {}
+impl Access for VA {
+    fn payload<T: Default>(&mut self) -> T {
+        return T::default();
+    }
+}
+
+fn build(va: &mut VA) -> Wrapper<i32> {
+    let v = va.payload();
+    // No expected type here: the struct's `T` is inferred from `v`, which is a
+    // deferred hole, so the literal's mangled name is frozen as `Wrapper<?hole>`.
+    let w = Wrapper { value: v };
+    // The hole is pinned to `i32` only here, by the declared return type.
+    return w;
+}
+
+test "deferred hole flows into a generic struct literal, solved at the return" {
+    let mut va = VA {};
+    let w = build(&mut va);
+    assert w.value == 0;
+}
+
+__DATA__
+{"test": {}}

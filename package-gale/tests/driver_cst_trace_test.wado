@@ -1,0 +1,21 @@
+// E2E safety net for the `trace` generator option on the emitter:
+// generates a trace-instrumented parser and actually parses input,
+// forcing the compiler to type-check and run the full trace output (rule-entry
+// enter/ok/fail, scan/pick lines). The trace goes to stderr; we only assert the
+// parse result so a regression in the emitted code fails the build.
+use g from "./grammars/ll_multi_alt_overlap.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false, trace: true },
+            output_dir: "tests/generated/cst_trace",
+        },
+    };
+
+test "traced parser compiles and parses a shared-prefix tournament" {
+    let ok = g::parse(&"X X Y");
+    assert ok.ok(), "expected a clean parse";
+
+    let bad = g::parse(&"Y");
+    assert !bad.ok(), "expected a diagnostic";
+}

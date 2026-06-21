@@ -1,0 +1,285 @@
+//! Unit tests for the CST (`tree.wado`), the `TreeBuilder`, the
+//! token-stream recovery flags (`lex.wado`), and `Diagnostic` (`diag.wado`).
+
+use { Span, TokenStream, TOK_SYNTHETIC, TOK_SKIPPED } from "./lex.wado";
+use { NodeKind, K_ERROR, NODE_ERROR, NODE_INCOMPLETE, CstNode, CstChild, TreeBuilder, ParseResult } from "./tree.wado";
+use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
+
+/// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
+fn stream_of(src: String, specs: List<[i32, i32, i32]>) -> TokenStream {
+    let chars: List<char> = src.chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    for let s of &specs {
+        let lo = ts.trivia_mark();
+        ts.push_token(s.0, s.1, s.2, lo, ts.trivia_mark());
+    }
+    return ts;
+}
+
+fn names(items: List<String>) -> List<String> {
+    return items;
+}
+
+// === TokenStream recovery flags ===
+
+test "push_token leaves flags zero" {
+    let ts = stream_of("ab", [
+        [0, 0, 1],
+        [1, 1, 2],
+    ]);
+    assert ts.flags_at(0) == 0;
+    assert !ts.is_synthetic(0);
+    assert !ts.is_skipped(0);
+}
+
+test "push_synthetic appends a zero-width synthetic token" {
+    let chars: List<char> = "a".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo, ts.trivia_mark());
+    let syn = ts.push_synthetic(7, 1);
+    assert syn == 1;
+    assert ts.kind_at(syn) == 7;  // carries the expected kind
+    assert ts.is_synthetic(syn);
+    assert ts.span_at(syn) == Span::new(1, 1);  // zero-width at the insertion point
+    assert ts.is_empty_text(syn);
+}
+
+test "mark_skipped sets the skipped flag without touching others" {
+    let mut ts = stream_of("a@b", [
+        [0, 0, 1],
+        [2, 1, 2],
+        [0, 2, 3],
+    ]);
+    ts.mark_skipped(1);
+    assert ts.is_skipped(1);
+    assert !ts.is_synthetic(1);
+    assert !ts.is_skipped(0);
+}
+
+// === TreeBuilder: clean trees ===
+
+test "builder builds a flat node and renders an S-expression" {
+    let ts = stream_of("a + b", [
+        [0, 0, 1],
+        [1, 2, 3],
+        [0, 4, 5],
+    ]);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.token(1);
+    b.token(2);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.kind == 0 as NodeKind;
+    assert tree.span == Span::new(0, 5);
+    assert tree.children.len() == 3;
+    assert !tree.is_error();
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + b)";
+}
+
+test "builder nests child nodes and computes spans" {
+    let ts = stream_of("x + y", [
+        [0, 0, 1],
+        [1, 2, 3],
+        [0, 4, 5],
+    ]);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);  // expr
+    b.start_node(1 as NodeKind, 0);  // term
+    b.token(0);
+    b.finish_node(1);
+    b.token(1);
+    b.start_node(1 as NodeKind, 4);  // term
+    b.token(2);
+    b.finish_node(5);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.children.len() == 3;
+    if let Node(first) = tree.children[0] {
+        assert first.kind == 1 as NodeKind;
+        assert first.span == Span::new(0, 1);
+    } else {
+        panic("expected first child to be a Node");
+    }
+    assert tree.to_string_tree(&ts, &names(["expr", "term"]), &names(["ID", "PLUS"])) == "(expr (term x) + (term y))";
+}
+
+// === TreeBuilder: error tokens ===
+
+test "missing terminal becomes a Missing child and marks the node incomplete" {
+    let chars: List<char> = "a +".chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    let lo0 = ts.trivia_mark();
+    ts.push_token(0, 0, 1, lo0, ts.trivia_mark());  // 'a'  ID
+    let lo1 = ts.trivia_mark();
+    ts.push_token(1, 2, 3, lo1, ts.trivia_mark());  // '+'  PLUS
+    let syn = ts.push_synthetic(0, 3);  // inserted ID at offset 3
+
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.token(1);
+    b.missing(syn);
+    b.finish_node(3);
+    let tree = b.finish();
+
+    assert tree.is_error();
+    assert tree.is_incomplete();
+    assert tree.flags & NODE_INCOMPLETE != 0;
+    if let Missing(i) = tree.children[2] {
+        assert i == syn;
+        assert ts.is_synthetic(i);
+    } else {
+        panic("expected a Missing child");
+    }
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + <missing ID>)";
+}
+
+test "skipped terminal becomes a Skipped child and marks the node erroneous" {
+    let mut ts = stream_of("a @ b", [
+        [0, 0, 1],
+        [2, 2, 3],
+        [0, 4, 5],
+    ]);
+    ts.mark_skipped(1);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.skip(1);
+    b.token(2);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.is_error();
+    assert !tree.is_incomplete();
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a <skip @> b)";
+}
+
+test "error region is a K_ERROR node and bubbles error up to the parent" {
+    let mut ts = stream_of("a @ b", [
+        [0, 0, 1],
+        [2, 2, 3],
+        [0, 4, 5],
+    ]);
+    ts.mark_skipped(1);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.start_error(2);
+    b.skip(1);
+    b.finish_node(3);
+    b.token(2);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.is_error();  // bubbled from the error region
+    if let Node(region) = tree.children[1] {
+        assert region.kind == K_ERROR;
+        assert region.is_error();
+    } else {
+        panic("expected an error region Node");
+    }
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS", "AT"])) == "(expr a (<error> <skip @>) b)";
+}
+
+test "start_node_at wraps left-associatively across iterations" {
+    // Mirrors precedence climbing for `1 + 2 + 3` →
+    // (expr (expr (expr 1) + (expr 2)) + (expr 3)).
+    let ts = stream_of("1+2+3", [
+        [0, 0, 1],
+        [1, 1, 2],
+        [0, 2, 3],
+        [1, 3, 4],
+        [0, 4, 5],
+    ]);
+    let mut b = TreeBuilder::new();
+    let cp = b.checkpoint();
+    // atom: (expr 1)
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    // iter 1: wrap, '+', (expr 2)
+    b.start_node_at(cp, 0 as NodeKind, 0);
+    b.token(1);
+    b.start_node(0 as NodeKind, 2);
+    b.token(2);
+    b.finish_node(3);
+    b.finish_node(3);
+    // iter 2: wrap, '+', (expr 3)
+    b.start_node_at(cp, 0 as NodeKind, 0);
+    b.token(3);
+    b.start_node(0 as NodeKind, 4);
+    b.token(4);
+    b.finish_node(5);
+    b.finish_node(5);
+    let tree = b.finish();
+
+    assert tree.span == Span::new(0, 5);
+    assert tree.to_string_tree(&ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr (expr (expr 1) + (expr 2)) + (expr 3))";
+}
+
+// === ParseResult ===
+
+test "ParseResult ok when there are no diagnostics" {
+    let ts = stream_of("a", [
+        [0, 0, 1],
+    ]);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    let result = ParseResult { root: b.finish(), tokens: ts, diagnostics: [] };
+    assert result.ok();
+    assert !result.has_errors();
+}
+
+test "ParseResult has_errors when an error diagnostic is present" {
+    let ts = stream_of("a", [
+        [0, 0, 1],
+    ]);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    let diags: List<Diagnostic> = [Diagnostic::error(DiagnosticCode::UnexpectedToken, "boom", Span::new(0, 1), 1, 0)];
+    let result = ParseResult { root: b.finish(), tokens: ts, diagnostics: diags };
+    assert result.has_errors();
+    assert !result.ok();
+    assert result.root.kind == 0 as NodeKind;
+}
+
+// === Diagnostic ===
+
+test "Diagnostic::error fills severity and position, defaults the rest" {
+    let d = Diagnostic::error(
+        DiagnosticCode::MissingToken,
+        `expected ',' but found ')'`,
+        Span::new(10, 11),
+        3,
+        7,
+    );
+    assert d.is_error();
+    assert d.line == 3;
+    assert d.col == 7;
+    assert d.expected.is_empty();
+    assert d.found == -1;
+    assert d.recovery matches { None };
+    assert `{d}` == "error[missing-token] at 3:7: expected ',' but found ')'";
+}
+
+test "Diagnostic renders related notes" {
+    let mut d = Diagnostic::error(
+        DiagnosticCode::UnterminatedConstruct,
+        "unterminated group",
+        Span::new(20, 21),
+        5,
+        0,
+    );
+    d.recovery = RecoveryAction::FilledMissing;
+    d.related.push(RelatedInfo { message: "'(' opened here", span: Span::new(4, 5) });
+    assert `{d}` == "error[unterminated-construct] at 5:0: unterminated group\n  note: '(' opened here";
+}

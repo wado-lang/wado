@@ -260,7 +260,7 @@ pub struct CborSerializer {
 impl SerializeSeq for CborSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize::<CborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -274,14 +274,14 @@ impl SerializeSeq for CborSeqSerializer {
 impl SerializeMap for CborMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = key.serialize::<CborSerializer>(&mut ser);
+        let r = key.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize::<CborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -295,7 +295,7 @@ impl SerializeStruct for CborStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         write_text(self.buf, name);
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize::<CborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -308,7 +308,7 @@ impl SerializeStruct for CborStructSerializer {
 impl SerializeVariant for CborVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CborSerializer { buf: self.buf };
-        let r = value.serialize::<CborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -445,7 +445,7 @@ impl Serializer for CborSerializer {
 pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CborSerializer { buf: &mut buf };
-    value.serialize::<CborSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);
 }
 
@@ -536,7 +536,7 @@ fn emit_sorted_map(buf: &mut List<u8>, entries: &mut List<[ByteList, ByteList]>)
 fn canonical_encode<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf: List<u8> = List::with_capacity(16);
     let mut ser = CanonicalCborSerializer { buf: &mut buf };
-    value.serialize::<CanonicalCborSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);
 }
 
@@ -566,7 +566,7 @@ pub struct CanonicalCborSerializer {
 impl SerializeSeq for CanonicalCborSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalCborSerializer { buf: self.buf };
-        let r = value.serialize::<CanonicalCborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -578,12 +578,12 @@ impl SerializeSeq for CanonicalCborSeqSerializer {
 
 impl SerializeMap for CanonicalCborMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        self.pending_key = canonical_encode::<T>(key)?;
+        self.pending_key = canonical_encode(key)?;
         return Result::Ok(());
     }
 
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let vbuf = canonical_encode::<T>(value)?;
+        let vbuf = canonical_encode(value)?;
         self.entries.push([self.pending_key, vbuf]);
         return Result::Ok(());
     }
@@ -598,7 +598,7 @@ impl SerializeStruct for CanonicalCborStructSerializer {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         let mut kbuf: List<u8> = List::with_capacity(name.len() + 1);
         write_text(&mut kbuf, name);
-        let vbuf = canonical_encode::<T>(value)?;
+        let vbuf = canonical_encode(value)?;
         self.entries.push([kbuf as ByteList, vbuf]);
         return Result::Ok(());
     }
@@ -612,7 +612,7 @@ impl SerializeStruct for CanonicalCborStructSerializer {
 impl SerializeVariant for CanonicalCborVariantSerializer {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = CanonicalCborSerializer { buf: self.buf };
-        let r = value.serialize::<CanonicalCborSerializer>(&mut ser);
+        let r = value.serialize(&mut ser);
         self.buf = ser.buf;
         return r;
     }
@@ -752,7 +752,7 @@ impl Serializer for CanonicalCborSerializer {
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf: List<u8> = List::with_capacity(SERIALIZE_BUFFER_CAPACITY);
     let mut ser = CanonicalCborSerializer { buf: &mut buf };
-    value.serialize::<CanonicalCborSerializer>(&mut ser)?;
+    value.serialize(&mut ser)?;
     return Result::Ok(buf as ByteList);
 }
 
@@ -1035,37 +1035,43 @@ impl CborDeserializer {
         let i128_max: u128 = I128_MAX_AS_U128;
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_UINT {
-                return Result::Ok(i128::from_pair(arg, 0));
-            }
-            if major == MAJOR_NINT {
+            match major {
+                MAJOR_UINT => {
+                    return Result::Ok(i128::from_pair(arg, 0));
+                },
                 // value = -1 - arg; the 128-bit two's-complement pattern is
                 // (~arg) in the low word, all-ones (-1) in the high word.
-                return Result::Ok(i128::from_pair(~arg, -1));
-            }
-            if major == MAJOR_TAG {
-                if is_passthrough_tag(arg) {
-                    continue;
-                }
-                if arg == TAG_BIGNUM_POS {
-                    let mag = self.read_bignum_mag()?;
-                    if mag <= i128_max {
-                        return Result::Ok(i128::from_pair(mag.low(), mag.high() as i64));
+                MAJOR_NINT => {
+                    return Result::Ok(i128::from_pair(~arg, -1));
+                },
+                MAJOR_TAG => {
+                    if is_passthrough_tag(arg) {
+                        continue;
+                    }
+                    if arg == TAG_BIGNUM_POS {
+                        let mag = self.read_bignum_mag()?;
+                        if mag <= i128_max {
+                            return Result::Ok(i128::from_pair(mag.low(), mag.high() as i64));
+                        }
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
+                    }
+                    if arg == TAG_BIGNUM_NEG {
+                        let mag = self.read_bignum_mag()?;
+                        if mag <= i128_max {
+                            return Result::Ok(i128::from_pair(~mag.low(), ~mag.high() as i64));
+                        }
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
                     }
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
-                }
-                if arg == TAG_BIGNUM_NEG {
-                    let mag = self.read_bignum_mag()?;
-                    if mag <= i128_max {
-                        return Result::Ok(i128::from_pair(~mag.low(), ~mag.high() as i64));
-                    }
+                    return Result::Err(DeserializeError::unexpected_type("expected integer", self.pos as i64));
+                },
+                _ => {
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("bignum exceeds i128", self.pos as i64));
-                }
+                    return Result::Err(DeserializeError::unexpected_type("expected integer", self.pos as i64));
+                },
             }
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type("expected integer", self.pos as i64));
         }
     }
 
@@ -1074,19 +1080,25 @@ impl CborDeserializer {
     fn read_unsigned_u128(&mut self) -> Result<u128, DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_UINT {
-                return Result::Ok(u128::from_u64(arg));
+            match major {
+                MAJOR_UINT => {
+                    return Result::Ok(u128::from_u64(arg));
+                },
+                MAJOR_TAG => {
+                    if is_passthrough_tag(arg) {
+                        continue;
+                    }
+                    if arg == TAG_BIGNUM_POS {
+                        return self.read_bignum_mag();
+                    }
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
+                },
+                _ => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
+                },
             }
-            if major == MAJOR_TAG {
-                if is_passthrough_tag(arg) {
-                    continue;
-                }
-                if arg == TAG_BIGNUM_POS {
-                    return self.read_bignum_mag();
-                }
-            }
-            builtin::cold_path();
-            return Result::Err(DeserializeError::overflow("expected unsigned integer", self.pos as i64));
         }
     }
 
@@ -1148,67 +1160,75 @@ impl CborDeserializer {
     /// only well-formedness, never validity (so it does not UTF-8-validate).
     fn skip_item(&mut self) -> Result<(), DeserializeError> {
         let [major, ai, arg, indef] = self.read_head()?;
-        if major == MAJOR_SIMPLE && indef {
-            // A lone break (0xff) is a terminator, not an item (RFC 8949 §3.2.1).
-            builtin::cold_path();
-            return Result::Err(DeserializeError::malformed(
-                "unexpected break",
-                (self.pos - 1) as i64,
-            ));
-        }
-        if major == MAJOR_UINT || major == MAJOR_NINT || major == MAJOR_SIMPLE {
-            return Result::Ok(());
-        }
-        if major == MAJOR_BYTES || major == MAJOR_TEXT {
-            return self.skip_string_raw(arg, indef, major);
-        }
-        if major == MAJOR_TAG {
-            return self.skip_item();
-        }
-        if major == MAJOR_ARRAY {
-            self.enter()?;
-            if indef {
-                loop {
-                    if self.peek_byte()? == BREAK {
-                        self.pos += 1;
-                        break;
+        match major {
+            MAJOR_UINT | MAJOR_NINT => {
+                return Result::Ok(());
+            },
+            MAJOR_SIMPLE => {
+                if indef {
+                    // A lone break (0xff) is a terminator, not an item
+                    // (RFC 8949 §3.2.1).
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::malformed(
+                        "unexpected break",
+                        (self.pos - 1) as i64,
+                    ));
+                }
+                return Result::Ok(());
+            },
+            MAJOR_BYTES | MAJOR_TEXT => {
+                return self.skip_string_raw(arg, indef, major);
+            },
+            MAJOR_TAG => {
+                return self.skip_item();
+            },
+            MAJOR_ARRAY => {
+                self.enter()?;
+                if indef {
+                    loop {
+                        if self.peek_byte()? == BREAK {
+                            self.pos += 1;
+                            break;
+                        }
+                        self.skip_item()?;
                     }
-                    self.skip_item()?;
-                }
-            } else {
-                let mut i: u64 = 0;
-                while i < arg {
-                    self.skip_item()?;
-                    i += 1;
-                }
-            }
-            self.depth -= 1;
-            return Result::Ok(());
-        }
-        if major == MAJOR_MAP {
-            self.enter()?;
-            if indef {
-                loop {
-                    if self.peek_byte()? == BREAK {
-                        self.pos += 1;
-                        break;
+                } else {
+                    let mut i: u64 = 0;
+                    while i < arg {
+                        self.skip_item()?;
+                        i += 1;
                     }
-                    self.skip_item()?;
-                    self.skip_item()?;
                 }
-            } else {
-                let mut i: u64 = 0;
-                while i < arg {
-                    self.skip_item()?;
-                    self.skip_item()?;
-                    i += 1;
+                self.depth -= 1;
+                return Result::Ok(());
+            },
+            MAJOR_MAP => {
+                self.enter()?;
+                if indef {
+                    loop {
+                        if self.peek_byte()? == BREAK {
+                            self.pos += 1;
+                            break;
+                        }
+                        self.skip_item()?;
+                        self.skip_item()?;
+                    }
+                } else {
+                    let mut i: u64 = 0;
+                    while i < arg {
+                        self.skip_item()?;
+                        self.skip_item()?;
+                        i += 1;
+                    }
                 }
-            }
-            self.depth -= 1;
-            return Result::Ok(());
+                self.depth -= 1;
+                return Result::Ok(());
+            },
+            _ => {
+                builtin::cold_path();
+                return Result::Err(DeserializeError::malformed("unskippable item", self.pos as i64));
+            },
         }
-        builtin::cold_path();
-        return Result::Err(DeserializeError::malformed("unskippable item", self.pos as i64));
     }
 
     fn skip_string_raw(&mut self, arg: u64, indef: bool, major: u8) -> Result<(), DeserializeError> {
@@ -1279,7 +1299,7 @@ impl DeserializeSeq for CborSeqAccess {
         if self.at_end()? {
             return Result::Ok(null);
         }
-        let v = T::deserialize::<CborDeserializer>(&mut self.de)?;
+        let v = T::deserialize(self.de)?;
         return Result::Ok(Option::Some(v));
     }
 
@@ -1324,7 +1344,7 @@ impl DeserializeMap for CborMapAccess {
     }
 
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
-        return V::deserialize::<CborDeserializer>(&mut self.de);
+        return V::deserialize(self.de);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
@@ -1364,7 +1384,7 @@ impl DeserializeStruct for CborStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return T::deserialize::<CborDeserializer>(&mut self.de);
+        return T::deserialize(self.de);
     }
 
     fn skip(&mut self) -> Result<(), DeserializeError> {
@@ -1391,7 +1411,7 @@ impl DeserializeVariant for CborVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return T::deserialize::<CborDeserializer>(&mut self.de);
+        return T::deserialize(self.de);
     }
 
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
@@ -1478,25 +1498,31 @@ impl Deserializer for CborDeserializer {
         // directly — routing through f64 would double-round large u64 values.
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_SIMPLE {
-                if ai == AI_8BYTE {
-                    return Result::Ok(f64::from_bits(arg as i64) as f32);
-                }
-                if ai == AI_4BYTE {
-                    return Result::Ok(f32::from_bits(arg as i32));
-                }
-                if ai == AI_2BYTE {
-                    return Result::Ok(decode_half(arg) as f32);
-                }
-            }
-            if major == MAJOR_UINT {
-                return Result::Ok(arg as f32);
-            }
-            if major == MAJOR_NINT {
-                return Result::Ok(-1.0 - arg as f32);
-            }
-            if major == MAJOR_TAG && is_passthrough_tag(arg) {
-                continue;
+            match major {
+                MAJOR_SIMPLE => match ai {
+                    AI_8BYTE => {
+                        return Result::Ok(f64::from_bits(arg as i64) as f32);
+                    },
+                    AI_4BYTE => {
+                        return Result::Ok(f32::from_bits(arg as i32));
+                    },
+                    AI_2BYTE => {
+                        return Result::Ok(decode_half(arg) as f32);
+                    },
+                    _ => {
+                    },
+                },
+                MAJOR_UINT => {
+                    return Result::Ok(arg as f32);
+                },
+                MAJOR_NINT => {
+                    return Result::Ok(-1.0 - arg as f32);
+                },
+                MAJOR_TAG && is_passthrough_tag(arg) => {
+                    continue;
+                },
+                _ => {
+                },
             }
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
@@ -1506,25 +1532,31 @@ impl Deserializer for CborDeserializer {
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_SIMPLE {
-                if ai == AI_8BYTE {
-                    return Result::Ok(f64::from_bits(arg as i64));
-                }
-                if ai == AI_4BYTE {
-                    return Result::Ok(f32::from_bits(arg as i32) as f64);
-                }
-                if ai == AI_2BYTE {
-                    return Result::Ok(decode_half(arg));
-                }
-            }
-            if major == MAJOR_UINT {
-                return Result::Ok(arg as f64);
-            }
-            if major == MAJOR_NINT {
-                return Result::Ok(-1.0 - arg as f64);
-            }
-            if major == MAJOR_TAG && is_passthrough_tag(arg) {
-                continue;
+            match major {
+                MAJOR_SIMPLE => match ai {
+                    AI_8BYTE => {
+                        return Result::Ok(f64::from_bits(arg as i64));
+                    },
+                    AI_4BYTE => {
+                        return Result::Ok(f32::from_bits(arg as i32) as f64);
+                    },
+                    AI_2BYTE => {
+                        return Result::Ok(decode_half(arg));
+                    },
+                    _ => {
+                    },
+                },
+                MAJOR_UINT => {
+                    return Result::Ok(arg as f64);
+                },
+                MAJOR_NINT => {
+                    return Result::Ok(-1.0 - arg as f64);
+                },
+                MAJOR_TAG && is_passthrough_tag(arg) => {
+                    continue;
+                },
+                _ => {
+                },
             }
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected float", self.pos as i64));
@@ -1536,16 +1568,22 @@ impl Deserializer for CborDeserializer {
             let [major, ai, arg, indef] = self.read_head()?;
             // Gate on `ai`, not `arg`: for a float head (ai 25/26/27) `arg` holds
             // the float bits, which could coincidentally equal 20/21.
-            if major == MAJOR_SIMPLE {
-                if ai == SIMPLE_FALSE {
-                    return Result::Ok(false);
-                }
-                if ai == SIMPLE_TRUE {
-                    return Result::Ok(true);
-                }
-            }
-            if major == MAJOR_TAG && is_passthrough_tag(arg) {
-                continue;
+            match major {
+                MAJOR_SIMPLE => match ai {
+                    SIMPLE_FALSE => {
+                        return Result::Ok(false);
+                    },
+                    SIMPLE_TRUE => {
+                        return Result::Ok(true);
+                    },
+                    _ => {
+                    },
+                },
+                MAJOR_TAG && is_passthrough_tag(arg) => {
+                    continue;
+                },
+                _ => {
+                },
             }
             builtin::cold_path();
             return Result::Err(DeserializeError::unexpected_type("expected bool", self.pos as i64));
@@ -1574,34 +1612,38 @@ impl Deserializer for CborDeserializer {
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_TAG {
-                if is_passthrough_tag(arg) {
+            match major {
+                MAJOR_TEXT => {
+                    return self.read_text_body(arg, indef);
+                },
+                MAJOR_TAG && is_passthrough_tag(arg) => {
                     continue;
-                }
-                builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
+                },
+                _ => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
+                },
             }
-            if major != MAJOR_TEXT {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type("expected text string", self.pos as i64));
-            }
-            return self.read_text_body(arg, indef);
         }
     }
 
     fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_TAG {
+            match major {
+                MAJOR_BYTES => {
+                    return self.read_bytes_body(arg, indef);
+                },
                 // An unknown tag wrapping a byte string passes through (the
                 // content is the byte sequence); self-described too.
-                continue;
+                MAJOR_TAG => {
+                    continue;
+                },
+                _ => {
+                    builtin::cold_path();
+                    return Result::Err(DeserializeError::unexpected_type("expected byte string", self.pos as i64));
+                },
             }
-            if major != MAJOR_BYTES {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type("expected byte string", self.pos as i64));
-            }
-            return self.read_bytes_body(arg, indef);
         }
     }
 
@@ -1681,36 +1723,43 @@ impl Deserializer for CborDeserializer {
     ) -> Result<CborVariantAccess, DeserializeError> with stores[self] {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
-            if major == MAJOR_TAG && arg == TAG_SELF_DESCRIBED {
-                continue;
-            }
-            if major == MAJOR_TEXT {
-                let name = self.read_text_body(arg, indef)?;
-                return Result::Ok(CborVariantAccess { de: self, variant: name, is_map: false, indef: false });
-            }
-            if major == MAJOR_MAP {
-                // External tagging encodes a payload-carrying variant as a map
-                // with exactly one pair; any other pair count would desync the
-                // decoder (the extra pairs re-parse as following items).
-                // Definite lengths are checked here; an indefinite map is
-                // checked in `end`, which requires the break right after the
-                // payload.
-                if !indef && arg != 1 {
+            match major {
+                MAJOR_TAG && arg == TAG_SELF_DESCRIBED => {
+                    continue;
+                },
+                MAJOR_TEXT => {
+                    let name = self.read_text_body(arg, indef)?;
+                    return Result::Ok(CborVariantAccess { de: self, variant: name, is_map: false, indef: false });
+                },
+                MAJOR_MAP => {
+                    // External tagging encodes a payload-carrying variant as a map
+                    // with exactly one pair; any other pair count would desync the
+                    // decoder (the extra pairs re-parse as following items).
+                    // Definite lengths are checked here; an indefinite map is
+                    // checked in `end`, which requires the break right after the
+                    // payload.
+                    if !indef && arg != 1 {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::malformed(
+                            "variant map must have exactly one pair",
+                            self.pos as i64,
+                        ));
+                    }
+                    // The map may nest (recursive variants), so bound the depth
+                    // like other containers (RFC 8949 §10). The matching decrement
+                    // is in `end`.
+                    self.enter()?;
+                    let key = self.deserialize_string()?;
+                    return Result::Ok(CborVariantAccess { de: self, variant: key, is_map: true, indef });
+                },
+                _ => {
                     builtin::cold_path();
-                    return Result::Err(DeserializeError::malformed(
-                        "variant map must have exactly one pair",
+                    return Result::Err(DeserializeError::unexpected_type(
+                        "expected text or map for variant",
                         self.pos as i64,
                     ));
-                }
-                // The map may nest (recursive variants), so bound the depth like
-                // other containers (RFC 8949 §10). The matching decrement is in
-                // `end`.
-                self.enter()?;
-                let key = self.deserialize_string()?;
-                return Result::Ok(CborVariantAccess { de: self, variant: key, is_map: true, indef });
+                },
             }
-            builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type("expected text or map for variant", self.pos as i64));
         }
     }
 
@@ -1723,108 +1772,117 @@ impl Deserializer for CborDeserializer {
             // Peek the major type without consuming, so the container paths can
             // delegate to `begin_seq` / `begin_map` (which carry `stores[self]`).
             let major = self.peek_byte()? >> 5;
-            if major == MAJOR_UINT {
-                let m = self.read_unsigned_u128()?;
-                if m.low() <= i64_max {
-                    return visitor.visit_i64(m.low() as i64);
-                }
-                return visitor.visit_u64(m.low());
-            }
-            if major == MAJOR_NINT {
-                let v = self.read_signed_i128()?;
-                if v >= i64_min128 {
-                    return visitor.visit_i64(v.low() as i64);
-                }
-                return visitor.visit_i128(v);
-            }
-            if major == MAJOR_BYTES {
-                let bytes = self.deserialize_bytes()?;
-                return visitor.visit_bytes(bytes);
-            }
-            if major == MAJOR_TEXT {
-                let s = self.deserialize_string()?;
-                return visitor.visit_string(s);
-            }
-            if major == MAJOR_ARRAY {
-                let mut seq = self.begin_seq()?;
-                return visitor.visit_seq::<CborSeqAccess>(&mut seq);
-            }
-            if major == MAJOR_MAP {
-                let mut map = self.begin_map()?;
-                return visitor.visit_map::<CborMapAccess>(&mut map);
-            }
-            if major == MAJOR_TAG {
-                let start = self.pos;
-                let [tmajor, tai, tag, tindef] = self.read_head()?;
-                if tag == TAG_BIGNUM_POS {
-                    let m = self.read_bignum_mag()?;
-                    if m <= u64_max {
-                        if m.low() <= i64_max {
-                            return visitor.visit_i64(m.low() as i64);
+            match major {
+                MAJOR_UINT => {
+                    let m = self.read_unsigned_u128()?;
+                    if m.low() <= i64_max {
+                        return visitor.visit_i64(m.low() as i64);
+                    }
+                    return visitor.visit_u64(m.low());
+                },
+                MAJOR_NINT => {
+                    let v = self.read_signed_i128()?;
+                    if v >= i64_min128 {
+                        return visitor.visit_i64(v.low() as i64);
+                    }
+                    return visitor.visit_i128(v);
+                },
+                MAJOR_BYTES => {
+                    let bytes = self.deserialize_bytes()?;
+                    return visitor.visit_bytes(bytes);
+                },
+                MAJOR_TEXT => {
+                    let s = self.deserialize_string()?;
+                    return visitor.visit_string(s);
+                },
+                MAJOR_ARRAY => {
+                    let mut seq = self.begin_seq()?;
+                    return visitor.visit_seq(&mut seq);
+                },
+                MAJOR_MAP => {
+                    let mut map = self.begin_map()?;
+                    return visitor.visit_map(&mut map);
+                },
+                MAJOR_TAG => {
+                    let start = self.pos;
+                    let [tmajor, tai, tag, tindef] = self.read_head()?;
+                    if tag == TAG_BIGNUM_POS {
+                        let m = self.read_bignum_mag()?;
+                        if m <= u64_max {
+                            if m.low() <= i64_max {
+                                return visitor.visit_i64(m.low() as i64);
+                            }
+                            return visitor.visit_u64(m.low());
                         }
-                        return visitor.visit_u64(m.low());
+                        if m <= i128_max {
+                            return visitor.visit_i128(i128::from_pair(m.low(), m.high() as i64));
+                        }
+                        return visitor.visit_u128(m);
                     }
-                    if m <= i128_max {
-                        return visitor.visit_i128(i128::from_pair(m.low(), m.high() as i64));
+                    if tag == TAG_BIGNUM_NEG {
+                        let m = self.read_bignum_mag()?;
+                        if m.low() <= i64_max && m <= u64_max {
+                            return visitor.visit_i64(-1 - m.low() as i64);
+                        }
+                        if m <= i128_max {
+                            return visitor.visit_i128(i128::from_pair(~m.low(), ~m.high() as i64));
+                        }
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::overflow("negative bignum exceeds i128", self.pos as i64));
                     }
-                    return visitor.visit_u128(m);
-                }
-                if tag == TAG_BIGNUM_NEG {
-                    let m = self.read_bignum_mag()?;
-                    if m.low() <= i64_max && m <= u64_max {
-                        return visitor.visit_i64(-1 - m.low() as i64);
+                    if is_passthrough_tag(tag) {
+                        // Use the tag's content, ignoring the number (RFC 8949 §6.1).
+                        continue;
                     }
-                    if m <= i128_max {
-                        return visitor.visit_i128(i128::from_pair(~m.low(), ~m.high() as i64));
+                    // Genuinely unknown tag.
+                    if self.strict {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::unexpected_type("unknown CBOR tag", start as i64));
                     }
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::overflow("negative bignum exceeds i128", self.pos as i64));
-                }
-                if is_passthrough_tag(tag) {
-                    // Use the tag's content, ignoring the number (RFC 8949 §6.1).
-                    continue;
-                }
-                // Genuinely unknown tag.
-                if self.strict {
-                    builtin::cold_path();
-                    return Result::Err(DeserializeError::unexpected_type("unknown CBOR tag", start as i64));
-                }
-                self.skip_item()?;
-                return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
+                    self.skip_item()?;
+                    return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
+                },
+                // major == MAJOR_SIMPLE (7), the only remaining 3-bit value.
+                _ => {
+                    let start = self.pos;
+                    let [smajor, ai, arg, indef] = self.read_head()?;
+                    // Gate the false/true/null/undefined cases on `ai` (a simple
+                    // value < 24 has `arg == ai`); for a float head (ai 25/26/27)
+                    // `arg` holds the float bits, which must not be mistaken for a
+                    // simple value.
+                    match ai {
+                        SIMPLE_FALSE => {
+                            return visitor.visit_bool(false);
+                        },
+                        SIMPLE_TRUE => {
+                            return visitor.visit_bool(true);
+                        },
+                        SIMPLE_NULL => {
+                            return visitor.visit_null();
+                        },
+                        SIMPLE_UNDEFINED => {
+                            return visitor.visit_undefined();
+                        },
+                        AI_2BYTE => {
+                            return visitor.visit_f64(decode_half(arg));
+                        },
+                        AI_4BYTE => {
+                            return visitor.visit_f64(f32::from_bits(arg as i32) as f64);
+                        },
+                        AI_8BYTE => {
+                            return visitor.visit_f64(f64::from_bits(arg as i64));
+                        },
+                        _ => {
+                        },
+                    }
+                    // Unassigned simple value or reserved.
+                    if self.strict {
+                        builtin::cold_path();
+                        return Result::Err(DeserializeError::unexpected_type("unassigned simple value", start as i64));
+                    }
+                    return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
+                },
             }
-            // major == MAJOR_SIMPLE
-            let start = self.pos;
-            let [smajor, ai, arg, indef] = self.read_head()?;
-            // Gate the false/true/null/undefined cases on `ai` (a simple value
-            // < 24 has `arg == ai`); for a float head (ai 25/26/27) `arg` holds
-            // the float bits, which must not be mistaken for a simple value.
-            if ai == SIMPLE_FALSE {
-                return visitor.visit_bool(false);
-            }
-            if ai == SIMPLE_TRUE {
-                return visitor.visit_bool(true);
-            }
-            if ai == SIMPLE_NULL {
-                return visitor.visit_null();
-            }
-            if ai == SIMPLE_UNDEFINED {
-                return visitor.visit_undefined();
-            }
-            if ai == AI_2BYTE {
-                return visitor.visit_f64(decode_half(arg));
-            }
-            if ai == AI_4BYTE {
-                return visitor.visit_f64(f32::from_bits(arg as i32) as f64);
-            }
-            if ai == AI_8BYTE {
-                return visitor.visit_f64(f64::from_bits(arg as i64));
-            }
-            // Unassigned simple value or reserved.
-            if self.strict {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type("unassigned simple value", start as i64));
-            }
-            return visitor.visit_unknown(self.slice_to_bytelist(start, self.pos));
         }
     }
 }
@@ -1845,7 +1903,7 @@ pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true)
         depth: 0,
         strict,
     };
-    let v = T::deserialize::<CborDeserializer>(&mut de)?;
+    let v = T::deserialize(&mut de)?;
     if de.pos < de.input.len() {
         builtin::cold_path();
         return Result::Err(DeserializeError::trailing(de.pos as i64));

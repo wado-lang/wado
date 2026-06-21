@@ -18,8 +18,8 @@ use { normalize_tree } from "../../grammars/ParserExec/TokenOffset.g4";
 test "stage_b_oracle: ParserExec/TokenOffset" {
     let input = "12 34 56 66";
     let expected = "(a 12 34 56 66)";
-    let root = t::parse_a(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_a(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

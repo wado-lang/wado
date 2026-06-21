@@ -72,6 +72,37 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 /// anchor shape.
 pub const CLOSURE_FN_TRAIT: &str = "Fn";
 
+/// Label the template-string synthesiser stamps on the block wrapping an
+/// expanded `` `...` `` literal. The template-hoist and const-branch-prune
+/// optimizers key on it to recognise template expansions, so the producer
+/// (`synthesis::template`) and those consumers share this one definition
+/// instead of re-hardcoding the literal — compiler-internal, hence a `const`.
+pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
+
+/// Name of the result accumulator local in an expanded template block.
+/// Recognised by the template-hoist optimizer; single-sourced here.
+pub const TEMPLATE_RESULT_LOCAL: &str = "__r";
+
+/// Name of the `Formatter` local in an expanded template block. Producer-only
+/// today, kept beside its siblings so the template-local convention lives in
+/// one place.
+pub const TEMPLATE_FORMATTER_LOCAL: &str = "__f";
+
+/// Per-module initializer function the lowering phase synthesises to run a
+/// module's global initializers. The optimizer's liveness / const-object
+/// passes treat it as a root, so producer and consumers share this name.
+pub const MODULE_INIT_FUNCTION: &str = "__initialize_module";
+
+/// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
+/// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
+/// over the latter still covers both.
+pub const MODULES_INIT_FUNCTION: &str = "__initialize_modules";
+
+/// Prefix the const-object globalization pass stamps on the globals it hoists
+/// constant aggregates into (`__const_obj_0`, …). It both mints and rescans
+/// these names, so the prefix lives here rather than as a repeated literal.
+pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
+
 /// A free function name (not a method on a struct).
 ///
 /// Format: `{module_source}/{name}`
@@ -403,6 +434,20 @@ pub(crate) fn split_base_name(name: &str) -> &str {
         Some(i) => &name[..i],
         None => name,
     }
+}
+
+/// Whether a mangled call name denotes a trait-method impl
+/// (`Type^Trait::method`); the `^` separates the receiver type from its trait.
+pub fn is_local_trait_method_name(name: &str) -> bool {
+    name.contains('^')
+}
+
+/// Decompose `Type^Trait::method` into its `(type, trait)` parts, or `None` when
+/// the name has no `^` trait segment.
+pub fn split_trait_method_receiver(name: &str) -> Option<(&str, &str)> {
+    let (ty, rest) = name.split_once('^')?;
+    let trait_name = rest.split_once("::").map_or(rest, |(t, _)| t);
+    Some((ty, trait_name))
 }
 
 impl LocalMethodName {
@@ -1164,6 +1209,18 @@ pub fn mangle_fn_type(param_count: usize, ret_type: &str) -> String {
     format!("Fn<{param_count},{ret_type}>")
 }
 
+/// Canonical struct-type-argument names for a closure / [`CLOSURE_FN_TRAIT`]
+/// receiver: `[arity, return-type]`. Feeding these to
+/// [`mangle_generic_name`] with `CLOSURE_FN_TRAIT` reproduces the
+/// [`mangle_fn_type`] head, so the two spellings cannot drift. Trait synthesis
+/// (`Fn<N,Ret>^Inspect`) and template expansion both build them here.
+///
+/// Examples:
+/// - `fn_type_arg_names(2, "i32")` → `["2", "i32"]`
+pub fn fn_type_arg_names(arity: usize, return_type_name: &str) -> Vec<String> {
+    vec![arity.to_string(), return_type_name.to_string()]
+}
+
 /// Build an Option type name from inner type name.
 ///
 /// Examples:
@@ -1256,6 +1313,36 @@ pub fn test_name_to_snake(name: &str) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect::<String>()
         .to_lowercase()
+}
+
+/// Build the exported function name for a test block. The prefix encodes the
+/// test's attributes, the index disambiguates anonymous tests, and `name` (when
+/// present) is appended as an ASCII snake-case segment via [`test_name_to_snake`].
+///
+/// - `__test_{index}` / `__test_{index}_{snake}` — plain
+/// - `__test_trap_…` — `#[expect_trap]`
+/// - `__test_todo_…` — `#[TODO]` (or module-level `#[TODO]`)
+/// - `__test_tm{ms}_…` — `#[timeout_ms(ms)]` (combines: `__test_trap_tm{ms}_…`)
+///
+/// The single source of this format: both the annotate walk and reify call here
+/// so the two never drift.
+pub fn test_function_name(
+    meta: &crate::ast::TestMetadata,
+    test_index: usize,
+    name: Option<&str>,
+) -> String {
+    let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
+        (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
+        (true, _, None) => "__test_todo".to_string(),
+        (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
+        (_, true, None) => "__test_trap".to_string(),
+        (_, _, Some(ms)) => format!("__test_tm{ms}"),
+        (_, _, None) => "__test".to_string(),
+    };
+    match name {
+        Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
+        None => format!("{prefix}_{test_index}"),
+    }
 }
 
 #[cfg(test)]

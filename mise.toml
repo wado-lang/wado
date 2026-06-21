@@ -9,8 +9,10 @@
 # embeds the dprint markdown plugin as a Cargo dependency. No external
 # dprint CLI is required.
 
-# Node.js - required for VS Code extension development
-node = "24"
+# Node.js - required for VS Code extension development and the jco runtime.
+# Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
+# `--experimental-wasm-jspi` (which Node 26 no longer accepts).
+node = "26"
 
 [settings]
 auto_install = true
@@ -18,7 +20,7 @@ lockfile = true
 verbose = false
 
 [env]
-RUSTFLAGS = {value = "-D warnings", default = true}
+RUSTFLAGS = "-D warnings"
 _.path = ["vendor/wasmtime/target/release"]
 
 [tasks.on-task-started]
@@ -575,4 +577,77 @@ node "$JCO" transpile "$WASM_FILE" -o "$OUTPUT_DIR" \
   --map "wasi:clocks/*=${SHIM_DIR}/clocks.js#*"
 echo '{"type": "module"}' > "$OUTPUT_DIR/package.json"
 echo "Transpiled to: $OUTPUT_DIR"
+"""
+
+[tasks.jco-deps]
+description = "Install the released jco for the vendor-free pipeline (scripts/jco)"
+run = "cd scripts/jco && npm install"
+
+[tasks.jco-harvest-intrinsics]
+description = "Harvest the future-end runtime classes from released jco (regenerate after a jco bump)"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WASM="$(mktemp -d)/future-trigger.wasm"
+cargo run -q -p wado-cli -- compile -O2 -o "$WASM" scripts/jco/future-trigger.wado
+node scripts/jco/harvest-intrinsics.mjs "$WASM" scripts/jco/missing-intrinsics.js
+"""
+
+[tasks.jco-transpile-released]
+description = "Transpile a Wado .wasm component to JS via the released jco + runtime post-process"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WASM_FILE="${1:?Usage: mise run jco-transpile-released <wasm-file> [output-dir]}"
+node scripts/jco/transpile-released.mjs "$WASM_FILE" ${2:+"$2"}
+"""
+
+[tasks.jco-hello-released]
+description = "Compile, transpile (released jco), and run example/hello.wado on Node"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WASM="$(mktemp -d)/hello.wasm"
+OUT="$(mktemp -d)/hello-released"
+cargo run -q -p wado-cli -- compile -O2 -o "$WASM" example/hello.wado
+node scripts/jco/transpile-released.mjs "$WASM" "$OUT"
+# Node 26 ships stable JSPI (WebAssembly.Suspending), so no flag is needed.
+node -e "
+  process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
+  import('$OUT/hello.js').then(m => m.run.run()).then(() => process.exit(0))
+    .catch(e => { console.error(e); process.exit(1); });
+"
+"""
+
+
+[tasks.jco-bench]
+description = "Benchmark a Wado program on Node via jco (compile -f no-wide-arithmetic, transpile, self-time 3x)"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+WADO="${1:?Usage: mise run jco-bench <program.wado> [runs]}"
+RUNS="${2:-3}"
+NAME=$(basename "$WADO" .wado)
+WORK=$(mktemp -d)
+# V8 has no wide-arithmetic; -f no-wide-arithmetic keeps float formatting (and
+# any i128 math) off the native ops so the component runs under Node.
+cargo run -q -p wado-cli -- compile -O2 -f no-wide-arithmetic -o "$WORK/$NAME.wasm" "$WADO"
+node scripts/jco/transpile-released.mjs "$WORK/$NAME.wasm" "$WORK/jco" >/dev/null
+echo "# $NAME on Node (jco, self-timed, best of $RUNS):"
+for i in $(seq 1 "$RUNS"); do
+  # `timeout` guards against the known jco read-stream deadlock: filesystem-backed
+  # benchmarks (Preopens) hang forever, so cap each run instead of wedging.
+  if ! timeout 120 node -e "
+    process.on('unhandledRejection', e => { console.error(e); process.exit(1); });
+    import('$WORK/jco/$NAME.js').then(m => m.run.run()).then(() => process.exit(0))
+      .catch(e => { console.error(e.message || e); process.exit(1); });
+  "; then
+    echo "error: '$NAME' did not finish on Node (timed out or errored). Filesystem-backed benchmarks are not yet supported via jco." >&2
+    exit 1
+  fi
+done
 """

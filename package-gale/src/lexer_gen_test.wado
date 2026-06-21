@@ -6,8 +6,16 @@
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { collect_literal_tokens, gen_token_constants, gen_lexer, lexer_try_fn_name, LitToken } from "./lexer_gen.wado";
+use {
+    collect_literal_tokens,
+    gen_token_constants,
+    gen_lexer,
+    lexer_try_fn_name,
+    LitToken,
+    compute_elem_first_chars,
+} from "./lexer_gen.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { TreeMap } from "core:collections";
 
 fn parse_grammar(input: String) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -146,7 +154,8 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let g = parse_grammar("lexer grammar T; ID : 'a' ; Id : 'b' ;");
     let lits: List<LitToken> = [];
     let mut w = CodeWriter::new();
-    gen_lexer(&mut w, &g, &lits);
+    let atn_class = TreeMap::<String, i32>::new();
+    gen_lexer(&mut w, &g, &lits, &atn_class);
     let out = w.to_string();
     assert out.contains("fn try_ID("), out;
     assert out.contains("fn try_Id("), out;
@@ -195,4 +204,44 @@ test "gen_token_constants: user ERROR rule suppresses sentinel emit" {
 test "gen_token_constants: TK_EOF sentinel is always emitted" {
     let out = token_globals_for("grammar T; a : ID; ID: [a-z]+;");
     assert count_occurrences(&out, "global TK_EOF:") == 1, out;
+}
+
+fn ranges_contain(ranges: &List<[char, char]>, c: char) -> bool {
+    for let r of ranges {
+        if c >= r[0] && c <= r[1] {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn rule_first_chars(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
+    for let rule of &g.lexer_rules {
+        if rule.name == *name {
+            let mut out: List<[char, char]> = [];
+            let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, false);
+            return [r.0, out];
+        }
+    }
+    panic(`lexer rule {*name} not found`);
+}
+
+test "compute_elem_first_chars: nullable leading element keeps a bounded first set" {
+    // Regression: `NUMBER : '-'? [0-9]+` — the nullable `'-'?` must add `-` and
+    // let the walk continue into `[0-9]`, not collapse the rule to wildcard
+    // (which used to dispatch `try_NUMBER` into every token branch).
+    let g = parse_grammar("grammar T; SEMI : ';' ; NUMBER : '-'? [0-9]+ ;");
+    let [is_wildcard, first] = rule_first_chars(&g, &"NUMBER");
+    assert !is_wildcard, "NUMBER must not be classified as wildcard";
+    assert ranges_contain(&first, '-'), "first set must include '-'";
+    assert ranges_contain(&first, '0') && ranges_contain(&first, '9'), "first set must include 0-9";
+    assert !ranges_contain(&first, ';'), "first set must not include unrelated ';'";
+}
+
+test "compute_elem_first_chars: negated class is genuinely wildcard" {
+    // A negated set (`~[a]`) cannot be enumerated, so it must stay wildcard —
+    // the fix narrows only the nullable-prefix case, not real wildcards.
+    let g = parse_grammar("grammar T; x : TILDE ; TILDE : ~[a] ;");
+    let [is_wildcard, _first] = rule_first_chars(&g, &"TILDE");
+    assert is_wildcard, "negated class must remain wildcard";
 }

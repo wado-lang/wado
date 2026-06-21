@@ -1,0 +1,124 @@
+/// Driver test for the ANTLR4 grammar parser.
+///
+/// The ANTLR4 grammar uses semantic predicates to distinguish TOKEN_REF
+/// from RULE_REF, so full parsing of real ANTLR4 input is not supported.
+/// These tests verify tokenization, basic parsing, and that the generated
+/// parser compiles.
+use antlr4 from "./grammars/ANTLRv4Lexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["./grammars/ANTLRv4Parser.g4"],
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_antlr4",
+        },
+    };
+use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.g4";
+
+test "tokenize grammar declaration" {
+    let tokens = antlr4::tokenize(&"grammar Foo;");
+    assert tokens.len() >= 3, `expected at least 3 tokens, got {tokens.len()}`;
+    // Verify the first token is GRAMMAR keyword
+    let first_name = antlr4::token_kind_name(tokens.kinds[0]);
+    assert first_name == "GRAMMAR", `expected GRAMMAR, got {first_name}`;
+}
+
+test "tokenize rule with string literal" {
+    let tokens = antlr4::tokenize(&"bar : 'hello' ;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+}
+
+test "tokenize alternatives" {
+    let tokens = antlr4::tokenize(&"expr : expr '+' expr | INT ;");
+    // Should have: identifier, colon, identifier, string, identifier, pipe, identifier, semi
+    assert tokens.len() >= 7, `expected at least 7 tokens, got {tokens.len()}`;
+}
+
+test "tokenize character set" {
+    let tokens = antlr4::tokenize(&"ID : [a-zA-Z_]+ ;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+}
+
+test "tokenize action block" {
+    let tokens = antlr4::tokenize(&"rule_ : 'a' { doSomething(); } ;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+}
+
+test "tokenize options block" {
+    let tokens = antlr4::tokenize(&"options { tokenVocab = FooLexer; }");
+    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+}
+
+test "tokenize fragment" {
+    let tokens = antlr4::tokenize(&"fragment DIGIT : [0-9] ;");
+    assert tokens.len() >= 4, `expected at least 4 tokens, got {tokens.len()}`;
+    let first_name = antlr4::token_kind_name(tokens.kinds[0]);
+    assert first_name == "FRAGMENT", `expected FRAGMENT, got {first_name}`;
+}
+
+test "tokenize labels" {
+    let tokens = antlr4::tokenize(&"expr : INT # NumExpr ;");
+    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+}
+
+test "tokenize lexer commands" {
+    let tokens = antlr4::tokenize(&"WS : [ \\t\\n]+ -> skip ;");
+    assert tokens.len() >= 5, `expected at least 5 tokens, got {tokens.len()}`;
+}
+
+
+test "parse minimal grammar" {
+    // ANTLR4 lexer produces ID tokens, but the parser expects RULE_REF/TOKEN_REF
+    // (distinguished by semantic predicates based on case). Without predicates,
+    // any input with identifiers fails to parse. Verify the error is sensible.
+    let r = antlr4::parse(&"grammar Foo;");
+    assert !r.ok(), "expected a diagnostic";
+}
+
+//
+// ANTLRv4Lexer declares `channels { OFF_CHANNEL, COMMENT }`, so DEFAULT=0,
+// HIDDEN=1, OFF_CHANNEL=2, COMMENT=3. DOC/BLOCK/LINE comments route to
+// channel(COMMENT), which is a non-HIDDEN user channel. The generated
+// lexer must: (a) keep those tokens out of the main stream, and (b) emit
+// them as trivia with `channel == 3`, not 0 or 1. This exercises the
+// generic `channel(X)` routing path, not just the HIDDEN shortcut.
+test "user channel: LINE_COMMENT routed to COMMENT channel" {
+    let tokens = antlr4::tokenize(&"// hi\n42");
+    // LINE_COMMENT must not appear in the main stream.
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_LINE_COMMENT, "LINE_COMMENT leaked into main stream — channel routing dropped";
+    }
+    // The INT `42` must follow, carrying the LINE_COMMENT as trivia on
+    // channel 3 (the COMMENT channel).
+    let mut found = false;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_INT {
+            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                if tokens.triv_kinds[j] == TK_LINE_COMMENT {
+                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got {tokens.triv_chans[j]}`;
+                    found = true;
+                }
+            }
+        }
+    }
+    assert found, "LINE_COMMENT trivia missing on INT token";
+}
+
+test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
+    let tokens = antlr4::tokenize(&"/* hi */ 42");
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        assert tokens.kinds[i] != TK_BLOCK_COMMENT, "BLOCK_COMMENT leaked into main stream";
+    }
+    let mut found = false;
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        if tokens.kinds[i] == TK_INT {
+            for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
+                if tokens.triv_kinds[j] == TK_BLOCK_COMMENT {
+                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got {tokens.triv_chans[j]}`;
+                    found = true;
+                }
+            }
+        }
+    }
+    assert found, "BLOCK_COMMENT trivia missing on INT token";
+}

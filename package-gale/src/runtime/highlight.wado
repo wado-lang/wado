@@ -1,10 +1,9 @@
-//! Syntax-highlighting runtime: a `Visitor` that collects capture ranges
-//! during a CST walk plus the HTML renderer. Emitted into a generated
-//! parser only when the `highlight` generator option is on. The
-//! `./lex.wado` / `./cst.wado` imports are stripped at `#include_str` time.
+//! Syntax-highlighting runtime: a `HighlightVisitor` that collects capture
+//! ranges during a CST walk plus the HTML renderer. Emitted into a generated
+//! parser only when the `highlight` generator option is on. The `./lex.wado`
+//! import is stripped at `#include_str` time.
 
-use { Span, Token } from "./lex.wado";
-use { Visitor } from "./cst.wado";
+use { TokenStream } from "./lex.wado";
 
 /// Highlight override: when inside a specific rule, override the capture for a token kind.
 pub struct HighlightOverride {
@@ -17,7 +16,7 @@ pub struct HighlightOverride {
 ///
 /// `rule_names` is the canonical name table used to resolve override
 /// `rule_name`s into integer ids that match what the generated walker
-/// passes to `Visitor::enter_rule`. The generator emits the names in
+/// passes to `hl_enter`. The generator emits the names in
 /// parser-rule declaration order; index = rule id.
 pub struct HighlightMapping {
     pub defaults: List<String>,
@@ -95,28 +94,32 @@ impl HighlightVisitor {
     }
 }
 
-impl Visitor for HighlightVisitor {
-    fn enter_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+/// Inherent visit hooks. The walk (`highlight_walk` in `highlight_walk.wado`)
+/// calls them directly off the `CstNode` tree.
+impl HighlightVisitor {
+    pub fn hl_enter(&mut self, rule_id: i32) {
         self.rule_stack.push(rule_id);
     }
 
-    fn exit_rule(&mut self, rule_id: i32, name: &String, span: &Span) {
+    pub fn hl_exit(&mut self) {
         self.rule_stack.pop();
     }
 
-    fn visit_token(&mut self, token: &Token) {
-        for let trivia of &token.leading_trivia {
-            let cap = self.classify(trivia.kind);
+    pub fn hl_visit_token(&mut self, toks: &TokenStream, idx: i32) {
+        for let mut t = toks.triv_lo[idx]; t < toks.triv_hi[idx]; t += 1 {
+            let cap = self.classify(toks.triv_kinds[t]);
             if !cap.is_empty() {
-                self.captures.push(HighlightCapture { capture: cap, start: trivia.span.start, end: trivia.span.end });
+                self.captures.push(
+                    HighlightCapture { capture: cap, start: toks.triv_starts[t], end: toks.triv_ends[t] },
+                );
             }
         }
-        if token.text.is_empty() {
+        if toks.is_empty_text(idx) {
             return;
         }
-        let cap = self.classify(token.kind);
+        let cap = self.classify(toks.kinds[idx]);
         if !cap.is_empty() {
-            self.captures.push(HighlightCapture { capture: cap, start: token.span.start, end: token.span.end });
+            self.captures.push(HighlightCapture { capture: cap, start: toks.starts[idx], end: toks.ends[idx] });
         }
     }
 }

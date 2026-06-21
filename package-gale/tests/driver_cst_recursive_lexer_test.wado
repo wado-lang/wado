@@ -1,0 +1,30 @@
+//! Stage 2b migration: recursive_lexer parses through the emitter.
+use g from "./grammars/recursive_lexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_recursive_lexer",
+        },
+    };
+fn ok(input: &String) {
+    assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;
+}
+test "recursive-lexer: atom" {
+    ok(&"foo");
+}
+test "recursive-lexer: empty braces" {
+    ok(&"{}");
+}
+test "recursive-lexer: braced" {
+    ok(&"{abc}");
+}
+test "recursive-lexer: nested braces" {
+    ok(&"{a{b}c}");
+}
+test "recursive-lexer: deep nesting" {
+    ok(&"{{{{deep}}}}");
+}
+test "recursive-lexer: mixed" {
+    ok(&"foo {a {b} c} bar {d} baz");
+}

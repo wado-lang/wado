@@ -18,8 +18,8 @@ use { normalize_tree } from "../../grammars/SemPredEvalParser/UnpredicatedPathsI
 test "stage_b_oracle: SemPredEvalParser/UnpredicatedPathsInAlt" {
     let input = "x 4";
     let expected = "(s (a x 4))";
-    let root = t::parse_s(&input).unwrap();
-    let actual = t::to_tree(&root).to_string_tree();
+    let result = t::parse_s(&input);
+    let actual = t::to_string_tree(&result);
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   {actual}\nexpected: {norm}`;
 }

@@ -6,6 +6,7 @@
 use lexopt::Parser;
 
 use wado_cli::args::CliExit;
+use wado_cli::check;
 use wado_cli::compile::{self, OptLevel, OutputFormat};
 
 /// Assert that a `Result<T, CliExit>` is an error with exit code 1
@@ -118,6 +119,20 @@ fn compile_world() {
     let parser = Parser::from_args(&["--world", "test", "input.wado"]);
     let opts = compile::parse_args(parser).unwrap();
     assert_eq!(opts.target_world, Some("test".to_string()));
+}
+
+#[test]
+fn check_world() {
+    let parser = Parser::from_args(&["--world", "test", "input.wado"]);
+    let opts = check::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, Some("test".to_string()));
+}
+
+#[test]
+fn check_world_defaults_to_none() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = check::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, None);
 }
 
 #[test]
@@ -497,6 +512,20 @@ fn test_with_exclude_drops_matching_explicit_file() {
 }
 
 #[test]
+fn test_defaults_to_o0() {
+    let parser = Parser::from_args(&["a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.opt_level, OptLevel::O0);
+}
+
+#[test]
+fn test_opt_level_override() {
+    let parser = Parser::from_args(&["-O2", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.opt_level, OptLevel::O2);
+}
+
+#[test]
 fn test_with_parallel() {
     let parser = Parser::from_args(&["-p", "4", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
@@ -669,6 +698,21 @@ fn dump_opt_level() {
     let opts = wado_cli::dump::parse_args(parser).unwrap();
     assert!(opts.show_nir);
     assert_eq!(opts.opt_level, wado_compiler::OptLevel::O3);
+}
+
+#[test]
+fn dump_world_defaults_to_none() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::dump::parse_args(parser).unwrap();
+    assert_eq!(opts.target_world, None);
+}
+
+#[test]
+fn dump_world() {
+    let parser = Parser::from_args(&["--tir-monomorphized", "--world", "test", "input.wado"]);
+    let opts = wado_cli::dump::parse_args(parser).unwrap();
+    assert!(opts.show_tir_monomorphized);
+    assert_eq!(opts.target_world.as_deref(), Some("test"));
 }
 
 #[test]

@@ -32,13 +32,18 @@ lib = "src/lib.wado"
 default = "https://wa.dev"
 
 [dependencies]
-router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
-regex = { package = "docs:regex", version = "^0.1.0" }
-shared = { path = "../shared" }
+"docs:regex" = { version = "^0.1.0" }                                            # direct coordinate
+"user:router" = { git = "https://github.com/user/router.git", version = "^1.0.0" }  # coordinate, git source
+"lib:shared" = { path = "../shared" }                                            # nickname (no public coordinate)
 
 [dev-dependencies]
-bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
+"lib:bench" = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 ```
+
+Each key is byte-identical to the `from "..."` specifier it backs (see
+[Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)):
+an open coordinate `ns:pkg`, or a `lib:` nickname for indirection. Bare keys
+(`router`) are rejected.
 
 ### `[package]`
 
@@ -55,7 +60,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 
 Both `namespace` and `name` must match `[a-zA-Z0-9_-]+` (minimum 1 character, maximum 64 characters).
 
-Dependency keys in `[dependencies]` follow the same rules. This ensures they are valid TOML bare keys and unambiguous in import paths.
+Dependency keys in `[dependencies]` are quoted specifiers — an open coordinate `"ns:pkg"` or a `"lib:nick"` nickname — each segment matching the same `[a-zA-Z0-9_-]+` rule. The `lib:`-or-coordinate form makes a real registry identity and a local indirection distinguishable on sight.
 
 A package must declare at least one world: a `[world]` entry, `[package].lib`, or both.
 
@@ -111,13 +116,13 @@ pub fn build_ast(tokens: List<Token>) -> Document { ... } // project-internal
 export fn parse(input: String) -> Document { ... }         // public API
 ```
 
-When another project depends on `"markdown"`, only `export` items from the `lib` entry point are visible:
+When another project depends on the `markdown` package (declared `"lib:markdown" = { ... }`, since it has no public namespace), only `export` items from the `lib` entry point are visible:
 
 ```wado
 // In a consuming project
-use { parse } from "markdown";        // OK: exported from lib
-// use { build_ast } from "markdown";  // ERROR: pub but not exported
-// use { tokenize } from "markdown";   // ERROR: private
+use { parse } from "lib:markdown";        // OK: exported from lib
+// use { build_ast } from "lib:markdown";  // ERROR: pub but not exported
+// use { tokenize } from "lib:markdown";   // ERROR: private
 ```
 
 When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's interface.
@@ -139,7 +144,7 @@ This optimization is transparent to the developer. The visible API is always det
 
 ### `[registries]`
 
-Named registry aliases. Keys are short names; values are registry URLs. The special key `default` sets the default registry — dependencies with `package` but no `registry` use it automatically.
+Named registry aliases. Keys are short names; values are registry URLs. The special key `default` sets the default registry — a registry dependency with no `registry` field uses it automatically.
 
 ```toml
 [registries]
@@ -149,15 +154,15 @@ custom = "https://registry.example.com"
 
 ```toml
 [dependencies]
-regex = { package = "docs:regex", version = "^0.1.0" }              # uses default registry
-special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }  # uses named registry
+"docs:regex" = { version = "^0.1.0" }                                       # uses default registry
+"lib:special" = { registry = "custom", package = "ns:lib", version = "^1.0.0" }  # uses named registry
 ```
 
-A dependency with `package` and `version` but no `registry` requires `default` to be set. If `default` is not defined and `registry` is omitted, it is an error.
+A registry dependency with no `registry` field requires `default` to be set. If `default` is not defined and `registry` is omitted, it is an error.
 
 ### `[dependencies]` and `[dev-dependencies]`
 
-Each key is the **import name** used in Wado source code. Values are inline tables specifying the dependency source.
+Each key is the **specifier** used in Wado source code, byte-for-byte (`"docs:regex"`, `"lib:shared"`). Values are inline tables specifying the dependency source. See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for the key forms and resolution rules.
 
 `[dev-dependencies]` are only available during `wado test` and are excluded from production builds.
 
@@ -168,12 +173,12 @@ Each dependency must have exactly one primary source type (`git`, `registry`, or
 #### Git
 
 ```toml
-# Semver on git tags
-router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
+# Semver on git tags (identity = the coordinate key, source = git)
+"user:router" = { git = "https://github.com/user/router.git", version = "^1.0.0" }
 
 # Exact git ref (tag, branch, or SHA)
-router = { git = "https://github.com/user/router.git", ref = "v1.0.0" }
-router = { git = "https://github.com/user/router.git", ref = "main" }
+"user:router" = { git = "https://github.com/user/router.git", ref = "v1.0.0" }
+"user:router" = { git = "https://github.com/user/router.git", ref = "main" }
 ```
 
 | Field     | Required | Description                                   |
@@ -187,20 +192,25 @@ Exactly one of `version` or `ref` must be specified. `version` resolves against 
 #### Registry
 
 ```toml
-regex = { package = "docs:regex", version = "^0.1.0" }                      # uses default registry
-special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }   # uses named registry
+"docs:regex" = { version = "^0.1.0" }                                       # direct coordinate, default registry
+"lib:rx" = { package = "docs:regex", version = "^0.1.0" }                   # nickname → coordinate
+"lib:special" = { registry = "custom", package = "ns:lib", version = "^1.0.0" }  # named registry
 ```
 
-| Field      | Required | Description                                                        |
-| ---------- | -------- | ------------------------------------------------------------------ |
-| `registry` | No       | Registry alias (defined in `[registries]`). Defaults to `default`. |
-| `package`  | Yes      | Package identity in `namespace:name` format                        |
-| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)                            |
+| Field      | Required            | Description                                                                                |
+| ---------- | ------------------- | ------------------------------------------------------------------------------------------ |
+| `registry` | No                  | Registry alias (defined in `[registries]`). Defaults to `default`.                         |
+| `package`  | `lib:` aliases only | Real coordinate in `namespace:name` format. Omitted when the key is itself the coordinate. |
+| `version`  | Yes                 | Semver version range (e.g., `"^0.1.0"`)                                                    |
+
+When the key is an open coordinate (`"docs:regex"`), it _is_ the package
+identity and `package` is omitted. `package` appears only on a `lib:` nickname
+that aliases a registry coordinate.
 
 #### Local Path
 
 ```toml
-shared = { path = "../shared" }
+"lib:shared" = { path = "../shared" }
 ```
 
 | Field  | Required | Description                                  |
@@ -212,35 +222,36 @@ Local path dependencies are resolved relative to the `wado.toml` location. They 
 For publishing, `path` can be combined with a registry or git source. When publishing (`wado publish`), the `path` is stripped and the accompanying source is used in the published package manifest:
 
 ```toml
-shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
-shared = { path = "../shared", git = "https://github.com/org/shared.git", version = "^0.1.0" }
+"lib:shared" = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
+"lib:shared" = { path = "../shared", git = "https://github.com/org/shared.git", version = "^0.1.0" }
 ```
 
 ### Module Resolution with Dependencies
 
-The existing module resolution (WEP-2026-01-24) is extended with one new rule: **bare name** resolution.
+The specifier grammar and the reserved = bundled rule are defined in
+[Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+A dependency-backed specifier is one of:
 
-A bare name is an import path that does not contain `:` and does not start with `./`, `../`, or `http(s)://`.
+- an **open coordinate** `ns:pkg` (`ns` ∉ {`wasi`, `core`}), or
+- a **`lib:` nickname**.
 
-Resolution order:
-
-1. `"scheme:path"` (contains `:`) — scheme-based (`core:`, `wasi:`, etc.)
-2. `"./path"` or `"../path"` — relative file
-3. `"https://url"` — remote URL (source-level feature, not a `wado.toml` dependency)
-4. **bare name** — look up key in `[dependencies]` (or `[dev-dependencies]` during test)
+Both resolve by looking up the byte-identical key in `[dependencies]` (or
+`[dev-dependencies]` during test). `wasi:`/`core:` resolve to bundled sources,
+`./`/`../` to local files, `http(s)://` to a remote URL.
 
 ```wado
-use { println } from "core:cli";           // scheme → built-in
-use { Request } from "wasi:http";           // scheme → built-in
-use { helper } from "./utils.wado";         // relative → local file
-use { Router } from "router";              // bare → wado.toml dependency
+use { println } from "core:cli";        // bundled
+use { Request } from "wasi:http";        // bundled
+use { helper }  from "./utils.wado";     // local file
+use { Regexp }  from "docs:regex";       // open coordinate → wado.toml → registry
+use { Router }  from "lib:router";       // nickname → wado.toml
 ```
 
-A bare name binds to the dependency's library world — its `[package].lib` entry module — and resolves the imported symbols against that module's `export` items. Only the consuming project resolves its own `[dependencies]`: a bare import from within a dependency module does not bind to the consumer's dependencies.
-
-Dependency keys must not contain `:` (TOML bare keys naturally enforce this). This makes scheme-based and bare name resolution structurally unambiguous.
-
-`core` and `wasi` are **not reserved**. `"core:cli"` (with `:`) resolves via scheme; `"core"` (bare) resolves via `wado.toml`. These are different resolution paths.
+A dependency specifier binds to the dependency's library world — its
+`[package].lib` entry module — and resolves the imported symbols against that
+module's `export` items. Only the consuming project resolves its own
+`[dependencies]`: a dependency specifier from within a dependency module does
+not bind to the consumer's dependencies.
 
 #### `ModuleSource` Extension
 
@@ -252,7 +263,7 @@ pub enum ModuleSource {
     Remote { url: String },
     EntryPoint { filename: Option<String> },
     // A dependency's library-world module. Identified by its resolved entry
-    // module so that two aliases for the same package unify: the resolved
+    // module so that two specifiers for the same package unify: the resolved
     // path for a path dependency; the resolved package id for a
     // registry/git dependency.
     Dependency { path: String },
@@ -340,12 +351,12 @@ my-app
 Resolved: http 1.x AND http 2.x (two separate instances)
 ```
 
-Within a single `wado.toml`, a user can also explicitly depend on multiple major versions by using different import names:
+Within a single `wado.toml`, a user can also explicitly depend on multiple major versions through `lib:` nicknames, each pinning a different range of the same coordinate:
 
 ```toml
 [dependencies]
-http-v1 = { package = "std:http", version = "^1.0.0" }
-http-v2 = { package = "std:http", version = "^2.0.0" }
+"lib:http1" = { package = "std:http", version = "^1.0.0" }
+"lib:http2" = { package = "std:http", version = "^2.0.0" }
 ```
 
 #### Transitive Version Isolation
@@ -362,14 +373,14 @@ resolution key   = (package identity, major version)
 
 When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping.
 
-The existing `resolve_import(from_module_source, import_source)` signature already provides the necessary context. The `from_module_source` tells the `CompilerHost` _which package is doing the importing_, so the same bare name `"foo"` resolves to different packages depending on the caller:
+The existing `resolve_import(from_module_source, import_source)` signature already provides the necessary context. The `from_module_source` tells the `CompilerHost` _which package is doing the importing_, so the same specifier `"myns:foo"` resolves to different packages depending on the caller:
 
 ```
-resolve_import(from=EntryPoint, "foo")
+resolve_import(from=EntryPoint, "myns:foo")
   → CompilerHost looks up my-app's wado.toml → "myns:foo" version 2.0.0
   → returns ModuleSource::Dependency { id: "registry+https://wa.dev/myns:foo@2.0.0" }
 
-resolve_import(from=Dependency{id="registry+https://wa.dev/user:router@1.0.0"}, "foo")
+resolve_import(from=Dependency{id="registry+https://wa.dev/user:router@1.0.0"}, "myns:foo")
   → CompilerHost looks up router's wado.toml → "myns:foo" version 1.0.0
   → returns ModuleSource::Dependency { id: "registry+https://wa.dev/myns:foo@1.0.0" }
 ```
@@ -551,10 +562,10 @@ A workspace groups multiple packages for co-development. The workspace root has 
 members = ["packages/*"]
 
 [workspace.dependencies]
-json = { package = "std:json", version = "^1.0.0" }
+"std:json" = { version = "^1.0.0" }
 
 [workspace.dev-dependencies]
-bench = { git = "https://gitlab.com/user/bench.git", version = "^0.1.0" }
+"lib:bench" = { git = "https://gitlab.com/user/bench.git", version = "^0.1.0" }
 ```
 
 ```toml
@@ -576,7 +587,7 @@ version = "0.1.0"
 "wasi:cli/command" = "src/main.wado"
 
 [dependencies]
-core = { path = "../core" }
+"myorg:core" = { path = "../core" }
 ```
 
 | Field     | Type       | Required | Description                                  |
@@ -588,10 +599,10 @@ core = { path = "../core" }
 ```toml
 # In a workspace member's wado.toml
 [dependencies]
-json = { workspace = true }  # inherits from [workspace.dependencies]
+"std:json" = { workspace = true }   # inherits from [workspace.dependencies]
 
 [dev-dependencies]
-bench = { workspace = true }  # inherits from [workspace.dev-dependencies]
+"lib:bench" = { workspace = true }  # inherits from [workspace.dev-dependencies]
 ```
 
 A workspace root `wado.toml` can have both `[workspace]` and `[package]` — the root itself is both a workspace and a package (like Cargo).
@@ -607,17 +618,28 @@ Properties:
 
 When no `wado.toml` exists, the compiler operates in single-file mode:
 
-- Only `core:*`, `wasi:*`, `./`, `../`, and `https://` imports are available
-- Bare name imports produce a clear error: `unknown module "foo" (no wado.toml found)`
-- No behavioral change from current behavior
+- `core:*`, `wasi:*`, `./`, `../`, and `https://` imports work as always.
+- A dependency specifier (`ns:pkg` or `lib:nick`) must carry an inline
+  `with { ... }` supplying its source — the same vocabulary as a
+  `[dependencies]` value, with an **exact** `version` (no lock to resolve a
+  range). See [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+- A dependency specifier without `with` produces a clear error:
+  `dependency "lib:foo" needs a source (add a with-clause or a wado.toml)`.
+- Inline `with` and a `[dependencies]` entry for the same specifier are mutually
+  exclusive (single-file uses `with`; a manifest project uses the table).
+
+```wado
+use { Regexp } from "docs:regex@1.0.0";   // exact pin, default registry
+use { Router } from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
+```
 
 ### Path Dependencies to Single Files
 
 `path` dependencies can point to a single `.wado` file (not just directories). The referenced file is implicitly treated as `lib = <that file>` — only `export` items are visible at the CM boundary:
 
 ```toml
-shared = { path = "../shared.wado" }    # treated as lib = "shared.wado"
-utils  = { path = "../utils" }          # reads ../utils/wado.toml for entry points
+"lib:shared" = { path = "../shared.wado" }    # treated as lib = "shared.wado"
+"lib:utils"  = { path = "../utils" }          # reads ../utils/wado.toml for entry points
 ```
 
 | Dependency type                      | Boundary    | Visible items                        |
@@ -646,15 +668,15 @@ When publishing a package to a registry (`wado publish`), the following validati
 [dependencies]
 # During development: resolved via path (fast, local edits)
 # When published: resolved via registry (self-contained)
-shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
+"lib:shared" = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
 ```
 
 Path dependencies without a registry or git fallback are errors:
 
 ```
 error: cannot publish with path-only dependency
-  → utils = { path = "../utils" }
-  help: add registry or git source: utils = { path = "../utils", package = "myorg:utils", version = "^0.1.0" }
+  → "lib:utils" = { path = "../utils" }
+  help: add registry or git source: "lib:utils" = { path = "../utils", package = "myorg:utils", version = "^0.1.0" }
 ```
 
 This enables seamless local development while ensuring published packages are self-contained.
@@ -668,8 +690,8 @@ This enables seamless local development while ensuring published packages are se
 - Git deps support both semver (`version`) and exact pinning (`ref`) — XOR ensures clarity
 - `dev-dependencies` keep test-only code out of production builds, tracked in lock file with `dev = true`
 - Registry aliases avoid URL repetition and enable easy migration
-- Bare name imports are short and ergonomic (`"router"` not `"dep:router"`)
-- No reserved namespaces — `core:` and `wasi:` are resolved by scheme syntax, not by name reservation
+- A dependency key is byte-identical to its `from "..."` specifier — no key-level indirection between manifest and source
+- Reserved namespace ⇔ bundled namespace (`wasi`, `core`); every other coordinate namespace is open, with `lib:` as the single home for indirection (see [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md))
 - PubGrub provides best-in-class error messages for resolution failures
 - Cyclic dependencies are detected early with clear error messages
 - Multiple semver-incompatible versions coexist naturally, matching Wasm Component Model's type isolation
@@ -684,7 +706,7 @@ This enables seamless local development while ensuring published packages are se
 - `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
 - Path deps with dual source (`path` + `registry`) enable seamless dev-to-publish workflow
 - Workspace support enables multi-package development with shared lock files and dependency declarations
-- Name/namespace validation (`[a-zA-Z0-9_-]+`) ensures valid TOML bare keys and unambiguous import paths
+- Name/namespace validation (`[a-zA-Z0-9_-]+` per segment) keeps dependency keys (`"ns:pkg"`, `"lib:nick"`) unambiguous as specifiers
 
 ### Negative
 
@@ -699,7 +721,7 @@ This enables seamless local development while ensuring published packages are se
 - **`version` XOR `ref` for git**: `version` enables semver resolution on tags (like Go/Swift PM), `ref` pins to an exact ref. XOR ensures the intent is always unambiguous — no implicit defaults.
 - **Bare version = error**: more verbose than Cargo's implicit caret, but eliminates a source of confusion ("does `1.0.0` mean exact or `^1.0.0`?"). Every `version` field is self-documenting.
 - **Registry names per-project**: avoids global configuration but requires repetition across projects. The `default` registry mitigates this for the common case. A future `~/.wado/config.toml` could provide user-level defaults.
-- **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
+- **Dependency specifier resolution**: an open coordinate or `lib:` nickname requires a `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
 - **`[world]` table keyed by FQ world name**: hosted worlds are declared by their Component Model world name (`"wasi:cli/command"`) rather than a short alias (`command`/`bin`/`cli`). The key is the world the entry conforms to, so new worlds need no new manifest field and the mapping to the CM world is explicit. The library world is the one exception — it has no externally-fixed FQ name, so it is named after the package and declared by `[package].lib`.

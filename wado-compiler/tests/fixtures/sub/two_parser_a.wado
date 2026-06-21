@@ -1,0 +1,14 @@
+//! Stand-in for one Gale-generated parser's tree types (see
+//! ../two_parser_conflict.wado). The shape mirrors a generated parser's
+//! inlined runtime: a `CstNode` struct and a recursive `CstChild` variant
+//! whose last case wraps the node. Module B is an independent "parser" with
+//! the same type names.
+
+pub type NodeKind = i32;
+pub struct Span { pub start: i32, pub end: i32 }
+pub variant CstChild { Token(i32), Missing(i32), Skipped(i32), Node(CstNode) }
+pub struct CstNode { pub kind: NodeKind, pub span: Span, pub children: List<CstChild>, pub flags: i32, pub alt: i32 }
+
+pub fn root() -> CstNode {
+    return CstNode { kind: 0, span: Span { start: 0, end: 0 }, children: [], flags: 0, alt: -1 };
+}

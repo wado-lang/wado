@@ -17,9 +17,6 @@ use t from "../../grammars/LexerExec/RecursiveLexerRuleRefWithWildcardStar_1.g4"
     };
 use { TK_EOF } from "../../grammars/LexerExec/RecursiveLexerRuleRefWithWildcardStar_1.g4";
 
-
-// triage: tokens-equivalence: Gale lexer mistokenizes nested `/* /*...*/ */` comments — recursive lexer rule with `.*?` wildcard star does not nest correctly (Stage C-independent)
-#[TODO]
 test "stage_a_tokens: LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" {
     let input = "/* ick */
 /* /* */
@@ -32,6 +29,6 @@ test "stage_a_tokens: LexerExec/RecursiveLexerRuleRefWithWildcardStar_1" {
 [@4,36:35='<EOF>',<-1>,4:0]
 ";
     let tokens = t::tokenize(&input);
-    let actual = t::to_lexer_string(&tokens, &input, TK_EOF);
+    let actual = t::to_lexer_string(&tokens, TK_EOF);
     assert actual == expected, `actual:\n{actual}\nexpected:\n{expected}`;
 }

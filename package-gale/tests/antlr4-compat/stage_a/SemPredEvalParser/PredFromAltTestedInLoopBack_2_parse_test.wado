@@ -24,7 +24,8 @@ x
 
 ";
     let result = t::parse_file_(&input);
-    if let Err(err) = &result {
-        panic(`parse failed: {err.message} at {err.span.start}..{err.span.end}`);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        panic(`parse failed: {d.message} at {d.span.start}..{d.span.end}`);
     }
 }

@@ -96,253 +96,62 @@ test "generate token kind" {
     assert !str_contains(&output, &"    DIGIT,");
 }
 
-test "generate single-alt struct" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "json",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::RuleRef(RuleRefElement::new("value")),
-                            Element::TokenRef(TokenRefElement::new("EOF")),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
+test "node-kind constants are pub so consumers can dispatch on CstNode.kind" {
+    let mut grammar = parse("grammar T; prog : expr ; expr : INT ; INT : [0-9]+ ;").unwrap();
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub struct JsonNode {");
-    assert str_contains(&output, &"    pub span: Span,");
-    assert str_contains(&output, &"    pub value: ValueNode,");
-    assert str_contains(&output, &"    pub eof: Token,");
+    assert str_contains(&output, &"pub global RK_PROG:");
+    assert str_contains(&output, &"pub global RK_EXPR:");
+    // No non-pub `global RK_` line should remain.
+    assert !str_contains(&output, &"\nglobal RK_");
 }
 
-test "generate multi-alt variant with labels" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "expr",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: Option::<String>::Some("BinOp"),
-                        options: [],
-                        elements: [
-                            Element::RuleRef(RuleRefElement::new("expr")),
-                            Element::TokenRef(TokenRefElement::new("PLUS")),
-                            Element::RuleRef(RuleRefElement::new("term")),
-                        ],
-                    },
-                    Alternative {
-                        label: Option::<String>::Some("Pass"),
-                        options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("term"))],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
+test "duplicate same-rule alt labels coalesce to one enum case (valid in ANTLR4)" {
+    // ANTLR4 accepts a `# Label` repeated within one rule: the alternatives
+    // share one alternative kind (one context class). The generated
+    // `<Rule>Alt` enum must emit the label once — a duplicate variant would
+    // not compile — while the accessor maps every alt index to it.
+    let input = "grammar Test;
+e : e '+' e # Bin | e '-' e # Bin | INT # Num ;
+INT : [0-9]+ ;
+WS : [ \\t\\r\\n]+ -> skip ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub variant ExprNode {");
-    assert str_contains(&output, &"    BinOp(ExprBinOp),");
-    assert str_contains(&output, &"    Pass(ExprPass),");
-    assert str_contains(&output, &"pub struct ExprBinOp {");
-    assert str_contains(&output, &"    pub expr: ExprNode,");
-    assert str_contains(&output, &"    pub plus: Token,");
-    assert str_contains(&output, &"    pub term: TermNode,");
-    assert str_contains(&output, &"pub struct ExprPass {");
+    assert str_contains(&output, &"pub enum EAlt {");
+    // The shared label appears once (no `Bin,\n    Bin,` duplicate variant).
+    assert !str_contains(&output, &"    Bin,\n    Bin,");
+    assert str_contains(&output, &"    Num,");
+    // The accessor returns Option so an unstamped/error node is None, not a
+    // silent first-alternative; both `# Bin` alts (0 and 1) map to one case.
+    assert str_contains(&output, &"pub fn e_alt(node: &CstNode) -> Option<EAlt>");
+    assert str_contains(&output, &"0 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, &"1 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, &"2 => Option::Some(EAlt::Num),");
+    assert str_contains(&output, &"_ => null,");
 }
 
-test "generate multi-alt variant without labels" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "item",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("atom"))],
-                    },
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [Element::RuleRef(RuleRefElement::new("list"))],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
+test "reserved-word alt labels are escaped to valid identifiers" {
+    // A `# Label` may be a Wado reserved word (ANTLR4's `ReservedWordsEscaping`
+    // uses `# else`). The `<Rule>Alt` enum variant and accessor arm must escape
+    // it (append `_`) or the generated code does not compile. Non-reserved
+    // labels are left unchanged.
+    let input = "grammar Test;
+r : A # else | B # loop | C # Keep ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub variant ItemNode {");
-    assert str_contains(&output, &"    Alt0(ItemAlt0),");
-    assert str_contains(&output, &"    Alt1(ItemAlt1),");
-    assert str_contains(&output, &"pub struct ItemAlt0 {");
-    assert str_contains(&output, &"pub struct ItemAlt1 {");
-}
-
-test "generate repeat fields" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "list",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::Repeat(RepeatElement {
-                                kind: RepeatKind::Star,
-                                element: Element::RuleRef(RuleRefElement::new("item")),
-                                non_greedy: false,
-                            }),
-                            Element::Repeat(RepeatElement {
-                                kind: RepeatKind::Optional,
-                                element: Element::TokenRef(TokenRefElement::new("COMMA")),
-                                non_greedy: false,
-                            }),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    pub item_list: List<ItemNode>,");
-    assert str_contains(&output, &"    pub comma: Option<Token>,");
-}
-
-test "generate duplicate field names" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "pair",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::RuleRef(RuleRefElement::new("item")),
-                            Element::Literal(LiteralElement::new(",")),
-                            Element::RuleRef(RuleRefElement::new("item")),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    pub item: ItemNode,");
-    assert str_contains(&output, &"    pub item_2: ItemNode,");
-}
-
-test "generate group variant type for repeated group" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "parse",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::Repeat(RepeatElement {
-                                kind: RepeatKind::Star,
-                                element: Element::Group(GroupElement::new([
-                                    Alternative {
-                                        label: null,
-                                        options: [],
-                                        elements: [Element::RuleRef(RuleRefElement::new("stmt"))],
-                                    },
-                                    Alternative {
-                                        label: null,
-                                        options: [],
-                                        elements: [Element::RuleRef(RuleRefElement::new("error"))],
-                                    },
-                                ])),
-                                non_greedy: false,
-                            }),
-                            Element::TokenRef(TokenRefElement::new("EOF")),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub variant StmtOrErrorGroup {");
-    assert str_contains(&output, &"    Stmt(StmtNode),");
-    assert str_contains(&output, &"    Error(ErrorNode),");
-    assert str_contains(&output, &"    pub stmt_or_error_list: List<StmtOrErrorGroup>,");
+    assert str_contains(&output, &"pub enum RAlt {");
+    assert str_contains(&output, &"    else_,");
+    assert str_contains(&output, &"    loop_,");
+    assert str_contains(&output, &"    Keep,");
+    assert !str_contains(&output, &"    else,");
+    assert !str_contains(&output, &"    loop,");
+    assert str_contains(&output, &"0 => Option::Some(RAlt::else_),");
+    assert str_contains(&output, &"1 => Option::Some(RAlt::loop_),");
+    assert str_contains(&output, &"2 => Option::Some(RAlt::Keep),");
 }
 
 test "generate wildcard element" {
@@ -375,8 +184,6 @@ test "generate wildcard element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub struct AnyNode {");
-    assert str_contains(&output, &"    pub wildcard: Token,");
     assert str_contains(&output, &"let wildcard = p.match_any()?;");
 }
 
@@ -410,97 +217,7 @@ test "generate parser not element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub struct ExceptCommaNode {");
-    assert str_contains(&output, &"    pub not_comma: Token,");
     assert str_contains(&output, &"let not_comma = p.match_not([TK_COMMA])?;");
-}
-
-test "generate list label field" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "list",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::Repeat(RepeatElement {
-                                kind: RepeatKind::Star,
-                                element: Element::Label(LabelElement {
-                                    name: "items",
-                                    list: true,
-                                    element: Element::RuleRef(RuleRefElement::new("item")),
-                                }),
-                                non_greedy: false,
-                            }),
-                            Element::TokenRef(TokenRefElement::new("EOF")),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    pub items: List<ItemNode>,");
-}
-
-test "generate standalone group as optional field" {
-    let mut grammar = Grammar {
-        name: "Test",
-        kind: GrammarKind::Combined,
-        parser_rules: [
-            ParserRule {
-                name: "cmd",
-                visibility: Visibility::Default,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [
-                            Element::Group(GroupElement::new([
-                                Alternative {
-                                    label: null,
-                                    options: [],
-                                    elements: [Element::RuleRef(RuleRefElement::new("foo"))],
-                                },
-                                Alternative {
-                                    label: null,
-                                    options: [],
-                                    elements: [Element::RuleRef(RuleRefElement::new("bar"))],
-                                },
-                            ])),
-                            Element::TokenRef(TokenRefElement::new("EOF")),
-                        ],
-                    },
-                ],
-            },
-        ],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub variant FooOrBarGroup {");
-    assert str_contains(&output, &"    Foo(FooNode),");
-    assert str_contains(&output, &"    Bar(BarNode),");
-    assert str_contains(&output, &"    pub foo_or_bar: Option<FooOrBarGroup>,");
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
@@ -748,7 +465,7 @@ test "generate lexer channel" {
     // Non-default channels must be routed to trivia, not tokens — ANTLR4
     // hides channels other than DEFAULT from parser rules.
     assert str_contains(&output, &"else if best_channel != 0");
-    assert str_contains(&output, &"Token::with_channel");
+    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
 }
 
 test "generate lexer hidden channel routes to trivia" {
@@ -771,7 +488,7 @@ ID : [a-z]+ ;";
     // stream.
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, &"else if best_channel != 0");
-    assert str_contains(&output, &"trivia.push(Token::with_channel(");
+    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
 }
 
 test "generate left-associative LR alt passes own_prec+1 on right operand" {
@@ -785,7 +502,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr__inner(p, 2)");
+    assert str_contains(&output, &"_parse_expr(p, 2)");
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -798,7 +515,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr__inner(p, 1)");
+    assert str_contains(&output, &"_parse_expr(p, 1)");
     // And the scan-side mirror must be kept in sync.
     assert str_contains(&output, &"scan_expr(tokens, pos, 1)");
 }
@@ -832,25 +549,6 @@ letterA : 'a' ;
     assert str_contains(&scan_body, &"pos = lr_saved_pos; break;");
 }
 
-test "LR helper wraps left into an array when the recursive-position label uses +=" {
-    // `b+=expr ',' b+=expr` declares `b` as a list-label (`+=`). After LR
-    // rewriting the recursive `b+=expr` is consumed into the helper's `left`
-    // parameter, but the generated struct field `b` keeps its
-    // `List<ExprNode>` type (the `+=` semantics) — the helper must build
-    // `[left]` instead of bare `left`, otherwise the struct literal mismatches
-    // the field type and the generated parser fails to compile.
-    let input = "grammar Test;
-s : expr EOF ;
-expr : b+=expr ',' b+=expr #Comma | ID #JustId ;
-ID : 'a' ;
-WS : [ \\t\\n]+ -> skip ;
-";
-    let mut grammar = parse_grammar(input, "test.g4");
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
-    assert str_contains(&helper, &"b: [left] as List<ExprNode>,");
-}
-
 test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
     // Regression: nested self-ref in `(',' b+=expr)*` kept min_prec=0
     // and ate the outer `'>>'`. Grammar mirrors `ReturnValueAndActionsList1_2`
@@ -868,10 +566,11 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_1");
+    let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
-    assert !str_contains(&helper, &"_parse_expr__inner(p)?");
-    assert str_contains(&helper, &"_parse_expr__inner(p, 2)?");
+    // The self-refs in the Send suffix must be stamped with min_prec 2.
+    assert !str_contains(&helper, &"_parse_expr(p)?");
+    assert str_contains(&helper, &"_parse_expr(p, 2)?");
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
     assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)");
     assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)");
@@ -891,9 +590,10 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let helper = extract_fn_body(&output, &"fn _parse_expr__inner_lr_");
+    let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
     assert helper.len() > 0;
-    assert !str_contains(&helper, &"_parse_expr__inner(p)?");
+    assert !str_contains(&helper, &"_parse_expr(p)?");
+    assert str_contains(&helper, &"_parse_expr(p, 2)?");
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -926,22 +626,19 @@ b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_a(input: &String)");
-    assert str_contains(&output, &"pub fn parse_b(input: &String)");
-    // Per-rule entries share the type-independent prologue/epilogue via two
-    // helpers emitted once (`_gale_new_parser` builds the Parser;
-    // `_gale_pick_error` prefers a deeper recovery error recorded in
-    // `parser.pending` by a scan-gated repetition over a malformed element,
-    // over the shallow top-level failure). The wrapper keeps only the typed
-    // inner call and the typed `Err` reconstruction.
-    assert str_contains(&output, &"let mut parser = _gale_new_parser(input);");
-    assert str_contains(&output, &"let _result = _parse_a(&mut parser);");
-    assert str_contains(&output, &"let _result = _parse_b(&mut parser);");
-    assert str_contains(&output, &"_gale_pick_error(&parser, _e)");
-    assert str_contains(&output, &"fn _gale_new_parser(input: &String) -> Parser");
-    assert str_contains(&output, &"fn _gale_pick_error(parser: &Parser, e: ParseError) -> ParseError");
-    assert str_contains(&output, &"if let Some(_d) = &parser.pending");
-    assert str_contains(&output, &"return parse_a(input);");
+    assert str_contains(&output, &"pub fn parse_a(input: &String");
+    assert str_contains(&output, &"pub fn parse_b(input: &String");
+    // Each `parse_<rule>` is a thin wrapper that hands the rule's
+    // `_parse_<rule>` entry to the shared `_run_parse_entry` helper as a fn value;
+    // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
+    assert str_contains(
+        &output,
+        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult",
+    );
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
+    // `pub fn parse` is a thin alias for the first rule's entry.
+    assert str_contains(&output, &"return parse_a(input, max_errors);");
 }
 
 test "trace option emits per-rule enter/ok/fail instrumentation" {
@@ -970,6 +667,35 @@ b : 'y' ;
     assert !str_contains(&plain, &"trace_enter");
     assert !str_contains(&plain, &"trace_depth");
     assert !str_contains(&plain, &"log_stderr");
+}
+
+test "token-led overlap dispatch emits no per-alt scan helpers" {
+    // `r`'s alts share the first token `'{'` but split on the second
+    // (`a` vs `'}'`), so prediction resolves token-led: a `peek_kind`
+    // dispatch that never calls a scan helper, leaving the per-alt
+    // `_parse_r__inner_scan_<n>` helpers dead.
+    let input = "grammar T;
+r : '{' a '}' | '{' '}' ;
+a : 'x' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    // Both alts are reached (the group resolved, not collapsed)...
+    assert str_contains(&output, &"fn _parse_r__inner_alt_0(");
+    assert str_contains(&output, &"fn _parse_r__inner_alt_1(");
+    // ...but neither scan helper is emitted.
+    assert !str_contains(&output, &"fn _parse_r__inner_scan_");
+
+    // A shared-prefix tournament rule still emits its scan helpers, so the
+    // gate is not over-pruning.
+    let tinput = "grammar T;
+s : X s Y? | X ;
+X : 'X' ;
+Y : 'Y' ;
+";
+    let mut tg = parse_grammar(tinput, "test.g4");
+    let tout = generate(&mut tg, &DEFAULT_OPTIONS).source;
+    assert str_contains(&tout, &"fn _parse_s__inner_scan_0(");
 }
 
 test "trace option instruments the scan tournament and alt picks" {
@@ -1019,52 +745,9 @@ C : 'c' ;
     assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
 }
 
-test "all-single-token multi-alt rule compacts to a { span, token } struct" {
-    // `tok : A | B | C` — every alt is one bare token, so the matched
-    // token's kind already records which alt fired. The CST node, parser,
-    // and walk all collapse to the compact single-token shape.
-    let input = "grammar T;
-tok : A | B | C ;
-A : 'a' ;
-B : 'b' ;
-C : 'c' ;
-";
-    let mut grammar = parse_grammar(input, "test.g4");
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub struct TokNode {");
-    assert str_contains(&output, &"pub token: Token");
-    assert !str_contains(&output, &"pub variant TokNode");
-    // Parser is a kind-set check + one construction, not an N-way cascade.
-    assert str_contains(&output, &"let token = p.expect(kind)?;");
-    assert str_contains(&output, &"TokNode {");
-    // Walk visits the single token directly.
-    assert str_contains(&output, &"v.visit_token(&node.token);");
-}
-
-test "labeled single-token alts stay a variant (CST/parse/walk in lockstep)" {
-    // `sign : p='+' | m='-'` carries element labels, so the compaction
-    // (which drops the per-alt field name) must NOT fire. All three emitters
-    // screen labels out via the one surface `all_alts_are_single_token`
-    // predicate; if the CST type generator disagreed it would emit a struct
-    // node while parse/walk emit `SignNode::Alt0(...)`, and the generated
-    // parser would not compile.
-    let input = "grammar T;
-sign : p='+' | m='-' ;
-WS : [ \\t]+ -> skip ;
-";
-    let mut grammar = parse_grammar(input, "test.g4");
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub variant SignNode"), `expected variant SignNode, got:\n{output}`;
-    assert !str_contains(&output, &"pub struct SignNode {");
-    // The parse side constructs the variant arms, so the type must match.
-    assert str_contains(&output, &"SignNode::Alt0(");
-}
-
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
-    // LR rules' internal helper takes a `min_prec: i32` parameter
-    // (see `lr_util.compute_prefix_self_ref_min_prec`); the public
-    // input entry must pin it to 0 so the top-level call admits every
-    // LR alt, matching the historic `parse(input)` behaviour.
+    // LR rules' `_parse_expr` wrapper defaults `min_prec` to 0, so the public
+    // entry admits every LR alt (historic `parse` behaviour).
     let input = "grammar Test;
 expr : expr '+' expr | NUMBER ;
 NUMBER : [0-9]+ ;
@@ -1072,8 +755,8 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_expr(input: &String)");
-    assert str_contains(&output, &"let _result = _parse_expr(&mut parser, 0);");
+    assert str_contains(&output, &"pub fn parse_expr(input: &String");
+    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
@@ -1401,9 +1084,7 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"let mut val: List<Token>");
     assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])");
-    assert str_contains(&body, &"val.push(");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {
@@ -1414,8 +1095,6 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"lit_else_statement: Option<");
-    assert !str_contains(&output, &"lit_else_statement: List<");
     let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
     // The non-greedy `??` enter/skip decision is taken at runtime by the
     // ATN simulator (full context), not by a static first-set peek — so the

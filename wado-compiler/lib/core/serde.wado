@@ -140,7 +140,13 @@ impl DeserializeError {
 
 #[compiler_item("serialize_seq")]
 pub trait SerializeSeq {
+
+
+    #[compiler_item("serialize_seq_element")]
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+
+
+    #[compiler_item("serialize_seq_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
@@ -152,13 +158,25 @@ pub trait SerializeMap {
 
 #[compiler_item("serialize_struct")]
 pub trait SerializeStruct {
+
+
+    #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
+
+
+    #[compiler_item("serialize_struct_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 #[compiler_item("serialize_variant")]
 pub trait SerializeVariant {
+
+
+    #[compiler_item("serialize_variant_payload")]
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
+
+
+    #[compiler_item("serialize_variant_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
@@ -202,19 +220,31 @@ pub trait Serializer {
         return seq.end();
     }
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
+
+
+    #[compiler_item("serializer_begin_seq")]
     fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
     fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self];
+
+
+    #[compiler_item("serializer_begin_struct")]
     fn begin_struct(
         &mut self,
         name: &String,
         fields: i32,
     ) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+
+
+    #[compiler_item("serializer_serialize_unit_variant")]
     fn serialize_unit_variant(
         &mut self,
         type_name: &String,
         variant_name: &String,
         disc: i32,
     ) -> Result<(), SerializeError>;
+
+
+    #[compiler_item("serializer_begin_variant")]
     fn begin_variant(
         &mut self,
         type_name: &String,
@@ -232,7 +262,13 @@ pub trait Serialize {
 
 #[compiler_item("deserialize_seq")]
 pub trait DeserializeSeq {
+
+
+    #[compiler_item("deserialize_seq_next_element")]
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>;
+
+
+    #[compiler_item("deserialize_seq_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
@@ -264,18 +300,42 @@ pub trait FieldSchema {
 
 #[compiler_item("deserialize_struct")]
 pub trait DeserializeStruct {
+
+
+    #[compiler_item("deserialize_struct_next_field")]
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>;
+
+
+    #[compiler_item("deserialize_struct_value")]
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
+
+
+    #[compiler_item("deserialize_struct_skip")]
     fn skip(&mut self) -> Result<(), DeserializeError>;
+
+
+    #[compiler_item("deserialize_struct_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
 #[compiler_item("deserialize_variant")]
 pub trait DeserializeVariant {
+
+
+    #[compiler_item("deserialize_variant_variant_name")]
     fn variant_name(&mut self) -> Result<String, DeserializeError>;
+
+
+    #[compiler_item("deserialize_variant_disc")]
     fn disc(&mut self) -> Result<i32, DeserializeError>;
+
+
+    #[compiler_item("deserialize_variant_payload")]
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
     fn is_unit(&mut self) -> Result<bool, DeserializeError>;
+
+
+    #[compiler_item("deserialize_variant_end")]
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
@@ -348,7 +408,7 @@ pub trait Deserializer {
         let seq = self.begin_seq()?;
         let mut out: ByteList = [];
         loop {
-            let opt = seq.next_element::<u8>()?;
+            let opt = seq.next_element()?;
             if let Some(b) = opt {
                 out.push(b);
             } else {
@@ -358,13 +418,22 @@ pub trait Deserializer {
         }
     }
     fn is_null(&mut self) -> Result<bool, DeserializeError>;
+
+
+    #[compiler_item("deserializer_begin_seq")]
     fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self];
     fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self];
+
+
+    #[compiler_item("deserializer_begin_struct")]
     fn begin_struct(
         &mut self,
         name: &String,
         num_fields: i32,
     ) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+
+
+    #[compiler_item("deserializer_begin_variant")]
     fn begin_variant(
         &mut self,
         type_name: &String,
@@ -381,7 +450,7 @@ pub trait Deserialize {
     /// Deserialize the next element from a sequence access.
     /// Used by variadic tuple deserialization via type pack expansion.
     fn deserialize_next_element_from_seq<S: DeserializeSeq>(seq: &mut S) -> Result<Self, DeserializeError> {
-        let opt = seq.next_element::<Self>()?;
+        let opt = seq.next_element()?;
         if let Some(v) = opt {
             return Result::Ok(v);
         }
@@ -666,12 +735,12 @@ impl<T: Deserialize> Deserialize for List<T> {
         // Peek at the first element before allocating backing storage.
         // Empty arrays (very common in practice) avoid any capacity allocation.
         // Non-empty arrays start at capacity 4, covering 1–4 elements without a grow.
-        let first_opt = seq.next_element::<T>()?;
+        let first_opt = seq.next_element()?;
         if let Some(first_elem) = first_opt {
             let mut items: List<T> = List::with_capacity(2);
             items.push(first_elem);
             loop {
-                let next_opt = seq.next_element::<T>()?;
+                let next_opt = seq.next_element()?;
                 if let Some(item) = next_opt {
                     items.push(item);
                 } else {
@@ -709,11 +778,11 @@ impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
         let va = d.begin_variant(&"Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
-            let val = va.payload::<T>()?;
+            let val = va.payload()?;
             va.end()?;
             return Result::Ok(Result::Ok(val));
         } else if name == "Err" {
-            let val = va.payload::<E>()?;
+            let val = va.payload()?;
             va.end()?;
             return Result::Ok(Result::Err(val));
         }

@@ -18,6 +18,7 @@ use {
 } from "./ir.wado";
 use { escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
+use { TreeMap } from "core:collections";
 
 pub struct LitToken {
     pub text: String,
@@ -58,7 +59,7 @@ pub fn resolve_ci(grammar_opts: &List<GrammarOption>, rule_opts: &List<GrammarOp
 /// case-insensitively. The original range is always included. When the range
 /// intersects ASCII letters, the opposing-case sub-range is appended.
 /// Non-letter chars are not folded (ANTLR4 only does one-length transforms).
-fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
+pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     out.push(CharRange { start, end });
     if start <= 'z' && end >= 'a' {
         let lo = if start < 'a' { 'a' } else { start };
@@ -290,12 +291,12 @@ fn rule_name_exists(lexer_rules: &List<LexerRule>, name: &String) -> bool {
     return false;
 }
 
-pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+pub fn gen_lexer(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, atn_class: &TreeMap<String, i32>) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
     gen_lexer_struct(w);
-    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options);
+    gen_lexer_match_fns(w, &grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, atn_class);
     gen_literal_match_fns(w, lit_tokens, grammar_ci);
     gen_keyword_classifier_fn(w, &keywords);
     gen_tokenize_fn(w, &grammar.lexer_rules, lit_tokens, &grammar.mode_names, &keywords, &grammar.options);
@@ -346,6 +347,7 @@ fn gen_lexer_match_fns(
     keywords: &List<KeywordInfo>,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
+    atn_class: &TreeMap<String, i32>,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -357,7 +359,7 @@ fn gen_lexer_match_fns(
         } else if !rule.is_fragment {
             if !is_keyword_rule_name(&rule.name, keywords)
                 && !is_literal_duplicate(rule, lit_tokens, grammar_opts, grammar_ci) {
-                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
+                gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
             }
         } else if fragment_is_recursive(rule, lexer_rules) {
             // A recursive fragment needs its own `try_*` matcher (non-
@@ -365,7 +367,7 @@ fn gen_lexer_match_fns(
             // resolves case-insensitivity from `resolve_ci(grammar_opts,
             // &rule.options)`, so a rule-level `options { caseInsensitive=... }`
             // on the fragment overrides the grammar-level flag.
-            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts);
+            gen_lexer_match_fn(w, rule, lexer_rules, grammar_opts, atn_class);
         }
     }
 }
@@ -442,6 +444,7 @@ fn gen_lexer_match_fn(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
+    atn_class: &TreeMap<String, i32>,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
@@ -451,6 +454,14 @@ fn gen_lexer_match_fn(
     f.add_param(&"start", &"i32");
     f.set_return_type(&"i32");
     f.emit_begin(w);
+    // ATN-class rule (recursive non-greedy body): the static single-pass
+    // emitter cannot decide it, so delegate to the runtime lexer simulator.
+    if let Some(idx) = atn_class.get(rule.name) {
+        w.line(&`return latn_match(&LATN_SIM, {idx}, chars, start);`);
+        w.end();
+        w.blank();
+        return;
+    }
     w.line(&"let mut pos = start;");
     if rule.body.len() == 1 {
         gen_lexer_alt_seq(w, &rule.body[0], all_rules, &"return -1", ci);
@@ -791,30 +802,36 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
 
 fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
     w.line(&`if pos >= chars.len() \{ {fail_action}; \}`);
+    let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.write(&"if false");
-        for let range of cc.ranges {
-            if range.start == range.end {
-                w.write(&` || chars[pos] == {escape_char(range.start)}`);
-            } else {
-                w.write(&` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
-            }
-        }
-        w.write(&` \{ {*fail_action}; \}
-`);
+        w.line(&`if {cond} \{ {*fail_action}; \}`);
     } else {
-        w.write(&"if !(false");
-        for let range of cc.ranges {
-            if range.start == range.end {
-                w.write(&` || chars[pos] == {escape_char(range.start)}`);
-            } else {
-                w.write(&` || {escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
-            }
-        }
-        w.write(&`) \{ {*fail_action}; \}
-`);
+        w.line(&`if !({cond}) \{ {*fail_action}; \}`);
     }
     w.line(&"pos += 1;");
+}
+
+/// Build the `chars[pos] == X || lo <= chars[pos] <= hi || ...` disjunction for
+/// a char class (no leading `false ||` seed). Empty class lowers to `false`
+/// (negated: matches any char; positive: always fails).
+fn char_class_disjunction(cc: &CharClass) -> String {
+    if cc.ranges.len() == 0 {
+        return "false";
+    }
+    let mut s = String::with_capacity(64);
+    let mut first = true;
+    for let range of &cc.ranges {
+        if !first {
+            s.push_str(&" || ");
+        }
+        first = false;
+        if range.start == range.end {
+            s.push_str(&`chars[pos] == {escape_char(range.start)}`);
+        } else {
+            s.push_str(&`{escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
+        }
+    }
+    return s;
 }
 
 fn gen_lexer_repeat(
@@ -1421,7 +1438,6 @@ struct TryCall {
     first_chars: List<[char, char]>,
     is_wildcard: bool,
     is_catch_all: bool,
-    match_length: i32,
 }
 
 fn best_state_extras(
@@ -1509,7 +1525,7 @@ fn build_rule_try_call(
         has_channel_rules,
     );
     let mut chars: List<[char, char]> = [];
-    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci);
+    let is_wc = compute_elem_first_chars(&rule.body, all_rules, &mut chars, ci).0;
     // A catch-all rule (e.g., UNEXPECTED_CHAR: .) matches any single character.
     // It's only useful in the wildcard fallback, never in specific dispatch branches
     // where another rule already matches at least 1 character.
@@ -1524,28 +1540,46 @@ fn build_rule_try_call(
         first_chars: chars,
         is_wildcard: is_wc,
         is_catch_all: catch_all,
-        match_length: -1,
     };
 }
 
 /// Analyze first elements of rule body alternatives to find first-char set.
 /// Returns true if it's a wildcard (any char could match).
-fn compute_elem_first_chars(
+/// Compute the first-char set of a lexer rule body into `out`.
+/// Returns `[wildcard, nullable]`:
+///   - `wildcard`: the first set is unbounded (negated class, opaque rule ref,
+///     `.`) — the dispatch treats the rule as matching any char.
+///   - `nullable`: the body can match empty, so a caller folding a sequence
+///     must also include the following element's first set.
+/// A nullable leading element (`x?` / `x*`) contributes its first chars and the
+/// walk continues to the next element (rather than collapsing to wildcard).
+pub fn compute_elem_first_chars(
     body: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
-) -> bool {
+) -> [bool, bool] {
+    let mut any_nullable = false;
     for let alt of body {
         if alt.elements.is_empty() {
-            return true;
+            return [true, false];
         }
-        let elem = &alt.elements[0];
-        if compute_single_elem_first(elem, all_rules, out, ci) {
-            return true;
+        let mut alt_nullable = true;
+        for let mut i = 0; i < alt.elements.len(); i += 1 {
+            let r = compute_single_elem_first(&alt.elements[i], all_rules, out, ci);
+            if r.0 {
+                return [true, false];
+            }
+            if !r.1 {
+                alt_nullable = false;
+                break;
+            }
+        }
+        if alt_nullable {
+            any_nullable = true;
         }
     }
-    return false;
+    return [false, any_nullable];
 }
 
 fn add_folded_range(out: &mut List<[char, char]>, start: char, end: char, ci: bool) {
@@ -1560,30 +1594,32 @@ fn add_folded_range(out: &mut List<[char, char]>, start: char, end: char, ci: bo
     }
 }
 
+/// First-char set of a single lexer element into `out`, returning
+/// `[wildcard, nullable]` (see `compute_elem_first_chars`).
 fn compute_single_elem_first(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     out: &mut List<[char, char]>,
     ci: bool,
-) -> bool {
+) -> [bool, bool] {
     match *elem {
         Literal(text) => {
             let c = text.chars().next().unwrap();
             add_folded_range(out, c, c, ci);
-            return false;
+            return [false, false];
         },
         CharRange(pair) => {
             add_folded_range(out, pair.0, pair.1, ci);
-            return false;
+            return [false, false];
         },
         CharClass(cc) => {
             if cc.negated {
-                return true;
+                return [true, false];
             }
             for let r of &cc.ranges {
                 add_folded_range(out, r.start, r.end, ci);
             }
-            return false;
+            return [false, false];
         },
         RuleRef(name) => {
             for let rule of all_rules {
@@ -1591,23 +1627,23 @@ fn compute_single_elem_first(
                     return compute_elem_first_chars(&rule.body, all_rules, out, ci);
                 }
             }
-            return true;
+            return [true, false];
         },
         Repeat(rep) => {
-            let is_wc = compute_single_elem_first(&rep.element, all_rules, out, ci);
-            if is_wc {
-                return true;
+            let inner = compute_single_elem_first(&rep.element, all_rules, out, ci);
+            if inner.0 {
+                return [true, false];
             }
-            if rep.kind matches { Star } || rep.kind matches { Optional } {
-                return true;
-            }
-            return false;
+            // `?` / `*` make this element skippable, so the rule's first set
+            // extends into the next element; `+` inherits the inner nullability.
+            let nullable = rep.kind matches { Star | Optional } || inner.1;
+            return [false, nullable];
         },
         Group(alts) => {
             return compute_elem_first_chars(&alts, all_rules, out, ci);
         },
         _ => {
-            return true;
+            return [true, false];
         },
     }
 }
@@ -1792,7 +1828,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
 fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<DispatchGroup>, needs_extras: bool) {
     // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].guard == "true" {
-        gen_group_calls(w, calls, &groups[0].calls, needs_extras, true);
+        gen_group_calls(w, calls, &groups[0].calls, needs_extras);
         return;
     }
     let mut first_group = true;
@@ -1800,7 +1836,7 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
         let is_wc = g.guard == "true";
         if is_wc {
             if first_group {
-                gen_group_calls(w, calls, &g.calls, needs_extras, true);
+                gen_group_calls(w, calls, &g.calls, needs_extras);
                 continue;
             }
             w.else_begin(&"else");
@@ -1810,35 +1846,18 @@ fn gen_dispatch_groups(w: &mut CodeWriter, calls: &List<TryCall>, groups: &List<
             w.else_begin(&`else if {g.guard}`);
         }
         first_group = false;
-        gen_group_calls(w, calls, &g.calls, needs_extras, is_wc);
+        gen_group_calls(w, calls, &g.calls, needs_extras);
     }
     if !first_group {
         w.end();
     }
 }
 
-fn gen_group_calls(
-    w: &mut CodeWriter,
-    calls: &List<TryCall>,
-    indices: &List<i32>,
-    needs_extras: bool,
-    is_wildcard_group: bool,
-) {
+fn gen_group_calls(w: &mut CodeWriter, calls: &List<TryCall>, indices: &List<i32>, needs_extras: bool) {
+    // Uniform `try_*` call per candidate (keep the longest match). Single-char
+    // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
-        // In specific dispatch branches, single-char literals are guaranteed to match
-        // (the dispatch already confirmed the character). Inline the result
-        // instead of calling the try_* function.
-        if !is_wildcard_group && call.match_length == 1 {
-            if needs_extras {
-                w.line(
-                    &`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind};{call.extra} \}`,
-                );
-            } else {
-                w.line(&`if start + 1 > best_end \{ best_end = start + 1; best_kind = {call.token_kind}; \}`);
-            }
-            continue;
-        }
         w.line(&`end = {call.fn_name}(&lexer.chars, start);`);
         if needs_extras {
             w.line(&`if end > best_end \{ best_end = end; best_kind = {call.token_kind};{call.extra} \}`);
@@ -1878,13 +1897,14 @@ fn gen_tokenize_fn(
     let mut f = FnSpec::new("tokenize");
     f.set_pub();
     f.add_param(&"input", &"&String");
-    f.set_return_type(&"Array<Token>");
+    f.set_return_type(&"TokenStream");
     f.emit_begin(w);
     w.line(&"let mut lexer = Lexer::new(input);");
-    // Pre-size to roughly one token per 4 input chars to avoid repeated grow().
-    // `trivia` is reset to `[]` after each non-trivia token so pre-sizing is wasted there.
-    w.line(&"let mut tokens: List<Token> = List::with_capacity(lexer.chars.len() / 4 + 1);");
-    w.line(&"let mut trivia: List<Token> = [];");
+    // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
+    // per-token aggregate. `triv_lo` marks where the current token's leading
+    // trivia begins; it advances to the next mark after each emitted token.
+    w.line(&"let mut ts = TokenStream::new(&lexer.chars);");
+    w.line(&"let mut triv_lo = ts.trivia_mark();");
 
     if has_more_rules {
         // Tracks the start position of a pending `more` sequence; -1 means
@@ -1984,7 +2004,6 @@ fn gen_tokenize_fn(
             // the literal's first char may appear in either case.
             add_folded_range(&mut fc, c, c, grammar_ci);
             let tk = lit.const_name;
-            let mlen = lit.text.chars().count();
             all_calls.push(TryCall {
                 fn_name,
                 token_kind: tk,
@@ -1992,7 +2011,6 @@ fn gen_tokenize_fn(
                 first_chars: fc,
                 is_wildcard: false,
                 is_catch_all: false,
-                match_length: mlen,
             });
         }
         for let rule of lexer_rules {
@@ -2043,11 +2061,7 @@ fn gen_tokenize_fn(
         String::from("best_end <= start");
     };
     w.begin(&`if {no_match_guard}`);
-    w.line(
-        &"let tok = Token::with_trivia(TK_ERROR, lexer.slice(start, start + 1), Span::new(start, start + 1), trivia);",
-    );
-    w.line(&"tokens.push(tok);");
-    w.line(&"trivia = [];");
+    emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
     w.line(&"lexer.pos = start + 1;");
     w.else_begin(&"else");
 
@@ -2085,44 +2099,32 @@ fn gen_tokenize_fn(
         w.begin(&"if best_more");
         w.line(&"if more_start < 0 { more_start = start; }");
         w.else_begin(&"else if is_skip");
-        w.line(&"trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
         w.line(&"more_start = -1;");
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin(&"else if best_channel != 0");
-            w.line(
-                &"trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
-            );
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
             w.line(&"more_start = -1;");
         }
         w.else_begin(&"else");
-        w.line(
-            &"let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
-        );
-        w.line(&"tokens.push(tok);");
-        w.line(&"trivia = [];");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.line(&"more_start = -1;");
         w.end();
     } else {
         w.begin(&"if is_skip");
-        w.line(&"trivia.push(Token::new(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end)));");
+        w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             w.else_begin(&"else if best_channel != 0");
-            w.line(
-                &"trivia.push(Token::with_channel(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), [], best_channel));",
-            );
+            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
         }
         w.else_begin(&"else");
-        w.line(
-            &"let tok = Token::with_trivia(best_kind, lexer.slice(tok_start, best_end), Span::new(tok_start, best_end), trivia);",
-        );
-        w.line(&"tokens.push(tok);");
-        w.line(&"trivia = [];");
+        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
         w.end();
     }
 
@@ -2153,12 +2155,20 @@ fn gen_tokenize_fn(
     w.line(&"lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
-    w.line(
-        &"tokens.push(Token::with_trivia(TK_EOF, LexerSlice::empty(&lexer.chars), Span::new(lexer.pos, lexer.pos), trivia));",
-    );
-    w.line(&"return tokens.to_array();");
+    // EOF sentinel: zero-length, carrying any trailing trivia. No reset
+    // follows (the stream ends here), so this stays inline rather than
+    // using `emit_token_commit`.
+    w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
+    w.line(&"return ts;");
     w.end();  // fn
     w.blank();
+}
+
+/// Emit a default-channel token commit: push it with the pending leading-trivia
+/// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
+fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
+    w.line(&`ts.push_token({*kind}, {*start}, {*end}, triv_lo, ts.trivia_mark());`);
+    w.line(&"triv_lo = ts.trivia_mark();");
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {

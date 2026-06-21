@@ -1,0 +1,63 @@
+// A method type parameter that appears only in the return type
+// (`payload<T>() -> Result<T, _>`, no value argument) must be inferred per call
+// site from that site's sink — not fused to an enclosing generic that happens
+// to share its `(name, index)`. Here `Result<T, E>::decode` calls the
+// return-only `payload()` twice: once pinned to `T` (the `Ok` arm) and once to
+// `E` (the `Err` arm). Before the fix both fused to `T`, so the `Err` arm built
+// a payload of the wrong type and codegen produced invalid Wasm.
+
+trait Access {
+    fn payload<T: Default>(&mut self) -> Result<T, i32>;
+    fn tag(&mut self) -> Result<i32, i32>;
+}
+
+// `choice` selects which arm the decoder takes, so both monomorphizations of
+// `payload` are exercised at runtime.
+struct VAImpl {
+    choice: i32,
+}
+
+impl Access for VAImpl {
+    fn payload<T: Default>(&mut self) -> Result<T, i32> {
+        return Result::Ok(T::default());
+    }
+    fn tag(&mut self) -> Result<i32, i32> {
+        return Result::Ok(self.choice);
+    }
+}
+
+trait Decoder {
+    fn decode(va: &mut VAImpl) -> Result<Self, i32>;
+}
+
+impl<T: Default, E: Default> Decoder for Result<T, E> {
+    fn decode(va: &mut VAImpl) -> Result<Result<T, E>, i32> {
+        let t = va.tag()?;
+        if t == 0 {
+            let val = va.payload()?;
+            return Result::Ok(Result::Ok(val));
+        } else {
+            let val = va.payload()?;
+            return Result::Ok(Result::Err(val));
+        }
+    }
+}
+
+fn decode<X: Decoder>(va: &mut VAImpl) -> Result<X, i32> {
+    return X::decode(va);
+}
+
+test "return-only method param resolves per call site (Ok arm -> T)" {
+    let mut va = VAImpl { choice: 0 };
+    let r: Result<Result<i32, String>, i32> = decode(&mut va);
+    assert r matches { Ok(Ok(0)) };
+}
+
+test "return-only method param resolves per call site (Err arm -> E)" {
+    let mut va = VAImpl { choice: 1 };
+    let r: Result<Result<i32, String>, i32> = decode(&mut va);
+    assert r matches { Ok(Err(s)) && s == "" };
+}
+
+__DATA__
+{"test": {}}

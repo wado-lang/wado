@@ -143,6 +143,61 @@ impl TypeSystem {
         mapping
     }
 
+    /// The traits the compiler auto-derives for eligible aggregate types
+    /// (`struct` / `variant` / `enum` / generic instance) and exposes through
+    /// method-call and operator dispatch, each paired with the method it
+    /// declares. The single source for the auto-derive method ↔ trait mapping:
+    /// the dispatch sites read it instead of hardcoding the `"eq"` / `"cmp"`
+    /// strings and the per-trait return type. Adding a new auto-derived trait
+    /// is one entry here (plus its synthesis in `synthesis::traits`).
+    const AUTO_DERIVED_METHODS: &'static [(CompilerItem, &'static str)] =
+        &[(CompilerItem::Eq, "eq"), (CompilerItem::Ord, "cmp")];
+
+    /// The return type an auto-derived trait fixes, regardless of what any user
+    /// impl writes (`Eq` → `bool`, `Ord` → `Ordering`).
+    fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
+        match item {
+            CompilerItem::Eq => TypeTable::BOOL,
+            _ => self
+                .type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::Ordering),
+        }
+    }
+
+    /// Resolve the auto-derived trait that declares `method_name`, returning its
+    /// trait name and fixed return type, or `None` when no auto-derived trait
+    /// declares that method.
+    pub(super) fn auto_derive_by_method(&self, method_name: &str) -> Option<(String, TypeId)> {
+        let item = Self::AUTO_DERIVED_METHODS
+            .iter()
+            .find(|(_, m)| *m == method_name)
+            .map(|(it, _)| *it)?;
+        let trait_name = self
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(item)
+            .to_string();
+        Some((trait_name, self.auto_derive_return_type(item)))
+    }
+
+    /// Mirror of [`Self::auto_derive_by_method`] keyed by trait name, for
+    /// operator dispatch which already knows the trait. Returns the fixed
+    /// return type, or `None` when `trait_name` is not an auto-derived trait.
+    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<TypeId> {
+        let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
+            let name = self
+                .type_table
+                .borrow()
+                .compiler_items()
+                .trait_name(*item)
+                .to_string();
+            (name == trait_name).then_some(*item)
+        })?;
+        Some(self.auto_derive_return_type(item))
+    }
+
     /// Check that concrete type args at non-type-parameter positions match the impl type.
     /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
     /// because position 0 expects String but got i32.
@@ -1073,39 +1128,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
-        // Look up function's type params from AST
         let type_params = self.lookup_function_type_params(callee);
-        for (i, param) in type_params.iter().enumerate() {
-            if let Some(&type_arg) = type_args.get(i) {
-                for bound in &param.bounds {
-                    // Skip `fn(...)` / `fn mut(...)` closure-type bounds: they
-                    // are eagerly realised to the bound's function type at
-                    // `register_generic_params`, so the parameter is no longer
-                    // a real generic that needs `type_implements_trait` to
-                    // satisfy a synthetic `Fn` trait.
-                    if bound.fn_signature.is_some() {
-                        continue;
-                    }
-                    if self.type_implements_trait(&self.annotate_ctx, type_arg, &bound.name) {
-                        // Register associated type resolutions so the monomorphizer can
-                        // substitute e.g. I::Iter → ListIter<u8> when I = List<u8>.
-                        self.register_assoc_types_for_concrete_type_and_trait(
-                            type_arg,
-                            &bound.name.clone(),
-                        );
-                    } else {
-                        let type_name = self.tysys.type_id_to_string(type_arg);
-                        let reason = self.trait_unimpl_reason_chain(type_arg, &bound.name);
-                        let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
-                            type_name,
-                            trait_name: bound.name.clone(),
-                            param_name: param.name.clone(),
-                            reason,
-                            span,
-                        });
-                    }
-                }
+        self.enforce_type_arg_bounds(&type_params, type_args, span);
+    }
+
+    /// The single enforcement of trait bounds on a generic decl's type args,
+    /// shared by every generic-call kind so the rule cannot drift. Enforces only
+    /// fully concrete args: a still-parametric arg is forwarded from the caller
+    /// (verified once concrete, since impl-level bounds are not in scope here),
+    /// and `fn(...)`-bound params are realised eagerly elsewhere.
+    pub(super) fn enforce_type_arg_bounds(
+        &mut self,
+        params: &[ast::GenericParam],
+        type_args: &[TypeId],
+        span: Span,
+    ) {
+        for (i, param) in params.iter().enumerate() {
+            let Some(&type_arg) = type_args.get(i) else {
+                continue;
+            };
+            if self.tysys.type_table.borrow().contains_type_param(type_arg) {
+                // Also covers holes (reserved-index params), re-checked at finalize.
+                continue;
             }
+            for bound in &param.bounds {
+                if bound.fn_signature.is_some() {
+                    continue;
+                }
+                self.enforce_single_bound(type_arg, &bound.name, &param.name, span);
+            }
+        }
+    }
+
+    /// Check one concrete type argument against one trait bound — the primitive
+    /// every bound-enforcement path funnels through. On success registers the
+    /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
+    pub(super) fn enforce_single_bound(
+        &mut self,
+        type_arg: TypeId,
+        trait_name: &str,
+        param_name: &str,
+        span: Span,
+    ) {
+        if self.type_implements_trait(&self.annotate_ctx, type_arg, trait_name) {
+            self.register_assoc_types_for_concrete_type_and_trait(type_arg, trait_name);
+        } else {
+            let type_name = self.tysys.type_id_to_string(type_arg);
+            let reason = self.trait_unimpl_reason_chain(type_arg, trait_name);
+            let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name: trait_name.to_string(),
+                param_name: param_name.to_string(),
+                reason,
+                span,
+            });
         }
     }
 
@@ -1361,33 +1437,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // respectively) regardless of what a user impl writes, so normalize
         // those here. `find_arithmetic_trait_impl` would otherwise default
         // `output_type` to the receiver type when no `type Output` is
-        // declared.
-        let (eq_name, ord_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::Eq).to_string(),
-                items.trait_name(CompilerItem::Ord).to_string(),
-            )
-        };
-        let is_eq = trait_name == eq_name;
-        let is_ord = trait_name == ord_name;
+        // declared. The auto-derive set and the fixed return types come from
+        // `TypeSystem::auto_derive_by_trait` (the single source).
+        let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
         let (info_trait_name, self_kind, param_types, return_type) = if let Some(info) =
             self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_name, method_name)
         {
-            let return_type = if is_eq {
-                TypeTable::BOOL
-            } else if is_ord {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_enum(CompilerItem::Ordering)
-            } else {
-                info.output_type
-            };
+            let return_type = auto_derive.unwrap_or(info.output_type);
             let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
             (info.trait_name, info.self_kind, param_types, return_type)
-        } else if (is_eq || is_ord)
+        } else if let Some(return_type) = auto_derive
             && self.type_implements_trait(&self.annotate_ctx, lookup_type_id, trait_name)
         {
             let ref_self_ty = self
@@ -1395,14 +1454,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .intern(ResolvedType::Ref(lookup_type_id));
-            let return_type = if is_eq {
-                TypeTable::BOOL
-            } else {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_compiler_enum(CompilerItem::Ordering)
-            };
             (
                 trait_name.to_string(),
                 ast::SelfKind::Ref,
@@ -1437,48 +1488,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// because their equality/comparison lowers to Wasm instructions, not
     /// to a method body.
     ///
-    /// FIXME: this function has two places where it hard-codes knowledge
-    /// that should live on the trait declarations themselves:
+    /// The method ↔ trait mapping and the fixed return type come from
+    /// [`TypeSystem::auto_derive_by_method`] — the single source for which
+    /// traits the compiler auto-derives — so adding a new auto-derived trait
+    /// touches that table, not this arm.
     ///
-    ///   1. `method_name -> trait_name` is a closed `match` against `"eq"`
-    ///      and `"cmp"`.  Adding auto-derive method-call support for
-    ///      `Inspect::inspect` / `Display::fmt` / any new auto-derived
-    ///      trait requires extending this arm. The right design is a
-    ///      reverse-index built from `trait_env.decl_index` that answers
-    ///      "which traits declare a method named `X`?" and then filters
-    ///      by those that have an auto-derive rule.
-    ///
-    ///   2. The synthesized [`MethodInfo`] is built with a fixed shape
-    ///      (`self_kind: Ref`, single `&Self` parameter named `"other"`,
-    ///      no defaults, no method type params).  If the prelude ever
-    ///      evolves the `Eq` or `Ord` trait declaration (e.g. renames
-    ///      the parameter, adds a default arg, takes `&mut self`), this
-    ///      shape drifts silently.  The right design is to look the
-    ///      real `ast::Function` up via `find_trait_decl_methods` and
-    ///      substitute `Self` through the same path as user-written
-    ///      impls (via `trait_ctx.self_type`).
-    ///
-    /// Tracked as a post-PR cleanup; the shape is stable enough for the
-    /// current two traits that it does not cause observable bugs today.
+    /// The synthesized [`MethodInfo`] is still built with the fixed shape the
+    /// auto-derived `Eq` / `Ord` declarations have (`self_kind: Ref`, a single
+    /// `&Self` parameter named `"other"`, no defaults, no method type params).
+    /// Should a future auto-derived trait need a different shape, read it from
+    /// the trait's `ast::Function` (via `find_trait_decl_methods`) instead of
+    /// this literal; the current two traits share this shape exactly.
     pub(super) fn try_auto_derived_method_match(
         &mut self,
         struct_name: &str,
         method_name: &str,
         receiver_type_id: TypeId,
     ) -> Option<TraitMethodMatch> {
-        let (eq_name, ord_name) = {
-            let tt = self.tysys.type_table.borrow();
-            let items = tt.compiler_items();
-            (
-                items.trait_name(CompilerItem::Eq).to_string(),
-                items.trait_name(CompilerItem::Ord).to_string(),
-            )
-        };
-        let trait_name: String = match method_name {
-            "eq" => eq_name.clone(),
-            "cmp" => ord_name,
-            _ => return None,
-        };
+        let (trait_name, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
         if !self.tysys.auto_derive_eligible_kind(base_type_id) {
             return None;
@@ -1491,15 +1518,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
-        let is_eq_match = trait_name == eq_name;
-        let return_type = if is_eq_match {
-            TypeTable::BOOL
-        } else {
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::Ordering)
-        };
         let method_info = MethodInfo {
             return_type,
             self_kind: ast::SelfKind::Ref,

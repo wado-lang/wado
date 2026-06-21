@@ -1,0 +1,85 @@
+#!/usr/bin/env wado run
+// Higher-order numerics: each routine takes a function `fn(f64) -> f64` as a
+// value. There is no for-of equivalent here — the function *is* the input, and
+// closures let the caller pass an arbitrary expression (often capturing its
+// coefficients).
+//
+//   wado run example/closure_numerics.wado
+
+use { println, Stdout } from "core:cli";
+
+// Numerical derivative via the central difference.
+fn derivative(f: fn(f64) -> f64, x: f64) -> f64 {
+    let h = 0.000001;
+    return (f(x + h) - f(x - h)) / (2.0 * h);
+}
+
+// Root of `f` in [lo, hi] by bisection (assumes a sign change on the interval).
+fn bisect(f: fn(f64) -> f64, mut lo: f64, mut hi: f64) -> f64 {
+    for let mut i = 0; i < 100; i += 1 {
+        let mid = (lo + hi) / 2.0;
+        if f(lo) * f(mid) <= 0.0 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    return (lo + hi) / 2.0;
+}
+
+// Newton's method: needs both `f` and its derivative `df`.
+fn newton(f: fn(f64) -> f64, df: fn(f64) -> f64, x0: f64) -> f64 {
+    let mut x = x0;
+    for let mut i = 0; i < 50; i += 1 {
+        x = x - f(x) / df(x);
+    }
+    return x;
+}
+
+// Definite integral over [a, b] by the composite Simpson rule (n even).
+fn integrate(f: fn(f64) -> f64, a: f64, b: f64, n: i32) -> f64 {
+    let h = (b - a) / n as f64;
+    let mut sum = f(a) + f(b);
+    for let mut i = 1; i < n; i += 1 {
+        let x = a + i as f64 * h;
+        let weight = if i % 2 == 0 { 2.0 } else { 4.0 };
+        sum = sum + weight * f(x);
+    }
+    return sum * h / 3.0;
+}
+
+test "derivative of x^2 is 2x" {
+    let sq = |x: f64| x * x;
+    assert f64::abs(derivative(sq, 3.0) - 6.0) < 0.0001;
+}
+
+test "bisection finds sqrt(2)" {
+    let f = |x: f64| x * x - 2.0;  // root of x^2 - 2 in [0, 2]
+    assert f64::abs(bisect(f, 0.0, 2.0) - f64::sqrt(2.0)) < 0.0001;
+}
+
+test "newton converges to the nearby root" {
+    let f = |x: f64| x * x - 3.0 * x + 2.0;  // (x-1)(x-2)
+    let df = |x: f64| 2.0 * x - 3.0;
+    assert f64::abs(newton(f, df, 1.6) - 2.0) < 0.0001;
+}
+
+test "simpson integrates x^2 on [0, 1] to 1/3" {
+    let sq = |x: f64| x * x;
+    assert f64::abs(integrate(sq, 0.0, 1.0, 100) - 1.0 / 3.0) < 0.0001;
+}
+
+export fn run() with Stdout {
+    // The closures capture the coefficients a, b, c at definition time.
+    let a = 1.0;
+    let b = -5.0;
+    let c = 6.0;  // f(x) = (x-2)(x-3)
+    let quad = |x: f64| a * x * x + b * x + c;
+    let dquad = |x: f64| 2.0 * a * x + b;
+
+    println(`f(x) = {a}x^2 + {b}x + {c}`);
+    println(`  f'(4)                         = {derivative(quad, 4.0):0.4f}`);
+    println(`  root in [2.5, 5] (bisection)  = {bisect(quad, 2.5, 5.0):0.4f}`);
+    println(`  root from x0 = 2.4 (newton)   = {newton(quad, dquad, 2.4):0.4f}`);
+    println(`  integral over [0, 1] (simpson)= {integrate(quad, 0.0, 1.0, 100):0.4f}`);
+}

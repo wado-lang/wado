@@ -1,0 +1,13 @@
+use sqlite from "./grammars/SQLite.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_sqlite",
+        },
+    };
+
+test "minimal parse" {
+    let r = sqlite::parse(&"SELECT 1;");
+    assert r.ok(), "unexpected diagnostics";
+}

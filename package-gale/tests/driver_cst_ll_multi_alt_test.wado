@@ -1,0 +1,28 @@
+//! Stage 2b: a General-group scan tournament inside a rule body, emitted
+//! uniformly. `r : (a b | a) EOF` overlaps on `a`'s first set and is
+//! resolved by the longest-match scan tournament — the group
+//! dispatch reuses that prediction (no GIR-only re-implementation).
+
+use g from "./grammars/ll_multi_alt.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_ll_multi_alt",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+test "tree: X Y picks (a b) when a is multi-alt" {
+    assert_tree(&"X Y", &"(r (a X) (b Y))");
+}
+
+test "tree: Z picks a's second alt" {
+    assert_tree(&"Z", &"(r (a Z))");
+}

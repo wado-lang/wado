@@ -221,9 +221,9 @@ use json from "./grammars/JSON.g4"
 use { normalize_tree } from "./grammars/JSON.g4";
 
 fn assert_tree(input: &String, expected: &String) {
-    let root = json::parse(input).unwrap();
-    let tree = json::to_tree(&root);
-    let actual = tree.to_string_tree();
+    let result = json::parse(input);
+    assert result.ok(), `unexpected diagnostics for {*input}`;
+    let actual = json::to_string_tree(&result);
     let norm = normalize_tree(expected);
     assert actual == norm, `\ninput:    {*input}\nexpected: {norm}\nactual:   {actual}`;
 }
@@ -241,9 +241,10 @@ test "tree: nested object with array" {
 }
 ```
 
-- `to_string_tree()` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
+- `parse()` returns a `ParseResult` (a clean parse has `result.ok() == true`); there is no typed-CST / `to_tree` step.
+- `to_string_tree(&result)` outputs `(ruleName child1 child2 ...)` with tokens as their text. EOF is omitted.
 - `normalize_tree()` collapses whitespace (preserving quoted strings) so multi-line indented expected values compare correctly with compact single-line output.
-- Both functions are defined in the inlined runtime (`src/runtime/cst.wado` and `src/runtime/tools.wado`) and available in all generated parsers.
+- `to_string_tree` is emitted into every generated parser by codegen (`cst_gen`); `normalize_tree` lives in the inlined `src/runtime/tools.wado`.
 
 #### Adding a new e2e test grammar
 
@@ -261,16 +262,21 @@ The runtime is split across `src/runtime/*.wado` and inlined into every
 generated file via `#include_str` in `gen_runtime` (`codegen.wado`), gated so a
 generated parser carries only the fragments it needs:
 
-- `lex.wado` (Span / LexerSlice / Token / ParseError), `cst.wado` (generic
-  `CstNode` tree + `Visitor` + `to_tree`), and `tools.wado` (consumer-facing
-  `normalize_tree` / `find_first_child_node` / `to_lexer_string`) are **always**
-  emitted.
+- `lex.wado` (Span / LexerSlice / Token / ParseError), `diag.wado`
+  (`Diagnostic`), `tree.wado` (the untyped `CstNode` tree + `TreeBuilder` +
+  `NodeKind` + `to_string_tree`), and `tools.wado` (consumer-facing
+  `normalize_tree` / `to_lexer_string`) are **always** emitted.
 - `follow.wado` only when lowering built a caller-FOLLOW gate (`emit_follow`).
-- `highlight.wado` only when the `highlight` generator option is on.
-- `atn.wado` only when lowering needs the runtime simulator (`needs_atn`).
+- `highlight.wado` + `highlight_walk.wado` only when the `highlight` generator
+  option is on.
+- `atn.wado` when lowering needs the parser runtime simulator (`needs_atn`)
+  or a lexer rule needs the lexer simulator (`needs_latn` reuses its
+  `AtnSim` / `atn_decode`).
+- `latn.wado` only for ATN-class lexer rules (`grammar_needs_latn`): the
+  lexer Pike VM, decoded once into `LATN_SIM`.
 
 Each fragment is a real module for dev/test and imports its siblings via
-`use { ... } from "./lex.wado"` etc.; `emit_runtime_fragment` strips those
+`use { ... } from "./lex.wado"` etc.; `gen_runtime_fragment` strips those
 sibling-runtime imports when concatenating, since every fragment lands in the
 single generated module (with `lex` first). A fragment may also import the
 standard library (`core:` / `wasi:`); those imports are kept verbatim and flow
@@ -319,6 +325,20 @@ by the builder in `src/atn.wado`. See [WEP: Compile-Time File Inclusion](../docs
   future grammar exercises the complex shape AND the inner does compete
   with the suffix, generalise the peek emitters rather than widening
   the trigger blindly.
+- **ATN-class lexer rules escape to a runtime simulator.** A rule whose
+  non-greedy repeat body recurses into itself (nested comments,
+  `CMT : '/*' (CMT | .)+? '*' '/'`) cannot be decided single-pass: whether
+  an inner `/*` opens a nested rule or is wildcard text needs unbounded
+  lookahead. `lexer_rule_is_atn_class` (`src/latn.wado`) detects it and
+  `gen_lexer_match_fn` emits the rule's `try_*` body as a call to
+  `latn_match` (`src/runtime/latn.wado`) over a dedicated lexer ATN
+  (`build_latn`, char-range atoms). The simulator is an ordered-thread
+  Pike VM (leftmost-first / PCRE priority — still no backtracking) with a
+  per-thread rule-call return stack; greedy/non-greedy is loop-edge order,
+  as in the parser ATN. Semantics were pinned clean-room against the
+  published jar (License hygiene: black-box only). Regression fixtures:
+  `tests/antlr4-compat/.../RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`
+  plus `src/latn_test.wado`.
 
 ## LL Prediction
 

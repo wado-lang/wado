@@ -1,0 +1,50 @@
+// Deferred inference into a `match` scrutinee (`match m.opt() { Some(x) => x,
+// None => 0 }`) and a binary-op operand (`m.num() + 1`): the call's `T`, only
+// in its return type, is pinned by the surrounding expression.
+
+trait Producer {
+    fn make() -> Self;
+}
+impl Producer for i32 {
+    fn make() -> i32 { return 7; }
+}
+impl Producer for String {
+    fn make() -> String { return "hi"; }
+}
+
+struct Source {}
+impl Source {
+    fn opt<T: Producer>(&self) -> Option<T> {
+        return Option::Some(T::make());
+    }
+    fn num<T: Producer>(&self) -> T {
+        return T::make();
+    }
+}
+
+test "match scrutinee infers from a sibling arm" {
+    let s = Source {};
+    let r = match s.opt() {
+        Some(x) => x,
+        None => 0,
+    };
+    assert r == 7;
+}
+
+test "match scrutinee infers from the result annotation" {
+    let s = Source {};
+    let r: String = match s.opt() {
+        Some(x) => x,
+        None => "fallback",
+    };
+    assert r == "hi";
+}
+
+test "binary-op operand infers from the other operand" {
+    let s = Source {};
+    let n = s.num() + 1;
+    assert n == 8;
+}
+
+__DATA__
+{"test": {}}

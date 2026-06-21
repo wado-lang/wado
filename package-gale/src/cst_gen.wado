@@ -1,0 +1,165 @@
+//! CST scaffolding.
+//!
+//! The parser itself is emitted by `parser_gen` (the `Parser` drives a
+//! `TreeBuilder` while every prediction / scan / ATN decision drives the
+//! tree build — see `resilient-parser.md`). This module retains only the two
+//! grammar-specific tables that path needs: the per-rule `NodeKind` constants
+//! + name table, and the `to_string_tree` convenience.
+
+use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
+use { LitToken } from "./lexer_gen.wado";
+use { Rule } from "./gir.wado";
+use { CodeWriter } from "./wadopoet.wado";
+use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
+
+/// Number of distinct token kinds: one per non-fragment lexer rule, the two
+/// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
+/// the contiguous `0..n` numbering `gen_token_constants` assigns.
+fn num_token_kinds(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> i32 {
+    let mut n = 0;
+    for let r of lexer_rules {
+        if !r.is_fragment {
+            n += 1;
+        }
+    }
+    return n + 2 + lit_tokens.len();
+}
+
+fn rule_name(rule: &Rule) -> String {
+    return match *rule {
+        Simple(s) => s.header.name,
+        MultiAlt(m) => m.header.name,
+        LeftRecursive(l) => l.header.name,
+    };
+}
+
+/// Uppercase the rule name for the `RK_` constant suffix.
+fn rule_const(name: &String) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        out.push(c.to_ascii_uppercase());
+    }
+    return out;
+}
+
+/// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
+/// table (rule-index order); the name table drives `to_string_tree`. The
+/// `RK_*` constants are `pub` so a consumer can dispatch on `CstNode.kind`
+/// (e.g. an interpreter walking the tree).
+pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
+    for let mut i = 0; i < rules.len(); i += 1 {
+        w.line(&`pub global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
+    }
+    w.blank();
+    let mut names = String::with_capacity(rules.len() * 12);
+    names.push('[');
+    for let mut i = 0; i < rules.len(); i += 1 {
+        if i > 0 {
+            names.push_str(&", ");
+        }
+        names.push('"');
+        names.push_str(&rule_name(&rules[i]));
+        names.push('"');
+    }
+    names.push(']');
+    w.line(&`global RULE_NAMES: List<String> = {names};`);
+    w.blank();
+}
+
+/// Emit, for every parser rule whose alternatives carry `# Label`s, a
+/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) ->
+/// Option<<Rule>Alt>` accessor, so a consumer can dispatch on the matched
+/// alternative (`match expr_alt(node) { Some(MulDiv) => ..., None => ... }`).
+///
+/// The parser stamps the per-rule alternative index (grammar declaration
+/// order) onto `CstNode.alt`; the enum cases are emitted in that same order,
+/// so the accessor maps `node.alt` straight to its case. The accessor returns
+/// `Option`, so a node whose `alt` was never set (an error-recovery node, or a
+/// node of another rule) is `None` rather than a silent first alternative.
+pub fn gen_alt_enums(w: &mut CodeWriter, grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        gen_one_alt_enum(w, rule);
+    }
+}
+
+fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
+    if !rule_alts_labeled(&rule.alternatives) {
+        return;
+    }
+    let enum_name = `{to_pascal_case(&rule.name)}Alt`;
+
+    // Several alternatives may share one `# Label` (valid in ANTLR4: they
+    // denote the same alternative kind), so emit each distinct label once —
+    // a repeated variant would not compile. A label may be a Wado reserved
+    // word (e.g. `# else`), so escape it to a valid identifier.
+    w.begin(&`pub enum {enum_name}`);
+    let mut seen: List<String> = [];
+    for let alt of &rule.alternatives {
+        if let Some(label) = &alt.label {
+            let case = escape_ident(label);
+            let mut dup = false;
+            for let s of &seen {
+                if *s == case {
+                    dup = true;
+                }
+            }
+            if !dup {
+                seen.push(case);
+                w.line(&`{case},`);
+            }
+        }
+    }
+    w.end();
+    w.blank();
+
+    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> Option<{enum_name}>`);
+    w.line(&"return match node.alt {");
+    w.indent();
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if let Some(label) = &rule.alternatives[i].label {
+            w.line(&`{i} => Option::Some({enum_name}::{escape_ident(label)}),`);
+        }
+    }
+    w.line(&"_ => null,");
+    w.dedent();
+    w.line(&"};");
+    w.end();
+    w.blank();
+}
+
+/// Emit a `to_string_tree(result)` convenience that supplies the grammar's name
+/// tables (rules from `RULE_NAMES`, tokens via the generated
+/// `token_kind_name`). Used by driver tests; never called by the parser.
+pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+    let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
+    w.begin(&"pub fn to_string_tree(result: &ParseResult) -> String");
+    w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
+    w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+    w.line(&"token_names.push(token_kind_name(k));");
+    w.end();
+    w.line(&"return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);");
+    w.end();
+    w.blank();
+
+    // Sub-tree render: find the first child of the root named `rule` and render
+    // just that subtree. For ANTLR4 descriptors whose `[output]` is a labelled
+    // child's tree, not the start rule's full tree. Returns "" when absent.
+    w.begin(&"pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String");
+    w.line(&`let mut token_names: List<String> = List::with_capacity({n});`);
+    w.begin(&`for let mut k = 0; k < {n}; k += 1`);
+    w.line(&"token_names.push(token_kind_name(k));");
+    w.end();
+    w.line(&"let mut _kind: i32 = -1;");
+    w.begin(&"for let mut i = 0; i < RULE_NAMES.len(); i += 1");
+    w.begin(&"if RULE_NAMES[i] == *rule");
+    w.line(&"_kind = i;");
+    w.line(&"break;");
+    w.end();
+    w.end();
+    w.begin(&"if let Some(sub) = result.root.find_child(_kind as NodeKind)");
+    w.line(&"return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);");
+    w.end();
+    w.line(&"return String::new();");
+    w.end();
+    w.blank();
+}

@@ -1059,7 +1059,7 @@ fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
         Type::Reference(inner) | Type::MutReference(inner) => {
             collect_named_type_sources(inner, out);
         }
-        Type::TypePackSpread(_, _) | Type::Error(_) => {}
+        Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
 }
 

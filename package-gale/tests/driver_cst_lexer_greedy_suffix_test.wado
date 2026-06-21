@@ -1,0 +1,24 @@
+//! Stage 2b migration probe: lexer_greedy_suffix.
+use g from "./grammars/lexer_greedy_suffix.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_lexer_greedy_suffix",
+        },
+    };
+fn ok(input: &String) {
+    assert g::parse(input).ok(), `unexpected diagnostics for {*input}`;
+}
+test "greedy-suffix: emoji span" {
+    ok(&"a😳😡😝🤓c");
+}
+test "greedy-suffix: axc" {
+    ok(&"axc");
+}
+test "greedy-suffix: repeated" {
+    ok(&"axcxcxc");
+}
+test "greedy-suffix: two spans" {
+    ok(&"axc azc");
+}

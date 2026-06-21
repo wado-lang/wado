@@ -1,0 +1,27 @@
+//! CLI for the arithmetic interpreter: `arith <expression>` prints the result.
+//!
+//!   wado run package-gale/example/main.wado '2 * (3 + 4)'   # -> 14
+//!
+//! The `between`/`and`/`or` ALL(*) example (`logic.wado`) is exercised by its
+//! own test rather than this CLI: a single program cannot yet import two
+//! independent Gale parsers, because their generated `CstNode` types share a
+//! name and collide in cross-module type resolution (issue #1416). Once that
+//! is fixed this entry can grow into a subcommand CLI driving both.
+
+use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { eval } from "./eval.wado";
+
+export fn run() with Stdout, Stderr, Environment, Exit {
+    let arguments = args();
+    if arguments.len() != 1 {
+        eprintln("usage: arith <expression>");
+        exit(1);
+    }
+    match eval(&arguments[0]) {
+        Ok(v) => println(`{v}`),
+        Err(m) => {
+            eprintln(`error: {m}`);
+            exit(1);
+        },
+    }
+}

@@ -1,0 +1,15 @@
+// A `_` slot with nothing to infer from is the same error as an omitted
+// turbofish on an uninferable parameter: `A` appears in neither an argument
+// nor the return type, so inference cannot fill the hole.
+
+fn only_b<A, B>(b: B) -> B {
+    return b;
+}
+
+test "uninferable wildcard" {
+    let x = only_b::<_, bool>(true);
+    assert x == true;
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `A` of function `only_b`"}

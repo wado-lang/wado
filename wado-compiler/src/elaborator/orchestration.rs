@@ -1372,6 +1372,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // body walk captures here, so they are always recorded.
                 capture_tuple_overlays: true,
                 suppress_reference_recording: false,
+                infer_holes: super::infer_hole::InferHoleTable::default(),
             };
 
             // Set file context so diagnostics emitted during resolution
@@ -2293,7 +2294,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::Call(call) => {
                 for ty in &call.type_args {
-                    Self::validate_ast_type_names(
+                    Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
                         resource_type_names,
@@ -2320,7 +2321,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::MethodCall(mc) => {
                 for ty in &mc.type_args {
-                    Self::validate_ast_type_names(
+                    Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
                         resource_type_names,
@@ -2346,15 +2347,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             ast::Expr::StaticMethodCall(smc) => {
-                Self::validate_ast_type_names(
-                    &smc.target_type,
-                    known_type_names,
-                    resource_type_names,
-                    type_params,
-                    logger,
-                )?;
+                // The target type heads a turbofish (`Result::<_, MyErr>`), so
+                // its direct args allow `_`; deeper positions are strict.
+                match &smc.target_type {
+                    Type::Generic(g) => {
+                        for arg in &g.args {
+                            Self::validate_turbofish_type_arg(
+                                arg,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                    other => Self::validate_ast_type_names(
+                        other,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?,
+                }
                 for ty in &smc.type_args {
-                    Self::validate_ast_type_names(
+                    Self::validate_turbofish_type_arg(
                         ty,
                         known_type_names,
                         resource_type_names,
@@ -2663,7 +2679,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )?;
             }
-            ast::Expr::Ident(_) | ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
+            ast::Expr::Ident(ident) => {
+                // A bare turbofish value (`pair::<_, bool>`) has no call to
+                // infer from, so a `_` slot here is unresolvable — validate its
+                // type args strictly.
+                for ty in &ident.type_args {
+                    Self::validate_ast_type_names(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
         }
         Ok(())
     }
@@ -2760,7 +2790,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     logger,
                 )
             }
+            // `_` is only meaningful as a top-level turbofish type argument
+            // (handled by `validate_turbofish_type_arg`); in an annotation or
+            // nested position it cannot be inferred, so reject it here rather
+            // than let an unresolved `unknown` reach codegen.
+            Type::Infer(span) => {
+                logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                Ok(())
+            }
             Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),
+        }
+    }
+
+    /// Validate a turbofish type argument, where a top-level `_` is allowed
+    /// (it marks an inference slot). Nested `_` is still out of scope, so a
+    /// non-`_` argument is validated strictly via [`Self::validate_ast_type_names`].
+    fn validate_turbofish_type_arg(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+    ) -> Result<(), Bail> {
+        match ty {
+            Type::Infer(_) => Ok(()),
+            _ => Self::validate_ast_type_names(
+                ty,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            ),
         }
     }
 
@@ -3043,6 +3103,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     TypeTable::UNKNOWN
                 }
             }
+            // Inference placeholder `_` resolves to the unknown type, matching
+            // an omitted turbofish slot.
+            Type::Infer(_) => TypeTable::UNKNOWN,
             // Parser error-recovery placeholder: resolve to the error type.
             Type::Error(_) => TypeTable::ERROR,
         }
