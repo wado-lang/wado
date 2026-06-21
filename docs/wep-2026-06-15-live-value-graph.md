@@ -39,17 +39,33 @@ in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
 
 ### Next: missed optimizations under promotion (BCE cluster)
 
-The remaining `-O2` failures are guard-based bounds-check elimination and
-store/forward/branchless assertions (`array_bounds_elim_loop_guard` /
-`_offset_chain` / `_le_guard_wir`, `optimize_bce_if_guard` / `_ref_param` /
-`_field_access_equiv`, `optimize_bitmask_bce`, `tir_optimize_*`,
-`store_to_load_forwarding`, `field_forward_snapshot_after_mutation`,
-`wir_optimize_branchless_increment` / `_brif_select`, `opt_hfs_defer_*`), plus
-the pre-existing optimization-independent `bug_store_load_forward_mut_method_receiver`
-(fails at `-O0` too). All run correctly; the optimization no longer fires. The
-loop-stable operand re-seed (`6e42241cc`, decision (a) below) is the landed
-foundation — sound, resolves the induction-variable identity — but the
-cross-source bound identity below still blocks the wir assertions.
+The loop-stable operand re-seed (decision (a) below) is landed and sound
+(`6e42241cc` + copy-chain `4944baa98`); it took the default `-O2` e2e from
+17 → 11 failing fixtures by greening the loop-guard BCE cluster:
+`array_bounds_elim_loop_guard` (+`_wir`), `optimize_bce_if_guard` /
+`_ref_param` / `_field_access_equiv`, `wir_optimize_branchless_increment`. No
+regression (`array_bounds_elim_oob_*` + `WADO_VERIFY_VG` green).
+
+The 11 still failing fall in three buckets:
+
+- **Non-loop early-exit / short-circuit guards** (`tir_optimize_early_exit_guard`,
+  `_short_circuit_bounds`, `array_bounds_elim_offset_chain`). The re-seed is
+  loop-scoped, but these are straight-line (`if pos >= arr.len() { return };
+  arr[pos]`). The guard bound is a _direct_ `arr.used` (operand value dropped,
+  not a `let`-copy snapshot the re-seed can restore). Re-seeding a direct field
+  access to a canonical value is **unsound** without a field-invariance gate:
+  it would defeat the write detection `array_bounds_elim_oob_bound_shrunk` pins
+  (a `pop()` between guard and check). Sound extension: re-seed a direct
+  `recv.field` only when `recv.field` is never written in the function (receiver
+  never `&mut`-escaped, field never assigned), keyed to the same canonical value
+  the snapshot copies use — validate with the oob suite + `WADO_VERIFY_VG`.
+- **`array_bounds_elim_le_guard_wir`, `optimize_bitmask_bce`.** `le_guard` needs
+  `arr.used == limit + 1` (the array was `List::filled(limit + 1)`) — a relation
+  only construction tracking proves; bitmask is its own matcher.
+- **Other passes** (`store_to_load_forwarding`, `field_forward_snapshot_after_mutation`,
+  `opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`) and the
+  pre-existing optimization-independent `bug_store_load_forward_mut_method_receiver`
+  (fails at `-O0` too). Not `condition_implication` — separate promotion work.
 
 The decisive root cause (traced on the minimal reproducer below): **the value
 graph `condition_implication` reads has no `ValueId` for the operands it must
