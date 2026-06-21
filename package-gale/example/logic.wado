@@ -1,0 +1,99 @@
+//! A tiny boolean/range interpreter whose grammar needs ALL(*) — i.e. the
+//! runtime ATN simulator, which static LL prediction cannot replace.
+//!
+//! `Between.g4` reuses the keyword `and` two ways: as the binary operator in
+//! `A and B`, and as the mandatory separator inside `between LO and HI`. At
+//! `between LO ⟨and⟩ …`, the parser must decide — with full context — whether
+//! that `and` closes `between` or continues `LO` as a binary `and`. No fixed
+//! lookahead resolves it, so Gale emits the runtime ATN simulator for this
+//! rule (confirmed: the generated parser contains `atn_lr_loop_decision`).
+//!
+//! Values are booleans encoded as integers (0 = false, non-zero = true):
+//!   - `A and B`        → 1 if both are true
+//!   - `A or B`         → 1 if either is true
+//!   - `between LO and HI` → 1 if `LO <= HI` (a non-empty ascending range)
+
+use bw from "./Between.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "example/generated/between",
+        },
+    };
+
+/// Evaluate a boolean/range expression. A syntax error, or a runtime error
+/// like an out-of-range literal, surfaces as `Err` rather than a trap.
+pub fn eval(input: &String) -> Result<i64, String> {
+    let result = bw::parse(input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        return Result::Err(`{d.line}:{d.col}: {d.message}`);
+    }
+    return eval_first_child(&result.root, &result.tokens);
+}
+
+/// Evaluate the first child rule node (`prog` wraps exactly one `expr`).
+fn eval_first_child(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
+    for let child of &node.children {
+        if let Node(n) = *child {
+            return eval_expr(&n, toks);
+        }
+    }
+    panic("expr: expected a child rule node");
+}
+
+fn eval_expr(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
+    return match bw::expr_alt(node) {
+        Some(Num) => int_value(node, toks),
+        Some(And) => {
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 });
+        },
+        Some(Or) => {
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 });
+        },
+        Some(Between) => {
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 <= ops.1 { 1 } else { 0 });
+        },
+        None => panic("expr: node has no stamped alternative"),
+    };
+}
+
+/// The two operand `expr` children of an `And` / `Or` / `Between` node, in
+/// order. Each rule has exactly two sub-`expr`s; the keyword tokens between
+/// them are ignored.
+fn operands(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<[i64, i64], String> {
+    let mut a: i64 = 0;
+    let mut b: i64 = 0;
+    let mut have_a = false;
+    for let child of &node.children {
+        if let Node(n) = *child {
+            let v = eval_expr(&n, toks)?;
+            if have_a {
+                b = v;
+            } else {
+                a = v;
+                have_a = true;
+            }
+        }
+    }
+    return Result::Ok([a, b]);
+}
+
+/// The integer value of a `Num` node (its single `INT` token). All-digit text
+/// can still overflow `i64`, so that surfaces as `Err`.
+fn int_value(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
+    for let child of &node.children {
+        if let Token(i) = *child {
+            let text = toks.token_text(i);
+            return match i64::from_str(&text) {
+                Ok(v) => Result::Ok(v),
+                Err(_) => Result::Err(`integer literal out of range: {text}`),
+            };
+        }
+    }
+    panic("Num: expected an INT token");
+}

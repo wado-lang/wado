@@ -136,7 +136,8 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
                 .map(std::path::Path::to_path_buf)
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         });
-    let mut inline = crate::compile::collect_inline_invocations_for_entry(path, &manifest_root);
+    let (mut inline, identities) =
+        crate::compile::collect_inline_invocations_for_entry_with_identities(path, &manifest_root);
 
     let outcome = if inline.is_empty() {
         CheckOutcome::default()
@@ -147,9 +148,12 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
-        crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
-            .await
-            .map_err(|e| CliExit::error(FormatPipelineError(&e)))?
+        let mut outcome =
+            crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
+                .await
+                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
+        crate::compile::remap_index_decl_files(&mut outcome.invocations, &identities);
+        outcome
     };
 
     let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();

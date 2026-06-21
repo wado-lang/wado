@@ -29,6 +29,7 @@ use {
     element_field_info,
     all_alts_are_single_token,
     single_token_first,
+    rule_alts_labeled,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
@@ -2087,7 +2088,7 @@ fn gen_parse_fn_simple_named(
     f.emit_begin(w);
     w.line(&"let start = p.peek_start();");
     let body = rule_alt_body(lowered_rule, 0).unwrap();
-    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, ctx);
+    gen_alt_body(w, &type_name, null, null, &rule.alternatives[0], body, 0, rule_alts_labeled(&rule.alternatives), ctx);
     w.end();
     w.blank();
 }
@@ -2118,6 +2119,32 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
             firsts.push(t);
         }
     }
+    if rule_alts_labeled(&rule.alternatives) {
+        // Labeled rule: emit a per-alt cascade so the matched alternative's
+        // index is stamped on the node (consumers dispatch via `<rule>_alt`).
+        // Each alt is exactly one token; a shared token resolves to the first
+        // alt (cascade order), matching ANTLR4.
+        let mut first = true;
+        for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+            let single: List<String> = [single_token_first(&rule.alternatives[i].elements[0])];
+            let cond = ctx.kind_check_str(&single, &"kind");
+            if first {
+                w.begin(&`if {cond}`);
+                first = false;
+            } else {
+                w.else_begin(&`else if {cond}`);
+            }
+            w.line(&`p.b.set_alt({i});`);
+            w.line(&"let _ = p.expect(kind)?;");
+            w.line(&"return Result::Ok(());");
+        }
+        w.end();
+        gen_error_fallback(w, rule, &type_name, ctx);
+        w.end();
+        w.blank();
+        return;
+    }
+
     let check = ctx.kind_check_str(&firsts, &"kind");
     w.begin(&`if {check}`);
     // The token is appended by `expect`; no struct to build.
@@ -2263,6 +2290,8 @@ fn gen_parse_fn_named(
                         Option::Some(body.struct_name),
                         alt,
                         body,
+                        alt_index,
+                        rule_alts_labeled(&rule.alternatives),
                         ctx,
                     );
                     w.end();
@@ -2368,11 +2397,21 @@ fn gen_alt_body(
     struct_name: Option<String>,
     alt: &Alternative,
     body: &AltBody,
+    alt_index: i32,
+    rule_labeled: bool,
     ctx: &mut GenContext,
 ) {
     let _ = type_name;
     let _ = variant_case;
     let _ = struct_name;
+    // Stamp the matched labeled-alternative index on the open node so a
+    // consumer can dispatch via `<rule>_alt`. This is the single rule-level
+    // alt-body chokepoint (simple / overlap-helper / direct dispatch);
+    // gated on the rule being labeled so unlabeled grammars stay
+    // byte-identical.
+    if rule_labeled {
+        w.line(&`p.b.set_alt({alt_index});`);
+    }
     gen_alt_elements(w, &alt.elements, &body.ops, ctx);
 
     // the alt's terminals / subtrees already appended to the
@@ -2429,6 +2468,8 @@ fn gen_multi_alt_body(
             Option::Some(body.struct_name),
             alt,
             body,
+            alt_index,
+            rule_alts_labeled(&rule.alternatives),
             ctx,
         );
         w.end();
@@ -2845,6 +2886,7 @@ fn gen_lr_fn(
         return;
     }
     let scan_fn = `scan_{rule.snake_name}`;
+    let labeled = rule_alts_labeled(&rule.alternatives);
     w.begin(&"loop");
     w.line(&"let _sk = p.peek_kind();");
     let mut nc: List<[String, i32]> = [];
@@ -2867,7 +2909,7 @@ fn gen_lr_fn(
             w.else_begin(&`else if {cond}`);
         }
         if group.len() == 1 {
-            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, ctx, &mut nc);
+            emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[0]]], &rk, &scan_fn, labeled, ctx, &mut nc);
         } else {
             emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc);
         }
@@ -2901,6 +2943,7 @@ fn gen_lr_fn_atn(
     decision: i32,
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
+    let labeled = rule_alts_labeled(&rule.alternatives);
     let mut nc: List<[String, i32]> = [];
     w.begin(&"loop");
     w.line(
@@ -2915,7 +2958,7 @@ fn gen_lr_fn_atn(
         } else {
             w.else_begin(&`else if _atn_alt == {i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rk, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rk, labeled, ctx, &mut nc);
     }
     if !is_first {
         w.else_begin(&"else");
@@ -2943,6 +2986,7 @@ fn emit_lr_branch(
     lr: &LrAlt,
     rk: &String,
     scan_fn: &String,
+    labeled: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
@@ -2950,7 +2994,7 @@ fn emit_lr_branch(
     w.begin(&`if {*scan_fn}_lr_{lr.alt_index}(&p.kinds, p.pos) < 0`);
     w.line(&"break;");
     w.end();
-    emit_lr_branch_body(w, lr, rk, ctx, nc);
+    emit_lr_branch_body(w, lr, rk, labeled, ctx, nc);
     w.else_begin(&"else");
     w.line(&"break;");
     w.end();
@@ -2959,8 +3003,20 @@ fn emit_lr_branch(
 /// The left-associative wrap + suffix ops shared by the static and ATN LR
 /// loops: open a new same-rule node spanning the tree built so far, append
 /// the suffix, close it.
-fn emit_lr_branch_body(w: &mut CodeWriter, lr: &LrAlt, rk: &String, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn emit_lr_branch_body(
+    w: &mut CodeWriter,
+    lr: &LrAlt,
+    rk: &String,
+    labeled: bool,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
     w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
+    // Stamp this continuation's labeled-alternative index on the wrap node
+    // (gated on the rule being labeled, mirroring the atom path).
+    if labeled {
+        w.line(&`p.b.set_alt({lr.alt_index});`);
+    }
     gen_ops(w, &lr.suffix.ops, ctx, nc);
     w.line(&"p.b.finish_node(p.last_end());");
 }
@@ -2979,6 +3035,7 @@ fn emit_lr_overlap(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
+    let labeled = rule_alts_labeled(&rule.alternatives);
     let mut first_sets: List<List<String>> = [];
     for let gi of group {
         first_sets.push(lr_alts[lr_dispatch.valid_lr_alts[*gi]].suffix_first);
@@ -3003,7 +3060,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if _sk == {*tk}`);
                 }
-                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, ctx, nc);
+                emit_lr_branch(w, &lr_alts[lr_dispatch.valid_lr_alts[group[k]]], rk, scan_fn, labeled, ctx, nc);
                 emitted.push(*tk);
             }
         }
@@ -3038,10 +3095,10 @@ fn emit_lr_overlap(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
+                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
                 } else {
                     w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
+                    emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
                     w.end();
                 }
             } else {
@@ -3054,7 +3111,7 @@ fn emit_lr_overlap(
                 } else {
                     w.else_begin(&`else if {sub_cond}`);
                 }
-                emit_lr_branch(w, lr, rk, scan_fn, ctx, nc);
+                emit_lr_branch(w, lr, rk, scan_fn, labeled, ctx, nc);
             }
         }
         emitted.push(*shared_tk);
@@ -5960,6 +6017,8 @@ fn gen_multi_alt_body_alt(
                 Option::Some(body.struct_name),
                 alt,
                 body,
+                alt_index,
+                rule_alts_labeled(&rule.alternatives),
                 ctx,
             );
         } else {

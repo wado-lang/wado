@@ -608,6 +608,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -717,6 +722,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -741,6 +747,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -806,6 +819,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -837,9 +851,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -1173,9 +1190,24 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_EXPR: NodeKind = 0;
+pub global RK_EXPR: NodeKind = 0;
 
 global RULE_NAMES: List<String> = ["expr"];
+
+pub enum ExprAlt {
+    Pow,
+    Add,
+    Int,
+}
+
+pub fn expr_alt(node: &CstNode) -> Option<ExprAlt> {
+    return match node.alt {
+        0 => Option::Some(ExprAlt::Pow),
+        1 => Option::Some(ExprAlt::Add),
+        2 => Option::Some(ExprAlt::Int),
+        _ => null,
+    };
+}
 
 struct Parser {
     tokens: TokenStream,
@@ -1373,6 +1405,7 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_INT {
+        p.b.set_alt(2);
         let int = p.expect(TK_INT)?;
         return Result::Ok(());
     }
@@ -1397,6 +1430,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseErro
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
+                p.b.set_alt(0);
                 let caret = p.expect(TK_LIT_CARET)?;
                 let expr_2 = _parse_expr(p, 2)?;
                 p.b.finish_node(p.last_end());
@@ -1409,6 +1443,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseErro
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
+                p.b.set_alt(1);
                 let plus = p.expect(TK_LIT_PLUS)?;
                 let expr_2 = _parse_expr(p, 2)?;
                 p.b.finish_node(p.last_end());

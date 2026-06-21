@@ -1,0 +1,44 @@
+#![TODO]
+//! Known bug (issue #1418): consuming a `Future<Result<(), ErrorCode>>` and
+//! materializing its unit `Ok(())` payload ICEs the WIR pipeline in the CLI
+//! world:
+//!
+//!   Internal compiler error: WIR pipeline generated invalid core Wasm module
+//!   Validation error: type mismatch: values remaining on stack at end of block
+//!
+//! The future is the completion handle of `write_via_stream` /
+//! `read_via_stream`. Matching only `Some(Err(_))` compiles; materializing the
+//! `Some(Ok(_))` arm — lifting the unit-payload result across the CM boundary —
+//! is what trips it. Same family as the `Exit::exit(Result<(), ()>)` ICE.
+//!
+//! This blocks `gale gen -o` (package-gale/src/main.wado) and the descriptor
+//! extractor from awaiting their writes to detect a partial/failed write, so
+//! both drop the completion future unread today. Drop `#![TODO]` once fixed.
+
+use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+use { eprintln, Stderr } from "core:cli";
+
+export fn run() with Preopens, Stderr {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+    let file = root.open_at(
+        PathFlags::none(),
+        "out.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait().unwrap();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write([65 as u8]);
+    tx.drop();
+    match sub.read() {
+        Some(Ok(_)) => {},
+        Some(Err(_)) => {
+            eprintln("write failed");
+        },
+        None => {},
+    }
+}
+
+__DATA__
+{"preopened_dirs": [["", "/work"]]}

@@ -6,10 +6,11 @@
 //! grammar-specific tables that path needs: the per-rule `NodeKind` constants
 //! + name table, and the `to_string_tree` convenience.
 
-use { Grammar, LexerRule } from "./ir.wado";
+use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -42,10 +43,12 @@ fn rule_const(name: &String) -> String {
 }
 
 /// Emit the per-rule `RK_<RULE>` node-kind constants and the `RULE_NAMES`
-/// table (rule-index order); the name table drives `to_string_tree`.
+/// table (rule-index order); the name table drives `to_string_tree`. The
+/// `RK_*` constants are `pub` so a consumer can dispatch on `CstNode.kind`
+/// (e.g. an interpreter walking the tree).
 pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     for let mut i = 0; i < rules.len(); i += 1 {
-        w.line(&`global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
+        w.line(&`pub global RK_{rule_const(&rule_name(&rules[i]))}: NodeKind = {i};`);
     }
     w.blank();
     let mut names = String::with_capacity(rules.len() * 12);
@@ -60,6 +63,67 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     }
     names.push(']');
     w.line(&`global RULE_NAMES: List<String> = {names};`);
+    w.blank();
+}
+
+/// Emit, for every parser rule whose alternatives carry `# Label`s, a
+/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) ->
+/// Option<<Rule>Alt>` accessor, so a consumer can dispatch on the matched
+/// alternative (`match expr_alt(node) { Some(MulDiv) => ..., None => ... }`).
+///
+/// The parser stamps the per-rule alternative index (grammar declaration
+/// order) onto `CstNode.alt`; the enum cases are emitted in that same order,
+/// so the accessor maps `node.alt` straight to its case. The accessor returns
+/// `Option`, so a node whose `alt` was never set (an error-recovery node, or a
+/// node of another rule) is `None` rather than a silent first alternative.
+pub fn gen_alt_enums(w: &mut CodeWriter, grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        gen_one_alt_enum(w, rule);
+    }
+}
+
+fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
+    if !rule_alts_labeled(&rule.alternatives) {
+        return;
+    }
+    let enum_name = `{to_pascal_case(&rule.name)}Alt`;
+
+    // Several alternatives may share one `# Label` (valid in ANTLR4: they
+    // denote the same alternative kind), so emit each distinct label once —
+    // a repeated variant would not compile. A label may be a Wado reserved
+    // word (e.g. `# else`), so escape it to a valid identifier.
+    w.begin(&`pub enum {enum_name}`);
+    let mut seen: List<String> = [];
+    for let alt of &rule.alternatives {
+        if let Some(label) = &alt.label {
+            let case = escape_ident(label);
+            let mut dup = false;
+            for let s of &seen {
+                if *s == case {
+                    dup = true;
+                }
+            }
+            if !dup {
+                seen.push(case);
+                w.line(&`{case},`);
+            }
+        }
+    }
+    w.end();
+    w.blank();
+
+    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> Option<{enum_name}>`);
+    w.line(&"return match node.alt {");
+    w.indent();
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if let Some(label) = &rule.alternatives[i].label {
+            w.line(&`{i} => Option::Some({enum_name}::{escape_ident(label)}),`);
+        }
+    }
+    w.line(&"_ => null,");
+    w.dedent();
+    w.line(&"};");
+    w.end();
     w.blank();
 }
 

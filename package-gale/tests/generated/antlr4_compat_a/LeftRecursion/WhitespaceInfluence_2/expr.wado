@@ -608,6 +608,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -717,6 +722,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -741,6 +747,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -806,6 +819,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -837,9 +851,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -1853,10 +1870,75 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_PROG: NodeKind = 0;
-global RK_EXPRESSION: NodeKind = 1;
+pub global RK_PROG: NodeKind = 0;
+pub global RK_EXPRESSION: NodeKind = 1;
 
 global RULE_NAMES: List<String> = ["prog", "expression"];
+
+pub enum ExpressionAlt {
+    doFunction,
+    doParenthesis,
+    doNot,
+    doNegate,
+    doPositiv,
+    doPower,
+    doMultipy,
+    doDivide,
+    doModulo,
+    doMinus,
+    doPlus,
+    doEqual,
+    doNotEqual,
+    doGreather,
+    doGreatherEqual,
+    doLesser,
+    doLesserEqual,
+    doIn,
+    doAnd,
+    doOr,
+    newArray,
+    newTrueBoolean,
+    newFalseBoolean,
+    newNumber,
+    newDateTime,
+    newIdentifier,
+    newString,
+    newNull,
+}
+
+pub fn expression_alt(node: &CstNode) -> Option<ExpressionAlt> {
+    return match node.alt {
+        0 => Option::Some(ExpressionAlt::doFunction),
+        1 => Option::Some(ExpressionAlt::doParenthesis),
+        2 => Option::Some(ExpressionAlt::doNot),
+        3 => Option::Some(ExpressionAlt::doNegate),
+        4 => Option::Some(ExpressionAlt::doPositiv),
+        5 => Option::Some(ExpressionAlt::doPower),
+        6 => Option::Some(ExpressionAlt::doMultipy),
+        7 => Option::Some(ExpressionAlt::doDivide),
+        8 => Option::Some(ExpressionAlt::doModulo),
+        9 => Option::Some(ExpressionAlt::doMinus),
+        10 => Option::Some(ExpressionAlt::doPlus),
+        11 => Option::Some(ExpressionAlt::doEqual),
+        12 => Option::Some(ExpressionAlt::doNotEqual),
+        13 => Option::Some(ExpressionAlt::doGreather),
+        14 => Option::Some(ExpressionAlt::doGreatherEqual),
+        15 => Option::Some(ExpressionAlt::doLesser),
+        16 => Option::Some(ExpressionAlt::doLesserEqual),
+        17 => Option::Some(ExpressionAlt::doIn),
+        18 => Option::Some(ExpressionAlt::doAnd),
+        19 => Option::Some(ExpressionAlt::doOr),
+        20 => Option::Some(ExpressionAlt::newArray),
+        21 => Option::Some(ExpressionAlt::newTrueBoolean),
+        22 => Option::Some(ExpressionAlt::newFalseBoolean),
+        23 => Option::Some(ExpressionAlt::newNumber),
+        24 => Option::Some(ExpressionAlt::newDateTime),
+        25 => Option::Some(ExpressionAlt::newIdentifier),
+        26 => Option::Some(ExpressionAlt::newString),
+        27 => Option::Some(ExpressionAlt::newNull),
+        _ => null,
+    };
+}
 
 struct Parser {
     tokens: TokenStream,
@@ -2507,6 +2589,7 @@ fn _parse_prog(p: &mut Parser) -> Result<(), ParseError> {
 
 fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let id = p.expect(TK_ID)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let expression = _parse_expression(p)?;
@@ -2566,6 +2649,7 @@ fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(25);
     let id = p.expect(TK_ID)?;
     return Result::Ok(());
 }
@@ -2604,27 +2688,32 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
         return _parse_expression__inner_alt_25(p);
     }
     if kind == TK_LIT_LPAREN {
+        p.b.set_alt(1);
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expression = _parse_expression(p)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_BANG {
+        p.b.set_alt(2);
         let bang = p.expect(TK_LIT_BANG)?;
         let expression = _parse_expression(p, 16)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_MINUS {
+        p.b.set_alt(3);
         let minus = p.expect(TK_LIT_MINUS)?;
         let expression = _parse_expression(p, 16)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_PLUS {
+        p.b.set_alt(4);
         let plus = p.expect(TK_LIT_PLUS)?;
         let expression = _parse_expression(p, 16)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_LBRACKET {
+        p.b.set_alt(20);
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let expression = _parse_expression(p)?;
         loop {
@@ -2653,26 +2742,32 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
         return Result::Ok(());
     }
     if kind == TK_K_TRUE {
+        p.b.set_alt(21);
         let k_true = p.expect(TK_K_TRUE)?;
         return Result::Ok(());
     }
     if kind == TK_K_FALSE {
+        p.b.set_alt(22);
         let k_false = p.expect(TK_K_FALSE)?;
         return Result::Ok(());
     }
     if kind == TK_NUMBER {
+        p.b.set_alt(23);
         let number = p.expect(TK_NUMBER)?;
         return Result::Ok(());
     }
     if kind == TK_DATE {
+        p.b.set_alt(24);
         let date = p.expect(TK_DATE)?;
         return Result::Ok(());
     }
     if kind == TK_SQ_STRING {
+        p.b.set_alt(26);
         let sq_string = p.expect(TK_SQ_STRING)?;
         return Result::Ok(());
     }
     if kind == TK_K_NULL {
+        p.b.set_alt(27);
         let k_null = p.expect(TK_K_NULL)?;
         return Result::Ok(());
     }
@@ -2697,6 +2792,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(5);
                 let caret = p.expect(TK_LIT_CARET)?;
                 let expression_2 = _parse_expression(p, 16)?;
                 p.b.finish_node(p.last_end());
@@ -2709,6 +2805,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(6);
                 let star = p.expect(TK_LIT_STAR)?;
                 let expression_2 = _parse_expression(p, 15)?;
                 p.b.finish_node(p.last_end());
@@ -2721,6 +2818,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(7);
                 let slash = p.expect(TK_LIT_SLASH)?;
                 let expression_2 = _parse_expression(p, 14)?;
                 p.b.finish_node(p.last_end());
@@ -2733,6 +2831,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(8);
                 let percent = p.expect(TK_LIT_PERCENT)?;
                 let expression_2 = _parse_expression(p, 13)?;
                 p.b.finish_node(p.last_end());
@@ -2745,6 +2844,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(9);
                 let minus = p.expect(TK_LIT_MINUS)?;
                 let expression_2 = _parse_expression(p, 12)?;
                 p.b.finish_node(p.last_end());
@@ -2757,6 +2857,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(10);
                 let plus = p.expect(TK_LIT_PLUS)?;
                 let expression_2 = _parse_expression(p, 11)?;
                 p.b.finish_node(p.last_end());
@@ -2769,6 +2870,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(11);
                 let eq = p.expect(TK_LIT_EQ)?;
                 let expression_2 = _parse_expression(p, 10)?;
                 p.b.finish_node(p.last_end());
@@ -2781,6 +2883,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(12);
                 let lit_bangeq = p.expect(TK_LIT_BANGEQ)?;
                 let expression_2 = _parse_expression(p, 9)?;
                 p.b.finish_node(p.last_end());
@@ -2793,6 +2896,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(13);
                 let gt = p.expect(TK_LIT_GT)?;
                 let expression_2 = _parse_expression(p, 8)?;
                 p.b.finish_node(p.last_end());
@@ -2805,6 +2909,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(14);
                 let lit_gteq = p.expect(TK_LIT_GTEQ)?;
                 let expression_2 = _parse_expression(p, 7)?;
                 p.b.finish_node(p.last_end());
@@ -2817,6 +2922,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(15);
                 let lt = p.expect(TK_LIT_LT)?;
                 let expression_2 = _parse_expression(p, 6)?;
                 p.b.finish_node(p.last_end());
@@ -2829,6 +2935,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(16);
                 let lit_lteq = p.expect(TK_LIT_LTEQ)?;
                 let expression_2 = _parse_expression(p, 5)?;
                 p.b.finish_node(p.last_end());
@@ -2841,6 +2948,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(17);
                 let k_in = p.expect(TK_K_IN)?;
                 let lparen = p.expect(TK_LIT_LPAREN)?;
                 let expression_2 = _parse_expression(p, 4)?;
@@ -2859,6 +2967,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(18);
                 let _ = p.match_set([TK_LIT_AMP, TK_K_AND])?;
                 let expression_2 = _parse_expression(p, 3)?;
                 p.b.finish_node(p.last_end());
@@ -2871,6 +2980,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
+                p.b.set_alt(19);
                 let _ = p.match_set([TK_LIT_PIPE, TK_K_OR])?;
                 let expression_2 = _parse_expression(p, 2)?;
                 p.b.finish_node(p.last_end());

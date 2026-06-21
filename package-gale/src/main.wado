@@ -14,12 +14,21 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 
     if arguments.len() >= 2 && arguments[0] == "gen" {
         let mut paths: List<String> = [];
+        let mut output: Option<String> = null;
         let mut options = GenerateOptions { highlight: false, trace: false };
         for let mut i = 1; i < arguments.len(); i += 1 {
             if arguments[i] == "--highlight" {
                 options.highlight = true;
             } else if arguments[i] == "--trace" {
                 options.trace = true;
+            } else if arguments[i] == "--output" || arguments[i] == "-o" {
+                if i + 1 >= arguments.len() {
+                    eprintln(`gale gen: '{arguments[i]}' needs a file path`);
+                    usage();
+                    exit(1);
+                }
+                i += 1;
+                output = Option::Some(arguments[i]);
             } else if arguments[i].starts_with("--") {
                 eprintln(`gale gen: unknown flag '{arguments[i]}'`);
                 usage();
@@ -28,7 +37,7 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
                 paths.push(arguments[i]);
             }
         }
-        cmd_gen(paths, &options);
+        cmd_gen(paths, &output, &options);
         return;
     }
 
@@ -55,11 +64,11 @@ export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
 }
 
 fn usage() with Stderr {
-    eprintln("Usage: gale gen [--highlight] [--trace] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("Usage: gale gen [--highlight] [--trace] [-o|--output <file>] <grammar.g4> [grammar2.g4 ...]");
     eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
 }
 
-fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens, Exit {
+fn cmd_gen(paths: List<String>, output: &Option<String>, options: &GenerateOptions) with Stdout, Stderr, Preopens, Exit {
     if paths.len() == 0 {
         eprintln("gale gen: no grammar files given");
         exit(1);
@@ -76,7 +85,41 @@ fn cmd_gen(paths: List<String>, options: &GenerateOptions) with Stdout, Stderr, 
         eprintln(`gale: warning: {d.rule}: {d.message}`);
     }
 
-    print(generated.source);
+    match *output {
+        Some(path) => write_output(&path, &generated.source),
+        None => print(generated.source),
+    }
+}
+
+/// Write the generated parser source to `path`, relative to the first
+/// preopened directory (mirrors `load_and_merge`'s read side).
+fn write_output(path: &String, source: &String) with Stderr, Preopens, Exit {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("gale: no preopened directories available");
+        exit(1);
+    }
+    let root = dirs[0].0;
+    let open_result = root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait();
+    if let Err(_) = open_result {
+        eprintln(`gale: {*path}: cannot open for writing`);
+        exit(1);
+    }
+    let file = open_result.unwrap();
+    let bytes: List<u8> = source.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write(bytes);
+    tx.drop();
+    // TODO(compiler): `sub.read()` should be awaited here to catch a partial
+    // write, but reading a `Future<Result<(), ErrorCode>>` currently ICEs the
+    // compiler in the CLI world (same bug family as `read_all`).
+    sub.drop();
 }
 
 fn cmd_dump(paths: List<String>, atn: bool) with Stdout, Stderr, Preopens, Exit {

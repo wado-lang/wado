@@ -291,6 +291,22 @@ pub fn is_single_alt_group(alts: &List<Alternative>) -> bool {
     return alts[0].elements.len() >= 2;
 }
 
+/// True when every alternative carries a `# Label` (ANTLR4 requires
+/// all-or-none labeling). Drives the per-rule `<Rule>Alt` enum emission and
+/// the parser's `set_alt` stamping; unlabeled rules stay byte-identical.
+pub fn rule_alts_labeled(alts: &List<Alternative>) -> bool {
+    if alts.is_empty() {
+        return false;
+    }
+    for let a of alts {
+        if let Some(_) = &a.label {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 /// Check if a group has any storable pattern.
 /// All multi-alt groups are storable (general groups get variant types).
 pub fn is_storable_group(alts: &List<Alternative>) -> bool {
