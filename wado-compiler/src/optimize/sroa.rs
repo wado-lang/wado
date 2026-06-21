@@ -571,12 +571,10 @@ fn field_access_node(
                     has_access.insert(idx);
                     return;
                 }
-                field_access_node(
-                    body,
-                    NodeRef::Expr(inner.as_expr().expect("skeleton operand")),
-                    candidates,
-                    has_access,
-                );
+                // A promoted `Operand::Value` inner is no candidate-local access.
+                if let Some(inner_e) = inner.as_expr() {
+                    field_access_node(body, NodeRef::Expr(inner_e), candidates, has_access);
+                }
             }
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
@@ -954,11 +952,11 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     } = &engine.body.exprs[id].kind
     {
         let (inner, field_index) = (*inner, *field_index);
-        if let Some(local_idx) = is_candidate_local(
-            engine.body,
-            inner.as_expr().expect("skeleton operand"),
-            ctx.safe_set,
-        ) {
+        // A promoted `Operand::Value` receiver is no scalarizable candidate local.
+        if let Some(local_idx) = inner
+            .as_expr()
+            .and_then(|e| is_candidate_local(engine.body, e, ctx.safe_set))
+        {
             let key = (local_idx, field_index);
             if let Some(&new_local) = ctx.field_map.get(&key) {
                 let new_name = ctx.info_map[&key].0.clone();
@@ -984,11 +982,11 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         } = &engine.body.exprs[target].kind
         {
             let (inner, field_index) = (*inner, *field_index);
-            if let Some(local_idx) = is_candidate_local(
-                engine.body,
-                inner.as_expr().expect("skeleton operand"),
-                ctx.safe_set,
-            ) {
+            // A promoted value write target is not a scalarizable candidate.
+            if let Some(local_idx) = inner
+                .as_expr()
+                .and_then(|e| is_candidate_local(engine.body, e, ctx.safe_set))
+            {
                 let key = (local_idx, field_index);
                 if let Some(&new_local) = ctx.field_map.get(&key) {
                     let new_name = ctx.info_map[&key].0.clone();
