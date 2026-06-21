@@ -3003,7 +3003,14 @@ fn emit_lr_branch(
 /// The left-associative wrap + suffix ops shared by the static and ATN LR
 /// loops: open a new same-rule node spanning the tree built so far, append
 /// the suffix, close it.
-fn emit_lr_branch_body(w: &mut CodeWriter, lr: &LrAlt, rk: &String, labeled: bool, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+fn emit_lr_branch_body(
+    w: &mut CodeWriter,
+    lr: &LrAlt,
+    rk: &String,
+    labeled: bool,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
     w.line(&`p.b.start_node_at(_cp, {*rk}, _start);`);
     // Stamp this continuation's labeled-alternative index on the wrap node
     // (gated on the rule being labeled, mirroring the atom path).

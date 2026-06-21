@@ -7,8 +7,12 @@ use { eval } from "./logic.wado";
 
 fn assert_eval(input: &String, expected: i64) {
     match eval(input) {
-        Ok(v) => { assert v == expected, `{*input} = {v}, expected {expected}`; },
-        Err(m) => { assert false, `{*input}: unexpected error: {m}`; },
+        Ok(v) => {
+            assert v == expected, `{*input} = {v}, expected {expected}`;
+        },
+        Err(m) => {
+            assert false, `{*input}: unexpected error: {m}`;
+        },
     }
 }
 
@@ -21,8 +25,8 @@ test "literals and logical operators" {
 }
 
 test "between binds its mandatory 'and' (needs ALL(*))" {
-    assert_eval(&"between 1 and 5", 1);   // 1 <= 5
-    assert_eval(&"between 5 and 1", 0);   // 5 > 1
+    assert_eval(&"between 1 and 5", 1);  // 1 <= 5
+    assert_eval(&"between 5 and 1", 0);  // 5 > 1
 }
 
 test "the shared 'and' is disambiguated by full context" {

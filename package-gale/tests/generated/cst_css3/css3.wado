@@ -611,6 +611,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -720,6 +725,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -744,6 +750,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -809,6 +822,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -840,9 +854,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -28107,87 +28124,233 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_STYLESHEET: NodeKind = 0;
-global RK_CHARSET: NodeKind = 1;
-global RK_IMPORTS: NodeKind = 2;
-global RK_NAMESPACE_: NodeKind = 3;
-global RK_NAMESPACEPREFIX: NodeKind = 4;
-global RK_MEDIA: NodeKind = 5;
-global RK_MEDIAQUERYLIST: NodeKind = 6;
-global RK_MEDIAQUERY: NodeKind = 7;
-global RK_MEDIATYPE: NodeKind = 8;
-global RK_MEDIAEXPRESSION: NodeKind = 9;
-global RK_MEDIAFEATURE: NodeKind = 10;
-global RK_PAGE: NodeKind = 11;
-global RK_PSEUDOPAGE: NodeKind = 12;
-global RK_SELECTORGROUP: NodeKind = 13;
-global RK_SELECTOR: NodeKind = 14;
-global RK_COMBINATOR: NodeKind = 15;
-global RK_SIMPLESELECTORSEQUENCE: NodeKind = 16;
-global RK_TYPESELECTOR: NodeKind = 17;
-global RK_TYPENAMESPACEPREFIX: NodeKind = 18;
-global RK_ELEMENTNAME: NodeKind = 19;
-global RK_UNIVERSAL: NodeKind = 20;
-global RK_CLASSNAME: NodeKind = 21;
-global RK_ATTRIB: NodeKind = 22;
-global RK_PSEUDO: NodeKind = 23;
-global RK_FUNCTIONALPSEUDO: NodeKind = 24;
-global RK_EXPRESSION: NodeKind = 25;
-global RK_NEGATION: NodeKind = 26;
-global RK_NEGATIONARG: NodeKind = 27;
-global RK_OPERATOR_: NodeKind = 28;
-global RK_PROPERTY_: NodeKind = 29;
-global RK_RULESET: NodeKind = 30;
-global RK_DECLARATIONLIST: NodeKind = 31;
-global RK_DECLARATION: NodeKind = 32;
-global RK_PRIO: NodeKind = 33;
-global RK_VALUE: NodeKind = 34;
-global RK_EXPR: NodeKind = 35;
-global RK_TERM: NodeKind = 36;
-global RK_FUNCTION_: NodeKind = 37;
-global RK_DXIMAGETRANSFORM: NodeKind = 38;
-global RK_HEXCOLOR: NodeKind = 39;
-global RK_NUMBER: NodeKind = 40;
-global RK_PERCENTAGE: NodeKind = 41;
-global RK_DIMENSION: NodeKind = 42;
-global RK_UNKNOWNDIMENSION: NodeKind = 43;
-global RK_ANY_: NodeKind = 44;
-global RK_ATRULE: NodeKind = 45;
-global RK_UNUSED: NodeKind = 46;
-global RK_BLOCK: NodeKind = 47;
-global RK_NESTEDSTATEMENT: NodeKind = 48;
-global RK_GROUPRULEBODY: NodeKind = 49;
-global RK_SUPPORTSRULE: NodeKind = 50;
-global RK_SUPPORTSCONDITION: NodeKind = 51;
-global RK_SUPPORTSCONDITIONINPARENS: NodeKind = 52;
-global RK_SUPPORTSNEGATION: NodeKind = 53;
-global RK_SUPPORTSCONJUNCTION: NodeKind = 54;
-global RK_SUPPORTSDISJUNCTION: NodeKind = 55;
-global RK_SUPPORTSDECLARATIONCONDITION: NodeKind = 56;
-global RK_GENERALENCLOSED: NodeKind = 57;
-global RK_URL: NodeKind = 58;
-global RK_VAR_: NodeKind = 59;
-global RK_CALC: NodeKind = 60;
-global RK_CALCSUM: NodeKind = 61;
-global RK_CALCPRODUCT: NodeKind = 62;
-global RK_CALCVALUE: NodeKind = 63;
-global RK_FONTFACERULE: NodeKind = 64;
-global RK_FONTFACEDECLARATION: NodeKind = 65;
-global RK_KEYFRAMESRULE: NodeKind = 66;
-global RK_KEYFRAMEBLOCK: NodeKind = 67;
-global RK_KEYFRAMESELECTOR: NodeKind = 68;
-global RK_VIEWPORT: NodeKind = 69;
-global RK_COUNTERSTYLE: NodeKind = 70;
-global RK_FONTFEATUREVALUESRULE: NodeKind = 71;
-global RK_FONTFAMILYNAMELIST: NodeKind = 72;
-global RK_FONTFAMILYNAME: NodeKind = 73;
-global RK_FEATUREVALUEBLOCK: NodeKind = 74;
-global RK_FEATURETYPE: NodeKind = 75;
-global RK_FEATUREVALUEDEFINITION: NodeKind = 76;
-global RK_IDENT: NodeKind = 77;
-global RK_WS: NodeKind = 78;
+pub global RK_STYLESHEET: NodeKind = 0;
+pub global RK_CHARSET: NodeKind = 1;
+pub global RK_IMPORTS: NodeKind = 2;
+pub global RK_NAMESPACE_: NodeKind = 3;
+pub global RK_NAMESPACEPREFIX: NodeKind = 4;
+pub global RK_MEDIA: NodeKind = 5;
+pub global RK_MEDIAQUERYLIST: NodeKind = 6;
+pub global RK_MEDIAQUERY: NodeKind = 7;
+pub global RK_MEDIATYPE: NodeKind = 8;
+pub global RK_MEDIAEXPRESSION: NodeKind = 9;
+pub global RK_MEDIAFEATURE: NodeKind = 10;
+pub global RK_PAGE: NodeKind = 11;
+pub global RK_PSEUDOPAGE: NodeKind = 12;
+pub global RK_SELECTORGROUP: NodeKind = 13;
+pub global RK_SELECTOR: NodeKind = 14;
+pub global RK_COMBINATOR: NodeKind = 15;
+pub global RK_SIMPLESELECTORSEQUENCE: NodeKind = 16;
+pub global RK_TYPESELECTOR: NodeKind = 17;
+pub global RK_TYPENAMESPACEPREFIX: NodeKind = 18;
+pub global RK_ELEMENTNAME: NodeKind = 19;
+pub global RK_UNIVERSAL: NodeKind = 20;
+pub global RK_CLASSNAME: NodeKind = 21;
+pub global RK_ATTRIB: NodeKind = 22;
+pub global RK_PSEUDO: NodeKind = 23;
+pub global RK_FUNCTIONALPSEUDO: NodeKind = 24;
+pub global RK_EXPRESSION: NodeKind = 25;
+pub global RK_NEGATION: NodeKind = 26;
+pub global RK_NEGATIONARG: NodeKind = 27;
+pub global RK_OPERATOR_: NodeKind = 28;
+pub global RK_PROPERTY_: NodeKind = 29;
+pub global RK_RULESET: NodeKind = 30;
+pub global RK_DECLARATIONLIST: NodeKind = 31;
+pub global RK_DECLARATION: NodeKind = 32;
+pub global RK_PRIO: NodeKind = 33;
+pub global RK_VALUE: NodeKind = 34;
+pub global RK_EXPR: NodeKind = 35;
+pub global RK_TERM: NodeKind = 36;
+pub global RK_FUNCTION_: NodeKind = 37;
+pub global RK_DXIMAGETRANSFORM: NodeKind = 38;
+pub global RK_HEXCOLOR: NodeKind = 39;
+pub global RK_NUMBER: NodeKind = 40;
+pub global RK_PERCENTAGE: NodeKind = 41;
+pub global RK_DIMENSION: NodeKind = 42;
+pub global RK_UNKNOWNDIMENSION: NodeKind = 43;
+pub global RK_ANY_: NodeKind = 44;
+pub global RK_ATRULE: NodeKind = 45;
+pub global RK_UNUSED: NodeKind = 46;
+pub global RK_BLOCK: NodeKind = 47;
+pub global RK_NESTEDSTATEMENT: NodeKind = 48;
+pub global RK_GROUPRULEBODY: NodeKind = 49;
+pub global RK_SUPPORTSRULE: NodeKind = 50;
+pub global RK_SUPPORTSCONDITION: NodeKind = 51;
+pub global RK_SUPPORTSCONDITIONINPARENS: NodeKind = 52;
+pub global RK_SUPPORTSNEGATION: NodeKind = 53;
+pub global RK_SUPPORTSCONJUNCTION: NodeKind = 54;
+pub global RK_SUPPORTSDISJUNCTION: NodeKind = 55;
+pub global RK_SUPPORTSDECLARATIONCONDITION: NodeKind = 56;
+pub global RK_GENERALENCLOSED: NodeKind = 57;
+pub global RK_URL: NodeKind = 58;
+pub global RK_VAR_: NodeKind = 59;
+pub global RK_CALC: NodeKind = 60;
+pub global RK_CALCSUM: NodeKind = 61;
+pub global RK_CALCPRODUCT: NodeKind = 62;
+pub global RK_CALCVALUE: NodeKind = 63;
+pub global RK_FONTFACERULE: NodeKind = 64;
+pub global RK_FONTFACEDECLARATION: NodeKind = 65;
+pub global RK_KEYFRAMESRULE: NodeKind = 66;
+pub global RK_KEYFRAMEBLOCK: NodeKind = 67;
+pub global RK_KEYFRAMESELECTOR: NodeKind = 68;
+pub global RK_VIEWPORT: NodeKind = 69;
+pub global RK_COUNTERSTYLE: NodeKind = 70;
+pub global RK_FONTFEATUREVALUESRULE: NodeKind = 71;
+pub global RK_FONTFAMILYNAMELIST: NodeKind = 72;
+pub global RK_FONTFAMILYNAME: NodeKind = 73;
+pub global RK_FEATUREVALUEBLOCK: NodeKind = 74;
+pub global RK_FEATURETYPE: NodeKind = 75;
+pub global RK_FEATUREVALUEDEFINITION: NodeKind = 76;
+pub global RK_IDENT: NodeKind = 77;
+pub global RK_WS: NodeKind = 78;
 
 global RULE_NAMES: List<String> = ["stylesheet", "charset", "imports", "namespace_", "namespacePrefix", "media", "mediaQueryList", "mediaQuery", "mediaType", "mediaExpression", "mediaFeature", "page", "pseudoPage", "selectorGroup", "selector", "combinator", "simpleSelectorSequence", "typeSelector", "typeNamespacePrefix", "elementName", "universal", "className", "attrib", "pseudo", "functionalPseudo", "expression", "negation", "negationArg", "operator_", "property_", "ruleset", "declarationList", "declaration", "prio", "value", "expr", "term", "function_", "dxImageTransform", "hexcolor", "number", "percentage", "dimension", "unknownDimension", "any_", "atRule", "unused", "block", "nestedStatement", "groupRuleBody", "supportsRule", "supportsCondition", "supportsConditionInParens", "supportsNegation", "supportsConjunction", "supportsDisjunction", "supportsDeclarationCondition", "generalEnclosed", "url", "var_", "calc", "calcSum", "calcProduct", "calcValue", "fontFaceRule", "fontFaceDeclaration", "keyframesRule", "keyframeBlock", "keyframeSelector", "viewport", "counterStyle", "fontFeatureValuesRule", "fontFamilyNameList", "fontFamilyName", "featureValueBlock", "featureType", "featureValueDefinition", "ident", "ws"];
+
+pub enum CharsetAlt {
+    goodCharset,
+    badCharset,
+}
+
+pub fn charset_alt(node: &CstNode) -> Option<CharsetAlt> {
+    return match node.alt {
+        0 => Option::Some(CharsetAlt::goodCharset),
+        1 => Option::Some(CharsetAlt::badCharset),
+        _ => null,
+    };
+}
+
+pub enum ImportsAlt {
+    goodImport,
+    badImport,
+}
+
+pub fn imports_alt(node: &CstNode) -> Option<ImportsAlt> {
+    return match node.alt {
+        0 => Option::Some(ImportsAlt::goodImport),
+        1 => Option::Some(ImportsAlt::goodImport),
+        2 => Option::Some(ImportsAlt::badImport),
+        3 => Option::Some(ImportsAlt::badImport),
+        _ => null,
+    };
+}
+
+pub enum NamespaceAlt {
+    goodNamespace,
+    badNamespace,
+}
+
+pub fn namespace__alt(node: &CstNode) -> Option<NamespaceAlt> {
+    return match node.alt {
+        0 => Option::Some(NamespaceAlt::goodNamespace),
+        1 => Option::Some(NamespaceAlt::badNamespace),
+        _ => null,
+    };
+}
+
+pub enum OperatorAlt {
+    goodOperator,
+    badOperator,
+}
+
+pub fn operator__alt(node: &CstNode) -> Option<OperatorAlt> {
+    return match node.alt {
+        0 => Option::Some(OperatorAlt::goodOperator),
+        1 => Option::Some(OperatorAlt::goodOperator),
+        2 => Option::Some(OperatorAlt::goodOperator),
+        3 => Option::Some(OperatorAlt::badOperator),
+        _ => null,
+    };
+}
+
+pub enum PropertyAlt {
+    goodProperty,
+    badProperty,
+}
+
+pub fn property__alt(node: &CstNode) -> Option<PropertyAlt> {
+    return match node.alt {
+        0 => Option::Some(PropertyAlt::goodProperty),
+        1 => Option::Some(PropertyAlt::goodProperty),
+        2 => Option::Some(PropertyAlt::badProperty),
+        3 => Option::Some(PropertyAlt::badProperty),
+        _ => null,
+    };
+}
+
+pub enum RulesetAlt {
+    knownRuleset,
+    unknownRuleset,
+}
+
+pub fn ruleset_alt(node: &CstNode) -> Option<RulesetAlt> {
+    return match node.alt {
+        0 => Option::Some(RulesetAlt::knownRuleset),
+        1 => Option::Some(RulesetAlt::unknownRuleset),
+        _ => null,
+    };
+}
+
+pub enum DeclarationAlt {
+    knownDeclaration,
+    unknownDeclaration,
+}
+
+pub fn declaration_alt(node: &CstNode) -> Option<DeclarationAlt> {
+    return match node.alt {
+        0 => Option::Some(DeclarationAlt::knownDeclaration),
+        1 => Option::Some(DeclarationAlt::unknownDeclaration),
+        _ => null,
+    };
+}
+
+pub enum TermAlt {
+    knownTerm,
+    unknownTerm,
+    badTerm,
+}
+
+pub fn term_alt(node: &CstNode) -> Option<TermAlt> {
+    return match node.alt {
+        0 => Option::Some(TermAlt::knownTerm),
+        1 => Option::Some(TermAlt::knownTerm),
+        2 => Option::Some(TermAlt::knownTerm),
+        3 => Option::Some(TermAlt::knownTerm),
+        4 => Option::Some(TermAlt::knownTerm),
+        5 => Option::Some(TermAlt::knownTerm),
+        6 => Option::Some(TermAlt::knownTerm),
+        7 => Option::Some(TermAlt::knownTerm),
+        8 => Option::Some(TermAlt::knownTerm),
+        9 => Option::Some(TermAlt::knownTerm),
+        10 => Option::Some(TermAlt::knownTerm),
+        11 => Option::Some(TermAlt::unknownTerm),
+        12 => Option::Some(TermAlt::badTerm),
+        _ => null,
+    };
+}
+
+pub enum AtRuleAlt {
+    unknownAtRule,
+}
+
+pub fn at_rule_alt(node: &CstNode) -> Option<AtRuleAlt> {
+    return match node.alt {
+        0 => Option::Some(AtRuleAlt::unknownAtRule),
+        _ => null,
+    };
+}
+
+pub enum FontFaceDeclarationAlt {
+    knownFontFaceDeclaration,
+    unknownFontFaceDeclaration,
+}
+
+pub fn font_face_declaration_alt(node: &CstNode) -> Option<FontFaceDeclarationAlt> {
+    return match node.alt {
+        0 => Option::Some(FontFaceDeclarationAlt::knownFontFaceDeclaration),
+        1 => Option::Some(FontFaceDeclarationAlt::unknownFontFaceDeclaration),
+        _ => null,
+    };
+}
 
 struct Parser {
     tokens: TokenStream,
@@ -32381,6 +32544,7 @@ fn _parse_stylesheet(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let charset = p.expect(TK_Charset)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
     let string_ = p.expect(TK_String_)?;
@@ -32409,6 +32573,7 @@ fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let charset = p.expect(TK_Charset)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
     let string_ = p.expect(TK_String_)?;
@@ -32475,6 +32640,7 @@ fn _parse_charset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> R
 
 fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let import_ = p.expect(TK_Import)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
     let grp_kind = p.peek_kind();
@@ -32528,6 +32694,7 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let import_ = p.expect(TK_Import)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
     let grp_kind = p.peek_kind();
@@ -32578,6 +32745,7 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let import_ = p.expect(TK_Import)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
     let grp_kind = p.peek_kind();
@@ -32625,6 +32793,7 @@ fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(3);
     let import_ = p.expect(TK_Import)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
     let grp_kind = p.peek_kind();
@@ -32729,6 +32898,7 @@ fn _parse_imports(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> R
 
 fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let namespace = p.expect(TK_Namespace)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_6)?;
     let mut opt_scan_pos: i32 = -1;
@@ -32807,6 +32977,7 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
 
 fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let namespace = p.expect(TK_Namespace)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_6)?;
     let mut opt_scan_pos: i32 = -1;
@@ -34103,21 +34274,25 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_SLASH {
+        p.b.set_alt(0);
         let slash = p.expect(TK_LIT_SLASH)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Comma {
+        p.b.set_alt(1);
         let comma = p.expect(TK_Comma)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Space {
+        p.b.set_alt(2);
         let space = p.expect(TK_Space)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_EQ {
+        p.b.set_alt(3);
         let eq = p.expect(TK_LIT_EQ)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
@@ -34145,21 +34320,25 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
+        p.b.set_alt(0);
         let ident = _parse_ident(p, follow)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Variable {
+        p.b.set_alt(1);
         let variable = p.expect(TK_Variable)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_STAR {
+        p.b.set_alt(2);
         let star = p.expect(TK_LIT_STAR)?;
         let ident = _parse_ident(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_U5f {
+        p.b.set_alt(3);
         let lit_u5f = p.expect(TK_LIT_U5f)?;
         let ident = _parse_ident(p, follow)?;
         return Result::Ok(());
@@ -34185,6 +34364,7 @@ fn _parse_property_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -34243,6 +34423,7 @@ fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 
 fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let selector_group = _parse_selector_group(p, &FOLLOW_MASK_7)?;
     let lbrace = p.expect(TK_LIT_LBRACE)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
@@ -34398,6 +34579,7 @@ fn _parse_declaration_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
@@ -34428,6 +34610,7 @@ fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List
 
 fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_23)?;
@@ -34628,6 +34811,7 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
 
 fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let number = _parse_number(p, follow)?;
     let ws = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -34635,6 +34819,7 @@ fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let percentage = _parse_percentage(p, follow)?;
     let ws = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -34642,6 +34827,7 @@ fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let dimension = _parse_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -34649,6 +34835,7 @@ fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(11);
     let unknown_dimension = _parse_unknown_dimension(p, follow)?;
     let ws = _parse_ws(p, follow)?;
     return Result::Ok(());
@@ -34689,42 +34876,51 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
     }
     if kind == TK_String_ {
+        p.b.set_alt(3);
         let string_ = p.expect(TK_String_)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_UnicodeRange {
+        p.b.set_alt(4);
         let unicoderange = p.expect(TK_UnicodeRange)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if _kind_set_4(kind) {
+        p.b.set_alt(5);
         let ident = _parse_ident(p, follow)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Var {
+        p.b.set_alt(6);
         let var_ = _parse_var_(p, follow)?;
         return Result::Ok(());
     }
     if _kind_set_2(kind) {
+        p.b.set_alt(7);
         let url = _parse_url(p, follow)?;
         let ws = _parse_ws(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Hash {
+        p.b.set_alt(8);
         let hexcolor = _parse_hexcolor(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Calc {
+        p.b.set_alt(9);
         let calc = _parse_calc(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_Function_ {
+        p.b.set_alt(10);
         let function_ = _parse_function_(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_DxImageTransform {
+        p.b.set_alt(12);
         let dx_image_transform = _parse_dx_image_transform(p, follow)?;
         return Result::Ok(());
     }
@@ -35228,6 +35424,7 @@ fn _parse_any_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Resu
 
 fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let atkeyword = p.expect(TK_AtKeyword)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_26)?;
     loop {
@@ -36383,6 +36580,7 @@ fn _parse_font_face_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
@@ -36405,6 +36603,7 @@ fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
 
 fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
     let colon = p.expect(TK_LIT_COLON)?;
     let ws = _parse_ws(p, &FOLLOW_MASK_23)?;

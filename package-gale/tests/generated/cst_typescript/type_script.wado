@@ -612,6 +612,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -721,6 +726,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -745,6 +751,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -810,6 +823,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -841,9 +855,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -5074,166 +5091,403 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_INITIALIZER: NodeKind = 0;
-global RK_BINDINGPATTERN: NodeKind = 1;
-global RK_TYPEPARAMETERS: NodeKind = 2;
-global RK_TYPEPARAMETERLIST: NodeKind = 3;
-global RK_TYPEPARAMETER: NodeKind = 4;
-global RK_CONSTRAINT: NodeKind = 5;
-global RK_TYPEARGUMENTS: NodeKind = 6;
-global RK_TYPEARGUMENTLIST: NodeKind = 7;
-global RK_TYPEARGUMENT: NodeKind = 8;
-global RK_TYPE_: NodeKind = 9;
-global RK_UNIONORINTERSECTIONORPRIMARYTYPE: NodeKind = 10;
-global RK_PRIMARYTYPE: NodeKind = 11;
-global RK_PREDEFINEDTYPE: NodeKind = 12;
-global RK_TYPEREFERENCE: NodeKind = 13;
-global RK_TYPEGENERIC: NodeKind = 14;
-global RK_TYPENAME: NodeKind = 15;
-global RK_OBJECTTYPE: NodeKind = 16;
-global RK_TYPEBODY: NodeKind = 17;
-global RK_TYPEMEMBERLIST: NodeKind = 18;
-global RK_TYPEMEMBER: NodeKind = 19;
-global RK_ARRAYTYPE: NodeKind = 20;
-global RK_TUPLETYPE: NodeKind = 21;
-global RK_TUPLEELEMENTTYPES: NodeKind = 22;
-global RK_FUNCTIONTYPE: NodeKind = 23;
-global RK_CONSTRUCTORTYPE: NodeKind = 24;
-global RK_TYPEQUERY: NodeKind = 25;
-global RK_TYPEQUERYEXPRESSION: NodeKind = 26;
-global RK_PROPERTYSIGNATUR: NodeKind = 27;
-global RK_TYPEANNOTATION: NodeKind = 28;
-global RK_CALLSIGNATURE: NodeKind = 29;
-global RK_PARAMETERLIST: NodeKind = 30;
-global RK_REQUIREDPARAMETERLIST: NodeKind = 31;
-global RK_PARAMETER: NodeKind = 32;
-global RK_OPTIONALPARAMETER: NodeKind = 33;
-global RK_RESTPARAMETER: NodeKind = 34;
-global RK_REQUIREDPARAMETER: NodeKind = 35;
-global RK_ACCESSIBILITYMODIFIER: NodeKind = 36;
-global RK_IDENTIFIERORPATTERN: NodeKind = 37;
-global RK_CONSTRUCTSIGNATURE: NodeKind = 38;
-global RK_INDEXSIGNATURE: NodeKind = 39;
-global RK_METHODSIGNATURE: NodeKind = 40;
-global RK_TYPEALIASDECLARATION: NodeKind = 41;
-global RK_CONSTRUCTORDECLARATION: NodeKind = 42;
-global RK_INTERFACEDECLARATION: NodeKind = 43;
-global RK_INTERFACEEXTENDSCLAUSE: NodeKind = 44;
-global RK_CLASSORINTERFACETYPELIST: NodeKind = 45;
-global RK_ENUMDECLARATION: NodeKind = 46;
-global RK_ENUMBODY: NodeKind = 47;
-global RK_ENUMMEMBERLIST: NodeKind = 48;
-global RK_ENUMMEMBER: NodeKind = 49;
-global RK_NAMESPACEDECLARATION: NodeKind = 50;
-global RK_NAMESPACENAME: NodeKind = 51;
-global RK_IMPORTALIASDECLARATION: NodeKind = 52;
-global RK_DECORATORLIST: NodeKind = 53;
-global RK_DECORATOR: NodeKind = 54;
-global RK_DECORATORMEMBEREXPRESSION: NodeKind = 55;
-global RK_DECORATORCALLEXPRESSION: NodeKind = 56;
-global RK_PROGRAM: NodeKind = 57;
-global RK_SOURCEELEMENT: NodeKind = 58;
-global RK_STATEMENT: NodeKind = 59;
-global RK_BLOCK: NodeKind = 60;
-global RK_STATEMENTLIST: NodeKind = 61;
-global RK_ABSTRACTDECLARATION: NodeKind = 62;
-global RK_IMPORTSTATEMENT: NodeKind = 63;
-global RK_IMPORTFROMBLOCK: NodeKind = 64;
-global RK_IMPORTMODULEITEMS: NodeKind = 65;
-global RK_IMPORTALIASNAME: NodeKind = 66;
-global RK_MODULEEXPORTNAME: NodeKind = 67;
-global RK_IMPORTEDBINDING: NodeKind = 68;
-global RK_IMPORTDEFAULT: NodeKind = 69;
-global RK_IMPORTNAMESPACE: NodeKind = 70;
-global RK_IMPORTFROM: NodeKind = 71;
-global RK_ALIASNAME: NodeKind = 72;
-global RK_EXPORTSTATEMENT: NodeKind = 73;
-global RK_EXPORTFROMBLOCK: NodeKind = 74;
-global RK_EXPORTMODULEITEMS: NodeKind = 75;
-global RK_EXPORTALIASNAME: NodeKind = 76;
-global RK_DECLARATION: NodeKind = 77;
-global RK_VARIABLESTATEMENT: NodeKind = 78;
-global RK_VARIABLEDECLARATIONLIST: NodeKind = 79;
-global RK_VARIABLEDECLARATION: NodeKind = 80;
-global RK_EMPTYSTATEMENT_: NodeKind = 81;
-global RK_EXPRESSIONSTATEMENT: NodeKind = 82;
-global RK_IFSTATEMENT: NodeKind = 83;
-global RK_ITERATIONSTATEMENT: NodeKind = 84;
-global RK_VARMODIFIER: NodeKind = 85;
-global RK_CONTINUESTATEMENT: NodeKind = 86;
-global RK_BREAKSTATEMENT: NodeKind = 87;
-global RK_RETURNSTATEMENT: NodeKind = 88;
-global RK_YIELDSTATEMENT: NodeKind = 89;
-global RK_WITHSTATEMENT: NodeKind = 90;
-global RK_SWITCHSTATEMENT: NodeKind = 91;
-global RK_CASEBLOCK: NodeKind = 92;
-global RK_CASECLAUSES: NodeKind = 93;
-global RK_CASECLAUSE: NodeKind = 94;
-global RK_DEFAULTCLAUSE: NodeKind = 95;
-global RK_LABELLEDSTATEMENT: NodeKind = 96;
-global RK_THROWSTATEMENT: NodeKind = 97;
-global RK_TRYSTATEMENT: NodeKind = 98;
-global RK_CATCHPRODUCTION: NodeKind = 99;
-global RK_FINALLYPRODUCTION: NodeKind = 100;
-global RK_DEBUGGERSTATEMENT: NodeKind = 101;
-global RK_FUNCTIONDECLARATION: NodeKind = 102;
-global RK_CLASSDECLARATION: NodeKind = 103;
-global RK_CLASSHERITAGE: NodeKind = 104;
-global RK_CLASSTAIL: NodeKind = 105;
-global RK_CLASSEXTENDSCLAUSE: NodeKind = 106;
-global RK_IMPLEMENTSCLAUSE: NodeKind = 107;
-global RK_CLASSELEMENT: NodeKind = 108;
-global RK_PROPERTYMEMBERDECLARATION: NodeKind = 109;
-global RK_PROPERTYMEMBERBASE: NodeKind = 110;
-global RK_INDEXMEMBERDECLARATION: NodeKind = 111;
-global RK_GENERATORMETHOD: NodeKind = 112;
-global RK_GENERATORFUNCTIONDECLARATION: NodeKind = 113;
-global RK_GENERATORBLOCK: NodeKind = 114;
-global RK_GENERATORDEFINITION: NodeKind = 115;
-global RK_ITERATORBLOCK: NodeKind = 116;
-global RK_ITERATORDEFINITION: NodeKind = 117;
-global RK_CLASSELEMENTNAME: NodeKind = 118;
-global RK_PRIVATEIDENTIFIER: NodeKind = 119;
-global RK_FORMALPARAMETERLIST: NodeKind = 120;
-global RK_FORMALPARAMETERARG: NodeKind = 121;
-global RK_LASTFORMALPARAMETERARG: NodeKind = 122;
-global RK_FUNCTIONBODY: NodeKind = 123;
-global RK_SOURCEELEMENTS: NodeKind = 124;
-global RK_ARRAYLITERAL: NodeKind = 125;
-global RK_ELEMENTLIST: NodeKind = 126;
-global RK_ARRAYELEMENT: NodeKind = 127;
-global RK_OBJECTLITERAL: NodeKind = 128;
-global RK_PROPERTYASSIGNMENT: NodeKind = 129;
-global RK_GETACCESSOR: NodeKind = 130;
-global RK_SETACCESSOR: NodeKind = 131;
-global RK_PROPERTYNAME: NodeKind = 132;
-global RK_ARGUMENTS: NodeKind = 133;
-global RK_ARGUMENTLIST: NodeKind = 134;
-global RK_ARGUMENT: NodeKind = 135;
-global RK_EXPRESSIONSEQUENCE: NodeKind = 136;
-global RK_SINGLEEXPRESSION: NodeKind = 137;
-global RK_ASEXPRESSION: NodeKind = 138;
-global RK_ASSIGNABLE: NodeKind = 139;
-global RK_ANONYMOUSFUNCTION: NodeKind = 140;
-global RK_ARROWFUNCTIONDECLARATION: NodeKind = 141;
-global RK_ARROWFUNCTIONPARAMETERS: NodeKind = 142;
-global RK_ARROWFUNCTIONBODY: NodeKind = 143;
-global RK_ASSIGNMENTOPERATOR: NodeKind = 144;
-global RK_LITERAL: NodeKind = 145;
-global RK_TEMPLATESTRINGLITERAL: NodeKind = 146;
-global RK_TEMPLATESTRINGATOM: NodeKind = 147;
-global RK_NUMERICLITERAL: NodeKind = 148;
-global RK_BIGINTLITERAL: NodeKind = 149;
-global RK_GETTER: NodeKind = 150;
-global RK_SETTER: NodeKind = 151;
-global RK_IDENTIFIERNAME: NodeKind = 152;
-global RK_IDENTIFIER: NodeKind = 153;
-global RK_IDENTIFIERORKEYWORD: NodeKind = 154;
-global RK_RESERVEDWORD: NodeKind = 155;
-global RK_KEYWORD: NodeKind = 156;
-global RK_EOS: NodeKind = 157;
+pub global RK_INITIALIZER: NodeKind = 0;
+pub global RK_BINDINGPATTERN: NodeKind = 1;
+pub global RK_TYPEPARAMETERS: NodeKind = 2;
+pub global RK_TYPEPARAMETERLIST: NodeKind = 3;
+pub global RK_TYPEPARAMETER: NodeKind = 4;
+pub global RK_CONSTRAINT: NodeKind = 5;
+pub global RK_TYPEARGUMENTS: NodeKind = 6;
+pub global RK_TYPEARGUMENTLIST: NodeKind = 7;
+pub global RK_TYPEARGUMENT: NodeKind = 8;
+pub global RK_TYPE_: NodeKind = 9;
+pub global RK_UNIONORINTERSECTIONORPRIMARYTYPE: NodeKind = 10;
+pub global RK_PRIMARYTYPE: NodeKind = 11;
+pub global RK_PREDEFINEDTYPE: NodeKind = 12;
+pub global RK_TYPEREFERENCE: NodeKind = 13;
+pub global RK_TYPEGENERIC: NodeKind = 14;
+pub global RK_TYPENAME: NodeKind = 15;
+pub global RK_OBJECTTYPE: NodeKind = 16;
+pub global RK_TYPEBODY: NodeKind = 17;
+pub global RK_TYPEMEMBERLIST: NodeKind = 18;
+pub global RK_TYPEMEMBER: NodeKind = 19;
+pub global RK_ARRAYTYPE: NodeKind = 20;
+pub global RK_TUPLETYPE: NodeKind = 21;
+pub global RK_TUPLEELEMENTTYPES: NodeKind = 22;
+pub global RK_FUNCTIONTYPE: NodeKind = 23;
+pub global RK_CONSTRUCTORTYPE: NodeKind = 24;
+pub global RK_TYPEQUERY: NodeKind = 25;
+pub global RK_TYPEQUERYEXPRESSION: NodeKind = 26;
+pub global RK_PROPERTYSIGNATUR: NodeKind = 27;
+pub global RK_TYPEANNOTATION: NodeKind = 28;
+pub global RK_CALLSIGNATURE: NodeKind = 29;
+pub global RK_PARAMETERLIST: NodeKind = 30;
+pub global RK_REQUIREDPARAMETERLIST: NodeKind = 31;
+pub global RK_PARAMETER: NodeKind = 32;
+pub global RK_OPTIONALPARAMETER: NodeKind = 33;
+pub global RK_RESTPARAMETER: NodeKind = 34;
+pub global RK_REQUIREDPARAMETER: NodeKind = 35;
+pub global RK_ACCESSIBILITYMODIFIER: NodeKind = 36;
+pub global RK_IDENTIFIERORPATTERN: NodeKind = 37;
+pub global RK_CONSTRUCTSIGNATURE: NodeKind = 38;
+pub global RK_INDEXSIGNATURE: NodeKind = 39;
+pub global RK_METHODSIGNATURE: NodeKind = 40;
+pub global RK_TYPEALIASDECLARATION: NodeKind = 41;
+pub global RK_CONSTRUCTORDECLARATION: NodeKind = 42;
+pub global RK_INTERFACEDECLARATION: NodeKind = 43;
+pub global RK_INTERFACEEXTENDSCLAUSE: NodeKind = 44;
+pub global RK_CLASSORINTERFACETYPELIST: NodeKind = 45;
+pub global RK_ENUMDECLARATION: NodeKind = 46;
+pub global RK_ENUMBODY: NodeKind = 47;
+pub global RK_ENUMMEMBERLIST: NodeKind = 48;
+pub global RK_ENUMMEMBER: NodeKind = 49;
+pub global RK_NAMESPACEDECLARATION: NodeKind = 50;
+pub global RK_NAMESPACENAME: NodeKind = 51;
+pub global RK_IMPORTALIASDECLARATION: NodeKind = 52;
+pub global RK_DECORATORLIST: NodeKind = 53;
+pub global RK_DECORATOR: NodeKind = 54;
+pub global RK_DECORATORMEMBEREXPRESSION: NodeKind = 55;
+pub global RK_DECORATORCALLEXPRESSION: NodeKind = 56;
+pub global RK_PROGRAM: NodeKind = 57;
+pub global RK_SOURCEELEMENT: NodeKind = 58;
+pub global RK_STATEMENT: NodeKind = 59;
+pub global RK_BLOCK: NodeKind = 60;
+pub global RK_STATEMENTLIST: NodeKind = 61;
+pub global RK_ABSTRACTDECLARATION: NodeKind = 62;
+pub global RK_IMPORTSTATEMENT: NodeKind = 63;
+pub global RK_IMPORTFROMBLOCK: NodeKind = 64;
+pub global RK_IMPORTMODULEITEMS: NodeKind = 65;
+pub global RK_IMPORTALIASNAME: NodeKind = 66;
+pub global RK_MODULEEXPORTNAME: NodeKind = 67;
+pub global RK_IMPORTEDBINDING: NodeKind = 68;
+pub global RK_IMPORTDEFAULT: NodeKind = 69;
+pub global RK_IMPORTNAMESPACE: NodeKind = 70;
+pub global RK_IMPORTFROM: NodeKind = 71;
+pub global RK_ALIASNAME: NodeKind = 72;
+pub global RK_EXPORTSTATEMENT: NodeKind = 73;
+pub global RK_EXPORTFROMBLOCK: NodeKind = 74;
+pub global RK_EXPORTMODULEITEMS: NodeKind = 75;
+pub global RK_EXPORTALIASNAME: NodeKind = 76;
+pub global RK_DECLARATION: NodeKind = 77;
+pub global RK_VARIABLESTATEMENT: NodeKind = 78;
+pub global RK_VARIABLEDECLARATIONLIST: NodeKind = 79;
+pub global RK_VARIABLEDECLARATION: NodeKind = 80;
+pub global RK_EMPTYSTATEMENT_: NodeKind = 81;
+pub global RK_EXPRESSIONSTATEMENT: NodeKind = 82;
+pub global RK_IFSTATEMENT: NodeKind = 83;
+pub global RK_ITERATIONSTATEMENT: NodeKind = 84;
+pub global RK_VARMODIFIER: NodeKind = 85;
+pub global RK_CONTINUESTATEMENT: NodeKind = 86;
+pub global RK_BREAKSTATEMENT: NodeKind = 87;
+pub global RK_RETURNSTATEMENT: NodeKind = 88;
+pub global RK_YIELDSTATEMENT: NodeKind = 89;
+pub global RK_WITHSTATEMENT: NodeKind = 90;
+pub global RK_SWITCHSTATEMENT: NodeKind = 91;
+pub global RK_CASEBLOCK: NodeKind = 92;
+pub global RK_CASECLAUSES: NodeKind = 93;
+pub global RK_CASECLAUSE: NodeKind = 94;
+pub global RK_DEFAULTCLAUSE: NodeKind = 95;
+pub global RK_LABELLEDSTATEMENT: NodeKind = 96;
+pub global RK_THROWSTATEMENT: NodeKind = 97;
+pub global RK_TRYSTATEMENT: NodeKind = 98;
+pub global RK_CATCHPRODUCTION: NodeKind = 99;
+pub global RK_FINALLYPRODUCTION: NodeKind = 100;
+pub global RK_DEBUGGERSTATEMENT: NodeKind = 101;
+pub global RK_FUNCTIONDECLARATION: NodeKind = 102;
+pub global RK_CLASSDECLARATION: NodeKind = 103;
+pub global RK_CLASSHERITAGE: NodeKind = 104;
+pub global RK_CLASSTAIL: NodeKind = 105;
+pub global RK_CLASSEXTENDSCLAUSE: NodeKind = 106;
+pub global RK_IMPLEMENTSCLAUSE: NodeKind = 107;
+pub global RK_CLASSELEMENT: NodeKind = 108;
+pub global RK_PROPERTYMEMBERDECLARATION: NodeKind = 109;
+pub global RK_PROPERTYMEMBERBASE: NodeKind = 110;
+pub global RK_INDEXMEMBERDECLARATION: NodeKind = 111;
+pub global RK_GENERATORMETHOD: NodeKind = 112;
+pub global RK_GENERATORFUNCTIONDECLARATION: NodeKind = 113;
+pub global RK_GENERATORBLOCK: NodeKind = 114;
+pub global RK_GENERATORDEFINITION: NodeKind = 115;
+pub global RK_ITERATORBLOCK: NodeKind = 116;
+pub global RK_ITERATORDEFINITION: NodeKind = 117;
+pub global RK_CLASSELEMENTNAME: NodeKind = 118;
+pub global RK_PRIVATEIDENTIFIER: NodeKind = 119;
+pub global RK_FORMALPARAMETERLIST: NodeKind = 120;
+pub global RK_FORMALPARAMETERARG: NodeKind = 121;
+pub global RK_LASTFORMALPARAMETERARG: NodeKind = 122;
+pub global RK_FUNCTIONBODY: NodeKind = 123;
+pub global RK_SOURCEELEMENTS: NodeKind = 124;
+pub global RK_ARRAYLITERAL: NodeKind = 125;
+pub global RK_ELEMENTLIST: NodeKind = 126;
+pub global RK_ARRAYELEMENT: NodeKind = 127;
+pub global RK_OBJECTLITERAL: NodeKind = 128;
+pub global RK_PROPERTYASSIGNMENT: NodeKind = 129;
+pub global RK_GETACCESSOR: NodeKind = 130;
+pub global RK_SETACCESSOR: NodeKind = 131;
+pub global RK_PROPERTYNAME: NodeKind = 132;
+pub global RK_ARGUMENTS: NodeKind = 133;
+pub global RK_ARGUMENTLIST: NodeKind = 134;
+pub global RK_ARGUMENT: NodeKind = 135;
+pub global RK_EXPRESSIONSEQUENCE: NodeKind = 136;
+pub global RK_SINGLEEXPRESSION: NodeKind = 137;
+pub global RK_ASEXPRESSION: NodeKind = 138;
+pub global RK_ASSIGNABLE: NodeKind = 139;
+pub global RK_ANONYMOUSFUNCTION: NodeKind = 140;
+pub global RK_ARROWFUNCTIONDECLARATION: NodeKind = 141;
+pub global RK_ARROWFUNCTIONPARAMETERS: NodeKind = 142;
+pub global RK_ARROWFUNCTIONBODY: NodeKind = 143;
+pub global RK_ASSIGNMENTOPERATOR: NodeKind = 144;
+pub global RK_LITERAL: NodeKind = 145;
+pub global RK_TEMPLATESTRINGLITERAL: NodeKind = 146;
+pub global RK_TEMPLATESTRINGATOM: NodeKind = 147;
+pub global RK_NUMERICLITERAL: NodeKind = 148;
+pub global RK_BIGINTLITERAL: NodeKind = 149;
+pub global RK_GETTER: NodeKind = 150;
+pub global RK_SETTER: NodeKind = 151;
+pub global RK_IDENTIFIERNAME: NodeKind = 152;
+pub global RK_IDENTIFIER: NodeKind = 153;
+pub global RK_IDENTIFIERORKEYWORD: NodeKind = 154;
+pub global RK_RESERVEDWORD: NodeKind = 155;
+pub global RK_KEYWORD: NodeKind = 156;
+pub global RK_EOS: NodeKind = 157;
 
 global RULE_NAMES: List<String> = ["initializer", "bindingPattern", "typeParameters", "typeParameterList", "typeParameter", "constraint", "typeArguments", "typeArgumentList", "typeArgument", "type_", "unionOrIntersectionOrPrimaryType", "primaryType", "predefinedType", "typeReference", "typeGeneric", "typeName", "objectType", "typeBody", "typeMemberList", "typeMember", "arrayType", "tupleType", "tupleElementTypes", "functionType", "constructorType", "typeQuery", "typeQueryExpression", "propertySignatur", "typeAnnotation", "callSignature", "parameterList", "requiredParameterList", "parameter", "optionalParameter", "restParameter", "requiredParameter", "accessibilityModifier", "identifierOrPattern", "constructSignature", "indexSignature", "methodSignature", "typeAliasDeclaration", "constructorDeclaration", "interfaceDeclaration", "interfaceExtendsClause", "classOrInterfaceTypeList", "enumDeclaration", "enumBody", "enumMemberList", "enumMember", "namespaceDeclaration", "namespaceName", "importAliasDeclaration", "decoratorList", "decorator", "decoratorMemberExpression", "decoratorCallExpression", "program", "sourceElement", "statement", "block", "statementList", "abstractDeclaration", "importStatement", "importFromBlock", "importModuleItems", "importAliasName", "moduleExportName", "importedBinding", "importDefault", "importNamespace", "importFrom", "aliasName", "exportStatement", "exportFromBlock", "exportModuleItems", "exportAliasName", "declaration", "variableStatement", "variableDeclarationList", "variableDeclaration", "emptyStatement_", "expressionStatement", "ifStatement", "iterationStatement", "varModifier", "continueStatement", "breakStatement", "returnStatement", "yieldStatement", "withStatement", "switchStatement", "caseBlock", "caseClauses", "caseClause", "defaultClause", "labelledStatement", "throwStatement", "tryStatement", "catchProduction", "finallyProduction", "debuggerStatement", "functionDeclaration", "classDeclaration", "classHeritage", "classTail", "classExtendsClause", "implementsClause", "classElement", "propertyMemberDeclaration", "propertyMemberBase", "indexMemberDeclaration", "generatorMethod", "generatorFunctionDeclaration", "generatorBlock", "generatorDefinition", "iteratorBlock", "iteratorDefinition", "classElementName", "privateIdentifier", "formalParameterList", "formalParameterArg", "lastFormalParameterArg", "functionBody", "sourceElements", "arrayLiteral", "elementList", "arrayElement", "objectLiteral", "propertyAssignment", "getAccessor", "setAccessor", "propertyName", "arguments", "argumentList", "argument", "expressionSequence", "singleExpression", "asExpression", "assignable", "anonymousFunction", "arrowFunctionDeclaration", "arrowFunctionParameters", "arrowFunctionBody", "assignmentOperator", "literal", "templateStringLiteral", "templateStringAtom", "numericLiteral", "bigintLiteral", "getter", "setter", "identifierName", "identifier", "identifierOrKeyWord", "reservedWord", "keyword", "eos"];
+
+pub enum UnionOrIntersectionOrPrimaryTypeAlt {
+    Union,
+    Intersection,
+    Primary,
+}
+
+pub fn union_or_intersection_or_primary_type_alt(node: &CstNode) -> Option<UnionOrIntersectionOrPrimaryTypeAlt> {
+    return match node.alt {
+        0 => Option::Some(UnionOrIntersectionOrPrimaryTypeAlt::Union),
+        1 => Option::Some(UnionOrIntersectionOrPrimaryTypeAlt::Intersection),
+        2 => Option::Some(UnionOrIntersectionOrPrimaryTypeAlt::Primary),
+        _ => null,
+    };
+}
+
+pub enum PrimaryTypeAlt {
+    ParenthesizedPrimType,
+    PredefinedPrimType,
+    ReferencePrimType,
+    ObjectPrimType,
+    ArrayPrimType,
+    TuplePrimType,
+    QueryPrimType,
+    ThisPrimType,
+    RedefinitionOfType,
+    KeyOfType,
+}
+
+pub fn primary_type_alt(node: &CstNode) -> Option<PrimaryTypeAlt> {
+    return match node.alt {
+        0 => Option::Some(PrimaryTypeAlt::ParenthesizedPrimType),
+        1 => Option::Some(PrimaryTypeAlt::PredefinedPrimType),
+        2 => Option::Some(PrimaryTypeAlt::ReferencePrimType),
+        3 => Option::Some(PrimaryTypeAlt::ObjectPrimType),
+        4 => Option::Some(PrimaryTypeAlt::ArrayPrimType),
+        5 => Option::Some(PrimaryTypeAlt::TuplePrimType),
+        6 => Option::Some(PrimaryTypeAlt::QueryPrimType),
+        7 => Option::Some(PrimaryTypeAlt::ThisPrimType),
+        8 => Option::Some(PrimaryTypeAlt::RedefinitionOfType),
+        9 => Option::Some(PrimaryTypeAlt::KeyOfType),
+        _ => null,
+    };
+}
+
+pub enum ExportStatementAlt {
+    ExportDeclaration,
+    ExportDefaultDeclaration,
+}
+
+pub fn export_statement_alt(node: &CstNode) -> Option<ExportStatementAlt> {
+    return match node.alt {
+        0 => Option::Some(ExportStatementAlt::ExportDeclaration),
+        1 => Option::Some(ExportStatementAlt::ExportDefaultDeclaration),
+        _ => null,
+    };
+}
+
+pub enum IterationStatementAlt {
+    DoStatement,
+    WhileStatement,
+    ForStatement,
+    ForVarStatement,
+    ForInStatement,
+    ForVarInStatement,
+    ForOfStatement,
+    ForVarOfStatement,
+}
+
+pub fn iteration_statement_alt(node: &CstNode) -> Option<IterationStatementAlt> {
+    return match node.alt {
+        0 => Option::Some(IterationStatementAlt::DoStatement),
+        1 => Option::Some(IterationStatementAlt::WhileStatement),
+        2 => Option::Some(IterationStatementAlt::ForStatement),
+        3 => Option::Some(IterationStatementAlt::ForVarStatement),
+        4 => Option::Some(IterationStatementAlt::ForInStatement),
+        5 => Option::Some(IterationStatementAlt::ForVarInStatement),
+        6 => Option::Some(IterationStatementAlt::ForOfStatement),
+        7 => Option::Some(IterationStatementAlt::ForVarOfStatement),
+        _ => null,
+    };
+}
+
+pub enum PropertyMemberDeclarationAlt {
+    PropertyDeclarationExpression,
+    MethodDeclarationExpression,
+    GetterSetterDeclarationExpression,
+    AbstractMemberDeclaration,
+}
+
+pub fn property_member_declaration_alt(node: &CstNode) -> Option<PropertyMemberDeclarationAlt> {
+    return match node.alt {
+        0 => Option::Some(PropertyMemberDeclarationAlt::PropertyDeclarationExpression),
+        1 => Option::Some(PropertyMemberDeclarationAlt::MethodDeclarationExpression),
+        2 => Option::Some(PropertyMemberDeclarationAlt::GetterSetterDeclarationExpression),
+        3 => Option::Some(PropertyMemberDeclarationAlt::AbstractMemberDeclaration),
+        _ => null,
+    };
+}
+
+pub enum PropertyAssignmentAlt {
+    PropertyExpressionAssignment,
+    ComputedPropertyExpressionAssignment,
+    PropertyGetter,
+    PropertySetter,
+    MethodProperty,
+    PropertyShorthand,
+    SpreadOperator,
+    RestParameterInObject,
+}
+
+pub fn property_assignment_alt(node: &CstNode) -> Option<PropertyAssignmentAlt> {
+    return match node.alt {
+        0 => Option::Some(PropertyAssignmentAlt::PropertyExpressionAssignment),
+        1 => Option::Some(PropertyAssignmentAlt::ComputedPropertyExpressionAssignment),
+        2 => Option::Some(PropertyAssignmentAlt::PropertyGetter),
+        3 => Option::Some(PropertyAssignmentAlt::PropertySetter),
+        4 => Option::Some(PropertyAssignmentAlt::MethodProperty),
+        5 => Option::Some(PropertyAssignmentAlt::PropertyShorthand),
+        6 => Option::Some(PropertyAssignmentAlt::SpreadOperator),
+        7 => Option::Some(PropertyAssignmentAlt::RestParameterInObject),
+        _ => null,
+    };
+}
+
+pub enum SingleExpressionAlt {
+    FunctionExpression,
+    ClassExpression,
+    MemberIndexExpression,
+    OptionalChainExpression,
+    MemberDotExpression,
+    NewExpression,
+    ArgumentsExpression,
+    PostIncrementExpression,
+    PostDecreaseExpression,
+    DeleteExpression,
+    VoidExpression,
+    TypeofExpression,
+    PreIncrementExpression,
+    PreDecreaseExpression,
+    UnaryPlusExpression,
+    UnaryMinusExpression,
+    BitNotExpression,
+    NotExpression,
+    AwaitExpression,
+    PowerExpression,
+    MultiplicativeExpression,
+    AdditiveExpression,
+    CoalesceExpression,
+    BitShiftExpression,
+    RelationalExpression,
+    InstanceofExpression,
+    InExpression,
+    EqualityExpression,
+    BitAndExpression,
+    BitXOrExpression,
+    BitOrExpression,
+    LogicalAndExpression,
+    LogicalOrExpression,
+    TernaryExpression,
+    AssignmentExpression,
+    AssignmentOperatorExpression,
+    TemplateStringExpression,
+    IteratorsExpression,
+    GeneratorsExpression,
+    GeneratorsFunctionExpression,
+    YieldExpression,
+    ThisExpression,
+    IdentifierExpression,
+    SuperExpression,
+    LiteralExpression,
+    ArrayLiteralExpression,
+    ObjectLiteralExpression,
+    ParenthesizedExpression,
+    GenericTypes,
+    CastAsExpression,
+    NonNullAssertionExpression,
+}
+
+pub fn single_expression_alt(node: &CstNode) -> Option<SingleExpressionAlt> {
+    return match node.alt {
+        0 => Option::Some(SingleExpressionAlt::FunctionExpression),
+        1 => Option::Some(SingleExpressionAlt::ClassExpression),
+        2 => Option::Some(SingleExpressionAlt::MemberIndexExpression),
+        3 => Option::Some(SingleExpressionAlt::OptionalChainExpression),
+        4 => Option::Some(SingleExpressionAlt::MemberDotExpression),
+        5 => Option::Some(SingleExpressionAlt::MemberDotExpression),
+        6 => Option::Some(SingleExpressionAlt::NewExpression),
+        7 => Option::Some(SingleExpressionAlt::NewExpression),
+        8 => Option::Some(SingleExpressionAlt::ArgumentsExpression),
+        9 => Option::Some(SingleExpressionAlt::PostIncrementExpression),
+        10 => Option::Some(SingleExpressionAlt::PostDecreaseExpression),
+        11 => Option::Some(SingleExpressionAlt::DeleteExpression),
+        12 => Option::Some(SingleExpressionAlt::VoidExpression),
+        13 => Option::Some(SingleExpressionAlt::TypeofExpression),
+        14 => Option::Some(SingleExpressionAlt::PreIncrementExpression),
+        15 => Option::Some(SingleExpressionAlt::PreDecreaseExpression),
+        16 => Option::Some(SingleExpressionAlt::UnaryPlusExpression),
+        17 => Option::Some(SingleExpressionAlt::UnaryMinusExpression),
+        18 => Option::Some(SingleExpressionAlt::BitNotExpression),
+        19 => Option::Some(SingleExpressionAlt::NotExpression),
+        20 => Option::Some(SingleExpressionAlt::AwaitExpression),
+        21 => Option::Some(SingleExpressionAlt::PowerExpression),
+        22 => Option::Some(SingleExpressionAlt::MultiplicativeExpression),
+        23 => Option::Some(SingleExpressionAlt::AdditiveExpression),
+        24 => Option::Some(SingleExpressionAlt::CoalesceExpression),
+        25 => Option::Some(SingleExpressionAlt::BitShiftExpression),
+        26 => Option::Some(SingleExpressionAlt::RelationalExpression),
+        27 => Option::Some(SingleExpressionAlt::InstanceofExpression),
+        28 => Option::Some(SingleExpressionAlt::InExpression),
+        29 => Option::Some(SingleExpressionAlt::EqualityExpression),
+        30 => Option::Some(SingleExpressionAlt::BitAndExpression),
+        31 => Option::Some(SingleExpressionAlt::BitXOrExpression),
+        32 => Option::Some(SingleExpressionAlt::BitOrExpression),
+        33 => Option::Some(SingleExpressionAlt::LogicalAndExpression),
+        34 => Option::Some(SingleExpressionAlt::LogicalOrExpression),
+        35 => Option::Some(SingleExpressionAlt::TernaryExpression),
+        36 => Option::Some(SingleExpressionAlt::AssignmentExpression),
+        37 => Option::Some(SingleExpressionAlt::AssignmentOperatorExpression),
+        38 => Option::Some(SingleExpressionAlt::TemplateStringExpression),
+        39 => Option::Some(SingleExpressionAlt::IteratorsExpression),
+        40 => Option::Some(SingleExpressionAlt::GeneratorsExpression),
+        41 => Option::Some(SingleExpressionAlt::GeneratorsFunctionExpression),
+        42 => Option::Some(SingleExpressionAlt::YieldExpression),
+        43 => Option::Some(SingleExpressionAlt::ThisExpression),
+        44 => Option::Some(SingleExpressionAlt::IdentifierExpression),
+        45 => Option::Some(SingleExpressionAlt::SuperExpression),
+        46 => Option::Some(SingleExpressionAlt::LiteralExpression),
+        47 => Option::Some(SingleExpressionAlt::ArrayLiteralExpression),
+        48 => Option::Some(SingleExpressionAlt::ObjectLiteralExpression),
+        49 => Option::Some(SingleExpressionAlt::ParenthesizedExpression),
+        50 => Option::Some(SingleExpressionAlt::GenericTypes),
+        51 => Option::Some(SingleExpressionAlt::CastAsExpression),
+        52 => Option::Some(SingleExpressionAlt::NonNullAssertionExpression),
+        _ => null,
+    };
+}
 
 struct Parser {
     tokens: TokenStream,
@@ -13168,6 +13422,7 @@ fn _parse_union_or_intersection_or_primary_type__inner_atom(p: &mut Parser, foll
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
+        p.b.set_alt(2);
         let primary_type = _parse_primary_type(p, follow)?;
         return Result::Ok(());
     }
@@ -13192,6 +13447,7 @@ fn _parse_union_or_intersection_or_primary_type__inner(p: &mut Parser, follow: &
                     break;
                 }
                 p.b.start_node_at(_cp, RK_UNIONORINTERSECTIONORPRIMARYTYPE, _start);
+                p.b.set_alt(0);
                 let pipe = p.expect(TK_LIT_PIPE)?;
                 let union_or_intersection_or_primary_type_2 = _parse_union_or_intersection_or_primary_type(p, follow, 3)?;
                 p.b.finish_node(p.last_end());
@@ -13204,6 +13460,7 @@ fn _parse_union_or_intersection_or_primary_type__inner(p: &mut Parser, follow: &
                     break;
                 }
                 p.b.start_node_at(_cp, RK_UNIONORINTERSECTIONORPRIMARYTYPE, _start);
+                p.b.set_alt(1);
                 let amp = p.expect(TK_LIT_AMP)?;
                 let union_or_intersection_or_primary_type_2 = _parse_union_or_intersection_or_primary_type(p, follow, 2)?;
                 p.b.finish_node(p.last_end());
@@ -13228,6 +13485,7 @@ fn _parse_union_or_intersection_or_primary_type(p: &mut Parser, follow: &List<Li
 
 fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(9);
     let keyof = p.expect(TK_KeyOf)?;
     let primary_type = _parse_primary_type(p, follow, 1)?;
     return Result::Ok(());
@@ -13244,6 +13502,7 @@ fn _parse_primary_type__inner_scan_9(tokens: &Array<i32>, pos: i32, follow: &Lis
 
 fn _parse_primary_type__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let predefined_type = _parse_predefined_type(p, follow)?;
     return Result::Ok(());
 }
@@ -13257,6 +13516,7 @@ fn _parse_primary_type__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Lis
 
 fn _parse_primary_type__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let type_reference = _parse_type_reference(p, follow)?;
     return Result::Ok(());
 }
@@ -13270,6 +13530,7 @@ fn _parse_primary_type__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &Lis
 
 fn _parse_primary_type__inner_alt_8(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(8);
     let type_reference = _parse_type_reference(p, &FOLLOW_MASK_3)?;
     let is = p.expect(TK_Is)?;
     let primary_type = _parse_primary_type(p, follow, 1)?;
@@ -13291,6 +13552,7 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &E
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
+        p.b.set_alt(0);
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let type_ = _parse_type_(p, &FOLLOW_MASK_1)?;
         let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -13384,20 +13646,24 @@ fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &E
         }
     }
     if kind == TK_LIT_LBRACE {
+        p.b.set_alt(3);
         let object_type = _parse_object_type(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_LBRACKET {
+        p.b.set_alt(5);
         let lbracket = p.expect(TK_LIT_LBRACKET)?;
         let tuple_element_types = _parse_tuple_element_types(p, &FOLLOW_MASK_2)?;
         let rbracket = p.expect(TK_LIT_RBRACKET)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_TYPEOF {
+        p.b.set_alt(6);
         let type_query = _parse_type_query(p, follow)?;
         return Result::Ok(());
     }
     if kind == TK_This {
+        p.b.set_alt(7);
         let this = p.expect(TK_This)?;
         return Result::Ok(());
     }
@@ -13422,6 +13688,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     break;
                 }
                 p.b.start_node_at(_cp, RK_PRIMARYTYPE, _start);
+                p.b.set_alt(4);
                 let lbracket = p.expect(TK_LIT_LBRACKET)?;
                 if _kind_set_4(p.peek_kind()) {
                     let primary_type = _parse_primary_type(p, &EMPTY_FOLLOW, 2)?;
@@ -16957,6 +17224,7 @@ fn _parse_alias_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let export_ = p.expect(TK_Export)?;
     if p.peek_kind() == TK_Default {
         let default = p.expect(TK_Default)?;
@@ -17021,6 +17289,7 @@ fn _parse_export_statement__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
 
 fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let export_ = p.expect(TK_Export)?;
     let default = p.expect(TK_Default)?;
     let single_expression = _parse_single_expression(p, follow)?;
@@ -17588,6 +17857,7 @@ fn _parse_if_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(3);
     let for_ = p.expect(TK_For)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let var_modifier = _parse_var_modifier(p, &FOLLOW_MASK_22)?;
@@ -17638,6 +17908,7 @@ fn _parse_iteration_statement__inner_scan_3(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(7);
     let for_ = p.expect(TK_For)?;
     if p.peek_kind() == TK_Await {
         let await = p.expect(TK_Await)?;
@@ -17698,6 +17969,7 @@ fn _parse_iteration_statement__inner_scan_7(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let for_ = p.expect(TK_For)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     if _kind_set_30(p.peek_kind()) {
@@ -17750,6 +18022,7 @@ fn _parse_iteration_statement__inner_scan_2(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(6);
     let for_ = p.expect(TK_For)?;
     if p.peek_kind() == TK_Await {
         let await = p.expect(TK_Await)?;
@@ -17807,6 +18080,7 @@ fn _parse_iteration_statement__inner_scan_6(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(5);
     let for_ = p.expect(TK_For)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let var_modifier = _parse_var_modifier(p, &FOLLOW_MASK_22)?;
@@ -17841,6 +18115,7 @@ fn _parse_iteration_statement__inner_scan_5(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_iteration_statement__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(4);
     let for_ = p.expect(TK_For)?;
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let single_expression = _parse_single_expression(p, &FOLLOW_MASK_23)?;
@@ -17874,6 +18149,7 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Do {
+        p.b.set_alt(0);
         let do = p.expect(TK_Do)?;
         let statement = _parse_statement(p, &FOLLOW_MASK_21)?;
         let while_ = p.expect(TK_While)?;
@@ -17884,6 +18160,7 @@ fn _parse_iteration_statement__inner(p: &mut Parser, follow: &List<List<i32>> = 
         return Result::Ok(());
     }
     if kind == TK_While {
+        p.b.set_alt(1);
         let while_ = p.expect(TK_While)?;
         let lparen = p.expect(TK_LIT_LPAREN)?;
         let expression_sequence = _parse_expression_sequence(p, &FOLLOW_MASK_1)?;
@@ -18763,6 +19040,7 @@ fn _parse_class_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_32)?;
     let property_name = _parse_property_name(p, &FOLLOW_MASK_33)?;
     if p.peek_kind() == TK_LIT_QUESTION {
@@ -18806,6 +19084,7 @@ fn _parse_property_member_declaration__inner_scan_0(tokens: &Array<i32>, pos: i3
 
 fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_32)?;
     let property_name = _parse_property_name(p, &FOLLOW_MASK_18)?;
     let call_signature = _parse_call_signature(p, &FOLLOW_MASK_30)?;
@@ -18862,6 +19141,7 @@ fn _parse_property_member_declaration__inner_scan_1(tokens: &Array<i32>, pos: i3
 
 fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_24)?;
     let grp_kind = p.peek_kind();
     if _kind_set_20(grp_kind) {
@@ -18950,6 +19230,7 @@ fn _parse_property_member_declaration__inner(p: &mut Parser, follow: &List<List<
         }
     }
     if kind == TK_Abstract {
+        p.b.set_alt(3);
         let abstract_declaration = _parse_abstract_declaration(p, follow)?;
         return Result::Ok(());
     }
@@ -19817,6 +20098,7 @@ fn _parse_object_literal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let lbracket = p.expect(TK_LIT_LBRACKET)?;
     let single_expression = _parse_single_expression(p, &FOLLOW_MASK_36)?;
     let rbracket = p.expect(TK_LIT_RBRACKET)?;
@@ -19842,6 +20124,7 @@ fn _parse_property_assignment__inner_scan_1(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(2);
     let get_accessor = _parse_get_accessor(p, follow)?;
     return Result::Ok(());
 }
@@ -19855,6 +20138,7 @@ fn _parse_property_assignment__inner_scan_2(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(3);
     let set_accessor = _parse_set_accessor(p, follow)?;
     return Result::Ok(());
 }
@@ -19868,6 +20152,7 @@ fn _parse_property_assignment__inner_scan_3(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(5);
     let identifier_or_key_word = _parse_identifier_or_key_word(p, follow)?;
     return Result::Ok(());
 }
@@ -19881,6 +20166,7 @@ fn _parse_property_assignment__inner_scan_5(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(4);
     let generator_method = _parse_generator_method(p, follow)?;
     return Result::Ok(());
 }
@@ -19894,6 +20180,7 @@ fn _parse_property_assignment__inner_scan_4(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let property_name = _parse_property_name(p, &FOLLOW_MASK_20)?;
     let colon_or_eq = p.match_set([TK_LIT_COLON, TK_LIT_EQ])?;
     let single_expression = _parse_single_expression(p, follow)?;
@@ -19927,6 +20214,7 @@ fn _parse_property_assignment__inner_scan_0(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(6);
     if p.peek_kind() == TK_Ellipsis {
         let ellipsis = p.expect(TK_Ellipsis)?;
     }
@@ -20117,6 +20405,7 @@ fn _parse_property_assignment__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
     }
     if kind == TK_LIT_DOTDOTDOT {
+        p.b.set_alt(7);
         let rest_parameter = _parse_rest_parameter(p, follow)?;
         return Result::Ok(());
     }
@@ -20381,6 +20670,7 @@ fn _parse_expression_sequence(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(1);
     let class = p.expect(TK_Class)?;
     if _kind_set_20(p.peek_kind()) {
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW)?;
@@ -20416,6 +20706,7 @@ fn _parse_single_expression__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(6);
     let new = p.expect(TK_New)?;
     let single_expression = _parse_single_expression(p, &FOLLOW_MASK_18)?;
     if p.peek_kind() == TK_LIT_LT {
@@ -20443,6 +20734,7 @@ fn _parse_single_expression__inner_scan_6(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(7);
     let new = p.expect(TK_New)?;
     let single_expression = _parse_single_expression(p, follow)?;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LT) {
@@ -20467,6 +20759,7 @@ fn _parse_single_expression__inner_scan_7(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(49);
     let lparen = p.expect(TK_LIT_LPAREN)?;
     let expression_sequence = _parse_expression_sequence(p, &FOLLOW_MASK_1)?;
     let rparen = p.expect(TK_LIT_RPAREN)?;
@@ -20486,6 +20779,7 @@ fn _parse_single_expression__inner_scan_49(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(11);
     let delete = p.expect(TK_Delete)?;
     let single_expression = _parse_single_expression(p, follow, 21)?;
     return Result::Ok(());
@@ -20502,6 +20796,7 @@ fn _parse_single_expression__inner_scan_11(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(12);
     let void = p.expect(TK_Void)?;
     let single_expression = _parse_single_expression(p, follow, 21)?;
     return Result::Ok(());
@@ -20518,6 +20813,7 @@ fn _parse_single_expression__inner_scan_12(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(13);
     let typeof = p.expect(TK_Typeof)?;
     let single_expression = _parse_single_expression(p, follow, 21)?;
     return Result::Ok(());
@@ -20534,6 +20830,7 @@ fn _parse_single_expression__inner_scan_13(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(20);
     let await = p.expect(TK_Await)?;
     let single_expression = _parse_single_expression(p, follow, 21)?;
     return Result::Ok(());
@@ -20550,6 +20847,7 @@ fn _parse_single_expression__inner_scan_20(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(47);
     let array_literal = _parse_array_literal(p, follow)?;
     return Result::Ok(());
 }
@@ -20563,6 +20861,7 @@ fn _parse_single_expression__inner_scan_47(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(41);
     let generator_function_declaration = _parse_generator_function_declaration(p, follow)?;
     return Result::Ok(());
 }
@@ -20576,6 +20875,7 @@ fn _parse_single_expression__inner_scan_41(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(42);
     let yield_statement = _parse_yield_statement(p, follow)?;
     return Result::Ok(());
 }
@@ -20589,6 +20889,7 @@ fn _parse_single_expression__inner_scan_42(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(46);
     let literal = _parse_literal(p, follow)?;
     return Result::Ok(());
 }
@@ -20602,6 +20903,7 @@ fn _parse_single_expression__inner_scan_46(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(0);
     let anonymous_function = _parse_anonymous_function(p, follow)?;
     return Result::Ok(());
 }
@@ -20615,6 +20917,7 @@ fn _parse_single_expression__inner_scan_0(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(44);
     let identifier_name = _parse_identifier_name(p, follow)?;
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_30(p.peek_kind())) {
         let single_expression = _parse_single_expression(p, &EMPTY_FOLLOW)?;
@@ -20636,6 +20939,7 @@ fn _parse_single_expression__inner_scan_44(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(43);
     let this = p.expect(TK_This)?;
     return Result::Ok(());
 }
@@ -20649,6 +20953,7 @@ fn _parse_single_expression__inner_scan_43(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(45);
     let super = p.expect(TK_Super)?;
     return Result::Ok(());
 }
@@ -20662,6 +20967,7 @@ fn _parse_single_expression__inner_scan_45(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_39(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(39);
     let iterator_block = _parse_iterator_block(p, follow)?;
     return Result::Ok(());
 }
@@ -20675,6 +20981,7 @@ fn _parse_single_expression__inner_scan_39(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_40(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(40);
     let generator_block = _parse_generator_block(p, follow)?;
     return Result::Ok(());
 }
@@ -20688,6 +20995,7 @@ fn _parse_single_expression__inner_scan_40(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
     let start = p.peek_start();
+    p.b.set_alt(48);
     let object_literal = _parse_object_literal(p, follow)?;
     return Result::Ok(());
 }
@@ -21136,31 +21444,37 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
         }
     }
     if kind == TK_LIT_PLUSPLUS {
+        p.b.set_alt(14);
         let lit_plusplus = p.expect(TK_LIT_PLUSPLUS)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_MINUSMINUS {
+        p.b.set_alt(15);
         let lit_minusminus = p.expect(TK_LIT_MINUSMINUS)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_PLUS {
+        p.b.set_alt(16);
         let plus = p.expect(TK_LIT_PLUS)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_MINUS {
+        p.b.set_alt(17);
         let minus = p.expect(TK_LIT_MINUS)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_TILDE {
+        p.b.set_alt(18);
         let tilde = p.expect(TK_LIT_TILDE)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
     }
     if kind == TK_LIT_BANG {
+        p.b.set_alt(19);
         let bang = p.expect(TK_LIT_BANG)?;
         let single_expression = _parse_single_expression(p, follow, 21)?;
         return Result::Ok(());
@@ -21199,6 +21513,7 @@ fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>>
         }
     }
     if kind == TK_LIT_LT {
+        p.b.set_alt(50);
         let type_arguments = _parse_type_arguments(p, follow)?;
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_30(p.peek_kind())) {
             let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW)?;
@@ -21227,6 +21542,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                    p.b.set_alt(2);
                     if p.peek_kind() == TK_LIT_QUESTIONDOT {
                         let lit_questiondot = p.expect(TK_LIT_QUESTIONDOT)?;
                     }
@@ -21244,6 +21560,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(2);
                         if p.peek_kind() == TK_LIT_QUESTIONDOT {
                             let lit_questiondot = p.expect(TK_LIT_QUESTIONDOT)?;
                         }
@@ -21260,6 +21577,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(3);
                         let lit_questiondot = p.expect(TK_LIT_QUESTIONDOT)?;
                         let single_expression_2 = _parse_single_expression(p, follow, 28)?;
                         p.b.finish_node(p.last_end());
@@ -21276,6 +21594,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(4);
                         if p.peek_kind() == TK_LIT_BANG {
                             let bang = p.expect(TK_LIT_BANG)?;
                         }
@@ -21297,6 +21616,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(52);
                         let bang = p.expect(TK_LIT_BANG)?;
                         p.b.finish_node(p.last_end());
                     } else {
@@ -21310,6 +21630,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(4);
                         if p.peek_kind() == TK_LIT_BANG {
                             let bang = p.expect(TK_LIT_BANG)?;
                         }
@@ -21331,6 +21652,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(5);
                         if p.peek_kind() == TK_LIT_QUESTION {
                             let question = p.expect(TK_LIT_QUESTION)?;
                         }
@@ -21354,6 +21676,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(5);
                         if p.peek_kind() == TK_LIT_QUESTION {
                             let question = p.expect(TK_LIT_QUESTION)?;
                         }
@@ -21375,6 +21698,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(35);
                         let question = p.expect(TK_LIT_QUESTION)?;
                         let single_expression_2 = _parse_single_expression(p, &FOLLOW_MASK_9, 0)?;
                         let colon = p.expect(TK_LIT_COLON)?;
@@ -21391,6 +21715,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(8);
                 let arguments = _parse_arguments(p, follow)?;
                 p.b.finish_node(p.last_end());
             } else {
@@ -21402,6 +21727,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(9);
                 let lit_plusplus = p.expect(TK_LIT_PLUSPLUS)?;
                 p.b.finish_node(p.last_end());
             } else {
@@ -21413,6 +21739,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(10);
                 let lit_minusminus = p.expect(TK_LIT_MINUSMINUS)?;
                 p.b.finish_node(p.last_end());
             } else {
@@ -21424,6 +21751,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(21);
                 let lit_starstar = p.expect(TK_LIT_STARSTAR)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 20)?;
                 p.b.finish_node(p.last_end());
@@ -21436,6 +21764,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(22);
                 let _ = p.match_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT])?;
                 let single_expression_2 = _parse_single_expression(p, follow, 20)?;
                 p.b.finish_node(p.last_end());
@@ -21448,6 +21777,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(23);
                 let _ = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS])?;
                 let single_expression_2 = _parse_single_expression(p, follow, 19)?;
                 p.b.finish_node(p.last_end());
@@ -21460,6 +21790,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(24);
                 let lit_questionquestion = p.expect(TK_LIT_QUESTIONQUESTION)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 18)?;
                 p.b.finish_node(p.last_end());
@@ -21473,6 +21804,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                    p.b.set_alt(25);
                     let mut gd_winner: i32 = -1;
                     gd_dispatch: {
                         gd_scan: {
@@ -21519,6 +21851,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                    p.b.set_alt(26);
                     let _ = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
                     let single_expression_2 = _parse_single_expression(p, follow, 16)?;
                     p.b.finish_node(p.last_end());
@@ -21531,6 +21864,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                    p.b.set_alt(26);
                     let _ = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
                     let single_expression_2 = _parse_single_expression(p, follow, 16)?;
                     p.b.finish_node(p.last_end());
@@ -21543,6 +21877,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         break;
                     }
                     p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                    p.b.set_alt(26);
                     let _ = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
                     let single_expression_2 = _parse_single_expression(p, follow, 16)?;
                     p.b.finish_node(p.last_end());
@@ -21556,6 +21891,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(25);
                         let mut gd_winner_2: i32 = -1;
                         gd_dispatch_2: {
                             gd_scan_3: {
@@ -21602,6 +21938,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                        p.b.set_alt(26);
                         let _ = p.match_set([TK_LIT_LT, TK_LIT_GT, TK_LIT_LTEQ, TK_LIT_GTEQ])?;
                         let single_expression_2 = _parse_single_expression(p, follow, 16)?;
                         p.b.finish_node(p.last_end());
@@ -21616,6 +21953,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(27);
                 let instanceof = p.expect(TK_Instanceof)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 15)?;
                 p.b.finish_node(p.last_end());
@@ -21628,6 +21966,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(28);
                 let in_ = p.expect(TK_In)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 14)?;
                 p.b.finish_node(p.last_end());
@@ -21640,6 +21979,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(29);
                 let _ = p.match_set([TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_EQEQEQ, TK_LIT_BANGEQEQ])?;
                 let single_expression_2 = _parse_single_expression(p, follow, 13)?;
                 p.b.finish_node(p.last_end());
@@ -21652,6 +21992,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(30);
                 let amp = p.expect(TK_LIT_AMP)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 12)?;
                 p.b.finish_node(p.last_end());
@@ -21664,6 +22005,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(31);
                 let caret = p.expect(TK_LIT_CARET)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 11)?;
                 p.b.finish_node(p.last_end());
@@ -21676,6 +22018,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(32);
                 let pipe = p.expect(TK_LIT_PIPE)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 10)?;
                 p.b.finish_node(p.last_end());
@@ -21688,6 +22031,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(33);
                 let lit_ampamp = p.expect(TK_LIT_AMPAMP)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 9)?;
                 p.b.finish_node(p.last_end());
@@ -21700,6 +22044,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(34);
                 let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 8)?;
                 p.b.finish_node(p.last_end());
@@ -21712,6 +22057,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(36);
                 let eq = p.expect(TK_LIT_EQ)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 6)?;
                 p.b.finish_node(p.last_end());
@@ -21724,6 +22070,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(37);
                 let assignment_operator = _parse_assignment_operator(p, &FOLLOW_MASK_25)?;
                 let single_expression_2 = _parse_single_expression(p, follow, 5)?;
                 p.b.finish_node(p.last_end());
@@ -21736,6 +22083,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(38);
                 let template_string_literal = _parse_template_string_literal(p, follow)?;
                 p.b.finish_node(p.last_end());
             } else {
@@ -21747,6 +22095,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                     break;
                 }
                 p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
+                p.b.set_alt(51);
                 let as_ = p.expect(TK_As)?;
                 let as_expression = _parse_as_expression(p, follow)?;
                 p.b.finish_node(p.last_end());

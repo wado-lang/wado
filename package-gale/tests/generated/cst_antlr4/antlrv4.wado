@@ -612,6 +612,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -721,6 +726,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -745,6 +751,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -810,6 +823,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -841,9 +855,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -4228,73 +4245,73 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_GRAMMARSPEC: NodeKind = 0;
-global RK_GRAMMARDECL: NodeKind = 1;
-global RK_GRAMMARTYPE: NodeKind = 2;
-global RK_PREQUELCONSTRUCT: NodeKind = 3;
-global RK_OPTIONSSPEC: NodeKind = 4;
-global RK_OPTION: NodeKind = 5;
-global RK_OPTIONVALUE: NodeKind = 6;
-global RK_DELEGATEGRAMMARS: NodeKind = 7;
-global RK_DELEGATEGRAMMAR: NodeKind = 8;
-global RK_TOKENSSPEC: NodeKind = 9;
-global RK_CHANNELSSPEC: NodeKind = 10;
-global RK_IDLIST: NodeKind = 11;
-global RK_ACTION_: NodeKind = 12;
-global RK_ACTIONSCOPENAME: NodeKind = 13;
-global RK_ACTIONBLOCK: NodeKind = 14;
-global RK_ARGACTIONBLOCK: NodeKind = 15;
-global RK_MODESPEC: NodeKind = 16;
-global RK_RULES: NodeKind = 17;
-global RK_RULESPEC: NodeKind = 18;
-global RK_PARSERRULESPEC: NodeKind = 19;
-global RK_EXCEPTIONGROUP: NodeKind = 20;
-global RK_EXCEPTIONHANDLER: NodeKind = 21;
-global RK_FINALLYCLAUSE: NodeKind = 22;
-global RK_RULEPREQUEL: NodeKind = 23;
-global RK_RULERETURNS: NodeKind = 24;
-global RK_THROWSSPEC: NodeKind = 25;
-global RK_LOCALSSPEC: NodeKind = 26;
-global RK_RULEACTION: NodeKind = 27;
-global RK_RULEMODIFIERS: NodeKind = 28;
-global RK_RULEMODIFIER: NodeKind = 29;
-global RK_RULEBLOCK: NodeKind = 30;
-global RK_RULEALTLIST: NodeKind = 31;
-global RK_LABELEDALT: NodeKind = 32;
-global RK_LEXERRULESPEC: NodeKind = 33;
-global RK_LEXERRULEBLOCK: NodeKind = 34;
-global RK_LEXERALTLIST: NodeKind = 35;
-global RK_LEXERALT: NodeKind = 36;
-global RK_LEXERELEMENTS: NodeKind = 37;
-global RK_LEXERELEMENT: NodeKind = 38;
-global RK_LEXERBLOCK: NodeKind = 39;
-global RK_LEXERCOMMANDS: NodeKind = 40;
-global RK_LEXERCOMMAND: NodeKind = 41;
-global RK_LEXERCOMMANDNAME: NodeKind = 42;
-global RK_LEXERCOMMANDEXPR: NodeKind = 43;
-global RK_ALTLIST: NodeKind = 44;
-global RK_ALTERNATIVE: NodeKind = 45;
-global RK_ELEMENT: NodeKind = 46;
-global RK_PREDICATEOPTIONS: NodeKind = 47;
-global RK_PREDICATEOPTION: NodeKind = 48;
-global RK_LABELEDELEMENT: NodeKind = 49;
-global RK_EBNF: NodeKind = 50;
-global RK_BLOCKSUFFIX: NodeKind = 51;
-global RK_EBNFSUFFIX: NodeKind = 52;
-global RK_LEXERATOM: NodeKind = 53;
-global RK_ATOM: NodeKind = 54;
-global RK_WILDCARD: NodeKind = 55;
-global RK_NOTSET: NodeKind = 56;
-global RK_BLOCKSET: NodeKind = 57;
-global RK_SETELEMENT: NodeKind = 58;
-global RK_BLOCK: NodeKind = 59;
-global RK_RULEREF: NodeKind = 60;
-global RK_CHARACTERRANGE: NodeKind = 61;
-global RK_TERMINALDEF: NodeKind = 62;
-global RK_ELEMENTOPTIONS: NodeKind = 63;
-global RK_ELEMENTOPTION: NodeKind = 64;
-global RK_IDENTIFIER: NodeKind = 65;
-global RK_QUALIFIEDIDENTIFIER: NodeKind = 66;
+pub global RK_GRAMMARSPEC: NodeKind = 0;
+pub global RK_GRAMMARDECL: NodeKind = 1;
+pub global RK_GRAMMARTYPE: NodeKind = 2;
+pub global RK_PREQUELCONSTRUCT: NodeKind = 3;
+pub global RK_OPTIONSSPEC: NodeKind = 4;
+pub global RK_OPTION: NodeKind = 5;
+pub global RK_OPTIONVALUE: NodeKind = 6;
+pub global RK_DELEGATEGRAMMARS: NodeKind = 7;
+pub global RK_DELEGATEGRAMMAR: NodeKind = 8;
+pub global RK_TOKENSSPEC: NodeKind = 9;
+pub global RK_CHANNELSSPEC: NodeKind = 10;
+pub global RK_IDLIST: NodeKind = 11;
+pub global RK_ACTION_: NodeKind = 12;
+pub global RK_ACTIONSCOPENAME: NodeKind = 13;
+pub global RK_ACTIONBLOCK: NodeKind = 14;
+pub global RK_ARGACTIONBLOCK: NodeKind = 15;
+pub global RK_MODESPEC: NodeKind = 16;
+pub global RK_RULES: NodeKind = 17;
+pub global RK_RULESPEC: NodeKind = 18;
+pub global RK_PARSERRULESPEC: NodeKind = 19;
+pub global RK_EXCEPTIONGROUP: NodeKind = 20;
+pub global RK_EXCEPTIONHANDLER: NodeKind = 21;
+pub global RK_FINALLYCLAUSE: NodeKind = 22;
+pub global RK_RULEPREQUEL: NodeKind = 23;
+pub global RK_RULERETURNS: NodeKind = 24;
+pub global RK_THROWSSPEC: NodeKind = 25;
+pub global RK_LOCALSSPEC: NodeKind = 26;
+pub global RK_RULEACTION: NodeKind = 27;
+pub global RK_RULEMODIFIERS: NodeKind = 28;
+pub global RK_RULEMODIFIER: NodeKind = 29;
+pub global RK_RULEBLOCK: NodeKind = 30;
+pub global RK_RULEALTLIST: NodeKind = 31;
+pub global RK_LABELEDALT: NodeKind = 32;
+pub global RK_LEXERRULESPEC: NodeKind = 33;
+pub global RK_LEXERRULEBLOCK: NodeKind = 34;
+pub global RK_LEXERALTLIST: NodeKind = 35;
+pub global RK_LEXERALT: NodeKind = 36;
+pub global RK_LEXERELEMENTS: NodeKind = 37;
+pub global RK_LEXERELEMENT: NodeKind = 38;
+pub global RK_LEXERBLOCK: NodeKind = 39;
+pub global RK_LEXERCOMMANDS: NodeKind = 40;
+pub global RK_LEXERCOMMAND: NodeKind = 41;
+pub global RK_LEXERCOMMANDNAME: NodeKind = 42;
+pub global RK_LEXERCOMMANDEXPR: NodeKind = 43;
+pub global RK_ALTLIST: NodeKind = 44;
+pub global RK_ALTERNATIVE: NodeKind = 45;
+pub global RK_ELEMENT: NodeKind = 46;
+pub global RK_PREDICATEOPTIONS: NodeKind = 47;
+pub global RK_PREDICATEOPTION: NodeKind = 48;
+pub global RK_LABELEDELEMENT: NodeKind = 49;
+pub global RK_EBNF: NodeKind = 50;
+pub global RK_BLOCKSUFFIX: NodeKind = 51;
+pub global RK_EBNFSUFFIX: NodeKind = 52;
+pub global RK_LEXERATOM: NodeKind = 53;
+pub global RK_ATOM: NodeKind = 54;
+pub global RK_WILDCARD: NodeKind = 55;
+pub global RK_NOTSET: NodeKind = 56;
+pub global RK_BLOCKSET: NodeKind = 57;
+pub global RK_SETELEMENT: NodeKind = 58;
+pub global RK_BLOCK: NodeKind = 59;
+pub global RK_RULEREF: NodeKind = 60;
+pub global RK_CHARACTERRANGE: NodeKind = 61;
+pub global RK_TERMINALDEF: NodeKind = 62;
+pub global RK_ELEMENTOPTIONS: NodeKind = 63;
+pub global RK_ELEMENTOPTION: NodeKind = 64;
+pub global RK_IDENTIFIER: NodeKind = 65;
+pub global RK_QUALIFIEDIDENTIFIER: NodeKind = 66;
 
 global RULE_NAMES: List<String> = ["grammarSpec", "grammarDecl", "grammarType", "prequelConstruct", "optionsSpec", "option", "optionValue", "delegateGrammars", "delegateGrammar", "tokensSpec", "channelsSpec", "idList", "action_", "actionScopeName", "actionBlock", "argActionBlock", "modeSpec", "rules", "ruleSpec", "parserRuleSpec", "exceptionGroup", "exceptionHandler", "finallyClause", "rulePrequel", "ruleReturns", "throwsSpec", "localsSpec", "ruleAction", "ruleModifiers", "ruleModifier", "ruleBlock", "ruleAltList", "labeledAlt", "lexerRuleSpec", "lexerRuleBlock", "lexerAltList", "lexerAlt", "lexerElements", "lexerElement", "lexerBlock", "lexerCommands", "lexerCommand", "lexerCommandName", "lexerCommandExpr", "altList", "alternative", "element", "predicateOptions", "predicateOption", "labeledElement", "ebnf", "blockSuffix", "ebnfSuffix", "lexerAtom", "atom", "wildcard", "notSet", "blockSet", "setElement", "block", "ruleref", "characterRange", "terminalDef", "elementOptions", "elementOption", "identifier", "qualifiedIdentifier"];
 

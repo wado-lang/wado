@@ -48,15 +48,15 @@ fn eval_expr(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> 
         Some(Num) => int_value(node, toks),
         Some(And) => {
             let ops = operands(node, toks)?;
-            Result::Ok(if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 })
+            Result::Ok(if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 });
         },
         Some(Or) => {
             let ops = operands(node, toks)?;
-            Result::Ok(if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 })
+            Result::Ok(if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 });
         },
         Some(Between) => {
             let ops = operands(node, toks)?;
-            Result::Ok(if ops.0 <= ops.1 { 1 } else { 0 })
+            Result::Ok(if ops.0 <= ops.1 { 1 } else { 0 });
         },
         None => panic("expr: node has no stamped alternative"),
     };
