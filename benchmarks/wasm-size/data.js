@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782051997856,
+  "lastUpdate": 1782058166174,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34661,6 +34661,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 309238,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b045ed89e9fefab6eddeee068a548fde6e07db11",
+          "message": "Merge pull request #1425 from wado-lang/claude/future-result-unit-ice-t5fg4i\n\nfix(cm): fix Future&lt;Result&lt;(), ErrorCode&gt;&gt; read ICE and unify future-read on the shared CM lift",
+          "timestamp": "2026-06-22T00:59:24+09:00",
+          "tree_id": "fd61a05057f9eb1163579a109f15ee0d2178ce1a",
+          "url": "https://github.com/wado-lang/wado/commit/b045ed89e9fefab6eddeee068a548fde6e07db11"
+        },
+        "date": 1782058165563,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308446,
             "unit": "bytes"
           }
         ]
