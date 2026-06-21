@@ -1,0 +1,15 @@
+//! Cross-module variant of issue #1415 (see ../wir_xmodule_return_xmod.wado).
+//!
+//! `parse_root` returns the imported parser's `CstNode` *by value*. The consumer
+//! lives in a *different* module (the entry), so resolving `parse_root`'s return
+//! type re-resolves its signature AST from the entry's perspective. That
+//! reconstructed import scope used to drop this module's `mini` namespace
+//! import, so `mini::CstNode` resolved to a non-canonical `TypeId` and the
+//! caller's binding local was lowered as `i32` instead of the struct's GC ref.
+
+use mini from "./wir_xmodule_return_parser.wado";
+
+pub fn parse_root(input: &String) -> mini::CstNode {
+    let r = mini::parse(input);
+    return r.root;
+}

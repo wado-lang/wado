@@ -718,14 +718,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (mut param_types, mut return_type, effects) = if same_module {
             resolve(self)
         } else {
-            let (imported_type_sources, import_original_names) =
-                self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(
-                def_module.clone(),
-                imported_type_sources,
-                import_original_names,
-                resolve,
-            )
+            let scope = self.tysys.trait_env.import_scope(def_module);
+            self.with_module_perspective(def_module.clone(), scope, resolve)
         };
         if !type_args.is_empty() {
             for p in &mut param_types {
@@ -989,14 +983,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (decl_params, decl_return, type_param_ids) = if same_module {
             resolve(self)
         } else {
-            let (imported_type_sources, import_original_names) =
-                self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(
-                def_module.clone(),
-                imported_type_sources,
-                import_original_names,
-                resolve,
-            )
+            let scope = self.tysys.trait_env.import_scope(def_module);
+            self.with_module_perspective(def_module.clone(), scope, resolve)
         };
         if type_param_ids.is_empty() {
             return FuncRefInference::NotApplicable;

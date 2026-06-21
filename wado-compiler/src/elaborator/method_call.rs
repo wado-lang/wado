@@ -2345,7 +2345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module B resolves against the caller's perspective (which only
         // knows about `CounterA` / `CounterB` aliases) and falls back to
         // `Unknown`, breaking arg-type coercion at the call site.
-        let (imports, originals) = self.tysys.trait_env.import_scope(impl_module);
+        let impl_scope = self.tysys.trait_env.import_scope(impl_module);
         // Inherited scope; only `type_params` is replaced.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -2412,7 +2412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let params: Vec<ast::Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        let result = scope.with_module_perspective(impl_module.clone(), imports, originals, |s| {
+        let result = scope.with_module_perspective(impl_module.clone(), impl_scope, |s| {
             params
                 .iter()
                 .map(|t| s.resolve_type(t))
@@ -2637,8 +2637,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_else(fallback);
         }
-        let (_, originals) = self.tysys.trait_env.import_scope(module);
-        originals.get(name).cloned().unwrap_or_else(fallback)
+        let scope = self.tysys.trait_env.import_scope(module);
+        scope
+            .original_names
+            .get(name)
+            .cloned()
+            .unwrap_or_else(fallback)
     }
 
     /// Whether an AST type syntactically mentions `Self`. Over-approximates

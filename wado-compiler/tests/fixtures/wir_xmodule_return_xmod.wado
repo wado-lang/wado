@@ -1,0 +1,22 @@
+//! Cross-module form of issue #1415: the callee returning a namespace-qualified
+//! struct *by value* lives in a different module than the consumer. Here the
+//! entry calls `parse_root` (module B), which returns module C's `mini::CstNode`.
+//!
+//! Resolving `parse_root`'s return type re-resolves its signature AST from the
+//! entry's perspective via a reconstructed import scope. That scope used to drop
+//! B's `mini` namespace import, so `mini::CstNode` resolved to a non-canonical
+//! `TypeId`, the binding `top`'s local was lowered as `i32` instead of the GC
+//! ref the call returns, and the module failed validation ("expected i32, found
+//! (ref $type)"). The reconstructed scope now carries the callee module's
+//! namespace imports.
+
+use { parse_root } from "./sub/wir_xmodule_return_eval2.wado";
+use mini from "./sub/wir_xmodule_return_parser.wado";
+
+test "cross-module by-value struct return keeps its GC-ref local" {
+    let top = parse_root(&"(1)");
+    assert top.kind == mini::RK_PROG;
+}
+
+__DATA__
+{"test": {}}
