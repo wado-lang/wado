@@ -121,10 +121,13 @@ WS : [ \\t\\r\\n]+ -> skip ;
     // The shared label appears once (no `Bin,\n    Bin,` duplicate variant).
     assert !str_contains(&output, &"    Bin,\n    Bin,");
     assert str_contains(&output, &"    Num,");
-    // Both `# Bin` alternatives (indices 0 and 1) dispatch to the same case.
-    assert str_contains(&output, &"0 => EAlt::Bin,");
-    assert str_contains(&output, &"1 => EAlt::Bin,");
-    assert str_contains(&output, &"2 => EAlt::Num,");
+    // The accessor returns Option so an unstamped/error node is None, not a
+    // silent first-alternative; both `# Bin` alts (0 and 1) map to one case.
+    assert str_contains(&output, &"pub fn e_alt(node: &CstNode) -> Option<EAlt>");
+    assert str_contains(&output, &"0 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, &"1 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, &"2 => Option::Some(EAlt::Num),");
+    assert str_contains(&output, &"_ => null,");
 }
 
 test "generate wildcard element" {

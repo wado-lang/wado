@@ -2331,13 +2331,13 @@ pub enum ExprAlt {
     Between,
 }
 
-pub fn expr_alt(node: &CstNode) -> ExprAlt {
+pub fn expr_alt(node: &CstNode) -> Option<ExprAlt> {
     return match node.alt {
-        0 => ExprAlt::Num,
-        1 => ExprAlt::And,
-        2 => ExprAlt::Or,
-        3 => ExprAlt::Between,
-        _ => ExprAlt::Num,
+        0 => Option::Some(ExprAlt::Num),
+        1 => Option::Some(ExprAlt::And),
+        2 => Option::Some(ExprAlt::Or),
+        3 => Option::Some(ExprAlt::Between),
+        _ => null,
     };
 }
 

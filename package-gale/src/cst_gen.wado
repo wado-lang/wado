@@ -73,8 +73,9 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
 ///
 /// The parser stamps the per-rule alternative index (grammar declaration
 /// order) onto `CstNode.alt`; the enum cases are emitted in that same order,
-/// so the accessor maps `node.alt` straight to its case. A node whose `alt`
-/// was never set (e.g. an error-recovery node) falls back to the first case.
+/// so the accessor maps `node.alt` straight to its case. The accessor returns
+/// `Option`, so a node whose `alt` was never set (an error-recovery node, or a
+/// node of another rule) is `None` rather than a silent first alternative.
 pub fn gen_alt_enums(w: &mut CodeWriter, grammar: &Grammar) {
     for let rule of &grammar.parser_rules {
         gen_one_alt_enum(w, rule);
@@ -110,17 +111,15 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.end();
     w.blank();
 
-    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> {enum_name}`);
+    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> Option<{enum_name}>`);
     w.line(&"return match node.alt {");
     w.indent();
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if let Some(label) = &rule.alternatives[i].label {
-            w.line(&`{i} => {enum_name}::{*label},`);
+            w.line(&`{i} => Option::Some({enum_name}::{*label}),`);
         }
     }
-    if let Some(first) = &rule.alternatives[0].label {
-        w.line(&`_ => {enum_name}::{*first},`);
-    }
+    w.line(&"_ => null,");
     w.dedent();
     w.line(&"};");
     w.end();

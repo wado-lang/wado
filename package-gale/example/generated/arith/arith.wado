@@ -1246,13 +1246,13 @@ pub enum ExprAlt {
     Num,
 }
 
-pub fn expr_alt(node: &CstNode) -> ExprAlt {
+pub fn expr_alt(node: &CstNode) -> Option<ExprAlt> {
     return match node.alt {
-        0 => ExprAlt::MulDiv,
-        1 => ExprAlt::AddSub,
-        2 => ExprAlt::Paren,
-        3 => ExprAlt::Num,
-        _ => ExprAlt::MulDiv,
+        0 => Option::Some(ExprAlt::MulDiv),
+        1 => Option::Some(ExprAlt::AddSub),
+        2 => Option::Some(ExprAlt::Paren),
+        3 => Option::Some(ExprAlt::Num),
+        _ => null,
     };
 }
 

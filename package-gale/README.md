@@ -121,20 +121,23 @@ onto each node, and exposes it as a per-rule enum plus an accessor:
 
 ```wado
 pub enum ExprAlt { MulDiv, AddSub, Paren, Num }
-pub fn expr_alt(node: &CstNode) -> ExprAlt
+pub fn expr_alt(node: &CstNode) -> Option<ExprAlt>
 ```
 
-So the interpreter dispatches on the label — no need to inspect the tree shape.
+The accessor returns `Option`: a node that isn't a parsed `expr` (an
+error-recovery node, say) is `None`, never a silent first alternative. So the
+interpreter dispatches on the label — no need to inspect the tree shape.
 Precedence and associativity are already baked into the tree, so evaluation is
 a plain fold (from [`example/eval.wado`](./example/eval.wado)):
 
 ```wado
-fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
+fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
     return match arith::expr_alt(node) {
-        Num => int_value(node, toks),
-        Paren => eval_first_child(node, toks),
-        MulDiv => fold_binary(node, toks),
-        AddSub => fold_binary(node, toks),
+        Some(Num) => int_value(node, toks),
+        Some(Paren) => eval_first_child(node, toks),
+        Some(MulDiv) => fold_binary(node, toks),
+        Some(AddSub) => fold_binary(node, toks),
+        None => panic("expr: node has no stamped alternative"),
     };
 }
 ```
@@ -142,8 +145,8 @@ fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
 `fold_binary` walks the node's children — sub-`expr` nodes (`CstChild::Node`)
 and the operator token (`CstChild::Token`, read with `toks.token_text(i)`) —
 and applies the operator. `int_value` reads a `Num` node's single `INT` token.
-The public entry point surfaces a syntax error as `Err` instead of trapping,
-exactly because the parser is resilient:
+The public entry point surfaces a syntax error — or a runtime error like
+division by zero — as `Err` instead of trapping:
 
 ```wado
 pub fn eval(input: &String) -> Result<i64, String> {
@@ -152,7 +155,7 @@ pub fn eval(input: &String) -> Result<i64, String> {
         let d = &result.diagnostics[0];
         return Result::Err(`{d.line}:{d.col}: {d.message}`);
     }
-    return Result::Ok(eval_first_child(&result.root, &result.tokens));
+    return eval_first_child(&result.root, &result.tokens);
 }
 ```
 
@@ -214,16 +217,16 @@ You can confirm a rule is ALL(\*)-class with `gale dump` (it prints
 
 Every generated parser module exports, at minimum:
 
-| Item                                             | What it is                                              |
-| ------------------------------------------------ | ------------------------------------------------------- |
-| `parse(input: &String) -> ParseResult`           | parse from the start rule                               |
-| `parse_<rule>(input) -> ParseResult`             | parse starting from any rule                            |
-| `tokenize(input: &String) -> TokenStream`        | run only the lexer                                      |
-| `to_string_tree(result: &ParseResult) -> String` | ANTLR4-style S-expression of the tree                   |
-| `ParseResult { root, tokens, diagnostics }`      | `.ok()` is true on a clean parse                        |
-| `CstNode` / `CstChild`                           | the uniform parse tree (see above)                      |
-| `RK_<RULE>: NodeKind`                            | node-kind constant for each rule (match on `node.kind`) |
-| `<Rule>Alt` enum + `<rule>_alt(node)`            | the matched `# Label`, for labeled rules                |
+| Item                                                       | What it is                                                     |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| `parse(input: &String) -> ParseResult`                     | parse from the start rule                                      |
+| `parse_<rule>(input) -> ParseResult`                       | parse starting from any rule                                   |
+| `tokenize(input: &String) -> TokenStream`                  | run only the lexer                                             |
+| `to_string_tree(result: &ParseResult) -> String`           | ANTLR4-style S-expression of the tree                          |
+| `ParseResult { root, tokens, diagnostics }`                | `.ok()` is true on a clean parse                               |
+| `CstNode` / `CstChild`                                     | the uniform parse tree (see above)                             |
+| `RK_<RULE>: NodeKind`                                      | node-kind constant for each rule (match on `node.kind`)        |
+| `<Rule>Alt` enum + `<rule>_alt(node) -> Option<<Rule>Alt>` | the matched `# Label`, for labeled rules (`None` if unstamped) |
 
 `Diagnostic` carries `line`, `col`, `message`, a `code`, and a severity
 (`is_error()`); a resilient parse reports recovery edits as `Missing` /

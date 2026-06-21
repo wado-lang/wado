@@ -35,12 +35,15 @@ pub fn eval(input: &String) -> Result<i64, String> {
 }
 
 /// Fold one `expr` node to its value, dispatching on the matched label.
+/// `expr_alt` is `None` only for a node that isn't a parsed `expr` (an
+/// error-recovery node, say) — impossible here after `ok()`, so a codegen bug.
 fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> Result<i64, String> {
     return match arith::expr_alt(node) {
-        Num => int_value(node, toks),
-        Paren => eval_first_child(node, toks),
-        MulDiv => fold_binary(node, toks),
-        AddSub => fold_binary(node, toks),
+        Some(Num) => int_value(node, toks),
+        Some(Paren) => eval_first_child(node, toks),
+        Some(MulDiv) => fold_binary(node, toks),
+        Some(AddSub) => fold_binary(node, toks),
+        None => panic("expr: node has no stamped alternative"),
     };
 }
 
