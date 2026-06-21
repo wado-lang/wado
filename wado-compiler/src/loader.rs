@@ -310,28 +310,21 @@ pub struct LoadResult {
 
 use crate::compiler_host::LogLevel;
 
-/// Build a `kiln:` URI from a filesystem path.
+/// Build a `kiln:` URI from a filesystem path, normalizing and percent-encoding
+/// it so the result is valid even for URI-unsafe paths (e.g. spaces);
+/// [`strip_kiln_scheme`] reverses it losslessly. The single producer — the CLI
+/// and LSP both call it, so their redirect URIs match.
 ///
-/// The path is lexically normalized ([`crate::path::normalize`]) and each
-/// segment is percent-encoded, so the result is a valid URI even when the path
-/// contains URI-unsafe characters such as spaces. [`strip_kiln_scheme`] reverses
-/// it losslessly. This is the single producer; the CLI and LSP both call it so
-/// a redirect URI written by `wado compile` and one resolved by the LSP are
-/// byte-identical.
-///
-/// The `kiln:` scheme (not `file://`) is intentional: the compiler's
-/// qualified-name format (`{module_source}//{name}`) treats `//` as the
-/// boundary, and a `file://` URI would introduce a spurious `//`.
+/// `kiln:` (not `file://`) avoids a spurious `//`, which the qualified-name
+/// format `{module_source}//{name}` treats as a boundary.
 #[must_use]
 pub fn path_to_kiln_uri(path: &str) -> String {
     use fluent_uri::pct_enc::{
         EString,
         encoder::{Data, Path},
     };
-    let normalized = crate::path::normalize(path);
-    // Encode per segment so `/` stays a real path separator while spaces and
-    // other non-unreserved bytes within a segment become percent-escapes.
-    let encoded = normalized
+    // Encode per segment so `/` stays a separator.
+    let encoded = crate::path::normalize(path)
         .split('/')
         .map(|segment| {
             let mut e = EString::<Path>::new();
@@ -343,24 +336,16 @@ pub fn path_to_kiln_uri(path: &str) -> String {
     if encoded.starts_with('/') {
         format!("kiln:{encoded}")
     } else {
-        // Keep the URI a valid absolute-path reference even for a non-absolute
-        // input; the loader then fails to find the file at runtime, a useful
-        // diagnostic shape for callers that forgot to canonicalize.
+        // Keep the URI valid for a non-absolute input; the loader then fails to
+        // find the file — a useful diagnostic shape.
         format!("kiln:/{encoded}")
     }
 }
 
-/// Strip a leading `kiln:` URI scheme, returning the percent-decoded path.
-///
-/// Used by [`ModuleLoader::get_source`] when handling
-/// `ModuleSource::Redirected` so the host receives a plain absolute path
-/// instead of a `kiln:` URI. Returns `None` when the input is not a `kiln:`
-/// URI; callers fall back to passing the raw URI through (in-memory hosts may
-/// use it as a key directly).
-///
-/// Inverse of [`path_to_kiln_uri`]: parses with [`fluent_uri::UriRef`] and
-/// percent-decodes the path, so a path with URI-unsafe characters round-trips
-/// back to its filesystem form.
+/// Strip a `kiln:` scheme, returning the percent-decoded path (inverse of
+/// [`path_to_kiln_uri`]). Used by [`ModuleLoader::get_source`] for
+/// `ModuleSource::Redirected`. Returns `None` for non-`kiln:` URIs, which
+/// callers pass through unchanged (in-memory hosts key on the URI directly).
 fn strip_kiln_scheme(uri: &str) -> Option<String> {
     let parsed = fluent_uri::UriRef::parse(uri).ok()?;
     if parsed.scheme()?.as_str() != "kiln" {
@@ -876,8 +861,7 @@ mod tests {
 
     #[test]
     fn kiln_uri_round_trips_uri_unsafe_paths() {
-        // A `kiln:` URI must stay a valid URI, and the path must round-trip
-        // losslessly back to its raw filesystem form (regression for #1417).
+        // Valid URI out, lossless path back (regression for #1417).
         for path in [
             "/home/user/My Project/gen.wado",
             "/tmp/.wado-cache/gen.wado",

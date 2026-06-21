@@ -259,14 +259,11 @@ fn find_manifest_root(entry_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Compose the `kiln:/abs/path` URI used by [`InvocationIndex`].
+/// Compose the `kiln:` redirect URI used by [`InvocationIndex`].
 ///
-/// Delegates to [`wado_compiler::loader::path_to_kiln_uri`] — the single
-/// shared producer — so a cached entry written by `wado compile` and one
-/// resolved by the LSP are byte-identical. The compiler-side loader strips the
-/// `kiln:` scheme and forwards the decoded path to `CompilerHost::load_source`.
-/// See WEP 2026-04-12 §"URI scheme" for why the scheme is `kiln:` and not
-/// `file:`.
+/// Thin wrapper over [`wado_compiler::loader::path_to_kiln_uri`] (the single
+/// producer shared with the CLI), so cache entries written by `wado compile`
+/// resolve identically in the LSP.
 fn path_to_kiln_uri(path: &Path) -> String {
     wado_compiler::loader::path_to_kiln_uri(&path.display().to_string())
 }

@@ -394,23 +394,11 @@ fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
     }
 }
 
-/// Compose a `file:` URI from an absolute filesystem path.
+/// Compose the `kiln:` redirect URI for an absolute filesystem path.
 ///
-/// Used to populate the [`wado_compiler::kiln::InvocationIndex`] entries
-/// the loader consults at module-resolve time.
-///
-/// Uses the `kiln:` scheme without authority (`kiln:/abs/path`) rather
-/// than `file://` because the compiler's qualified-name format
-/// (`{module_source}//{name}`) treats `//` as the separator between
-/// module source and symbol name. A `file:///abs/path` URI contains its
-/// own `//` and confuses every parser that splits on `//` — see
-/// `wir_build::types::sort_types_topologically` and the equivalent
-/// keying in `register_struct`. The `kiln:/path` form has no internal
-/// `//`, so the qualified-name boundary stays unambiguous.
-///
-/// Delegates to [`wado_compiler::loader::path_to_kiln_uri`] — the single
-/// producer shared with the LSP — which normalizes and percent-encodes the
-/// path. Relative paths are not supported; the caller must canonicalize first.
+/// Populates [`wado_compiler::kiln::InvocationIndex`] entries. Thin wrapper over
+/// [`wado_compiler::loader::path_to_kiln_uri`] (the single producer shared with
+/// the LSP); the caller must canonicalize first.
 fn path_to_kiln_uri(path: &Path) -> String {
     wado_compiler::loader::path_to_kiln_uri(&path.display().to_string())
 }
