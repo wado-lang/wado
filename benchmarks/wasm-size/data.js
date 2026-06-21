@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782003960486,
+  "lastUpdate": 1782006930148,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34421,6 +34421,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac29dd9c8ee9aff2c5a5e378cfc3469e79fde8a5"
         },
         "date": 1782003959946,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308953,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "982f4861a005eb143da65b96c4379dda57a6366c",
+          "message": "Merge pull request #1414 from wado-lang/claude/atn-class-grammars-qsgbw7\n\nfeat(gale): runtime lexer ATN simulator for recursive non-greedy rules",
+          "timestamp": "2026-06-21T10:45:39+09:00",
+          "tree_id": "0d3c29cb8fa8ea395df4143dab9c2f58fb620008",
+          "url": "https://github.com/wado-lang/wado/commit/982f4861a005eb143da65b96c4379dda57a6366c"
+        },
+        "date": 1782006929765,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
