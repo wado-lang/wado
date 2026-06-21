@@ -831,28 +831,29 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Lift `Result<(), E>` from CM linear memory.
+    /// Lift `Result<(), E>` from CM linear memory, where `E` is an enum
+    /// error-code (`wasi:cli` / `wasi:filesystem`).
     ///
-    /// CM layout at ptr:
-    /// - offset 0: result discriminant (i32) — 0=Ok, 1=Err
+    /// CM layout at ptr (error-code enum align = 1, ≤256 cases → 1-byte disc):
+    /// - offset 0: result discriminant (u8) — 0=Ok, 1=Err
+    /// - offset 1: error-code enum discriminant (u8), present when Err
     ///
-    /// Returns `Result::Ok(())` when discriminant is 0, traps on Err.
+    /// The CM enum discriminant maps 1:1 onto the Wado `ErrorCode` enum value,
+    /// so `Err` is lifted by boxing that byte (`Box<ErrorCode> { value: i32 }`).
     fn lift_result_unit(&mut self, result_type_id: TypeId, ptr_name: &str) -> WirInstr {
         let ptr = || WirInstr::LocalGet {
             name: ptr_name.to_string(),
             result_ty: WirType::I32,
         };
 
-        let result_disc = WirInstr::I32Load {
+        let result_disc = WirInstr::I32Load8U {
             offset: 0,
-            align: 2,
+            align: 0,
             addr: Box::new(ptr()),
         };
 
         let result_ok = self.build_variant_case_wir(result_type_id, 0, "Ok", None);
-
-        // Err branch: trap (ErrorCode lifting not yet implemented for this pattern)
-        let result_err = WirInstr::Unreachable;
+        let result_err = self.lift_result_unit_err(result_type_id, ptr_name);
 
         let result_wir_type = self
             .ctx
@@ -862,6 +863,65 @@ impl FunctionTranslator<'_, '_> {
             result: Some(result_wir_type),
             then_body: vec![result_ok],
             else_body: Some(vec![result_err]),
+        }
+    }
+
+    /// Build the `Err(error-code)` value for `lift_result_unit`. Reads the
+    /// 1-byte CM enum discriminant at offset 1 and boxes it into the Err
+    /// payload (`Box<ErrorCode>`). Falls back to a trap if the Err payload is
+    /// not a boxed enum (e.g. a `wasi:http` error-code variant with payloads),
+    /// which this hand-rolled path does not yet lift.
+    fn lift_result_unit_err(&mut self, result_type_id: TypeId, ptr_name: &str) -> WirInstr {
+        let err_disc = WirInstr::I32Load8U {
+            offset: 1,
+            align: 0,
+            addr: Box::new(WirInstr::LocalGet {
+                name: ptr_name.to_string(),
+                result_ty: WirType::I32,
+            }),
+        };
+        let Some(box_type_id) = self.variant_case_payload_box_type(result_type_id, "Err") else {
+            return WirInstr::Unreachable;
+        };
+        let boxed = self.struct_new(box_type_id, vec![err_disc]);
+        self.build_variant_case_wir(result_type_id, 1, "Err", Some(boxed))
+    }
+
+    /// Resolve the `WirTypeId` of a variant case's boxed payload struct
+    /// (`payload_0`'s referent), e.g. `Box<ErrorCode>` for `Result::Err`.
+    fn variant_case_payload_box_type(
+        &self,
+        variant_type_id: TypeId,
+        case_name: &str,
+    ) -> Option<crate::wir::WirTypeId> {
+        let (variant_name, module_source) = match self.type_table.get(variant_type_id) {
+            ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                type_args,
+                ..
+            } => {
+                let type_arg_names: Vec<String> = type_args
+                    .iter()
+                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
+                    .collect();
+                (
+                    crate::name::mangle_generic_name(name, &type_arg_names),
+                    module_source.clone(),
+                )
+            }
+            _ => return None,
+        };
+        let case_fq = format!("{module_source}//{variant_name}::{case_name}");
+        let case_type_id = self.ctx.type_map.get(&case_fq)?.clone();
+        match self.get_case_payload_wir_type(&case_type_id, 0)? {
+            WirType::Ref { type_id, .. } => Some(type_id),
+            _ => None,
         }
     }
 

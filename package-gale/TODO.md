@@ -138,7 +138,6 @@ PR with full-corpus validation rather than a quick patch (the AGENTS.md
 
 ### Pipeline and tooling correctness
 
-- [ ] WASI helpers drop completion futures unchecked: `write_file_string` returns `Ok(())` on partial/failed writes; `read_file_to_string` cannot distinguish mid-stream errors from EOF (silently truncated grammars could be committed). `scripts/extract_antlr4_descriptors.wado:450-469`, `:419-448` — BLOCKED on a wado-compiler bug: consuming a `Future<Result<(), ErrorCode>>` (`done.read()`) ICEs the CLI-world compile (unit-payload result lifting at the CM boundary; "WIR pipeline generated invalid core Wasm module — values remaining on stack at end of block" in the consuming fn). Same family as the `Exit::exit(Result<(),()>)` ICE. The intended checks are in place as TODO(compiler) comments at both helpers and in `src/main.wado::read_all`; re-apply once the compiler is fixed.
 - [ ] `action_strip`'s `[...]` now ends at the first unescaped `]` (correct for char sets, the corpus case). This loses the depth tracking that handled a rule-argument action whose host type contains `[]` (`r[int[] arr]`): such an action ends early and its remainder leaks into the grammar text (`catch [...]` is already handled separately via `find_balanced_close_bracket`). No corpus grammar exercises this (all nested-`[` cases are char sets), but a context-aware stripper (distinguish set vs arg-action by lexer/parser position) would handle both. `src/g4/action_strip.wado:38-61`
 
 ### Diagnostics and minor

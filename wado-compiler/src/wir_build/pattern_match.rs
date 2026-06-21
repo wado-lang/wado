@@ -1365,7 +1365,7 @@ impl FunctionTranslator<'_, '_> {
     /// Look up a variant case struct's payload field type, extracting the inner
     /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
     /// of the tuple struct.
-    fn get_case_payload_wir_type(
+    pub(super) fn get_case_payload_wir_type(
         &self,
         case_type_id: &crate::wir::WirTypeId,
         payload_index: usize,
