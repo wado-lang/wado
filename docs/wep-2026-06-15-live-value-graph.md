@@ -37,15 +37,19 @@ in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
 `value_copy_demote`, `value_copy_demote_mixed_sites`,
 `value_copy_demote_element_mut` at -O2, no regression.
 
-### Next: ~15 missed optimizations under promotion (BCE cluster)
+### Next: missed optimizations under promotion (BCE cluster)
 
 The remaining `-O2` failures are guard-based bounds-check elimination and
 store/forward/branchless assertions (`array_bounds_elim_loop_guard` /
 `_offset_chain` / `_le_guard_wir`, `optimize_bce_if_guard` / `_ref_param` /
 `_field_access_equiv`, `optimize_bitmask_bce`, `tir_optimize_*`,
 `store_to_load_forwarding`, `field_forward_snapshot_after_mutation`,
-`wir_optimize_branchless_increment` / `_brif_select`, `opt_hfs_defer_*`). All
-run correctly; the optimization no longer fires.
+`wir_optimize_branchless_increment` / `_brif_select`, `opt_hfs_defer_*`), plus
+the pre-existing optimization-independent `bug_store_load_forward_mut_method_receiver`
+(fails at `-O0` too). All run correctly; the optimization no longer fires. The
+loop-stable operand re-seed (`6e42241cc`, decision (a) below) is the landed
+foundation — sound, resolves the induction-variable identity — but the
+cross-source bound identity below still blocks the wir assertions.
 
 The decisive root cause (traced on the minimal reproducer below): **the value
 graph `condition_implication` reads has no `ValueId` for the operands it must
@@ -123,29 +127,42 @@ sufficient alone):
    shared helper called from both.
 
 Decision: **(a) re-seed the maintained graph, preserving build-once** (chosen
-over rebuilding for `condition_implication`). The hard constraint is that the
-re-seed must restore the dropped _flow-dependent_ values — the loop-carried
-variable's loop-phi value and the hoist locals' `field_access` value — and there
-is **no sound shortcut** (each was tried and is unsound or unavailable):
+over rebuilding for `condition_implication`). Implemented (`6e42241cc`) as a
+pre-pass in `eliminate_at_root`, sound and validated (the `array_bounds_elim_oob_*`
+suite and `WADO_VERIFY_VG` stay green, no runtime regression). It restores the
+dropped operand values without a `builder::build` (`rebuilds` stays 0):
 
-- A canonical `Opaque(Local idx)` per local over-merges: the induction variable
-  is reassigned (`i += 1`), so its reads at different versions are _not_ equal;
-  one opaque for all of them is the over-merge `WADO_VERIFY_VG` rejects.
-- Query-time leaf re-derivation in `maintain_pure_node` is the already-removed
-  dead end (over-merges generally).
-- `build_scoped` (the existing scoped re-valuation) only surfaces caller-rooted
-  re-emittable values and **drops walk-local opaques**, which is exactly the
-  loop-phi value `i` needs — so it cannot re-seed the induction variable.
+- A **loop-stable** local — reassigned only as the final induction update,
+  never `&mut`-escaped — holds one value across the matched reads, so its
+  dropped reads re-seed to a single `ValuePool::canonical_local` identity. (The
+  earlier "canonical opaque over-merges" worry was about a _function-wide_
+  canonical; gating it to the loop body where the variable is single-valued is
+  sound — `WADO_VERIFY_VG` confirms.)
+- A **field copy** (`let L = recv.field`, local or global receiver) re-seeds to
+  a shared field identity — preferring a surviving sibling copy's real value,
+  else a synthesized `field_access(canonical_receiver, field, INITIAL)` — so two
+  copies of the same `recv.field` hoisted in different iterations match.
+- A **derived** `let L = <pure Binary/Unary/Cast>` re-seeds to its binding's
+  value (pass 2, after the leaves), keeping a `let __cond = i < n` comparison's
+  arithmetic shape rather than a flat opaque.
 
-The correct implementation is therefore new infrastructure: a **scoped flow
-re-analysis that re-walks the edited loop region and merges its flow-derived
-values (including walk-local loop-phi opaques) back into the live graph**, run
-after licm's structural edits, gated to fire only when a region's values were
-dropped (so it stays a re-seed, not a per-pass rebuild — `rebuilds` must stay
-0). Also fix the duplicate hoist (reuse an existing pre-header `_licm_X =
-src.field` instead of creating a second local). Oracle: the minimal reproducer
-above resolving both operands to a `ValueId` with `WADO_VERIFY_VG` green and
-`WADO_MEASURE_VG` still reporting `rebuilds = 0`.
+This resolves the induction-variable identity (the systematic `left_v = None`
+blocker — every guard now extracts) but **does not yet green the BCE wir
+assertions**. The remaining gap is **cross-source bound identity**: a guard
+bound spelled `arr.len()` (a call result bound to a local `n`) and the check
+bound spelled `arr.used` (the inlined `index_value`'s field, hoisted to
+`_licm_used`) are _different syntactic sources_ that resolve to the same value
+only through inlining + field tracking — work a fresh build's flow does and the
+re-seed's per-copy classification does not. Closing it needs the re-seed to
+reconstruct those cross-binding equalities (e.g. recognise `n = arr.len() =
+recv.used` and unify it with the field copy), or the value graph to keep them
+through the edits. Oracle: the minimal `sum_list` reproducer eliminating its
+check with `WADO_VERIFY_VG` green and `rebuilds = 0`.
+
+Two abandoned re-seed shortcuts (do not retry): query-time leaf re-derivation in
+`maintain_pure_node` (the removed dead end — over-merges generally), and
+`build_scoped` (drops the walk-local loop-phi opaque the induction variable
+needs).
 
 `WADO_PROMOTE_FIELDS` (materialise pure `FieldAccess` values) is a _separate,
 further-out_ experiment — its optimizer-pass `skeleton operand` migration is
