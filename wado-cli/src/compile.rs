@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use wado_manifest::DependencySource;
 
@@ -9,7 +10,7 @@ use lexopt::Parser;
 use wado_compiler::LogLevel;
 
 use crate::args::{self, CliExit};
-use crate::compiler_host::FilesystemCompilerHost;
+use crate::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
 use crate::manifest;
@@ -362,6 +363,17 @@ pub async fn try_compile(
     filename: &str,
     flags: &CompileFlags,
 ) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
+    try_compile_with_kiln_cache(filename, flags, None).await
+}
+
+/// `try_compile` with an optional [`KilnComponentCache`]. `wado test`
+/// passes one shared across every fixture so a generator is AOT-compiled
+/// once per run; `None` keeps the per-host cache for single-file builds.
+pub async fn try_compile_with_kiln_cache(
+    filename: &str,
+    flags: &CompileFlags,
+    kiln_cache: Option<Arc<KilnComponentCache>>,
+) -> Result<wado_compiler::CompileResult, wado_compiler::CompileFailure> {
     let path = Path::new(filename);
 
     let source = match fs::read_to_string(path) {
@@ -381,11 +393,12 @@ pub async fn try_compile(
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
-    let host = attach_manifest_deps(
-        FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level),
-        manifest_pair.as_ref(),
-        &base_path,
-    );
+    let base_host = FilesystemCompilerHost::with_log_level(base_path.clone(), flags.log_level);
+    let base_host = match kiln_cache {
+        Some(cache) => base_host.with_shared_kiln_cache(cache),
+        None => base_host,
+    };
+    let host = attach_manifest_deps(base_host, manifest_pair.as_ref(), &base_path);
 
     let pipeline_outcome =
         match maybe_run_pipeline(path, &host, flags.no_cache, manifest_pair).await {

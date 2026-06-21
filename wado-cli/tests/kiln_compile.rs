@@ -16,7 +16,7 @@
 
 use std::path::PathBuf;
 
-use wado_cli::compiler_host::FilesystemCompilerHost;
+use wado_cli::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
 use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider};
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
@@ -667,6 +667,58 @@ fn host_caches_compiled_component_across_run_generator_calls() {
         2,
         "distinct wasm bytes must trigger a fresh component compile"
     );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A shared [`KilnComponentCache`] must AOT-compile a generator once even
+/// across the separate hosts a `wado test` run builds per fixture.
+#[test]
+fn shared_kiln_cache_compiles_generator_once_across_hosts() {
+    let tmp = unique_tmp("kiln-shared-component-cache");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let gen_path = tmp.join("my_generator.wado");
+    std::fs::write(&gen_path, MINIMAL_GENERATOR).unwrap();
+
+    let provider = CliGeneratorProvider::new(tmp.clone());
+    let module = GeneratorModule::LocalPath(InvocationPath::normalize("./my_generator.wado"));
+    let resolved = runtime()
+        .block_on(async { provider.resolve(&module).await })
+        .expect("generator compiles");
+
+    let request = || GeneratorRequest {
+        primary: GeneratorInputFile {
+            path: "schema.proto".to_string(),
+            content: "syntax = \"proto3\";".to_string(),
+        },
+        inputs: vec![],
+        options: r#"{"verbose": false}"#.to_string(),
+    };
+
+    let cache = std::sync::Arc::new(KilnComponentCache::new());
+
+    // Two separate hosts, as the per-fixture pipeline builds them.
+    let host_a = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
+        .with_shared_kiln_cache(cache.clone());
+    let host_b = FilesystemCompilerHost::with_log_level(tmp.clone(), LogLevel::Off)
+        .with_shared_kiln_cache(cache.clone());
+
+    runtime()
+        .block_on(async { host_a.run_generator(&resolved.wasm, request()).await })
+        .expect("first host generator run");
+    runtime()
+        .block_on(async { host_b.run_generator(&resolved.wasm, request()).await })
+        .expect("second host generator run");
+
+    assert_eq!(
+        cache.compile_count(),
+        1,
+        "shared cache must AOT-compile the generator once across hosts"
+    );
+    assert_eq!(host_a.kiln_component_compile_count(), 1);
+    assert_eq!(host_b.kiln_component_compile_count(), 1);
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
