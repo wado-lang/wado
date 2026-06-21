@@ -302,19 +302,13 @@ impl FunctionTranslator<'_, '_> {
         let mut if_depths = Vec::with_capacity(arms.len());
         {
             let mut depth = 0u32;
-            for (idx, arm) in arms.iter().enumerate() {
-                // When the pattern is trivially true (Binding/Wildcard) and a guard
-                // is present, we fold into a single If instead of nested 2-level If,
-                // so only count 1 depth instead of 2.
-                let pattern_trivially_true = matches!(
-                    &self.body.pats[arm.pattern].kind,
-                    PatKind::Wildcard | PatKind::Binding { .. }
-                );
+            for (idx, _arm) in arms.iter().enumerate() {
+                // Every non-irrefutable arm — guarded or not — emits exactly one
+                // wrapping `If`. Guarded arms fold their pattern test and guard
+                // into a single short-circuiting condition (see below), so they
+                // add no extra nesting.
                 if !emitted_as_irrefutable[idx] {
                     depth += 1;
-                    if arm.guard.is_some() && !pattern_trivially_true {
-                        depth += 1; // guarded arms with non-trivial pattern create an extra inner If
-                    }
                 }
                 if_depths.push(depth);
             }
@@ -401,64 +395,52 @@ impl FunctionTranslator<'_, '_> {
                     result = WirInstr::Seq(body_instrs);
                 }
             } else if let Some(guard) = &arm.guard {
-                // Guard present: use nested if to avoid eager evaluation.
-                // Outer if checks the pattern condition; inner if checks the guard.
-                // This prevents pattern bindings (ref.cast etc.) from executing
-                // when the pattern doesn't match.
+                // Guarded arm. Fold the pattern test and the guard into a single
+                // short-circuiting condition so the fall-through subtree
+                // (`result`) is placed at exactly one tree depth.
                 //
-                // Optimization: when the pattern condition is trivially true (i.e., the
-                // pattern is irrefutable like Binding/Wildcard), fold the guard into a
-                // single If to avoid cloning `result` (which causes 2^N tree explosion
-                // for many guarded arms, e.g., string match with N branches).
+                // A nested two-`If` form (outer pattern test, inner guard test)
+                // would clone `result` into both the inner guard-`else` and the
+                // outer pattern-`else` — copies that sit at depths differing by
+                // one. Break depths are baked in when an arm body is translated,
+                // so the shallower copy ends up with a stale (too-large) `Br`
+                // depth, producing invalid core Wasm (issue #1418). Collapsing to
+                // one `If` keeps `result` at a single depth and also avoids the
+                // 2^N clone explosion for many guarded arms.
+                let guard_expr = self.translate_expr(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
-                if pattern_is_trivially_true {
-                    // Pattern always matches — just use the guard as the sole condition.
-                    // Emit pattern bindings before the guard expression so that bound
-                    // variables (e.g., `__lit_N`) are available when evaluating the guard
-                    // (e.g., `__lit_N.eq("str")`). Since the pattern is irrefutable
-                    // (Binding/Wildcard), these bindings are safe to emit unconditionally.
-                    // We embed bindings into the condition via Seq so that the If is the
-                    // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_expr(*guard);
-                    let condition_with_bindings = if bindings.is_empty() {
+                let folded_condition = if pattern_is_trivially_true {
+                    // Pattern always matches: bindings are safe to emit
+                    // unconditionally, so the condition is just `bindings; guard`.
+                    if bindings.is_empty() {
                         guard_expr
                     } else {
                         let mut seq = bindings.clone();
                         seq.push(guard_expr);
                         WirInstr::Seq(seq)
-                    };
-                    // Bindings already live in the condition `Seq`, so the
-                    // arm body should not re-emit them. Use `body` alone.
-                    result = WirInstr::If {
-                        condition: Box::new(condition_with_bindings),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result]),
-                    };
+                    }
                 } else {
-                    let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_expr(*guard);
-                    // Bindings run once, before the guard, in the
-                    // `inner_then` prefix below — the guard may reference
-                    // them. The inner-if's `then_body` is the arm body
-                    // alone; re-emitting bindings inside it would produce
-                    // duplicate `_n = i; if guard { _n = i; … }` writes
-                    // that no later pass cleans up.
-                    let inner_if = WirInstr::If {
-                        condition: Box::new(guard_expr),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result.clone()]),
-                    };
-                    inner_then.push(inner_if);
-                    // Outer if: check pattern condition
-                    result = WirInstr::If {
+                    // Refutable pattern: short-circuit as
+                    // `if pattern { bindings; guard } else { false }` so the
+                    // bindings (e.g. `ref.cast`) run only after the pattern
+                    // matches, never against the wrong variant.
+                    let mut guarded_then = bindings.clone();
+                    guarded_then.push(guard_expr);
+                    WirInstr::If {
                         condition: Box::new(condition),
-                        result: result_wir_type.clone(),
-                        then_body: inner_then,
-                        else_body: Some(vec![result]),
-                    };
-                }
+                        result: Some(WirType::I32),
+                        then_body: guarded_then,
+                        else_body: Some(vec![WirInstr::I32Const(0)]),
+                    }
+                };
+                // Bindings already ran inside the condition, so the arm body is
+                // emitted alone.
+                result = WirInstr::If {
+                    condition: Box::new(folded_condition),
+                    result: result_wir_type.clone(),
+                    then_body: vec![body.clone()],
+                    else_body: Some(vec![result]),
+                };
             } else {
                 let then_body = body_instrs;
                 let else_body = Some(vec![result]);
