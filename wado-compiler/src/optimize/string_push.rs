@@ -150,10 +150,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     // through an explicit `Ref`. Match through it to reach the promoted
     // `ValueKind::String` in the pool.
     let s = {
+        let arg0_expr = arg0.as_expr()?;
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
-        } = &engine.body.exprs[arg0.as_expr().expect("skeleton operand")].kind
+        } = &engine.body.exprs[arg0_expr].kind
         else {
             return None;
         };

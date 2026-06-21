@@ -250,13 +250,11 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
                 s.total_reads += 1;
                 s.fieldaccess_reads += 1;
                 s.field_names.insert(field_name);
-            } else {
-                stats_node(
-                    body,
-                    NodeRef::Expr(inner.as_expr().expect("skeleton operand")),
-                    stats,
-                );
+            } else if let Some(ie) = inner.as_expr() {
+                stats_node(body, NodeRef::Expr(ie), stats);
             }
+            // A promoted `Operand::Value` inner (a pure FieldAccess value) is no
+            // box-local read — nothing to account.
         }
         ExprKind::Local { index, .. } => {
             stats.entry(*index).or_default().total_reads += 1;
