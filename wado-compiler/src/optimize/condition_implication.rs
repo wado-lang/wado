@@ -335,9 +335,182 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
+    reseed_invariant_fields(engine);
     reseed_loop_stable_operands(engine);
     let root = engine.body.root;
     process_block(engine, root)
+}
+
+/// Re-seed every read of a function-invariant field (`recv.field` where the
+/// receiver is never `&mut`-escaped, reassigned, or its field assigned) — both
+/// direct `recv.field` accesses and `let L = recv.field` snapshot copies — to a
+/// single identity. Unlike the loop-stable re-seed this covers straight-line
+/// early-exit / short-circuit guards (`if pos >= arr.len() { return }; arr[pos]`),
+/// whose guard bound is a *direct* field access, not a copy.
+///
+/// Sound only for an invariant field: re-seeding a direct field access to a
+/// version-free identity would otherwise defeat the write detection
+/// `array_bounds_elim_oob_bound_shrunk` pins (a `pop()` between guard and check).
+/// The `mut_escaped` gate excludes exactly such a receiver (`pop()` takes
+/// `&mut self`). `WADO_VERIFY_VG` + the oob suite are the oracle.
+fn reseed_invariant_fields(engine: &mut Engine) {
+    if engine.body.value_graph.is_none() {
+        return;
+    }
+    // Only straight-line functions: a loop's induction-variable / hoisted-bound
+    // identities are the loop-scoped re-seed's job, and a function-wide leaf /
+    // derived re-seed here would clash with them (e.g. re-seed a `let n =
+    // arr.len()` bound to a fresh `canonical_local` and break the loop guard).
+    if engine
+        .body
+        .stmts
+        .iter()
+        .any(|(_, s)| matches!(s.kind, StmtKind::Loop { .. }))
+    {
+        return;
+    }
+    let mut_escaped = engine.mut_escaped().clone();
+    // Reassigned receivers and directly-assigned `(receiver, field)` slots.
+    let mut reassigned: IndexSet<u32> = IndexSet::default();
+    let mut assigned_fields: IndexSet<(u32, u32)> = IndexSet::default();
+    for (_, enode) in engine.body.exprs.iter() {
+        if let ExprKind::Assign { target, .. } = &enode.kind {
+            match &engine.body.exprs[*target].kind {
+                ExprKind::Local { index, .. } => {
+                    reassigned.insert(*index);
+                }
+                ExprKind::FieldAccess {
+                    expr: inner,
+                    field_index,
+                    ..
+                } => {
+                    if let Some(ie) = inner.as_expr()
+                        && let ExprKind::Local { index, .. } = engine.body.exprs[ie].kind
+                    {
+                        assigned_fields.insert((index, *field_index));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let invariant = |recv: &RecvKey, field: u32| match recv {
+        RecvKey::Global(_) => true,
+        RecvKey::Local(idx) => {
+            !mut_escaped.contains(idx)
+                && !reassigned.contains(idx)
+                && !assigned_fields.contains(&(*idx, field))
+        }
+    };
+    // Group every invariant field-access read by `(receiver, field)`.
+    let maps = build_reseed_maps(engine.body);
+    let field_copies = &maps.field_copies;
+    // Function-stable leaf locals (a param / single-assignment leaf the guard
+    // variable is): never reassigned, `&mut`-escaped, or a field/derived/plain
+    // copy. Every read holds one value, so re-seed dropped reads to a single
+    // `canonical_local` — the non-loop counterpart of the loop induction var.
+    let address_taken = engine.body_address_taken().clone();
+    for (read, local) in collect_local_reads(engine.body, engine.body.root) {
+        if reassigned.contains(&local)
+            || mut_escaped.contains(&local)
+            || address_taken.contains(&local)
+            || field_copies.contains_key(&local)
+            || maps.copy_lets.contains_key(&local)
+            || maps.derived_lets.iter().any(|(l, _)| *l == local)
+            || has_value(engine, read)
+        {
+            continue;
+        }
+        let ty = engine.body.exprs[read].type_id;
+        let v = engine.body.values.canonical_local(local, ty);
+        engine.set_value(read, v);
+    }
+    let mut groups: IndexMap<(RecvKey, u32), (crate::tir::TypeId, Vec<ExprId>)> =
+        IndexMap::default();
+    for (e, enode) in engine.body.exprs.iter() {
+        if let ExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } = &enode.kind
+            && let Some(ie) = inner.as_expr()
+        {
+            let recv = match &engine.body.exprs[ie].kind {
+                ExprKind::Local { index, .. } => Some(RecvKey::Local(*index)),
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => Some(RecvKey::Global(format!("{module_source:?}\u{1}{name}"))),
+                _ => None,
+            };
+            if let Some(recv) = recv
+                && invariant(&recv, *field_index)
+            {
+                let recv_ty = engine.body.exprs[ie].type_id;
+                groups
+                    .entry((recv, *field_index))
+                    .or_insert((recv_ty, Vec::new()))
+                    .1
+                    .push(e);
+            }
+        }
+    }
+    for (read, local) in collect_local_reads(engine.body, engine.body.root) {
+        if let Some((recv, field, recv_ty)) = field_copies.get(&local)
+            && invariant(recv, *field)
+        {
+            groups
+                .entry((recv.clone(), *field))
+                .or_insert((*recv_ty, Vec::new()))
+                .1
+                .push(read);
+        }
+    }
+    // Re-seed every dropped read in a group to one value: a surviving read's
+    // value if any, else the synthesized canonical field identity.
+    for ((recv, field), (recv_ty, exprs)) in groups {
+        let surviving = exprs.iter().find_map(|&e| {
+            engine
+                .body
+                .value_graph
+                .as_ref()
+                .and_then(|g| g.value_of.get(&e).copied())
+        });
+        let value = surviving.unwrap_or_else(|| {
+            let recv_val = match &recv {
+                RecvKey::Local(src) => engine.body.values.canonical_local(*src, recv_ty),
+                RecvKey::Global(key) => engine.body.values.canonical_global(key, recv_ty),
+            };
+            engine
+                .body
+                .values
+                .field_access(recv_val, field, HeapVersion::INITIAL)
+        });
+        for e in exprs {
+            if !has_value(engine, e) {
+                let ty = engine.body.exprs[e].type_id;
+                engine.body.values.set_type(value, ty);
+                engine.set_value(e, value);
+            }
+        }
+    }
+    // Derived `let L = <pure expr>` (function-wide), in definition order so a
+    // copy reading an earlier one resolves: re-seed L's reads — and copies of L —
+    // to the binding's value, now that the field / leaf operands are seeded.
+    let reads = collect_local_reads(engine.body, engine.body.root);
+    for &(local, binding) in &maps.derived_lets {
+        if reassigned.contains(&local) {
+            continue;
+        }
+        let Some(v) = engine.value(binding) else {
+            continue;
+        };
+        for &(read, l) in &reads {
+            if reseed_root(l, &maps.copy_lets) == local && !has_value(engine, read) {
+                engine.set_value(read, v);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

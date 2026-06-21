@@ -412,6 +412,14 @@ impl<'a> Engine<'a> {
         self.body_address_taken.as_ref().unwrap()
     }
 
+    /// Locals that escape by mutable reference — `&mut v`, a `&mut`-arg / `&mut
+    /// self` call, or a `stores` stash — so a callee may mutate their fields.
+    /// Set by [`Engine::set_alias_sets`]; a pass treating a field read as
+    /// loop-/function-invariant must exclude these receivers.
+    pub fn mut_escaped(&self) -> &IndexSet<u32> {
+        &self.mut_escaped_locals
+    }
+
     /// Record the owning function's parameter local indices so the value graph
     /// seeds them up front (see the field doc on `param_locals`). Used by the
     /// one build-once construction; the graph is never rebuilt on a later change.
