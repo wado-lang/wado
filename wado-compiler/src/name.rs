@@ -780,7 +780,6 @@ pub fn build_core_internal_name(
 ///
 /// Returns `Ok(())` if the path is valid, or `Err(message)` if invalid.
 pub fn validate_module_path(path: &str) -> Result<(), String> {
-    // Special prefixes are opaque identifiers (URIs / scheme-qualified names).
     if has_special_prefix(path) {
         return Ok(());
     }

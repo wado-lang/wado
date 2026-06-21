@@ -417,8 +417,7 @@ fn path_to_kiln_uri(path: &Path) -> String {
     // `Path::display` is sufficient on Unix where every absolute path is
     // a `/`-separated UTF-8 string. The CLI is host-only, so any
     // platform-specific path quirk is the kiln_driver's problem to
-    // solve, not the wasm32-compatible compiler crate's. Normalize lexically
-    // (unify separators, fold dot segments) via the shared routine.
+    // solve, not the wasm32-compatible compiler crate's.
     let s = wado_compiler::path::normalize(&path.display().to_string());
     if s.starts_with('/') {
         format!("kiln:{s}")

@@ -27,8 +27,6 @@
 pub fn normalize(path: &str) -> String {
     let unified = path.replace('\\', "/");
 
-    // Split off an absolute root that `..` cannot escape: POSIX `/` or a
-    // Windows drive prefix like `C:` / `C:/`.
     let (root, rest) = split_root(&unified);
     let is_absolute = !root.is_empty();
     let explicit_dot = !is_absolute && rest.starts_with("./");
@@ -97,7 +95,6 @@ mod tests {
 
     #[test]
     fn relative_dot_segments() {
-        // Pins the historical `remove_dot_segments` behavior.
         assert_eq!(normalize("./a/b/../c.wado"), "./a/c.wado");
         assert_eq!(normalize("./a/./b/c.wado"), "./a/b/c.wado");
         assert_eq!(normalize("a//b/c.wado"), "a/b/c.wado");
