@@ -43,13 +43,14 @@ struct CopyBinding {
 }
 
 impl CopySource {
-    /// The source local index for the index-bearing sources; `None` for
-    /// literals (which are always stable).
+    /// The source local index for the index-bearing sources; `None` for a
+    /// promoted-value source (always stable — a pooled `ValueId` is immutable).
     fn local_index(&self) -> Option<u32> {
         match self {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
+            CopySource::Promoted(_) => None,
         }
     }
 }
@@ -70,6 +71,10 @@ enum CopySource {
         name: String,
         inner_type_id: TypeId,
     },
+    /// `let x = Operand::Value(v)` — a copy of a promoted operand. `x`'s reads
+    /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
+    /// the copy is unconditionally stable (operand-promotion-aware copy_prop).
+    Promoted(crate::nir_value_graph::ValueId),
 }
 
 #[derive(Debug, Default)]
@@ -97,12 +102,25 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         local_index,
         value,
         skip_value_copy,
+        type_id: let_type_id,
         ..
     } = &body.stmts[stmt].kind
     else {
         return None;
     };
-    let (local_index, value, skip_value_copy) = (*local_index, *value, *skip_value_copy);
+    let (local_index, value, skip_value_copy, let_type_id) =
+        (*local_index, *value, *skip_value_copy, *let_type_id);
+    // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
+    // reads to it (the value is pooled-immutable, so it is always stable). This
+    // is independent of `skip_value_copy` — the source is a value, not a place.
+    if let Operand::Value(v) = value {
+        return Some(CopyBinding {
+            target_local: local_index,
+            source: CopySource::Promoted(v),
+            type_id: let_type_id,
+            source_scope_stable: true,
+        });
+    }
     if skip_value_copy {
         return None;
     }
@@ -502,6 +520,9 @@ fn can_propagate_copy(
             }
             true
         }
+        // A pooled value is immutable, so forwarding it to every read is always
+        // sound; the read becomes `Operand::Value(v)`, re-emitted by the extractor.
+        CopySource::Promoted(_) => true,
     }
 }
 
@@ -576,6 +597,9 @@ fn apply_in_expr(
                 name,
                 inner_type_id,
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            CopySource::Promoted(v) => {
+                engine.redirect_expr(id, Operand::Value(v));
+            }
         }
         return;
     }
@@ -641,6 +665,8 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
+                // A promoted value has no source local to conflict.
+                CopySource::Promoted(_) => false,
             };
             if source_conflicts {
                 has_deferred = true;
