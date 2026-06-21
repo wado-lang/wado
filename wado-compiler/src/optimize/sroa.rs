@@ -248,17 +248,6 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     let root = engine.body.root;
     rewrite_block(engine, root, &ctx);
 
-    // Step 5: grow the live ValueGraph over the scalar locals SROA introduced.
-    // SROA turns heap fields (`p.f = v; … p.f`) — whose forwarding a call/heap
-    // bump can defeat — into bare scalars (`__sroa_p_f = v; … __sroa_p_f`),
-    // which calls never invalidate. The build-once graph was built (and, by
-    // `inline`, coarsened) before SROA, so those scalar reads carry no value and
-    // store→load forwarding misses them. Regrow them now — the same splice-point
-    // growth `inline` performs — so `const_fold` / `store_load_forward` read the
-    // forwarded constants without any rebuild.
-    let scalars: IndexSet<u32> = field_local_map.values().copied().collect();
-    engine.grow_bare_local_constants(&scalars);
-
     true
 }
 

@@ -371,10 +371,13 @@ impl<'a> Engine<'a> {
     /// non-constant scalar values are left for the next query to derive.
     pub fn grow_bare_local_constants(&mut self, scalars: &IndexSet<u32>) {
         use crate::nir_value_graph::builder;
-        if scalars.is_empty() {
+        // Only grow an already-built graph: building it here would use this
+        // session's alias config, which is sound only when the caller has set the
+        // real sets (`store_load_forward` does). A missing graph is left for the
+        // natural lazy build at the next query.
+        if scalars.is_empty() || self.body.value_graph.is_none() {
             return;
         }
-        self.ensure_value_graph();
         let root = self.body.root;
         let live_base = self.body.values.len() as u32;
         let mut scratch = self.body.values.clone();
@@ -384,7 +387,8 @@ impl<'a> Engine<'a> {
         // (`bump_call_effects`), destroying a bare scalar's reaching constant
         // across the calls between its store and a later read. A SROA scalar is
         // non-escaping, so the real sets leave it untouched by calls — exactly
-        // the forwarding we need to recover.
+        // the forwarding we need to recover. (`pure_calls` is left empty here:
+        // bumping at every call is conservative — it only forgoes a forward.)
         let aliased = self.aliased_locals.clone();
         let untrackable = self.untrackable_locals.clone();
         let mut_escaped = self.mut_escaped_locals.clone();
