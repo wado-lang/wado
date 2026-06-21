@@ -1,0 +1,106 @@
+//! Regression (issue #1418): consuming the `Future<Result<(), ErrorCode>>`
+//! completion handle of `write_via_stream` / `read_via_stream` and
+//! materializing the result across the CM boundary.
+//!
+//! `Future<T>::read()` lowers through the shared `synthesize_lift` / `cm_abi`
+//! path (`synthesize_future_reads`), which derives the CM layout from the
+//! payload type rather than hardcoding offsets. This exercises the full
+//! `Result<(), filesystem::ErrorCode>` lift — including the `Err` arm lifting
+//! the `ErrorCode` *variant* (not cli's enum) — under the debug allocator, so
+//! poison bytes catch any wrong-offset / wrong-source read.
+//!
+//! Exercises write-ok, read-ok, and a real Err (writing to a read-only
+//! descriptor → `NotPermitted`).
+
+use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+use { println, Stdout } from "core:cli";
+
+export fn run() with Preopens, Stdout {
+    let dirs = Preopens::get_directories();
+    let root = dirs[0].0;
+
+    let wfile = root.open_at(
+        PathFlags::none(),
+        "out.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait().unwrap();
+    let [wrx, wtx] = Stream::<u8>::new();
+    let wsub = wfile.write_via_stream(wrx, 0 as Filesize);
+    wtx.write([65 as u8, 66 as u8, 67 as u8]);
+    wtx.drop();
+    match wsub.read() {
+        Some(Ok(_)) => {
+            println("write-ok");
+        },
+        Some(Err(_)) => {
+            println("write-err");
+        },
+        None => {
+            println("write-none");
+        },
+    }
+    wsub.drop();
+
+    let rfile = root.open_at(
+        PathFlags::none(),
+        "out.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait().unwrap();
+    let [rstream, rdone] = rfile.read_via_stream(0 as Filesize);
+    let mut n = 0;
+    loop {
+        let chunk = rstream.read(4096);
+        if chunk.len() == 0 {
+            break;
+        }
+        n = n + chunk.len();
+    }
+    rstream.drop();
+    match rdone.read() {
+        Some(Ok(_)) => {
+            println(`read-ok n={n}`);
+        },
+        Some(Err(_)) => {
+            println("read-err");
+        },
+        None => {
+            println("read-none");
+        },
+    }
+    rdone.drop();
+
+    let rofile = root.open_at(
+        PathFlags::none(),
+        "out.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait().unwrap();
+    let [erx, etx] = Stream::<u8>::new();
+    let esub = rofile.write_via_stream(erx, 0 as Filesize);
+    etx.write([88 as u8]);
+    etx.drop();
+    match esub.read() {
+        Some(Ok(_)) => {
+            println("ewrite-ok");
+        },
+        Some(Err(ErrorCode::NotPermitted)) => {
+            println("ewrite-err-NotPermitted");
+        },
+        Some(Err(_)) => {
+            println("ewrite-err-other");
+        },
+        None => {
+            println("ewrite-none");
+        },
+    }
+    esub.drop();
+}
+
+__DATA__
+{
+    "preopened_dirs": [["", "/work"]],
+    "allocator": "debug",
+    "stdout": "write-ok\nread-ok n=3\newrite-err-NotPermitted\n"
+}

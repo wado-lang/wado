@@ -126,13 +126,9 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__cm_export_
         global:__modules_initialized = 1;
     };
     opt = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 };
-    __cond = (if ref.is_null(opt) == 0 -> bool {
+    __cond = (if ref.is_null(opt) == 0 -> i32 {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
-            1;
-        } else {
-            0;
-        }
+        "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 });
     } else {
         0;
     });
@@ -159,13 +155,9 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__cm_export_
         global:__modules_initialized = 1;
     };
     opt = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 102, 111, 111), used: 4 };
-    __cond = (if ref.is_null(opt) == 0 -> bool {
+    __cond = (if ref.is_null(opt) == 0 -> i32 {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
-            1;
-        } else {
-            0;
-        }
+        "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 });
     } else {
         0;
     }) == 0;
@@ -192,13 +184,9 @@ fn "wado-compiler/tests/fixtures/matches_option_string_literal.wado/__cm_export_
         global:__modules_initialized = 1;
     };
     opt = ref.null none;
-    __cond = (if ref.is_null(opt) == 0 -> bool {
+    __cond = (if ref.is_null(opt) == 0 -> i32 {
         __local_4 = ref.as_non_null(opt);
-        if "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 }) -> bool {
-            1;
-        } else {
-            0;
-        }
+        "core:prelude/string.wado/String^Eq::eq"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 });
     } else {
         0;
     }) == 0;
@@ -215,12 +203,12 @@ condition: !opt matches { Some(\"/\") }
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 i >= len;
+    b6: block {
+        l7: loop {
+            break_if b6 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l10;
+            continue l7;
         };
     };
 }
@@ -302,12 +290,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b14: block {
-        l15: loop {
-            break_if b14 t <= 0_i64;
+    b11: block {
+        l12: loop {
+            break_if b11 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l15;
+            continue l12;
         };
     };
     return n;
@@ -321,13 +309,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b17: block {
-            l18: loop {
-                break_if b17 temp <= 0_i64;
+        b14: block {
+            l15: loop {
+                break_if b14 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l18;
+                continue l15;
             };
         };
     }
@@ -413,14 +401,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= len;
+    b21: block {
+        l22: loop {
+            break_if b21 i >= len;
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l25;
+            continue l22;
         };
     };
     return 1;
@@ -461,12 +449,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b31: block {
-        l32: loop {
-            break_if b31 i >= n;
+    b28: block {
+        l29: loop {
+            break_if b28 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l32;
+            continue l29;
         };
     };
 }

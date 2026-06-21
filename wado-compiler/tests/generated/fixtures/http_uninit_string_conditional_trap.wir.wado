@@ -484,11 +484,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
         global:__modules_initialized = 1;
     };
     __local_161 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(request);
-    take_else = (if ref.is_null(__local_161) == 0 -> bool {
-        1;
-    } else {
-        0;
-    });
+    take_else = ref.is_null(__local_161) == 0;
     if take_else == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
@@ -943,12 +939,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b73: block {
-        l74: loop {
-            break_if b73 i >= len;
+    b72: block {
+        l73: loop {
+            break_if b72 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l74;
+            continue l73;
         };
     };
     return arr;
@@ -957,12 +953,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b75: block {
-        l76: loop {
-            break_if b75 i >= len;
+    b74: block {
+        l75: loop {
+            break_if b74 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l76;
+            continue l75;
         };
     };
 }
@@ -1068,16 +1064,16 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     _licm_used_10 = self.used;
     _licm_repr_11 = self.repr;
     __hfs_index_12 = self.index;
-    b81: block {
-        l82: loop {
+    b80: block {
+        l81: loop {
             if __hfs_index_12 >= _licm_used_10 {
                 self.index = __hfs_index_12;
-                break b81;
+                break b80;
             }
             byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
-            continue l82;
+            continue l81;
         };
     };
     return __b;

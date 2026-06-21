@@ -81,9 +81,7 @@ fn "wado-compiler/tests/fixtures/variant_import.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    if block -> bool {
-        1;
-    } {
+    if 1 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 });
     } else {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not red"), used: 7 });
@@ -123,12 +121,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l4;
+            continue l3;
         };
     };
 }

@@ -234,9 +234,7 @@ fn "wado-compiler/tests/fixtures/variant_infer.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __cond = block -> bool {
-        1;
-    };
+    __cond = 1;
     if @unlikely(__cond == 0) {
         cold_path;
         "core:internal/panic"(__local_2 = "core:prelude/string.wado/String::with_capacity"(104); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("variant_infer_option_none"), used: 25 }); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 116); "core:prelude/string.wado/String::push"(__local_2, 32); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/variant_infer.wado"), used: 47 }); "core:prelude/string.wado/String::push"(__local_2, 58); __local_3 = "core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 8 }, __local_3); "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -252,12 +250,12 @@ condition: a matches { None }
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 i >= len;
+    b9: block {
+        l10: loop {
+            break_if b9 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l11;
+            continue l10;
         };
     };
 }
@@ -339,12 +337,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b15: block {
-        l16: loop {
-            break_if b15 t <= 0_i64;
+    b14: block {
+        l15: loop {
+            break_if b14 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l16;
+            continue l15;
         };
     };
     return n;
@@ -358,13 +356,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b18: block {
-            l19: loop {
-                break_if b18 temp <= 0_i64;
+        b17: block {
+            l18: loop {
+                break_if b17 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l19;
+                continue l18;
             };
         };
     }
@@ -450,14 +448,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b25: block {
-        l26: loop {
-            break_if b25 i >= len;
+    b24: block {
+        l25: loop {
+            break_if b24 i >= len;
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l26;
+            continue l25;
         };
     };
     return 1;
@@ -498,12 +496,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b32: block {
-        l33: loop {
-            break_if b32 i >= n;
+    b31: block {
+        l32: loop {
+            break_if b31 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l33;
+            continue l32;
         };
     };
 }

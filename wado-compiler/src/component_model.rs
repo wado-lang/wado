@@ -11,7 +11,72 @@ use crate::hashmap::{IndexMap, IndexSet};
 use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
-use crate::tir::{TypeId, TypeTable};
+use crate::module_source::ModuleSource;
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::wir::{CmFuturePayload, CmScalarType};
+
+/// Classify a future's type argument into the CM future payload category.
+/// The single source of truth shared by the future-read synthesis path and the
+/// WIR-build future-write / cancel / drop / new paths, so every operation on a
+/// given `Future<T>` agrees on its component-level future type.
+///
+/// - Primitive scalar → `Scalar(s)`
+/// - `Result<(), E>` (unit Ok type) → `Transmission(error-code package)`
+/// - Anything else → `Trailers` (the HTTP trailers pattern)
+pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFuturePayload {
+    match type_table.get(type_arg) {
+        ResolvedType::Primitive(prim) => {
+            if let Some(scalar) = primitive_to_cm_scalar(prim) {
+                return CmFuturePayload::Scalar(scalar);
+            }
+        }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Result" && type_args.len() >= 2 => {
+            if matches!(type_table.get(type_args[0]), ResolvedType::Unit) {
+                return CmFuturePayload::Transmission(error_code_source(type_table, type_args[1]));
+            }
+        }
+        _ => {}
+    }
+    CmFuturePayload::Trailers
+}
+
+/// Map a primitive type to its CM scalar type, or `None` for non-CM-scalars.
+pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
+    Some(match prim {
+        PrimitiveType::I8 => CmScalarType::S8,
+        PrimitiveType::I16 => CmScalarType::S16,
+        PrimitiveType::I32 => CmScalarType::S32,
+        PrimitiveType::I64 => CmScalarType::S64,
+        PrimitiveType::U8 => CmScalarType::U8,
+        PrimitiveType::U16 => CmScalarType::U16,
+        PrimitiveType::U32 => CmScalarType::U32,
+        PrimitiveType::U64 => CmScalarType::U64,
+        PrimitiveType::F32 => CmScalarType::F32,
+        PrimitiveType::F64 => CmScalarType::F64,
+        PrimitiveType::Bool => CmScalarType::Bool,
+        PrimitiveType::Char => CmScalarType::Char,
+        _ => return None,
+    })
+}
+
+/// WASI package owning an `ErrorCode` type (e.g. `"http/types.wado"` → `"http"`).
+/// Each package's error-code is a distinct CM type, so the transmission future
+/// is parameterized by it. Falls back to `"cli"` for a non-WASI error type.
+pub fn error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> String {
+    let module_source = match type_table.get(error_type_id) {
+        ResolvedType::Enum { module_source, .. } | ResolvedType::Variant { module_source, .. } => {
+            module_source
+        }
+        _ => return "cli".to_string(),
+    };
+    if let ModuleSource::Wasi { interface } = module_source {
+        interface.split('/').next().unwrap_or("cli").to_string()
+    } else {
+        "cli".to_string()
+    }
+}
 
 /// A variant case with both CM and Wado names.
 #[derive(Debug, Clone)]

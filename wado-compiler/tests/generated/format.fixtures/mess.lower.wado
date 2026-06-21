@@ -2349,6 +2349,18 @@ pub fn wait_for_blocked(handle: i32) -> i32 {
     return payload;
 }
 
+pub fn future_await_blocked(handle: i32) -> i32 {
+    let ws: i32 = core::builtin::waitable_set_new();
+    core::builtin::waitable_join(handle, ws);
+    let evt_ptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    let code: i32 = core::builtin::waitable_set_wait(ws, evt_ptr);
+    let status: i32 = core::builtin::i32_load((evt_ptr + 4));
+    let freed: i32 = core::builtin::realloc(evt_ptr, 8, 4, 0);
+    core::builtin::waitable_join(handle, 0);
+    core::builtin::waitable_set_drop(ws);
+    return status;
+}
+
 pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
     let mut result: i32 = core::builtin::stream_read(handle, ptr, max);

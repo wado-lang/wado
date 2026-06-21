@@ -13,6 +13,30 @@ use crate::wir::{WirInstr, WirType};
 use super::translate::{FunctionTranslator, LabelEntry};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, PatId, PatKind};
 
+/// Build `if condition { then_body } else { else_body }`, collapsing the
+/// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
+///
+/// Every condition match lowering feeds to an `If` already yields 0/1
+/// (`ref.test`, comparisons), so dropping the redundant select is value-exact.
+fn bool_if(
+    condition: WirInstr,
+    result: Option<WirType>,
+    then_body: Vec<WirInstr>,
+    else_body: Vec<WirInstr>,
+) -> WirInstr {
+    if matches!(then_body.as_slice(), [WirInstr::I32Const(1)])
+        && matches!(else_body.as_slice(), [WirInstr::I32Const(0)])
+    {
+        return condition;
+    }
+    WirInstr::If {
+        condition: Box::new(condition),
+        result,
+        then_body,
+        else_body: Some(else_body),
+    }
+}
+
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
 /// set of match arms exhaustively covers every case.
 struct CaseIndexer {
@@ -302,19 +326,13 @@ impl FunctionTranslator<'_, '_> {
         let mut if_depths = Vec::with_capacity(arms.len());
         {
             let mut depth = 0u32;
-            for (idx, arm) in arms.iter().enumerate() {
-                // When the pattern is trivially true (Binding/Wildcard) and a guard
-                // is present, we fold into a single If instead of nested 2-level If,
-                // so only count 1 depth instead of 2.
-                let pattern_trivially_true = matches!(
-                    &self.body.pats[arm.pattern].kind,
-                    PatKind::Wildcard | PatKind::Binding { .. }
-                );
+            for (idx, _arm) in arms.iter().enumerate() {
+                // Every non-irrefutable arm — guarded or not — emits exactly one
+                // wrapping `If`. Guarded arms fold their pattern test and guard
+                // into a single short-circuiting condition (see below), so they
+                // add no extra nesting.
                 if !emitted_as_irrefutable[idx] {
                     depth += 1;
-                    if arm.guard.is_some() && !pattern_trivially_true {
-                        depth += 1; // guarded arms with non-trivial pattern create an extra inner If
-                    }
                 }
                 if_depths.push(depth);
             }
@@ -401,73 +419,59 @@ impl FunctionTranslator<'_, '_> {
                     result = WirInstr::Seq(body_instrs);
                 }
             } else if let Some(guard) = &arm.guard {
-                // Guard present: use nested if to avoid eager evaluation.
-                // Outer if checks the pattern condition; inner if checks the guard.
-                // This prevents pattern bindings (ref.cast etc.) from executing
-                // when the pattern doesn't match.
+                // Guarded arm. Fold the pattern test and the guard into a single
+                // short-circuiting condition so the fall-through subtree
+                // (`result`) is placed at exactly one tree depth.
                 //
-                // Optimization: when the pattern condition is trivially true (i.e., the
-                // pattern is irrefutable like Binding/Wildcard), fold the guard into a
-                // single If to avoid cloning `result` (which causes 2^N tree explosion
-                // for many guarded arms, e.g., string match with N branches).
+                // A nested two-`If` form (outer pattern test, inner guard test)
+                // would clone `result` into both the inner guard-`else` and the
+                // outer pattern-`else` — copies that sit at depths differing by
+                // one. Break depths are baked in when an arm body is translated,
+                // so the shallower copy ends up with a stale (too-large) `Br`
+                // depth, producing invalid core Wasm (issue #1418). Collapsing to
+                // one `If` keeps `result` at a single depth and also avoids the
+                // 2^N clone explosion for many guarded arms.
+                let guard_expr = self.translate_expr(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
-                if pattern_is_trivially_true {
-                    // Pattern always matches — just use the guard as the sole condition.
-                    // Emit pattern bindings before the guard expression so that bound
-                    // variables (e.g., `__lit_N`) are available when evaluating the guard
-                    // (e.g., `__lit_N.eq("str")`). Since the pattern is irrefutable
-                    // (Binding/Wildcard), these bindings are safe to emit unconditionally.
-                    // We embed bindings into the condition via Seq so that the If is the
-                    // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_expr(*guard);
-                    let condition_with_bindings = if bindings.is_empty() {
+                let folded_condition = if pattern_is_trivially_true {
+                    // Pattern always matches: bindings are safe to emit
+                    // unconditionally, so the condition is just `bindings; guard`.
+                    if bindings.is_empty() {
                         guard_expr
                     } else {
                         let mut seq = bindings.clone();
                         seq.push(guard_expr);
                         WirInstr::Seq(seq)
-                    };
-                    // Bindings already live in the condition `Seq`, so the
-                    // arm body should not re-emit them. Use `body` alone.
-                    result = WirInstr::If {
-                        condition: Box::new(condition_with_bindings),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result]),
-                    };
+                    }
                 } else {
-                    let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_expr(*guard);
-                    // Bindings run once, before the guard, in the
-                    // `inner_then` prefix below — the guard may reference
-                    // them. The inner-if's `then_body` is the arm body
-                    // alone; re-emitting bindings inside it would produce
-                    // duplicate `_n = i; if guard { _n = i; … }` writes
-                    // that no later pass cleans up.
-                    let inner_if = WirInstr::If {
-                        condition: Box::new(guard_expr),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result.clone()]),
-                    };
-                    inner_then.push(inner_if);
-                    // Outer if: check pattern condition
-                    result = WirInstr::If {
-                        condition: Box::new(condition),
-                        result: result_wir_type.clone(),
-                        then_body: inner_then,
-                        else_body: Some(vec![result]),
-                    };
-                }
-            } else {
-                let then_body = body_instrs;
-                let else_body = Some(vec![result]);
-                result = WirInstr::If {
-                    condition: Box::new(condition),
-                    result: result_wir_type.clone(),
-                    then_body,
-                    else_body,
+                    // Refutable pattern: short-circuit as
+                    // `if pattern { bindings; guard } else { false }` so the
+                    // bindings (e.g. `ref.cast`) run only after the pattern
+                    // matches, never against the wrong variant.
+                    let mut guarded_then = bindings.clone();
+                    guarded_then.push(guard_expr);
+                    bool_if(
+                        condition,
+                        Some(WirType::I32),
+                        guarded_then,
+                        vec![WirInstr::I32Const(0)],
+                    )
                 };
+                // Bindings already ran inside the condition, so the arm body is
+                // emitted alone.
+                result = bool_if(
+                    folded_condition,
+                    result_wir_type.clone(),
+                    vec![body.clone()],
+                    vec![result],
+                );
+            } else {
+                result = bool_if(
+                    condition,
+                    result_wir_type.clone(),
+                    body_instrs,
+                    vec![result],
+                );
             }
         }
 
@@ -1458,69 +1462,6 @@ impl FunctionTranslator<'_, '_> {
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
                 fields.push(self.translate_expr(payload_expr));
-            }
-            self.struct_new(type_id, fields)
-        }
-    }
-
-    /// Build a variant case value directly from WIR instructions (no TIR needed).
-    ///
-    /// Used by canonical method synthesis to construct `Option::Some/None` and similar
-    /// variant values without going through TIR expression translation.
-    pub(super) fn build_variant_case_wir(
-        &self,
-        variant_type_id: TypeId,
-        case_index: u32,
-        case_name: &str,
-        payload: Option<WirInstr>,
-    ) -> WirInstr {
-        let (variant_name, variant_module_source) = match self.type_table.get(variant_type_id) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                (
-                    crate::name::mangle_generic_name(name, &type_arg_names),
-                    module_source.clone(),
-                )
-            }
-            other => panic!(
-                "[WIR] build_variant_case_wir: expected Variant/GenericInstance, got {other:?} (variant_type_id={variant_type_id:?})"
-            ),
-        };
-
-        let fq = format!("{variant_module_source}//{variant_name}");
-        let case_fq = format!("{fq}::{case_name}");
-
-        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_instr) = payload {
-                fields.push(payload_instr);
-            }
-            self.struct_new(case_type_id, fields)
-        } else {
-            let wir_type = self
-                .ctx
-                .type_id_to_wir_type(self.type_table, variant_type_id);
-            let WirType::Ref { type_id, .. } = wir_type else {
-                panic!(
-                    "[WIR] build_variant_case_wir: case type {case_fq} not registered, and variant type {variant_type_id:?} is not a Ref ({wir_type:?})"
-                );
-            };
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_instr) = payload {
-                fields.push(payload_instr);
             }
             self.struct_new(type_id, fields)
         }

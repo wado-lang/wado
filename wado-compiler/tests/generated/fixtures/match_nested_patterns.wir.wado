@@ -1209,17 +1209,18 @@ fn "wado-compiler/tests/fixtures/match_nested_patterns.wado/variant_inside_varia
     let __local_3: ref "core:prelude/format.wado//Formatter";
     let __local_4: ref "core:prelude/types.wado//Option<i32>";
     nested = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 42 };
-    if ref.is_null(nested) == 0 {
+    if (if ref.is_null(nested) == 0 -> i32 {
         __local_4 = ref.as_non_null(nested);
-        if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_4) -> i32 {
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(__local_4) -> i32 {
             n = ref.cast "core:prelude/types.wado//Option<i32>::Some"(__local_4).payload_0;
             1;
         } else {
             0;
-        }) {
-            "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nested if-let: "), used: 15 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_3); __local_2);
-        } else {
         }
+    } else {
+        0;
+    }) {
+        "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("nested if-let: "), used: 15 }); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(n, __local_3); __local_2);
     } else {
     }
 }

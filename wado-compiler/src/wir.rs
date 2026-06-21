@@ -353,6 +353,27 @@ impl fmt::Display for CmScalarType {
     }
 }
 
+impl CmScalarType {
+    /// Parse the kebab-case CM scalar name produced by `Display` (the inverse).
+    pub fn from_cm_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "s8" => Self::S8,
+            "s16" => Self::S16,
+            "s32" => Self::S32,
+            "s64" => Self::S64,
+            "u8" => Self::U8,
+            "u16" => Self::U16,
+            "u32" => Self::U32,
+            "u64" => Self::U64,
+            "float32" => Self::F32,
+            "float64" => Self::F64,
+            "bool" => Self::Bool,
+            "char" => Self::Char,
+            _ => return None,
+        })
+    }
+}
+
 /// The element type of a CM `stream<T>` canonical intrinsic.
 ///
 /// Distinguishes between distinct stream types at the Component Model level:
@@ -461,24 +482,21 @@ impl CanonicalIntrinsic {
 
     /// Parse a canonical intrinsic from a WASI import name.
     ///
-    /// Used for TIR-level WASI imports (e.g., "task-return") that are registered
-    /// before WIR translation. Only handles non-parameterized intrinsics since
-    /// parameterized ones (future with type) are created directly in WIR translation.
+    /// Used for TIR-level WASI imports registered before WIR translation,
+    /// including the payload-parameterized stream / future intrinsics emitted
+    /// as `CmRawCall`s by synthesis (e.g. `"future-read:transmission-http"`).
+    /// Inverse of [`Self::import_name`].
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
             _ if name.starts_with("stream-") => {
                 return parse_stream_intrinsic(name);
             }
+            _ if name.starts_with("future-") => {
+                return parse_future_intrinsic(name);
+            }
             _ if name.starts_with("resource-drop:") => {
                 Self::ResourceDrop(name["resource-drop:".len()..].to_string())
             }
-            "future-new" => Self::FutureNew(CmFuturePayload::Trailers),
-            "future-read" => Self::FutureRead(CmFuturePayload::Trailers),
-            "future-write" => Self::FutureWrite(CmFuturePayload::Trailers),
-            "future-drop-readable" => Self::FutureDropReadable(CmFuturePayload::Trailers),
-            "future-drop-writable" => Self::FutureDropWritable(CmFuturePayload::Trailers),
-            "future-cancel-read" => Self::FutureCancelRead(CmFuturePayload::Trailers),
-            "future-cancel-write" => Self::FutureCancelWrite(CmFuturePayload::Trailers),
             "waitable-set-new" => Self::WaitableSetNew,
             "waitable-set-wait" => Self::WaitableSetWait,
             "waitable-set-poll" => Self::WaitableSetPoll,
@@ -539,6 +557,34 @@ fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
         "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable(payload),
         "stream-cancel-read" => CanonicalIntrinsic::StreamCancelRead(payload),
         "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite(payload),
+        _ => return None,
+    })
+}
+
+fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
+    // Inverse of `format_future_name`:
+    //   "future-read"                     → FutureRead(Trailers)
+    //   "future-read:transmission-http"   → FutureRead(Transmission("http"))
+    //   "future-read:s32"                 → FutureRead(Scalar(S32))
+    let (base, payload) = match name.split_once(':') {
+        None => (name, CmFuturePayload::Trailers),
+        Some((b, suffix)) => {
+            let payload = if let Some(source) = suffix.strip_prefix("transmission-") {
+                CmFuturePayload::Transmission(source.to_string())
+            } else {
+                CmFuturePayload::Scalar(CmScalarType::from_cm_name(suffix)?)
+            };
+            (b, payload)
+        }
+    };
+    Some(match base {
+        "future-new" => CanonicalIntrinsic::FutureNew(payload),
+        "future-read" => CanonicalIntrinsic::FutureRead(payload),
+        "future-write" => CanonicalIntrinsic::FutureWrite(payload),
+        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable(payload),
+        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable(payload),
+        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead(payload),
+        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite(payload),
         _ => return None,
     })
 }
@@ -3306,4 +3352,61 @@ pub struct WirMemoryConfig {
     pub has_memory: bool,
     /// Minimum memory pages.
     pub min_pages: u32,
+}
+
+#[cfg(test)]
+mod intrinsic_name_tests {
+    use super::*;
+
+    fn round_trip(intr: CanonicalIntrinsic) {
+        let name = intr.import_name();
+        assert_eq!(
+            CanonicalIntrinsic::from_import_name(&name),
+            Some(intr),
+            "round-trip failed for {name:?}"
+        );
+    }
+
+    #[test]
+    fn future_intrinsics_round_trip() {
+        for base in [
+            CanonicalIntrinsic::FutureNew as fn(CmFuturePayload) -> CanonicalIntrinsic,
+            CanonicalIntrinsic::FutureRead,
+            CanonicalIntrinsic::FutureWrite,
+            CanonicalIntrinsic::FutureDropReadable,
+            CanonicalIntrinsic::FutureDropWritable,
+            CanonicalIntrinsic::FutureCancelRead,
+            CanonicalIntrinsic::FutureCancelWrite,
+        ] {
+            round_trip(base(CmFuturePayload::Trailers));
+            round_trip(base(CmFuturePayload::Transmission("http".to_string())));
+            round_trip(base(CmFuturePayload::Transmission(
+                "filesystem".to_string(),
+            )));
+            round_trip(base(CmFuturePayload::Transmission("cli".to_string())));
+            round_trip(base(CmFuturePayload::Scalar(CmScalarType::S32)));
+            round_trip(base(CmFuturePayload::Scalar(CmScalarType::F64)));
+            round_trip(base(CmFuturePayload::Scalar(CmScalarType::Bool)));
+        }
+    }
+
+    #[test]
+    fn scalar_name_round_trips() {
+        for s in [
+            CmScalarType::S8,
+            CmScalarType::S16,
+            CmScalarType::S32,
+            CmScalarType::S64,
+            CmScalarType::U8,
+            CmScalarType::U16,
+            CmScalarType::U32,
+            CmScalarType::U64,
+            CmScalarType::F32,
+            CmScalarType::F64,
+            CmScalarType::Bool,
+            CmScalarType::Char,
+        ] {
+            assert_eq!(CmScalarType::from_cm_name(&s.to_string()), Some(s));
+        }
+    }
 }
