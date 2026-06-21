@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782029356667,
+  "lastUpdate": 1782038296320,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34509,6 +34509,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fbcdbc3629f4653e82900bb197952288fc8a80be"
         },
         "date": 1782029356063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 309238,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15f590b10bad1bcc445e28763c2792d7e8a0f0f9",
+          "message": "Merge pull request #1421 from wado-lang/claude/wado-struct-return-miscompile-strfob\n\nfix(elaborator): resolve cross-module struct returns and namespace-qualified decl types canonically",
+          "timestamp": "2026-06-21T19:28:11+09:00",
+          "tree_id": "178661950a6b82ac462f382af29e426f67ea3bea",
+          "url": "https://github.com/wado-lang/wado/commit/15f590b10bad1bcc445e28763c2792d7e8a0f0f9"
+        },
+        "date": 1782038295713,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
