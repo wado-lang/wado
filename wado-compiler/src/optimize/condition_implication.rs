@@ -421,6 +421,11 @@ struct ReseedMaps {
     /// a copy re-seeds to the value of its binding once the leaves it reads are
     /// seeded — so the comparison keeps its arithmetic shape, not a flat opaque.
     derived_lets: Vec<(u32, ExprId)>,
+    /// `local → source_local` for a `let L = M` plain copy (both single-assignment).
+    /// A copy of a hoisted bound (`let n_copy = _licm_used`) resolves to the
+    /// source's classification, so the guard's bound and the check's copy of it
+    /// share one identity. Followed transitively by [`reseed_root`].
+    copy_lets: IndexMap<u32, u32>,
 }
 
 fn build_reseed_maps(body: &Body) -> ReseedMaps {
@@ -449,6 +454,7 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
     }
     let mut field_copies = IndexMap::default();
     let mut derived_lets = Vec::new();
+    let mut copy_lets = IndexMap::default();
     for (_, node) in body.stmts.iter() {
         let StmtKind::Let {
             local_index,
@@ -485,13 +491,29 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
             ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. } => {
                 derived_lets.push((*local_index, *v));
             }
+            ExprKind::Local { index: src, .. } if !reassigned.contains(src) => {
+                copy_lets.insert(*local_index, *src);
+            }
             _ => {}
         }
     }
     ReseedMaps {
         field_copies,
         derived_lets,
+        copy_lets,
     }
+}
+
+/// Follow a `let L = M` copy chain to its non-copy root (cycle-guarded).
+fn reseed_root(local: u32, copy_lets: &IndexMap<u32, u32>) -> u32 {
+    let mut cur = local;
+    for _ in 0..copy_lets.len() + 1 {
+        match copy_lets.get(&cur) {
+            Some(&src) => cur = src,
+            None => break,
+        }
+    }
+    cur
 }
 
 /// Walk the body, re-seeding each loop's stable operands. Recurses into nested
@@ -546,16 +568,18 @@ fn reseed_loop(
     let unstable = loop_unstable_locals(engine.body, loop_body);
     let reads = collect_local_reads(engine.body, loop_body);
     // Pass 1: leaf reads (induction variables, params) and field copies — the
-    // values the maintenance cannot re-derive.
+    // values the maintenance cannot re-derive. A plain copy (`let n = _licm_used`)
+    // resolves to its source's classification via the copy chain.
     for &(read, local) in &reads {
         if unstable.contains(&local) || has_value(engine, read) {
             continue;
         }
-        if maps.derived_lets.iter().any(|(l, _)| *l == local) {
+        let root = reseed_root(local, &maps.copy_lets);
+        if maps.derived_lets.iter().any(|(l, _)| *l == root) {
             continue; // pass 2
         }
         let ty = engine.body.exprs[read].type_id;
-        let value = match maps.field_copies.get(&local) {
+        let value = match maps.field_copies.get(&root) {
             Some((recv, field, recv_ty)) => {
                 // Prefer the value a surviving copy of this `recv.field` already
                 // holds; only synthesize the canonical field value when every
@@ -576,13 +600,14 @@ fn reseed_loop(
                     fv
                 }
             }
-            None => engine.body.values.canonical_local(local, ty),
+            None => engine.body.values.canonical_local(root, ty),
         };
         engine.set_value(read, value);
     }
     // Pass 2: derived `let L = <pure expr>` copies, in definition order, so a
     // copy reading an earlier copy resolves. The binding's value is recomputed
-    // from the now-seeded leaves.
+    // from the now-seeded leaves, then applied to the derived local and any plain
+    // copy of it.
     for &(local, binding) in &maps.derived_lets {
         if unstable.contains(&local) {
             continue;
@@ -591,7 +616,7 @@ fn reseed_loop(
             continue;
         };
         for &(read, l) in &reads {
-            if l == local && !has_value(engine, read) {
+            if reseed_root(l, &maps.copy_lets) == local && !has_value(engine, read) {
                 engine.set_value(read, v);
             }
         }
@@ -947,17 +972,15 @@ fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
 
 /// Whether `s` is a `if (cond) { panic-block }` bounds check whose condition
 /// `fact` proves false; rewrites and reports if so.
-fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bool {
-    let StmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = &engine.body.stmts[s].kind
-    else {
-        return false;
-    };
-    let (condition, then_block) = (*condition, *then_block);
+fn fact_eliminates_panic(
+    engine: &mut Engine,
+    condition: Operand,
+    then_block: BlockId,
+    else_block: Option<BlockId>,
+    fact: &GuardFact,
+) -> bool {
     if let Some(ce) = condition.as_expr()
+        && else_block.is_none()
         && is_panic_block(engine, then_block)
         && fact.implies_false(engine, ce)
     {
@@ -965,6 +988,19 @@ fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bo
         return true;
     }
     false
+}
+
+fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bool {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block,
+    } = &engine.body.stmts[s].kind
+    else {
+        return false;
+    };
+    let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
+    fact_eliminates_panic(engine, condition, then_block, else_block, fact)
 }
 
 /// NIR visitor that eliminates loop-guard-implied false bounds checks.
@@ -1094,6 +1130,22 @@ impl ArenaOptVisitor for GuardEliminator {
             return true;
         }
         arena_opt_walk(self, engine, NodeRef::Stmt(s))
+    }
+
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        // A bounds check inlined into value position is an `ExprKind::If`.
+        if let ExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } = &engine.body.exprs[e].kind
+        {
+            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
+            if fact_eliminates_panic(engine, condition, then_branch, else_branch, &self.fact) {
+                return true;
+            }
+        }
+        arena_opt_walk(self, engine, NodeRef::Expr(e))
     }
 }
 
