@@ -1,0 +1,26 @@
+#![TODO]
+//! Known WIR miscompile (issue #1415): an imported (non-entry) module that
+//! returns a cross-module struct (here an imported Gale parser's `CstNode`) *by
+//! value* and then borrows + recurses on it has the binding's local lowered as
+//! `i32` instead of a GC ref, producing invalid core Wasm
+//! ("expected i32, found (ref $type)").
+//!
+//! Root cause: `Elaborator::lookup_function_return_type` returns a pre-resolved
+//! `TypeId` for entry-point callees but re-resolves the return-type AST for
+//! callees in imported modules; that re-resolution yields a non-canonical
+//! `TypeId` for the cross-module struct. Drop `#![TODO]` once fixed — the test
+//! should then pass and the runner reports it as resolved.
+//!
+//! See package-gale/example/eval.wado for the safe form (recurse on the
+//! loop-bound child instead of returning a `CstNode` by value).
+
+use { depth } from "./sub/wir_xmodule_return_eval.wado";
+
+test "nested parens give nesting depth" {
+    assert depth(&"1") == 1;
+    assert depth(&"(1)") == 2;
+    assert depth(&"((1))") == 3;
+}
+
+__DATA__
+{"test": {}}
