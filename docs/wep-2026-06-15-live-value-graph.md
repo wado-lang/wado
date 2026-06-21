@@ -47,29 +47,63 @@ store/forward/branchless assertions (`array_bounds_elim_loop_guard` /
 `wir_optimize_branchless_increment` / `_brif_select`, `opt_hfs_defer_*`). All
 run correctly; the optimization no longer fires.
 
-Two real root causes found in `condition_implication` (value-based fix drafted,
-reverted as incomplete — see dead ends):
+The decisive root cause (traced on the minimal reproducer below): **the value
+graph `condition_implication` reads has no `ValueId` for the operands it must
+compare.** `condition_implication` runs inside the `licm` session and reuses
+licm's _maintained_ (build-once) graph — but by the time it runs, the operands
+of every guard / check comparison resolve to `None`:
+
+- The hoisted bound. `licm` field-hoists `arr.len()`'s `arr.used` into
+  `let _licm_used_N = arr.used` and rewrites the guard `i < arr.used` and the
+  check to read `_licm_used_N`. `replace_expr_kind` runs
+  `maintain_value_after_edit`, which **drops** the now-`Local` leaf's
+  `value_of` entry (a `Local` is not operand-derivable) and, propagating up,
+  the comparison's entry too. So `value(i < _licm_used_N)` is `None`.
+- The induction variable. Independently, `operand_value` of the comparison's
+  **left** operand `i` is also `None` in the maintained graph for the failing
+  loops (it is `Some` for the loops that still optimize). The loop-carried
+  variable's value is lost across licm's edits as well.
+
+Minimal reproducer (no `assert`/`println` noise — a `&List` param keeps the
+`arr.used` bound a `FieldAccess`, not a const fold):
+
+```
+fn sum_list(arr: &List<i32>) -> i32 {
+  let mut sum = 0;
+  for let mut i = 0; i < arr.len(); i += 1 { sum += arr[i]; }
+  return sum;
+}
+```
+
+`wado dump --nir -O2` keeps one `index out of bounds` trap; the guard
+`if !(i < _licm_used_N)` and check `i < _licm_used_N` use the same hoisted
+local, so they _would_ match if both resolved to a `ValueId`.
+
+Two secondary issues, real but downstream of the above (both must also be
+fixed for a green result, neither is sufficient alone):
 
 1. **Guard extractors match the skeleton.** `extract_loop_guard`,
    `extract_early_exit_guard`, `extract_dominating_guard` pattern-match
-   `condition.as_expr()` → `ExprKind::Unary{Not}` / `Binary{GtEq|Lt}`. Under
-   promotion the guard condition (e.g. the `(i < n)` inside `!(i < n)`) is an
-   `Operand::Value`, so `as_expr()` is `None` and no fact is built. Fix:
-   resolve via `engine.operand_value` + the existing value-level helpers
-   (`lt_of_value`, `ge_operands_of_value`).
+   `condition.as_expr()` → `ExprKind::Unary{Not}` / `Binary{GtEq|Lt}`; resolve
+   via `engine.operand_value` + the value-level helpers (`lt_of_value`,
+   `ge_operands_of_value`) instead.
 2. **`ConditionEliminator::visit_expr` lacks panic-check elimination.** A bounds
    check inlined into value position (`sum + index(arr, i)`) is an
-   `ExprKind::If`, but only `visit_stmt` rewrites the panic guard. Factor the
-   elimination into a shared helper called from both.
+   `ExprKind::If`; only `visit_stmt` rewrites the panic guard. Factor it into a
+   shared helper called from both.
 
-Open question blocking the end-to-end fix: with both fixes, the check still was
-not eliminated for `array_bounds_elim_loop_guard`, and instrumentation showed
-the loop body the eliminator walked at `condition_implication` time did not
-contain the `sum = sum + {check}` assign — the optimizer's fixed-point loop runs
-`condition_implication` against an evolving NIR, so the guard and the inlined
-check are not in their final forms in the same iteration. Cracking this needs a
-mid-pipeline (not final-NIR) trace of when the guard and check co-exist — likely
-a pass-ordering or re-run condition, not another matcher.
+Fix direction (the real work): the maintained graph must keep a stable
+`ValueId` for licm-hoisted locals and loop-carried variables, _or_
+`condition_implication` must run on a graph where it can. Tried, did not
+suffice (see dead ends): giving each hoist local a stable `Opaque(Local N)` via
+`set_value` at rewrite — `set_value` no-ops when the graph is not yet built at
+hoist time, and even when set it does not restore the induction variable's lost
+value. The clean options are (a) a maintenance pass that re-seeds loop-variable
+and hoist-local values after licm's structural edits, or (b) move
+`condition_implication` to its own pass with a fresh build (costs one rebuild
+per function — weigh against the `rebuilds = 0` criterion; it may be acceptable
+since BCE precision is a correctness-of-output-quality gate). Whichever, the
+oracle is the minimal reproducer above resolving both operands to a `ValueId`.
 
 `WADO_PROMOTE_FIELDS` (materialise pure `FieldAccess` values) is a _separate,
 further-out_ experiment — its optimizer-pass `skeleton operand` migration is
@@ -94,11 +128,17 @@ default.
   `value_of` and re-introduces over-merge mechanisms; only operand promotion
   retires it. (Detailed in the pivot sections below.)
 - **Value-based `condition_implication` guard extraction + `visit_expr` panic
-  elimination** (the BCE-cluster fix above). Both sub-fixes are correct and
-  necessary, but alone they did not eliminate `array_bounds_elim_loop_guard`'s
-  check: the guard and the inlined check are not in their final forms in the
-  same fixed-point iteration. Reverted as incomplete; re-land together with the
-  pass-ordering / re-run change that makes them co-exist, validated end-to-end.
+  elimination** (the two secondary issues above). Correct and necessary, but
+  alone insufficient: the comparison operands resolve to `None` in licm's
+  maintained graph (the decisive root cause above), so no value matches even
+  with value-based extraction. Re-land together with the operand-value fix.
+- **Stable `Opaque(Local N)` identity for licm hoist locals** (`set_value` on
+  each rewritten read in `replace_hoisted_in_expr`, opaque allocated at
+  `licm_loop` step 4). Aimed to restore the dropped hoist-local value. Did not
+  fix BCE: `set_value` no-ops when the graph is unbuilt at hoist time, and the
+  comparison's _left_ operand (the induction variable) is also value-less in the
+  maintained graph — restoring only the bound is not enough. The induction
+  variable's lost value must be addressed too (see fix direction above).
 - **LICM modified-vars: marking `&mut x.field` as field-modified** (route
   `Unary{MutRef, FieldAccess}` through `mark_assignment_target_as_modified`).
   Sound but unnecessary — the sort miscompile was the `cse_loop_body` scope bug,
