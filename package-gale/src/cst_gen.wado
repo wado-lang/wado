@@ -67,9 +67,9 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
 }
 
 /// Emit, for every parser rule whose alternatives carry `# Label`s, a
-/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) -> <Rule>Alt`
-/// accessor, so a consumer can dispatch on the matched alternative
-/// (`match expr_alt(node) { BinOp => ..., Pass => ... }`).
+/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) ->
+/// Option<<Rule>Alt>` accessor, so a consumer can dispatch on the matched
+/// alternative (`match expr_alt(node) { Some(MulDiv) => ..., None => ... }`).
 ///
 /// The parser stamps the per-rule alternative index (grammar declaration
 /// order) onto `CstNode.alt`; the enum cases are emitted in that same order,
@@ -90,8 +90,7 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 
     // Several alternatives may share one `# Label` (valid in ANTLR4: they
     // denote the same alternative kind), so emit each distinct label once —
-    // a repeated variant would not compile. The accessor below still maps
-    // every alt index to its label, so the shared alts dispatch to one case.
+    // a repeated variant would not compile.
     w.begin(&`pub enum {enum_name}`);
     let mut seen: List<String> = [];
     for let alt of &rule.alternatives {
