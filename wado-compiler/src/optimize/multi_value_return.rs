@@ -582,8 +582,9 @@ fn walk_expr_for_uses(
             ..
         } => {
             let source = *source;
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[source.as_expr().expect("skeleton operand")].kind
+            // A promoted `Operand::Value` source falls through to the operand walk.
+            if let Some(source_e) = source.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[source_e].kind
                 && let Some(&candidate_idx) = tracked.get(index)
                 && let Some(info) = candidates.get(&candidate_idx)
                 && info.field_name_set.contains(field_name)

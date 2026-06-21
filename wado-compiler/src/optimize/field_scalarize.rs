@@ -220,8 +220,8 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
                 ..
             } => {
                 let (inner, field_index) = (*inner, *field_index);
-                if let Some(idx) =
-                    extract_local_index(body, inner.as_expr().expect("skeleton operand"))
+                // A promoted `Operand::Value` receiver is no scalarizable param.
+                if let Some(idx) = inner.as_expr().and_then(|e| extract_local_index(body, e))
                     && cx.struct_params.contains(&idx)
                 {
                     cx.field_sets.entry(idx).or_default().insert(field_index);
