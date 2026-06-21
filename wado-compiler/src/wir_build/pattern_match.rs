@@ -13,6 +13,30 @@ use crate::wir::{WirInstr, WirType};
 use super::translate::{FunctionTranslator, LabelEntry};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprId, PatId, PatKind};
 
+/// Build `if condition { then_body } else { else_body }`, collapsing the
+/// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
+///
+/// Every condition match lowering feeds to an `If` already yields 0/1
+/// (`ref.test`, comparisons), so dropping the redundant select is value-exact.
+fn bool_if(
+    condition: WirInstr,
+    result: Option<WirType>,
+    then_body: Vec<WirInstr>,
+    else_body: Vec<WirInstr>,
+) -> WirInstr {
+    if matches!(then_body.as_slice(), [WirInstr::I32Const(1)])
+        && matches!(else_body.as_slice(), [WirInstr::I32Const(0)])
+    {
+        return condition;
+    }
+    WirInstr::If {
+        condition: Box::new(condition),
+        result,
+        then_body,
+        else_body: Some(else_body),
+    }
+}
+
 /// Case enumeration for a variant or enum scrutinee, used to check whether a
 /// set of match arms exhaustively covers every case.
 struct CaseIndexer {
@@ -426,30 +450,28 @@ impl FunctionTranslator<'_, '_> {
                     // matches, never against the wrong variant.
                     let mut guarded_then = bindings.clone();
                     guarded_then.push(guard_expr);
-                    WirInstr::If {
-                        condition: Box::new(condition),
-                        result: Some(WirType::I32),
-                        then_body: guarded_then,
-                        else_body: Some(vec![WirInstr::I32Const(0)]),
-                    }
+                    bool_if(
+                        condition,
+                        Some(WirType::I32),
+                        guarded_then,
+                        vec![WirInstr::I32Const(0)],
+                    )
                 };
                 // Bindings already ran inside the condition, so the arm body is
                 // emitted alone.
-                result = WirInstr::If {
-                    condition: Box::new(folded_condition),
-                    result: result_wir_type.clone(),
-                    then_body: vec![body.clone()],
-                    else_body: Some(vec![result]),
-                };
+                result = bool_if(
+                    folded_condition,
+                    result_wir_type.clone(),
+                    vec![body.clone()],
+                    vec![result],
+                );
             } else {
-                let then_body = body_instrs;
-                let else_body = Some(vec![result]);
-                result = WirInstr::If {
-                    condition: Box::new(condition),
-                    result: result_wir_type.clone(),
-                    then_body,
-                    else_body,
-                };
+                result = bool_if(
+                    condition,
+                    result_wir_type.clone(),
+                    body_instrs,
+                    vec![result],
+                );
             }
         }
 
