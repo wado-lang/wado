@@ -6,10 +6,11 @@
 //! grammar-specific tables that path needs: the per-rule `NodeKind` constants
 //! + name table, and the `to_string_tree` convenience.
 
-use { Grammar, LexerRule } from "./ir.wado";
+use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
+use { to_pascal_case, rule_alts_labeled } from "./gen_util.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -62,6 +63,53 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     }
     names.push(']');
     w.line(&`global RULE_NAMES: List<String> = {names};`);
+    w.blank();
+}
+
+/// Emit, for every parser rule whose alternatives carry `# Label`s, a
+/// `pub enum <Rule>Alt { ... }` plus a `pub fn <rule>_alt(node) -> <Rule>Alt`
+/// accessor, so a consumer can dispatch on the matched alternative
+/// (`match expr_alt(node) { BinOp => ..., Pass => ... }`).
+///
+/// The parser stamps the per-rule alternative index (grammar declaration
+/// order) onto `CstNode.alt`; the enum cases are emitted in that same order,
+/// so the accessor maps `node.alt` straight to its case. A node whose `alt`
+/// was never set (e.g. an error-recovery node) falls back to the first case.
+pub fn gen_alt_enums(w: &mut CodeWriter, grammar: &Grammar) {
+    for let rule of &grammar.parser_rules {
+        gen_one_alt_enum(w, rule);
+    }
+}
+
+fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
+    if !rule_alts_labeled(&rule.alternatives) {
+        return;
+    }
+    let enum_name = `{to_pascal_case(&rule.name)}Alt`;
+
+    w.begin(&`pub enum {enum_name}`);
+    for let alt of &rule.alternatives {
+        if let Some(label) = &alt.label {
+            w.line(&`{*label},`);
+        }
+    }
+    w.end();
+    w.blank();
+
+    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> {enum_name}`);
+    w.line(&"return match node.alt {");
+    w.indent();
+    for let mut i = 0; i < rule.alternatives.len(); i += 1 {
+        if let Some(label) = &rule.alternatives[i].label {
+            w.line(&`{i} => {enum_name}::{*label},`);
+        }
+    }
+    if let Some(first) = &rule.alternatives[0].label {
+        w.line(&`_ => {enum_name}::{*first},`);
+    }
+    w.dedent();
+    w.line(&"};");
+    w.end();
     w.blank();
 }
 
