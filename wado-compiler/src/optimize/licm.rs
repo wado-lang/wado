@@ -1633,6 +1633,74 @@ fn hoist_invariant_arith(
 ///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
 ///   value. Trap-prone ops are excluded, so computing it once up front (possibly
 ///   on an iteration a conditional occurrence would have skipped) cannot trap.
+/// Whether `idx` is in scope at the CSE insertion point (before `min_i`): it is
+/// a loop-entry local, or bound by a top-level `let` of the loop body earlier.
+fn cse_local_available(
+    engine: &mut Engine,
+    idx: u32,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    toplevel_lets.iter().any(|(i, l)| *i < min_i && *l == idx)
+        || engine.loop_entry_value(loop_body, idx).is_some()
+}
+
+/// Whether cloning skeleton `e` at the insertion point is sound: every `Local`
+/// leaf it reads is in scope there (see [`cse_local_available`]).
+fn cse_clone_in_scope(
+    engine: &mut Engine,
+    e: ExprId,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    enum K {
+        Local(u32),
+        Bin(Operand, Operand),
+        Un(Operand),
+        Lit,
+        No,
+    }
+    let k = match &engine.body.exprs[e].kind {
+        ExprKind::Local { index, .. } => K::Local(*index),
+        ExprKind::Binary { left, right, .. } => K::Bin(*left, *right),
+        ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => K::Un(*expr),
+        ExprKind::BytesLiteral(_) => K::Lit,
+        _ => K::No,
+    };
+    match k {
+        K::Local(idx) => cse_local_available(engine, idx, min_i, toplevel_lets, loop_body),
+        K::Bin(l, r) => {
+            cse_operand_in_scope(engine, l, min_i, toplevel_lets, loop_body)
+                && cse_operand_in_scope(engine, r, min_i, toplevel_lets, loop_body)
+        }
+        K::Un(o) => cse_operand_in_scope(engine, o, min_i, toplevel_lets, loop_body),
+        K::Lit => true,
+        K::No => false,
+    }
+}
+
+fn cse_operand_in_scope(
+    engine: &mut Engine,
+    op: Operand,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    match op {
+        Operand::Expr(e) => cse_clone_in_scope(engine, e, min_i, toplevel_lets, loop_body),
+        Operand::Value(v) => {
+            let rep = engine.body.values.find_imm(v);
+            let mut leaves: IndexSet<u32> = IndexSet::default();
+            engine.body.values.collect_opaque_locals(rep, &mut leaves);
+            leaves
+                .iter()
+                .all(|&idx| cse_local_available(engine, idx, min_i, toplevel_lets, loop_body))
+        }
+    }
+}
+
 fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable value, as (top-level stmt index, expr),
@@ -1651,6 +1719,17 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
         }
     }
 
+    // Locals bound by a top-level `let` of the loop body, with their statement
+    // index — the in-scope set at the insertion point grows as these precede it.
+    let toplevel_lets: Vec<(usize, u32)> = stmts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &s)| match engine.body.stmts[s].kind {
+            StmtKind::Let { local_index, .. } => Some((i, local_index)),
+            _ => None,
+        })
+        .collect();
+
     // (stmt index, let) inserts and per-expr redirects, computed before any
     // mutation so indices stay stable.
     let mut inserts: Vec<(usize, StmtId)> = Vec::new();
@@ -1662,13 +1741,26 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
             continue;
         };
         let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
-        let span = engine.body.exprs[occs[0].1].span;
+        // Clone an occurrence whose skeleton is in scope at the insertion point
+        // (before `min_i`): every `Local` leaf must be a loop-entry local or
+        // bound by a top-level `let` before `min_i`. The value graph already
+        // proved every occurrence equal, so any in-scope occurrence computes the
+        // right value; cloning a bare alias read of an inner-scope local (e.g.
+        // `let __cse = a` where `a` is bound inside a nested block) would read a
+        // stale loop-carried value. Skip the value if none qualifies.
+        let Some(&(_, src_expr)) = occs
+            .iter()
+            .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
+        else {
+            continue;
+        };
+        let span = engine.body.exprs[src_expr].span;
         let name = format!("__cse_{}", engine.locals().len());
         let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
-        // Clone one occurrence's skeleton subtree for the temp's value (the
-        // value itself is a sourceless-Opaque tree the extractor can not
+        // Clone the chosen occurrence's skeleton subtree for the temp's value
+        // (the value itself is a sourceless-Opaque tree the extractor can not
         // re-emit; the skeleton can).
-        let cloned = engine.clone_expr(occs[0].1);
+        let cloned = engine.clone_expr(src_expr);
         let let_stmt = engine.alloc_stmt(
             StmtKind::Let {
                 name: name.clone(),
