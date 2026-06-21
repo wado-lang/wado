@@ -256,9 +256,7 @@ config.
 
 ## Compatibility and further reading
 
-Gale accepts the full ANTLR4 `.g4` syntax but ignores host-language action
-bodies and semantic predicates (`{ ... }`, `{ ... }?`, `@header`/`@members`),
-since the generated parser is target-agnostic.
+Gale targets the full ANTLR4 `.g4` grammar syntax.
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility
