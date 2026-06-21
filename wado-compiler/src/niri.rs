@@ -663,11 +663,12 @@ impl<'a> Interpreter<'a> {
                 expr: inner,
                 field_name,
                 ..
-            } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-                ExprKind::GlobalVarGet {
+            } => match inner.as_expr().map(|e| &body.exprs[e].kind) {
+                // A promoted `Operand::Value` inner is no global field read.
+                Some(ExprKind::GlobalVarGet {
                     module_source,
                     name,
-                } => self
+                }) => self
                     .global_fields
                     .and_then(|m| m.get(&(module_source.clone(), name.clone())))
                     .and_then(|m| m.get(field_name.as_str()))
