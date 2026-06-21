@@ -1,0 +1,101 @@
+//! A four-function arithmetic interpreter over a Gale-generated parse tree.
+//!
+//! `Arith.g4` is wired through the Gale generator at compile time by Kiln
+//! (the `use ... with { generator: ... }` below); Gale inlines its whole
+//! runtime into the generated module, so this file's only build input is the
+//! `.g4` — there is no parser runtime to depend on or version-sync.
+//!
+//! The grammar is left-recursive with `# Label`s, so the generated parser
+//! exposes an `ExprAlt` enum and an `arith::expr_alt(node)` accessor. The
+//! interpreter dispatches on that label, not on tree shape; precedence and
+//! associativity are already baked into the tree by the precedence-climbing
+//! parser.
+
+use arith from "./Arith.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "example/generated",
+        },
+    };
+
+/// Evaluate an arithmetic expression. The resilient parser always returns a
+/// tree plus diagnostics, so a syntax error surfaces here as `Err` rather
+/// than a trap.
+pub fn eval(input: &String) -> Result<i64, String> {
+    let result = arith::parse(input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        return Result::Err(`{d.line}:{d.col}: {d.message}`);
+    }
+    // The root is `prog`: its only child node is the top-level `expr`.
+    return Result::Ok(eval_first_child(&result.root, &result.tokens));
+}
+
+/// Fold one `expr` node to its value, dispatching on the matched label.
+fn eval_expr(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
+    return match arith::expr_alt(node) {
+        Num => int_value(node, toks),
+        Paren => eval_first_child(node, toks),
+        MulDiv => fold_binary(node, toks),
+        AddSub => fold_binary(node, toks),
+    };
+}
+
+/// Evaluate the first child rule node. `prog` and `Paren` each wrap exactly
+/// one `expr`, so a missing child is a codegen bug.
+fn eval_first_child(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
+    for let child of &node.children {
+        if let Node(n) = *child {
+            return eval_expr(&n, toks);
+        }
+    }
+    panic("expr: expected a child rule node");
+}
+
+/// A `MulDiv` / `AddSub` node's children are `expr OP expr`: evaluate both
+/// operands and apply the single operator token between them.
+fn fold_binary(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
+    let mut left: i64 = 0;
+    let mut right: i64 = 0;
+    let mut have_left = false;
+    let mut op = "";
+    for let child of &node.children {
+        if let Node(n) = *child {
+            let v = eval_expr(&n, toks);
+            if have_left {
+                right = v;
+            } else {
+                left = v;
+                have_left = true;
+            }
+        } else if let Token(i) = *child {
+            op = toks.token_text(i);
+        }
+    }
+    return apply(left, &op, right);
+}
+
+fn apply(a: i64, op: &String, b: i64) -> i64 {
+    if *op == "+" {
+        return a + b;
+    }
+    if *op == "-" {
+        return a - b;
+    }
+    if *op == "*" {
+        return a * b;
+    }
+    return a / b;
+}
+
+/// The integer value of a `Num` node (its single `INT` token).
+fn int_value(node: &arith::CstNode, toks: &arith::TokenStream) -> i64 {
+    for let child of &node.children {
+        if let Token(i) = *child {
+            return i64::from_str(&toks.token_text(i)).unwrap();
+        }
+    }
+    return 0;
+}
