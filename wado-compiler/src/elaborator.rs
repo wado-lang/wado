@@ -291,27 +291,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with the elaborator's "current module" perspective swapped to
-    /// `module_source` and the supplied import context. Locals are cleared
-    /// because they describe in-progress resolution, not the target module's
-    /// pre-existing definitions; they are restored on return.
-    ///
-    /// Replaces the legacy pattern of cloning per-module flat maps via
-    /// `build_module_map` and swapping six fields in/out.
+    /// `module_source` and the supplied import `scope` (type sources *and*
+    /// namespace imports, so `ns::Type` types resolve canonically — issue
+    /// #1415). Locals are cleared because they describe in-progress resolution,
+    /// not the target module's definitions; everything is restored on return.
     pub(super) fn with_module_perspective<R>(
         &mut self,
         module_source: ModuleSource,
-        imported_type_sources: IndexMap<String, ModuleSource>,
-        import_original_names: IndexMap<String, String>,
+        scope: trait_env::ModuleImportScope,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let saved_src = std::mem::replace(&mut self.current_module_source, module_source);
-        let saved_imp = std::mem::replace(
-            &mut self.sem.imports.imported_type_sources,
-            imported_type_sources,
-        );
+        let saved_imp =
+            std::mem::replace(&mut self.sem.imports.imported_type_sources, scope.sources);
         let saved_orig = std::mem::replace(
             &mut self.sem.imports.import_original_names,
-            import_original_names,
+            scope.original_names,
+        );
+        let saved_ns = std::mem::replace(
+            &mut self.sem.imports.namespace_imports,
+            scope.namespace_imports,
         );
         let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
         let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
@@ -325,6 +324,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.current_module_source = saved_src;
         self.sem.imports.imported_type_sources = saved_imp;
         self.sem.imports.import_original_names = saved_orig;
+        self.sem.imports.namespace_imports = saved_ns;
         self.sem.decls.local_struct_fields = saved_local_struct;
         self.sem.decls.local_newtypes = saved_local_newtypes;
         self.sem.decls.local_enum_cases = saved_local_enum;

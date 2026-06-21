@@ -1,0 +1,10 @@
+//! Library for the cross-module test (issue #1415; see
+//! ../wir_xmodule_return_xmod.wado): `parse_root` returns the imported parser's
+//! `mini::CstNode` by value, consumed from a different module.
+
+use mini from "./wir_xmodule_return_parser.wado";
+
+pub fn parse_root(input: &String) -> mini::CstNode {
+    let r = mini::parse(input);
+    return r.root;
+}

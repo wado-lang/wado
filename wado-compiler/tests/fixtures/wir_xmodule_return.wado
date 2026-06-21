@@ -1,18 +1,9 @@
-#![TODO]
-//! Known WIR miscompile (issue #1415): an imported (non-entry) module that
-//! returns a cross-module struct (here an imported Gale parser's `CstNode`) *by
-//! value* and then borrows + recurses on it has the binding's local lowered as
-//! `i32` instead of a GC ref, producing invalid core Wasm
-//! ("expected i32, found (ref $type)").
-//!
-//! Root cause: `Elaborator::lookup_function_return_type` returns a pre-resolved
-//! `TypeId` for entry-point callees but re-resolves the return-type AST for
-//! callees in imported modules; that re-resolution yields a non-canonical
-//! `TypeId` for the cross-module struct. Drop `#![TODO]` once fixed — the test
-//! should then pass and the runner reports it as resolved.
-//!
-//! See package-gale/example/eval.wado for the safe form (recurse on the
-//! loop-bound child instead of returning a `CstNode` by value).
+//! Regression test (issue #1415): an imported (non-entry) module that returns a
+//! cross-module struct (an imported Gale parser's `CstNode`) by value, then
+//! borrows + recurses on it, used to type the binding's local as `i32` instead
+//! of a GC ref ("expected i32, found (ref $type)"). `lookup_function_return_type`
+//! now resolves a same-module callee's signature in the live scope instead of a
+//! reconstructed one that dropped namespace imports.
 
 use { depth } from "./sub/wir_xmodule_return_eval.wado";
 

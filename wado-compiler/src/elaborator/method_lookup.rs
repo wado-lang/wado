@@ -595,15 +595,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (the impl may live in a different module than the receiver
                 // type's declaration), and it reveals which declaration the
                 // impl's bare target name refers to.
-                let (target_imports, target_originals) =
-                    self.tysys.trait_env.import_scope(impl_module);
+                let target_scope = self.tysys.trait_env.import_scope(impl_module);
                 // Identity guard: the impl's target type must be the receiver's
                 // own declaration. An impl in the receiver's home module
                 // declares it; otherwise the impl must import that same
                 // declaration (its bare target name resolves to `module_source`),
                 // so a same-named type in another module is never matched.
                 let targets_receiver = impl_module == module_source
-                    || target_imports
+                    || target_scope
+                        .sources
                         .get(&struct_name)
                         .is_some_and(|m| m == module_source);
                 if !targets_receiver {
@@ -666,105 +666,99 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_is_mut,
                     param_defaults,
                     param_names,
-                ) = scope.with_module_perspective(
-                    impl_module.clone(),
-                    target_imports,
-                    target_originals,
-                    |s| {
-                        let old_effect_params = std::mem::take(&mut s.current_effect_params);
-                        let old_effect_param_decls =
-                            std::mem::take(&mut s.current_effect_param_decls);
-                        let method_effect_params: Vec<&ast::GenericParam> =
-                            method.type_params.iter().filter(|p| p.is_effect).collect();
-                        s.current_effect_params = method_effect_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
-                        s.current_effect_param_decls = method_effect_params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.id))
-                            .collect();
+                ) = scope.with_module_perspective(impl_module.clone(), target_scope, |s| {
+                    let old_effect_params = std::mem::take(&mut s.current_effect_params);
+                    let old_effect_param_decls = std::mem::take(&mut s.current_effect_param_decls);
+                    let method_effect_params: Vec<&ast::GenericParam> =
+                        method.type_params.iter().filter(|p| p.is_effect).collect();
+                    s.current_effect_params = method_effect_params
+                        .iter()
+                        .map(|p| p.name.clone())
+                        .collect();
+                    s.current_effect_param_decls = method_effect_params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.id))
+                        .collect();
 
-                        let mut idx = impl_offset;
-                        for tp in method.type_params.iter().filter(|p| !p.is_effect) {
-                            if s.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
-                                continue;
-                            }
-                            let fn_bound_sig = if tp.is_pack {
-                                None
-                            } else {
-                                tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
-                            };
-                            let (type_id, consumed_index) = if tp.is_pack {
-                                (
-                                    s.tysys
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_pack(tp.name.clone(), idx),
-                                    true,
-                                )
-                            } else if let Some(sig) = fn_bound_sig {
-                                (s.resolve_type(&ast::Type::Function(sig.clone())), false)
-                            } else {
-                                (
-                                    s.tysys
-                                        .type_table
-                                        .borrow_mut()
-                                        .make_type_param(tp.name.clone(), idx),
-                                    true,
-                                )
-                            };
-                            s.annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .insert(tp.name.clone(), (idx, type_id));
-                            if consumed_index {
-                                idx += 1;
-                            }
+                    let mut idx = impl_offset;
+                    for tp in method.type_params.iter().filter(|p| !p.is_effect) {
+                        if s.annotate_ctx.trait_ctx.type_params.contains_key(&tp.name) {
+                            continue;
                         }
+                        let fn_bound_sig = if tp.is_pack {
+                            None
+                        } else {
+                            tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
+                        };
+                        let (type_id, consumed_index) = if tp.is_pack {
+                            (
+                                s.tysys
+                                    .type_table
+                                    .borrow_mut()
+                                    .make_type_pack(tp.name.clone(), idx),
+                                true,
+                            )
+                        } else if let Some(sig) = fn_bound_sig {
+                            (s.resolve_type(&ast::Type::Function(sig.clone())), false)
+                        } else {
+                            (
+                                s.tysys
+                                    .type_table
+                                    .borrow_mut()
+                                    .make_type_param(tp.name.clone(), idx),
+                                true,
+                            )
+                        };
+                        s.annotate_ctx
+                            .trait_ctx
+                            .type_params
+                            .insert(tp.name.clone(), (idx, type_id));
+                        if consumed_index {
+                            idx += 1;
+                        }
+                    }
 
-                        let return_type = method
-                            .return_type
-                            .as_ref()
-                            .map(|t| s.resolve_type(t))
-                            .unwrap_or(TypeTable::UNIT);
-                        let self_kind = method
-                            .params
-                            .first()
-                            .map(|p| p.self_kind)
-                            .unwrap_or(ast::SelfKind::None);
-                        let param_types = s.extract_param_types(&method.params);
-                        let param_is_mut: Vec<bool> = method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.is_mut)
-                            .collect();
-                        let param_defaults: Vec<Option<ast::Expr>> = method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.default.clone())
-                            .collect();
-                        let param_names: Vec<String> = method
-                            .params
-                            .iter()
-                            .filter(|p| p.name != "self")
-                            .map(|p| p.name.clone())
-                            .collect();
+                    let return_type = method
+                        .return_type
+                        .as_ref()
+                        .map(|t| s.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
+                    let self_kind = method
+                        .params
+                        .first()
+                        .map(|p| p.self_kind)
+                        .unwrap_or(ast::SelfKind::None);
+                    let param_types = s.extract_param_types(&method.params);
+                    let param_is_mut: Vec<bool> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.is_mut)
+                        .collect();
+                    let param_defaults: Vec<Option<ast::Expr>> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.default.clone())
+                        .collect();
+                    let param_names: Vec<String> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.name.clone())
+                        .collect();
 
-                        s.current_effect_params = old_effect_params;
-                        s.current_effect_param_decls = old_effect_param_decls;
-                        (
-                            return_type,
-                            self_kind,
-                            param_types,
-                            param_is_mut,
-                            param_defaults,
-                            param_names,
-                        )
-                    },
-                );
+                    s.current_effect_params = old_effect_params;
+                    s.current_effect_param_decls = old_effect_param_decls;
+                    (
+                        return_type,
+                        self_kind,
+                        param_types,
+                        param_is_mut,
+                        param_defaults,
+                        param_names,
+                    )
+                });
                 drop(scope);
                 return Some(MethodInfo {
                     return_type,
@@ -1915,10 +1909,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
         let impl_module = impl_ref.0.clone();
-        let (imports, originals) = self.tysys.trait_env.import_scope(&impl_module);
-        let impl_recv_id = self.with_module_perspective(impl_module, imports, originals, |s| {
-            s.resolve_type(&impl_ty_clone)
-        });
+        let impl_scope = self.tysys.trait_env.import_scope(&impl_module);
+        let impl_recv_id = self
+            .with_module_perspective(impl_module, impl_scope, |s| s.resolve_type(&impl_ty_clone));
         let tt = self.tysys.type_table.borrow();
         let target = tt.peel_refs(impl_recv_id);
         let mut current = tt.peel_refs(receiver);
