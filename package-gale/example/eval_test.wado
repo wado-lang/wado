@@ -46,3 +46,8 @@ test "nested groups and mixed operators" {
 test "a syntax error is reported, not trapped" {
     assert eval(&"1 +") matches { Err(_) };
 }
+
+test "division by zero is reported, not trapped" {
+    assert eval(&"1 / 0") matches { Err(_) };
+    assert eval(&"6 / (3 - 3)") matches { Err(_) };
+}

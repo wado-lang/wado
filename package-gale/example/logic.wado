@@ -24,18 +24,19 @@ use bw from "./Between.g4"
         },
     };
 
-/// Evaluate a boolean/range expression. A syntax error surfaces as `Err`.
+/// Evaluate a boolean/range expression. A syntax error, or a runtime error
+/// like an out-of-range literal, surfaces as `Err` rather than a trap.
 pub fn eval(input: &String) -> Result<i64, String> {
     let result = bw::parse(input);
     if !result.ok() {
         let d = &result.diagnostics[0];
         return Result::Err(`{d.line}:{d.col}: {d.message}`);
     }
-    return Result::Ok(eval_first_child(&result.root, &result.tokens));
+    return eval_first_child(&result.root, &result.tokens);
 }
 
 /// Evaluate the first child rule node (`prog` wraps exactly one `expr`).
-fn eval_first_child(node: &bw::CstNode, toks: &bw::TokenStream) -> i64 {
+fn eval_first_child(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
     for let child of &node.children {
         if let Node(n) = *child {
             return eval_expr(&n, toks);
@@ -44,20 +45,20 @@ fn eval_first_child(node: &bw::CstNode, toks: &bw::TokenStream) -> i64 {
     panic("expr: expected a child rule node");
 }
 
-fn eval_expr(node: &bw::CstNode, toks: &bw::TokenStream) -> i64 {
+fn eval_expr(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
     return match bw::expr_alt(node) {
         Num => int_value(node, toks),
         And => {
-            let ops = operands(node, toks);
-            if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 }
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 != 0 && ops.1 != 0 { 1 } else { 0 })
         },
         Or => {
-            let ops = operands(node, toks);
-            if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 }
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 != 0 || ops.1 != 0 { 1 } else { 0 })
         },
         Between => {
-            let ops = operands(node, toks);
-            if ops.0 <= ops.1 { 1 } else { 0 }
+            let ops = operands(node, toks)?;
+            Result::Ok(if ops.0 <= ops.1 { 1 } else { 0 })
         },
     };
 }
@@ -65,13 +66,13 @@ fn eval_expr(node: &bw::CstNode, toks: &bw::TokenStream) -> i64 {
 /// The two operand `expr` children of an `And` / `Or` / `Between` node, in
 /// order. Each rule has exactly two sub-`expr`s; the keyword tokens between
 /// them are ignored.
-fn operands(node: &bw::CstNode, toks: &bw::TokenStream) -> [i64, i64] {
+fn operands(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<[i64, i64], String> {
     let mut a: i64 = 0;
     let mut b: i64 = 0;
     let mut have_a = false;
     for let child of &node.children {
         if let Node(n) = *child {
-            let v = eval_expr(&n, toks);
+            let v = eval_expr(&n, toks)?;
             if have_a {
                 b = v;
             } else {
@@ -80,15 +81,20 @@ fn operands(node: &bw::CstNode, toks: &bw::TokenStream) -> [i64, i64] {
             }
         }
     }
-    return [a, b];
+    return Result::Ok([a, b]);
 }
 
-/// The integer value of a `Num` node (its single `INT` token).
-fn int_value(node: &bw::CstNode, toks: &bw::TokenStream) -> i64 {
+/// The integer value of a `Num` node (its single `INT` token). All-digit text
+/// can still overflow `i64`, so that surfaces as `Err`.
+fn int_value(node: &bw::CstNode, toks: &bw::TokenStream) -> Result<i64, String> {
     for let child of &node.children {
         if let Token(i) = *child {
-            return i64::from_str(&toks.token_text(i)).unwrap();
+            let text = toks.token_text(i);
+            return match i64::from_str(&text) {
+                Ok(v) => Result::Ok(v),
+                Err(_) => Result::Err(`integer literal out of range: {text}`),
+            };
         }
     }
-    return 0;
+    panic("Num: expected an INT token");
 }
