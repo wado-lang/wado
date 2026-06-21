@@ -10,7 +10,7 @@ use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
-use { to_pascal_case, rule_alts_labeled } from "./gen_util.wado";
+use { to_pascal_case, escape_ident, rule_alts_labeled } from "./gen_util.wado";
 
 /// Number of distinct token kinds: one per non-fragment lexer rule, the two
 /// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
@@ -90,20 +90,22 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 
     // Several alternatives may share one `# Label` (valid in ANTLR4: they
     // denote the same alternative kind), so emit each distinct label once —
-    // a repeated variant would not compile.
+    // a repeated variant would not compile. A label may be a Wado reserved
+    // word (e.g. `# else`), so escape it to a valid identifier.
     w.begin(&`pub enum {enum_name}`);
     let mut seen: List<String> = [];
     for let alt of &rule.alternatives {
         if let Some(label) = &alt.label {
+            let case = escape_ident(label);
             let mut dup = false;
             for let s of &seen {
-                if *s == *label {
+                if *s == case {
                     dup = true;
                 }
             }
             if !dup {
-                seen.push(*label);
-                w.line(&`{*label},`);
+                seen.push(case);
+                w.line(&`{case},`);
             }
         }
     }
@@ -115,7 +117,7 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.indent();
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if let Some(label) = &rule.alternatives[i].label {
-            w.line(&`{i} => Option::Some({enum_name}::{*label}),`);
+            w.line(&`{i} => Option::Some({enum_name}::{escape_ident(label)}),`);
         }
     }
     w.line(&"_ => null,");

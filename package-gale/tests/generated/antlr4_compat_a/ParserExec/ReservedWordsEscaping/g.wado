@@ -608,6 +608,11 @@ pub struct CstNode {
     pub span: Span,
     pub children: List<CstChild>,
     pub flags: i32,
+    /// The matched labeled-alternative index for this rule node (0-based, in
+    /// grammar declaration order), or -1 when the rule's alternatives are
+    /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
+    /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
+    pub alt: i32,
 }
 
 impl CstNode {
@@ -717,6 +722,7 @@ variant BuildEvent {
     Tok(i32),  // real terminal index
     Miss(i32),  // inserted synthetic terminal index
     Skip(i32),  // skipped real terminal index
+    SetAlt(i32),  // stamp the labeled-alternative index on the open node
 }
 
 /// The builder the generated parser drives. It records a flat event stream
@@ -741,6 +747,13 @@ impl TreeBuilder {
     /// Open a `<error>` region node (kind `K_ERROR`) at byte offset `start`.
     pub fn start_error(&mut self, start: i32) {
         self.events.push(BuildEvent::Open([K_ERROR, start]));
+    }
+
+    /// Stamp the matched labeled-alternative index on the innermost currently
+    /// open node. The generated parser calls this once it commits to a labeled
+    /// alternative; it is a no-op shape for unlabeled rules (never emitted).
+    pub fn set_alt(&mut self, alt: i32) {
+        self.events.push(BuildEvent::SetAlt(alt));
     }
 
     /// A position in the event stream to retro-open a node at. Used for
@@ -806,6 +819,7 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
         *pos += 1;
         let mut children: List<CstChild> = [];
         let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
+        let mut alt = -1;
         let mut end = start;
         loop {
             if *pos >= events.len() {
@@ -837,9 +851,12 @@ fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
                 children.push(CstChild::Skipped(i));
                 flags = flags | NODE_ERROR;
                 *pos += 1;
+            } else if let SetAlt(a) = ev {
+                alt = a;
+                *pos += 1;
             }
         }
-        return CstNode { kind, span: Span::new(start, end), children, flags };
+        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
     }
     panic("TreeBuilder: expected Open event");
 }
@@ -1255,12 +1272,28 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-global RK_ROOT: NodeKind = 0;
-global RK_CONTINUE: NodeKind = 1;
-global RK_ARGS: NodeKind = 2;
-global RK_FOR: NodeKind = 3;
+pub global RK_ROOT: NodeKind = 0;
+pub global RK_CONTINUE: NodeKind = 1;
+pub global RK_ARGS: NodeKind = 2;
+pub global RK_FOR: NodeKind = 3;
 
 global RULE_NAMES: List<String> = ["root", "continue", "args", "for"];
+
+pub enum ContinueAlt {
+    else_,
+    int,
+    class,
+}
+
+pub fn continue_alt(node: &CstNode) -> Option<ContinueAlt> {
+    return match node.alt {
+        0 => Option::Some(ContinueAlt::else_),
+        1 => Option::Some(ContinueAlt::else_),
+        2 => Option::Some(ContinueAlt::int),
+        3 => Option::Some(ContinueAlt::class),
+        _ => null,
+    };
+}
 
 struct Parser {
     tokens: TokenStream,
@@ -1577,6 +1610,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_FOR {
+        p.b.set_alt(0);
         let for_ = _parse_for(p, &follow_prepend(&FOLLOW_MASK_0, follow))?;
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_FOR) {
             let for_ = _parse_for(p, &EMPTY_FOLLOW)?;
@@ -1584,6 +1618,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return Result::Ok(());
     }
     if kind == TK_BREAK {
+        p.b.set_alt(1);
         let break_ = p.expect(TK_BREAK)?;
         let mut _plus_first = true;
         loop {
@@ -1611,6 +1646,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return Result::Ok(());
     }
     if kind == TK_IF {
+        p.b.set_alt(2);
         let if__item = p.expect(TK_IF)?;
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -1649,6 +1685,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
                     break;
                 }
                 p.b.start_node_at(_cp, RK_CONTINUE, _start);
+                p.b.set_alt(3);
                 let continue__2 = p.expect(TK_CONTINUE_)?;
                 p.b.finish_node(p.last_end());
             } else {

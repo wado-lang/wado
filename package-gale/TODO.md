@@ -143,13 +143,6 @@ PR with full-corpus validation rather than a quick patch (the AGENTS.md
 
 ### Diagnostics and minor
 
-- [ ] Labeled-alt enum / variant names are emitted from the raw `# Label` and
-      `to_pascal_case(rule.name)` with no identifier validation. Reserved-word
-      collision is not a concern (labels are PascalCase and the enum is suffixed
-      `Alt`), but a label that is not a valid Wado identifier (legal as an ANTLR4
-      label, illegal as a Wado ident) produces a `<Rule>Alt` enum / variant that
-      fails to compile. Validate or sanitize the identifier. `src/cst_gen.wado`
-      `gen_one_alt_enum`.
 - [ ] `gen_error_fallback` puts internal constant names (`TK_IDENT`) in user-facing "expected" lists while the `expect` path uses `token_kind_name` — two error paths, two vocabularies. `src/parser_gen.wado:6290-6313`
 - [ ] Error-token text is a message, so diagnostics read `unexpected token "unterminated string"`. `src/g4/lexer.wado:110`, `src/g4/parser.wado:1107`
 - [ ] `ParseError.expected` is populated everywhere but rendered by nothing (the Display impl omits it). `src/runtime/lex.wado:166`, `:207-214`
