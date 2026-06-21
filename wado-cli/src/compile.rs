@@ -662,7 +662,10 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 
     // (harvest_key, loader_identity, filesystem_path, is_entry)
     let mut queue: VecDeque<(String, String, std::path::PathBuf, bool)> = VecDeque::new();
-    let entry_key = entry_file.to_string_lossy().to_string();
+    // Normalize the entry's absolute filesystem path lexically so the harvest
+    // key matches what `resolve_module_path` derives for children and so a
+    // path with URI-unsafe characters (e.g. a space) cannot panic (#1417).
+    let entry_key = wado_compiler::path::normalize(&entry_file.to_string_lossy());
     queue.push_back((entry_key.clone(), entry_key, entry_file.to_path_buf(), true));
 
     while let Some((key, loader_id, fs_path, is_entry)) = queue.pop_front() {
