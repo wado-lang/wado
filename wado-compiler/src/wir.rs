@@ -3380,7 +3380,9 @@ mod intrinsic_name_tests {
         ] {
             round_trip(base(CmFuturePayload::Trailers));
             round_trip(base(CmFuturePayload::Transmission("http".to_string())));
-            round_trip(base(CmFuturePayload::Transmission("filesystem".to_string())));
+            round_trip(base(CmFuturePayload::Transmission(
+                "filesystem".to_string(),
+            )));
             round_trip(base(CmFuturePayload::Transmission("cli".to_string())));
             round_trip(base(CmFuturePayload::Scalar(CmScalarType::S32)));
             round_trip(base(CmFuturePayload::Scalar(CmScalarType::F64)));

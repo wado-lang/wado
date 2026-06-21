@@ -1463,69 +1463,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Build a variant case value directly from WIR instructions (no TIR needed).
-    ///
-    /// Used by canonical method synthesis to construct `Option::Some/None` and similar
-    /// variant values without going through TIR expression translation.
-    pub(super) fn build_variant_case_wir(
-        &self,
-        variant_type_id: TypeId,
-        case_index: u32,
-        case_name: &str,
-        payload: Option<WirInstr>,
-    ) -> WirInstr {
-        let (variant_name, variant_module_source) = match self.type_table.get(variant_type_id) {
-            ResolvedType::Variant {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-                ..
-            } => {
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| self.type_table.mangle_type_arg_for_generic(*t))
-                    .collect();
-                (
-                    crate::name::mangle_generic_name(name, &type_arg_names),
-                    module_source.clone(),
-                )
-            }
-            other => panic!(
-                "[WIR] build_variant_case_wir: expected Variant/GenericInstance, got {other:?} (variant_type_id={variant_type_id:?})"
-            ),
-        };
-
-        let fq = format!("{variant_module_source}//{variant_name}");
-        let case_fq = format!("{fq}::{case_name}");
-
-        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq).cloned() {
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_instr) = payload {
-                fields.push(payload_instr);
-            }
-            self.struct_new(case_type_id, fields)
-        } else {
-            let wir_type = self
-                .ctx
-                .type_id_to_wir_type(self.type_table, variant_type_id);
-            let WirType::Ref { type_id, .. } = wir_type else {
-                panic!(
-                    "[WIR] build_variant_case_wir: case type {case_fq} not registered, and variant type {variant_type_id:?} is not a Ref ({wir_type:?})"
-                );
-            };
-            let mut fields = vec![WirInstr::I32Const(case_index as i32)];
-            if let Some(payload_instr) = payload {
-                fields.push(payload_instr);
-            }
-            self.struct_new(type_id, fields)
-        }
-    }
-
     /// Translate variant test: check if variant is of a specific case.
     pub(super) fn translate_variant_test(&mut self, inner: ExprId, case_index: u32) -> WirInstr {
         let val = self.translate_expr(inner);

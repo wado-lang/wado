@@ -2,18 +2,15 @@
 //! completion handle of `write_via_stream` / `read_via_stream` and
 //! materializing the result across the CM boundary.
 //!
-//! Two bugs are covered:
-//!   1. The unit `Ok(())` payload extraction left a value on the operand
-//!      stack (compile-time ICE).
-//!   2. The result discriminant was read as a 4-byte `i32.load`, but the CM
-//!      `result<(), error-code>` discriminant is one byte; with the debug
-//!      allocator poisoning the buffer (0xFF) a successful read/write falsely
-//!      took the Err arm and trapped. The Err arm also never lifted the
-//!      error code.
+//! `Future<T>::read()` lowers through the shared `synthesize_lift` / `cm_abi`
+//! path (`synthesize_future_reads`), which derives the CM layout from the
+//! payload type rather than hardcoding offsets. This exercises the full
+//! `Result<(), filesystem::ErrorCode>` lift — including the `Err` arm lifting
+//! the `ErrorCode` *variant* (not cli's enum) — under the debug allocator, so
+//! poison bytes catch any wrong-offset / wrong-source read.
 //!
-//! Runs under the debug allocator so the poison bytes guard against the
-//! 4-byte discriminant read. Exercises write-ok, read-ok, and a real Err
-//! (writing to a read-only descriptor → `NotPermitted`).
+//! Exercises write-ok, read-ok, and a real Err (writing to a read-only
+//! descriptor → `NotPermitted`).
 
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { println, Stdout } from "core:cli";
