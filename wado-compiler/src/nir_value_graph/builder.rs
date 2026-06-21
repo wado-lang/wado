@@ -148,6 +148,29 @@ impl HeapState {
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
     }
+
+    /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
+    /// a call site of the enclosing build, so a re-valued field read sees the
+    /// caller's version rather than a fresh `INITIAL`. `next` is advanced past
+    /// every restored version: a write inside the re-valued region then allocates
+    /// a generation that cannot collide with a caller-allocated one (the snapshot
+    /// does not carry the build's `next` counter).
+    fn seed_from(&mut self, snap: &HeapSnapshot) {
+        self.per_slot = snap.per_slot.clone();
+        self.per_local = snap.per_local.clone();
+        self.field_global = snap.field_global.clone();
+        self.default_version = snap.default_version;
+        let max = snap
+            .per_slot
+            .values()
+            .chain(snap.per_local.values())
+            .chain(snap.field_global.values())
+            .chain(std::iter::once(&snap.default_version))
+            .copied()
+            .max()
+            .unwrap_or(HeapVersion::INITIAL);
+        self.next = max.bump();
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -210,15 +233,21 @@ pub struct ValueGraphBuild {
     /// [`build_scoped`] with this instead of a fresh `INITIAL` heap — so a spliced
     /// `FieldAccess` (e.g. `arr.len()` → `arr.used`) carries the version a fresh
     /// whole-function build would assign, the prerequisite for promoting it to an
-    /// operand without a rebuild (see the WEP "ideal end state"). Inert until
-    /// `build_scoped` consumes it (the next step of the ideal migration).
-    #[allow(dead_code)]
+    /// operand without a rebuild (see the WEP "ideal end state").
     pub(crate) call_site_heap: IndexMap<ExprId, HeapSnapshot>,
     /// The build config (param seeding + alias sets) this graph was produced
     /// with, so the `WADO_VERIFY_VG` oracle rebuilds with *this* config (not the
     /// consuming session's) — a config-view difference is not mistaken for an
     /// over-merge while a genuine maintenance staleness still fails.
     pub config: BuildConfig,
+}
+
+impl ValueGraphBuild {
+    /// The caller-heap snapshot captured at `call`'s site, if any, for seeding the
+    /// inline splice's scoped re-valuation ([`build_scoped`]).
+    pub(crate) fn call_site_heap_for(&self, call: ExprId) -> Option<&HeapSnapshot> {
+        self.call_site_heap.get(&call)
+    }
 }
 
 /// The parameters [`build`] was called with, retained so a verify-time rebuild
@@ -309,7 +338,8 @@ pub fn build(
 /// passes — so the walk runs in `scratch`, leaving `body.values` untouched
 /// (seeded `ValueId`s stay valid; the clone preserves ids). Only the constant
 /// *literals* are re-interned into the main pool, which is idempotent.
-pub fn build_scoped(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_scoped(
     body: &mut Body,
     block: BlockId,
     skip: usize,
@@ -319,11 +349,20 @@ pub fn build_scoped(
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
     scratch: &mut ValuePool,
+    heap_seed: Option<&HeapSnapshot>,
+    live_base: u32,
 ) -> IndexMap<ExprId, ValueId> {
-    let consts: Vec<(ExprId, ValueKind)> = {
+    let scoped: Vec<(ExprId, ValueId)> = {
         let pool = std::mem::take(scratch);
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
         b.current_value = seed.clone();
+        // Seed the heap with the caller's version state at the call site so a
+        // spliced field read carries the version a fresh whole-function build
+        // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
+        // a `pop()`-shrunk `.used` — and would over-merge).
+        if let Some(h) = heap_seed {
+            b.heap_state.seed_from(h);
+        }
         let stmts: Vec<StmtId> = b.body.blocks[block]
             .stmts
             .iter()
@@ -333,20 +372,19 @@ pub fn build_scoped(
         for s in stmts {
             b.walk_stmt(s);
         }
-        let consts = b
-            .value_of
-            .iter()
-            .filter_map(|(&e, &v)| {
-                let k = b.pool.kind(v).clone();
-                is_const_kind(&k).then_some((e, k))
-            })
-            .collect();
+        let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
         *scratch = b.pool;
-        consts
+        scoped
     };
+    // Surface every caller-rooted re-emittable value (constants, plus
+    // `FieldAccess` / arithmetic over the call-site args at their true version),
+    // re-interned into the live pool. A walk-local value (an `Opaque` of a
+    // remapped callee local) is dropped — it has no caller-pool identity.
     let mut out = IndexMap::default();
-    for (e, k) in consts {
-        out.insert(e, reintern_const(&mut body.values, k));
+    for (e, sv) in scoped {
+        if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base) {
+            out.insert(e, lv);
+        }
     }
     out
 }
@@ -384,6 +422,68 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Unit => pool.unit(),
         _ => unreachable!("is_const_kind gates this"),
     }
+}
+
+/// Re-intern a value computed in a [`build_scoped`] `scratch` pool into the live
+/// `live` pool, when it is rooted entirely in **caller** values — every leaf an
+/// id below `live_base` (the pool length the scratch was cloned at, so those ids
+/// are shared and valid in `live`). Such a value is a constant, or a
+/// `FieldAccess` / arithmetic / `Select` tree over the call-site argument values,
+/// and it carries the caller's heap version (from the seeded heap), so it equals
+/// what a fresh whole-function build assigns the spliced node — sound to surface.
+///
+/// Returns `None` for a walk-local `Opaque` (a remapped callee local with no seed
+/// value) or a `LoopPhi`: those have no meaning in the caller pool. The recursion
+/// is the cross-pool copy [`build_scoped`]'s constant case did, widened past
+/// constants to the re-emittable caller-rooted values (WEP: promote the spliced
+/// `FieldAccess` at its true version).
+fn reintern_live_rooted(
+    scratch: &ValuePool,
+    live: &mut ValuePool,
+    id: ValueId,
+    live_base: u32,
+) -> Option<ValueId> {
+    if id.index() < live_base {
+        return Some(id);
+    }
+    let kind = scratch.kind(id).clone();
+    Some(match kind {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::String(_)
+        | ValueKind::Null
+        | ValueKind::Unit => reintern_const(live, kind),
+        ValueKind::Binary { op, lhs, rhs, ty } => {
+            let l = reintern_live_rooted(scratch, live, lhs, live_base)?;
+            let r = reintern_live_rooted(scratch, live, rhs, live_base)?;
+            live.binary(op, l, r, ty)
+        }
+        ValueKind::Unary { op, operand, ty } => {
+            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
+            live.unary(op, o, ty)
+        }
+        ValueKind::Cast { operand, target } => {
+            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
+            live.cast(o, target)
+        }
+        ValueKind::FieldAccess {
+            receiver,
+            field_index,
+            heap_ver,
+        } => {
+            let r = reintern_live_rooted(scratch, live, receiver, live_base)?;
+            live.field_access(r, field_index, heap_ver)
+        }
+        ValueKind::Select { cond, then, else_ } => {
+            let c = reintern_live_rooted(scratch, live, cond, live_base)?;
+            let t = reintern_live_rooted(scratch, live, then, live_base)?;
+            let e = reintern_live_rooted(scratch, live, else_, live_base)?;
+            live.select(c, t, e)
+        }
+        ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => return None,
+    })
 }
 
 /// Soundness check for conservative per-edit maintenance: the maintained

@@ -753,8 +753,16 @@ pub fn inline_functions(
                     let tt = project.type_table.borrow();
                     // One scratch pool, cloned once and reused across every
                     // inlined block (the walk only grows it with throwaway ids).
+                    // `live_base` marks which scratch ids are shared caller values
+                    // (below it) versus walk-local (at or above), so re-interning a
+                    // scoped value into the live pool stays caller-rooted.
+                    let live_base = body.values.len() as u32;
                     let mut scratch = body.values.clone();
                     for info in &reval {
+                        let heap_seed = body
+                            .value_graph
+                            .as_ref()
+                            .and_then(|vg| vg.call_site_heap_for(info.call_expr).cloned());
                         let vo = crate::nir_value_graph::builder::build_scoped(
                             body,
                             info.block,
@@ -765,6 +773,8 @@ pub fn inline_functions(
                             &all,
                             Some(&tt),
                             &mut scratch,
+                            heap_seed.as_ref(),
+                            live_base,
                         );
                         let vg = body.value_graph.as_mut().unwrap();
                         for (e, v) in vo {
@@ -1222,6 +1232,10 @@ pub(super) struct InlineRevalInfo {
     pub block: BlockId,
     pub skip: usize,
     pub seed: IndexMap<u32, crate::nir_value_graph::ValueId>,
+    /// The original `Call` expr being inlined, keying its caller-heap snapshot
+    /// (`ValueGraphBuild::call_site_heap`) so the scoped re-valuation seeds the
+    /// callee body with the caller's field versions.
+    pub call_expr: ExprId,
 }
 
 /// The value of an operand in `caller`'s graph: a promoted value directly, or a
@@ -1248,6 +1262,7 @@ fn build_inlined_labeled_block(
     func_name: &str,
     bindings: Vec<InlineBinding>,
     call_span: Span,
+    call_expr: ExprId,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     inline_counter: &mut u32,
@@ -1336,6 +1351,7 @@ fn build_inlined_labeled_block(
         block: bid,
         skip,
         seed,
+        call_expr,
     });
     caller.exprs.push(ExprNode {
         kind: ExprKind::LabeledBlock {
@@ -1405,6 +1421,7 @@ fn try_inline_call_expr(
         &func_name,
         bindings,
         call_span,
+        call_id,
         local_count,
         locals,
         inline_counter,
@@ -1506,6 +1523,7 @@ fn try_inline_method_call_expr(
         &func_name,
         bindings,
         call_span,
+        call_id,
         local_count,
         locals,
         inline_counter,
