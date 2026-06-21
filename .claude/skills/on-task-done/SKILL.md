@@ -1,6 +1,6 @@
 ---
 name: on-task-done
-description: Completing the task in a branch
+description: Finalize a task: self-review the branch, update docs, and run `mise run on-task-done` (build, clippy-fix, golden/format fixtures, doc-stdlib, format, tests). Use when finishing a task or preparing a branch for commit or PR.
 ---
 
 # Overview

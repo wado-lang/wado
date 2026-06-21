@@ -1,6 +1,6 @@
 ---
 name: git-upstream-sync
-description: Sync current branch with the upstream origin/main when a GitHub PR has conflicts
+description: Merge origin/main into the current branch and resolve conflicts, regenerating conflicted golden/generated files. Use when a PR has merge conflicts or the branch is behind origin/main.
 ---
 
 # Overview

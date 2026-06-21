@@ -1,6 +1,6 @@
 ---
 name: rust
-description: Conventions for writing Rust code
+description: Conventions for writing Rust in this workspace (2024 edition, workspace dependencies, panic-over-dummy, no wildcard match arms, clippy-clean). Use when writing or editing Rust (.rs) code.
 ---
 
 - Manage dependencies in the workspace `Cargo.toml`.

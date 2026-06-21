@@ -1,6 +1,6 @@
 ---
 name: profiling-wado
-description: Profile Wado programs using wasmtime's guest profiler to identify hot functions.
+description: Profile a Wado program's guest wasm with wasmtime's guest profiler to find hot functions and call stacks. Use for guest-side CPU profiling of compiled Wado programs, not the native compiler (see profiling-wado-compiler for that).
 ---
 
 # Profiling Wado Programs
