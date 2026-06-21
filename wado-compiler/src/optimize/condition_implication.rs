@@ -34,7 +34,9 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{Body, BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind,
+};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
 
