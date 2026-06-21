@@ -103,6 +103,37 @@ fn enclosing_stmt_and_block(
     }
 }
 
+/// The statement before which a `let _av = <FieldAccess value>` materialising the
+/// uses `ids` can be inserted: the **earliest** of their enclosing statements,
+/// when every use shares one enclosing block. A single block of straight-line
+/// statements is a dominance chain — the earliest statement precedes (and so
+/// dominates) the rest — and the uses share one `ValueId`, so no heap bump
+/// separates them: the field's version is constant across the span, and a load
+/// pinned at the earliest use reproduces it for all. Cross-block uses need real
+/// dominance and are deferred (`None`).
+fn shared_field_materialise_point(
+    e: &Engine,
+    ids: &[ExprId],
+) -> Option<(crate::nir_arena::StmtId, crate::nir_arena::BlockId)> {
+    let mut block: Option<crate::nir_arena::BlockId> = None;
+    let mut stmts: Vec<crate::nir_arena::StmtId> = Vec::with_capacity(ids.len());
+    for &id in ids {
+        let (s, b) = enclosing_stmt_and_block(e, id)?;
+        match block {
+            None => block = Some(b),
+            Some(bb) if bb == b => {}
+            _ => return None,
+        }
+        stmts.push(s);
+    }
+    let b = block?;
+    let order = &e.body.blocks[b].stmts;
+    let earliest = *stmts
+        .iter()
+        .min_by_key(|s| order.iter().position(|x| x == *s).unwrap_or(usize::MAX))?;
+    Some((earliest, b))
+}
+
 /// Stamp `type_id` onto `v` and its arithmetic children so the WIR extractor
 /// can recover each value's width. Arithmetic is width-uniform, so the result
 /// type carries down through `Binary` / `Unary`. Returns `false` on a **width
@@ -318,45 +349,50 @@ pub(super) fn freeze_pure_arith(
             if !record_value_tree_types(&mut engine, rep, id_ty) {
                 continue;
             }
-            // Source-point materialise a `FieldAccess`: pin the load in a
-            // `let _av = <value>` at the use's enclosing statement and rewrite the
-            // use to a **skeleton** `Local _av` read, so receiver-position passes
-            // see an ordinary local (materialiser-first, WEP P2). MVP: single-use
-            // (no dominance needed); shared/Select extend this.
+            // Materialise a `FieldAccess`: pin the load in a `let _av = <value>`
+            // at a statement dominating its uses and rewrite each use to a
+            // **skeleton** `Local _av` read, so receiver-position passes see an
+            // ordinary local (materialiser-first, WEP P2). A `FieldAccess` is never
+            // inline-reemittable (re-emitting a load at an arbitrary slot is
+            // unsound once a pass moves the operand), so this is its only promotion
+            // path. Single-use places at the use's own statement; multi-use shares
+            // one load when all uses lie in one block (see the placement helper).
+            // Cross-block uses stay skeleton until real dominance lands.
             let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
-            if is_field
-                && ids.len() == 1
-                && let Some((s, b)) = enclosing_stmt_and_block(&engine, ids[0])
-            {
-                let e = ids[0];
-                let span = engine.body.exprs[e].span;
-                let name = format!("_av_{}", engine.locals().len());
-                let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
-                let let_stmt = engine.alloc_stmt(
-                    crate::nir_arena::StmtKind::Let {
-                        name: name.clone(),
-                        local_index: av,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: id_ty,
-                        value: crate::nir_arena::Operand::Value(rep),
-                        skip_value_copy: true,
-                    },
-                    span,
-                );
-                let mut stmts = engine.body.blocks[b].stmts.clone();
-                let pos = stmts.iter().position(|&x| x == s).unwrap_or(0);
-                stmts.insert(pos, let_stmt);
-                engine.set_block_stmts(b, stmts);
-                let lread = engine.alloc_expr(ExprKind::Local { index: av, name }, id_ty, span);
-                changed |= engine.redirect_expr(e, crate::nir_arena::Operand::Expr(lread));
-                continue;
-            }
-            // A `FieldAccess` only promotes via the source-point materialiser
-            // above; never inline (re-emitting a load at an arbitrary slot is
-            // unsound once a pass moves the operand). Multi-use / unplaceable ones
-            // stay skeleton for now (shared materialisation is the next step).
             if is_field {
+                if let Some((s, b)) = shared_field_materialise_point(&engine, &ids) {
+                    let span = engine.body.exprs[ids[0]].span;
+                    let name = format!("_av_{}", engine.locals().len());
+                    let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+                    let let_stmt = engine.alloc_stmt(
+                        crate::nir_arena::StmtKind::Let {
+                            name: name.clone(),
+                            local_index: av,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id: id_ty,
+                            value: crate::nir_arena::Operand::Value(rep),
+                            skip_value_copy: true,
+                        },
+                        span,
+                    );
+                    let mut stmts = engine.body.blocks[b].stmts.clone();
+                    let pos = stmts.iter().position(|&x| x == s).unwrap_or(0);
+                    stmts.insert(pos, let_stmt);
+                    engine.set_block_stmts(b, stmts);
+                    for id in ids {
+                        let span = engine.body.exprs[id].span;
+                        let lread = engine.alloc_expr(
+                            ExprKind::Local {
+                                index: av,
+                                name: name.clone(),
+                            },
+                            id_ty,
+                            span,
+                        );
+                        changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Expr(lread));
+                    }
+                }
                 continue;
             }
             let mut leaves = crate::hashmap::IndexSet::default();
