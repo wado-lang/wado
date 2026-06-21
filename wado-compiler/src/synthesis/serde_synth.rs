@@ -2128,7 +2128,10 @@ fn generate_variant_family_deserialize(
                 .iter()
                 .map(|(_, _, payload)| tt.make_result(*payload, deser_error_type))
                 .collect(),
-            cases.iter().map(|(_, _, payload)| tt.type_name(*payload)).collect(),
+            cases
+                .iter()
+                .map(|(_, _, payload)| tt.type_name(*payload))
+                .collect(),
         ),
     };
 
