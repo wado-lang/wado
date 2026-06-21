@@ -357,6 +357,62 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
+    /// Grow the live ValueGraph with the forwarded constant value of every read
+    /// of a bare scalar local in `scalars`, re-deriving them through a scratch
+    /// re-walk (the same splice-point growth `inline` uses — no live rebuild).
+    ///
+    /// A structural pass (SROA) that introduces bare scalar stores
+    /// (`__sroa_x = 99; … __sroa_x …`) leaves the build-once graph — built, and
+    /// by `inline` coarsened, before the pass — with no value for the new reads,
+    /// so store→load forwarding misses them. Bare-local forwarding is immune to
+    /// the call/heap bumps that defeat the pre-SROA *field* form, so a re-walk
+    /// recovers each read's reaching constant. Only constants are kept (a fresh
+    /// build forwards the identical store value, so the merge cannot over-merge);
+    /// non-constant scalar values are left for the next query to derive.
+    pub fn grow_bare_local_constants(&mut self, scalars: &IndexSet<u32>) {
+        use crate::nir_value_graph::builder;
+        if scalars.is_empty() {
+            return;
+        }
+        self.ensure_value_graph();
+        let root = self.body.root;
+        let live_base = self.body.values.len() as u32;
+        let mut scratch = self.body.values.clone();
+        let empty = crate::hashmap::IndexMap::default();
+        // The real alias sets, not a maximally-conservative `all`: with `all` as
+        // `mut_escaped`, every call would bump every local to a fresh opaque
+        // (`bump_call_effects`), destroying a bare scalar's reaching constant
+        // across the calls between its store and a later read. A SROA scalar is
+        // non-escaping, so the real sets leave it untouched by calls — exactly
+        // the forwarding we need to recover.
+        let aliased = self.aliased_locals.clone();
+        let untrackable = self.untrackable_locals.clone();
+        let mut_escaped = self.mut_escaped_locals.clone();
+        let vo = builder::build_scoped(
+            self.body,
+            root,
+            0,
+            &empty,
+            &aliased,
+            &untrackable,
+            &mut_escaped,
+            self.vg_type_table,
+            &mut scratch,
+            None,
+            live_base,
+        );
+        for (e, v) in vo {
+            if let ExprKind::Local { index, .. } = &self.body.exprs[e].kind
+                && scalars.contains(index)
+                && builder::is_const_value(&self.body.values, v)
+            {
+                let vg = self.body.value_graph.as_mut().unwrap();
+                vg.value_of.insert(e, v);
+                vg.analysis_only.insert(e);
+            }
+        }
+    }
+
     /// The class representative of `id` in the session's value graph. Two ids
     /// with the same representative denote the same value. See
     /// [`crate::nir_value_graph::ValuePool::find`].

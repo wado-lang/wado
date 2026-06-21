@@ -92,6 +92,16 @@ fn forward_one(
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
+    // Grow the build-once graph with the reaching constant of every safe bare
+    // scalar local. SROA / field_scalarize introduce such scalars after the
+    // graph was built (and `inline` coarsened it), so their reads carry no value
+    // and forwarding would miss them; the scratch re-walk recovers each one's
+    // forwarded literal (bare-local forwarding is immune to the call/heap bumps
+    // that defeat the pre-SROA field form). Constants only — sound by refinement.
+    let safe_scalars: IndexSet<u32> = (0..engine.locals().len() as u32)
+        .filter(|i| !unsafe_locals.contains(i))
+        .collect();
+    engine.grow_bare_local_constants(&safe_scalars);
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
