@@ -8,6 +8,40 @@ use predicates::prelude::*;
 mod common;
 use common::wado;
 
+/// A project under a directory whose name contains a space must compile. The
+/// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute
+/// resolve base containing the space — the exact input that a space would make
+/// a non-URI and panic on (regression for #1417).
+#[test]
+fn test_compile_project_under_path_with_space() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("My Project");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("eval.wado"),
+        "pub fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+    let main = dir.join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         use { answer } from \"./eval.wado\";\n\
+         export fn run() with Stdout { println(`answer: {answer()}`); }\n",
+    )
+    .unwrap();
+    let out = dir.join("out.wasm");
+
+    wado()
+        .arg("compile")
+        .arg("-o")
+        .arg(&out)
+        .arg(&main)
+        .assert()
+        .success();
+    assert!(out.exists(), "expected out.wasm to be written");
+}
+
 #[test]
 fn test_help() {
     wado()
