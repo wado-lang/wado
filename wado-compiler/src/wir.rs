@@ -3362,7 +3362,7 @@ mod intrinsic_name_tests {
         let name = intr.import_name();
         assert_eq!(
             CanonicalIntrinsic::from_import_name(&name),
-            Some(intr.clone()),
+            Some(intr),
             "round-trip failed for {name:?}"
         );
     }

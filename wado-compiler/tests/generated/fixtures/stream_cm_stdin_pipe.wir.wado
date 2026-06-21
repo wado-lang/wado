@@ -17,42 +17,48 @@ struct core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err { 
     payload_0: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+enum wasi:cli/types.wado//enum:ErrorCode { Io = 0, IllegalByteSequence = 1, Pipe = 2 };  // TypeId(3)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(5)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(10)
+type "functype//wasi/wasi:cli/Stdin::read_via_stream" = fn(i32);  // TypeId(10)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream" = fn() -> ref "tuple//[Stream<u8>, Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";  // TypeId(13)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(14)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
+
+type "functype//core:internal/future_await_blocked" = fn(i32) -> i32;  // TypeId(16)
+
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
+
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(18)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
+import fn wasi/waitable-join from "wasi/waitable-join";
+import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
+import fn wasi/waitable-set-new from "wasi/waitable-set-new";
+import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdin::read_via_stream from "wasi/wasi:cli/Stdin::read_via_stream";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
-import fn wasi/waitable-set-new from "wasi/waitable-set-new";
-import fn wasi/waitable-join from "wasi/waitable-join";
-import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 
 global mut global:__modules_initialized: bool = 0;
 
@@ -88,36 +94,60 @@ fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_export__run"() {
         global:__modules_initialized = 1;
     };
     __pattern_temp_0 = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdin_read_via_stream"();
-    subtask = "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0));
-    let __fr_ptr_1: i32;
-    let __fr_result_1: i32;
-    __fr_ptr_1 = "mem/realloc"(0, 0, 8, 40);
-    __fr_result_1 = "wasi/future-read:transmission-cli"(subtask, __fr_ptr_1);
-    if __fr_result_1 == -1 {
-        let __fr_ws_1: i32;
-        let __fr_evtptr_1: i32;
-        __fr_ws_1 = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(subtask, __fr_ws_1);
-        __fr_evtptr_1 = "mem/realloc"(0, 0, 4, 8);
-        drop("wasi/waitable-set-wait"(__fr_ws_1, __fr_evtptr_1));
-        drop("mem/realloc"(__fr_evtptr_1, 8, 4, 0));
-        "wasi/waitable-join"(subtask, 0);
-        "wasi/waitable-set-drop"(__fr_ws_1);
-        __fr_result_1 = 0;
-    }
-    let __fr_opt_2: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
-    __fr_opt_2 = (if (__fr_result_1 & 15) == 0 -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
-        ref.as_non_null((if @likely(builtin::load_i32(__fr_ptr_1) == 0) -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
-            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
-        } else {
-            unreachable;
-        }));
-    } else {
-        ref.null none;
-    });
-    drop("mem/realloc"(__fr_ptr_1, 40, 8, 0));
-    drop(__fr_opt_2);
+    drop("wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(local.tee subtask("wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_binding__Stdout_write_via_stream"(local.tee stdin_stream(__pattern_temp_0.0)))));
     "wasi/task-return"(0);
+}
+
+fn "wado-compiler/tests/fixtures/stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
+    let ptr: i32;
+    let status: i32;
+    let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
+    let __disc: i32;
+    let __result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
+    let __edisc: i32;
+    let __eresult: "wasi:cli/types.wado//enum:ErrorCode";
+    ptr = "mem/realloc"(0, 0, 1, 2);
+    status = "wasi/future-read:transmission-cli"(handle, ptr);
+    if status == -1 {
+        status = "core:internal/future_await_blocked"(handle);
+    }
+    result = ref.null none;
+    if (status & 15) == 0 {
+        __disc = builtin::load_u8(ptr);
+        __result_val = ref.null none;
+        if __disc == 0 {
+            __result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
+        } else {
+            __edisc = builtin::load_u8(ptr + 1);
+            __eresult = 0;
+            if __edisc == 0 {
+                __eresult = 0;
+            } else if __edisc == 1 {
+                __eresult = 1;
+            } else {
+                __eresult = 2;
+            }
+            __result_val = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: __eresult };
+        }
+        result = __result_val;
+    }
+    drop("mem/realloc"(ptr, 2, 1, 0));
+    return result;
+}
+
+fn "core:internal/future_await_blocked"(handle) {
+    let ws: i32;
+    let evt_ptr: i32;
+    let status: i32;
+    ws = "wasi/waitable-set-new"();
+    "wasi/waitable-join"(handle, ws);
+    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+    status = builtin::load_i32(evt_ptr + 4);
+    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+    "wasi/waitable-join"(handle, 0);
+    "wasi/waitable-set-drop"(ws);
+    return status;
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
