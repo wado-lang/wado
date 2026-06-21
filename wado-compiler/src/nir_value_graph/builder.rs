@@ -2209,7 +2209,8 @@ mod tests {
     fn build_t(body: &mut Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, &empty, &empty, &empty, None)
+        let no_pure_calls = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, &empty, &empty, &empty, &no_pure_calls, None)
     }
 
     /// `build` with an explicit reference-aliased set (no `untrackable`). The
@@ -2222,7 +2223,8 @@ mod tests {
     ) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, aliased, &empty, aliased, None)
+        let no_pure_calls = crate::hashmap::IndexSet::default();
+        build(body, &param_locals, aliased, &empty, aliased, &no_pure_calls, None)
     }
 
     fn empty_body() -> Body {
