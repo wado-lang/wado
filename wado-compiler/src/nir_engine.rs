@@ -527,6 +527,15 @@ impl<'a> Engine<'a> {
             self.verify_maintained_graph();
             return;
         }
+        // Size-gate the persisted value graph: building it, plus the inline-time
+        // `build_scoped` scratch-pool clone, scales with function size — under
+        // `wado test`'s parallel compilation that OOMs on generated parsers
+        // (ANTLR4 drivers). Past the threshold, skip it: every consumer already
+        // guards `value_graph.is_none()`.
+        const VG_MAX_EXPRS: usize = 5000;
+        if self.body.exprs.len() > VG_MAX_EXPRS {
+            return;
+        }
         crate::optimize::vg_measure::record_actual_build(&*self.body);
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
