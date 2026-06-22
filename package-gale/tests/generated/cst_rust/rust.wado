@@ -6793,6 +6793,7 @@ struct Parser {
     pos: i32,
     pending: Option<ParseError>,
     recovering: bool,
+    pending_code: DiagnosticCode,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -6801,7 +6802,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -6809,16 +6810,13 @@ impl Parser {
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
-    fn record_deeper(&mut self, e: ParseError) {
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
             self.pending = Option::Some(e);
+            self.pending_code = code;
         }
-    }
-
-    fn fail(&mut self, message: String, span: Span, expected: List<String>) {
-        let e = self.error(message, span, expected);
-        self.record_deeper(e);
         self.recovering = true;
     }
 
@@ -6947,6 +6945,7 @@ impl Parser {
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -6962,6 +6961,7 @@ impl Parser {
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -6987,6 +6987,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -7009,6 +7010,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -14662,6 +14664,7 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         "expected delimTokenTree",
         p.peek_span(),
         ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -14717,6 +14720,7 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected tokenTree",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_DOLLAR", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -14806,6 +14810,7 @@ fn _parse_token_tree_token__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         "expected tokenTreeToken",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_DOLLAR"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15013,6 +15018,7 @@ fn _parse_macro_invocation_semi__inner(p: &mut Parser, follow: &List<List<i32>> 
         "expected macroInvocationSemi",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15075,6 +15081,7 @@ fn _parse_macro_rules_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         "expected macroRulesDef",
         p.peek_span(),
         ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15237,6 +15244,7 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected macroMatcher",
         p.peek_span(),
         ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15353,6 +15361,7 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected macroMatch",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE", "TK_DOLLAR"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15438,6 +15447,7 @@ fn _parse_macro_match_token__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         "expected macroMatchToken",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_STAR", "TK_PLUS", "TK_QUESTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15540,6 +15550,7 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected macroRepSep",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND", "TK_DOLLAR"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15566,6 +15577,7 @@ fn _parse_macro_rep_op__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected macroRepOp",
         p.peek_span(),
         ["TK_STAR", "TK_PLUS", "TK_QUESTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15800,6 +15812,7 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected macroItem",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15923,6 +15936,7 @@ fn _parse_crate_ref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         "expected crateRef",
         p.peek_span(),
         ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SELFVALUE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16214,6 +16228,7 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         "expected useTree",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_STAR", "TK_LCURLYBRACE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16310,6 +16325,7 @@ fn _parse_abi__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         "expected abi",
         p.peek_span(),
         ["TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16466,6 +16482,7 @@ fn _parse_function_parameters__inner(p: &mut Parser, follow: &List<List<i32>> = 
         "expected functionParameters",
         p.peek_span(),
         ["TK_POUND", "TK_AND", "TK_KW_MUT", "TK_KW_SELFVALUE", "TK_OR", "TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT", "TK_DOTDOTDOT", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_NOT", "TK_STAR", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16771,6 +16788,7 @@ fn _parse_struct___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         "expected struct_",
         p.peek_span(),
         ["TK_KW_STRUCT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -17451,6 +17469,7 @@ fn _parse_implementation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         "expected implementation",
         p.peek_span(),
         ["TK_KW_IMPL", "TK_KW_UNSAFE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -18033,6 +18052,7 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         "expected whereClauseItem",
         p.peek_span(),
         ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_KW_FOR", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -18249,6 +18269,7 @@ fn _parse_attr_input__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected attrInput",
         p.peek_span(),
         ["TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LCURLYBRACE", "TK_EQ"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -18418,6 +18439,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         "expected statement",
         p.peek_span(),
         ["TK_SEMI", "TK_POUND", "TK_KW_PUB", "TK_KW_UNSAFE", "TK_KW_MOD", "TK_KW_EXTERN", "TK_KW_USE", "TK_KW_CONST", "TK_KW_ASYNC", "TK_KW_TYPE", "TK_KW_STRUCT", "TK_KW_ENUM", "TK_KW_UNION", "TK_KW_STATIC", "TK_KW_TRAIT", "TK_KW_IMPL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_KW_LET", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_KW_SELFTYPE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -18551,6 +18573,7 @@ fn _parse_expression_statement__inner(p: &mut Parser, follow: &List<List<i32>> =
         "expected expressionStatement",
         p.peek_span(),
         ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19017,6 +19040,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMP
         "expected expression",
         p.peek_span(),
         ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19440,6 +19464,7 @@ fn _parse_comparison_operator__inner(p: &mut Parser, follow: &List<List<i32>> = 
         "expected comparisonOperator",
         p.peek_span(),
         ["TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19466,6 +19491,7 @@ fn _parse_compound_assign_operator__inner(p: &mut Parser, follow: &List<List<i32
         "expected compoundAssignOperator",
         p.peek_span(),
         ["TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_ANDEQ", "TK_OREQ", "TK_CARETEQ", "TK_SHLEQ", "TK_SHREQ"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19558,6 +19584,7 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> 
         "expected expressionWithBlock",
         p.peek_span(),
         ["TK_POUND", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19584,6 +19611,7 @@ fn _parse_literal_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected literalExpression",
         p.peek_span(),
         ["TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19614,6 +19642,7 @@ fn _parse_path_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         "expected pathExpression",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19769,6 +19798,7 @@ fn _parse_statements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected statements",
         p.peek_span(),
         ["TK_SEMI", "TK_POUND", "TK_KW_PUB", "TK_KW_UNSAFE", "TK_KW_MOD", "TK_KW_EXTERN", "TK_KW_USE", "TK_KW_CONST", "TK_KW_ASYNC", "TK_KW_TYPE", "TK_KW_STRUCT", "TK_KW_ENUM", "TK_KW_UNION", "TK_KW_STATIC", "TK_KW_TRAIT", "TK_KW_IMPL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_KW_LET", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_KW_SELFTYPE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -19932,6 +19962,7 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         "expected arrayElements",
         p.peek_span(),
         ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -20088,6 +20119,7 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         "expected structExpression",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -20530,6 +20562,7 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: &List<Li
         "expected enumerationVariantExpression",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -20697,6 +20730,7 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         "expected enumExprField",
         p.peek_span(),
         ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_INTEGER_LITERAL"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -21360,6 +21394,7 @@ fn _parse_match_arm_expression__inner(p: &mut Parser, follow: &List<List<i32>> =
         "expected matchArmExpression",
         p.peek_span(),
         ["TK_POUND", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT", "TK_AND", "TK_ANDAND", "TK_STAR", "TK_MINUS", "TK_NOT", "TK_DOTDOT", "TK_DOTDOTEQ", "TK_KW_CONTINUE", "TK_KW_BREAK", "TK_KW_RETURN", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_KW_MOVE", "TK_OROR", "TK_OR", "TK_LCURLYBRACE", "TK_KW_ASYNC", "TK_KW_UNSAFE", "TK_LIFETIME_OR_LABEL", "TK_KW_LOOP", "TK_KW_WHILE", "TK_KW_FOR", "TK_KW_IF", "TK_KW_MATCH"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -21536,6 +21571,7 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected patternNoTopAlt",
         p.peek_span(),
         ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -21815,6 +21851,7 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: &List<List<i32>> 
         "expected patternWithoutRange",
         p.peek_span(),
         ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -21900,6 +21937,7 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         "expected literalPattern",
         p.peek_span(),
         ["TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22072,6 +22110,7 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected rangePattern",
         p.peek_span(),
         ["TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22137,6 +22176,7 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: &List<List<i32>> = 
         "expected rangePatternBound",
         p.peek_span(),
         ["TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22275,6 +22315,7 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: &List<List<i32>
         "expected structPatternElements",
         p.peek_span(),
         ["TK_POUND", "TK_INTEGER_LITERAL", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_REF", "TK_KW_MUT", "TK_DOTDOT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22689,6 +22730,7 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: &List<List<i32>> = 
         "expected tuplePatternItems",
         p.peek_span(),
         ["TK_OR", "TK_KW_TRUE", "TK_KW_FALSE", "TK_CHAR_LITERAL", "TK_BYTE_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_MINUS", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_REF", "TK_KW_MUT", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_DOTDOT", "TK_AND", "TK_ANDAND", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN", "TK_LSQUAREBRACKET", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22802,6 +22844,7 @@ fn _parse_path_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected pathPattern",
         p.peek_span(),
         ["TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -22913,6 +22956,7 @@ fn _parse_type___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         "expected type_",
         p.peek_span(),
         ["TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -23199,6 +23243,7 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         "expected typeNoBounds",
         p.peek_span(),
         ["TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -23548,6 +23593,7 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
         "expected functionParametersMaybeNamedVariadic",
         p.peek_span(),
         ["TK_POUND", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_UNDERSCORE", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -23893,6 +23939,7 @@ fn _parse_type_param_bound__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         "expected typeParamBound",
         p.peek_span(),
         ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -23937,6 +23984,7 @@ fn _parse_trait_bound__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected traitBound",
         p.peek_span(),
         ["TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_LPAREN"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24005,6 +24053,7 @@ fn _parse_lifetime__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         "expected lifetime",
         p.peek_span(),
         ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24090,6 +24139,7 @@ fn _parse_simple_path_segment__inner(p: &mut Parser, follow: &List<List<i32>> = 
         "expected simplePathSegment",
         p.peek_span(),
         ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24200,6 +24250,7 @@ fn _parse_path_ident_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected pathIdentSegment",
         p.peek_span(),
         ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24448,6 +24499,7 @@ fn _parse_generic_args__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected genericArgs",
         p.peek_span(),
         ["TK_LT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24602,6 +24654,7 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected genericArg",
         p.peek_span(),
         ["TK_LIFETIME_OR_LABEL", "TK_KW_STATICLIFETIME", "TK_KW_UNDERLINELIFETIME", "TK_LPAREN", "TK_KW_IMPL", "TK_KW_DYN", "TK_QUESTION", "TK_KW_FOR", "TK_PATHSEP", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE", "TK_NOT", "TK_STAR", "TK_AND", "TK_LSQUAREBRACKET", "TK_UNDERSCORE", "TK_LT", "TK_KW_UNSAFE", "TK_KW_EXTERN", "TK_LCURLYBRACE", "TK_MINUS", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -24639,6 +24692,7 @@ fn _parse_generic_args_const__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected genericArgsConst",
         p.peek_span(),
         ["TK_LCURLYBRACE", "TK_MINUS", "TK_CHAR_LITERAL", "TK_STRING_LITERAL", "TK_RAW_STRING_LITERAL", "TK_BYTE_LITERAL", "TK_BYTE_STRING_LITERAL", "TK_RAW_BYTE_STRING_LITERAL", "TK_INTEGER_LITERAL", "TK_FLOAT_LITERAL", "TK_KW_TRUE", "TK_KW_FALSE", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_SUPER", "TK_KW_SELFVALUE", "TK_KW_CRATE", "TK_KW_DOLLARCRATE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -25107,6 +25161,7 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected identifier",
         p.peek_span(),
         ["TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -25133,6 +25188,7 @@ fn _parse_keyword__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         "expected keyword",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -25224,6 +25280,7 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser, follow: &List<List<
         "expected macroIdentifierLikeToken",
         p.peek_span(),
         ["TK_KW_AS", "TK_KW_BREAK", "TK_KW_CONST", "TK_KW_CONTINUE", "TK_KW_CRATE", "TK_KW_ELSE", "TK_KW_ENUM", "TK_KW_EXTERN", "TK_KW_FALSE", "TK_KW_FN", "TK_KW_FOR", "TK_KW_IF", "TK_KW_IMPL", "TK_KW_IN", "TK_KW_LET", "TK_KW_LOOP", "TK_KW_MATCH", "TK_KW_MOD", "TK_KW_MOVE", "TK_KW_MUT", "TK_KW_PUB", "TK_KW_REF", "TK_KW_RETURN", "TK_KW_SELFVALUE", "TK_KW_SELFTYPE", "TK_KW_STATIC", "TK_KW_STRUCT", "TK_KW_SUPER", "TK_KW_TRAIT", "TK_KW_TRUE", "TK_KW_TYPE", "TK_KW_UNSAFE", "TK_KW_USE", "TK_KW_WHERE", "TK_KW_WHILE", "TK_KW_ASYNC", "TK_KW_AWAIT", "TK_KW_DYN", "TK_KW_ABSTRACT", "TK_KW_BECOME", "TK_KW_BOX", "TK_KW_DO", "TK_KW_FINAL", "TK_KW_MACRO", "TK_KW_OVERRIDE", "TK_KW_PRIV", "TK_KW_TYPEOF", "TK_KW_UNSIZED", "TK_KW_VIRTUAL", "TK_KW_YIELD", "TK_KW_TRY", "TK_KW_UNION", "TK_KW_STATICLIFETIME", "TK_NON_KEYWORD_IDENTIFIER", "TK_RAW_IDENTIFIER", "TK_KW_MACRORULES", "TK_KW_UNDERLINELIFETIME", "TK_KW_DOLLARCRATE", "TK_LIFETIME_OR_LABEL"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -25267,6 +25324,7 @@ fn _parse_macro_punctuation_token__inner(p: &mut Parser, follow: &List<List<i32>
         "expected macroPunctuationToken",
         p.peek_span(),
         ["TK_MINUS", "TK_SLASH", "TK_PERCENT", "TK_CARET", "TK_NOT", "TK_AND", "TK_OR", "TK_ANDAND", "TK_OROR", "TK_PLUSEQ", "TK_MINUSEQ", "TK_STAREQ", "TK_SLASHEQ", "TK_PERCENTEQ", "TK_CARETEQ", "TK_ANDEQ", "TK_OREQ", "TK_SHLEQ", "TK_SHREQ", "TK_EQ", "TK_EQEQ", "TK_NE", "TK_GT", "TK_LT", "TK_GE", "TK_LE", "TK_AT", "TK_UNDERSCORE", "TK_DOT", "TK_DOTDOT", "TK_DOTDOTDOT", "TK_DOTDOTEQ", "TK_COMMA", "TK_SEMI", "TK_COLON", "TK_PATHSEP", "TK_RARROW", "TK_FATARROW", "TK_POUND"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -25326,7 +25384,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

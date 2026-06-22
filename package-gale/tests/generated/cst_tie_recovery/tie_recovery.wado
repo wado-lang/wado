@@ -1204,6 +1204,7 @@ struct Parser {
     pos: i32,
     pending: Option<ParseError>,
     recovering: bool,
+    pending_code: DiagnosticCode,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1212,7 +1213,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1220,16 +1221,13 @@ impl Parser {
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
-    fn record_deeper(&mut self, e: ParseError) {
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
             self.pending = Option::Some(e);
+            self.pending_code = code;
         }
-    }
-
-    fn fail(&mut self, message: String, span: Span, expected: List<String>) {
-        let e = self.error(message, span, expected);
-        self.record_deeper(e);
         self.recovering = true;
     }
 
@@ -1358,6 +1356,7 @@ impl Parser {
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -1373,6 +1372,7 @@ impl Parser {
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -1398,6 +1398,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -1420,6 +1421,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -1541,7 +1543,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }

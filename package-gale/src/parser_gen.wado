@@ -198,7 +198,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter) {
     w.begin(&"if let Some(e) = &p.pending");
     w.line(&"let lc = line_col(p.tokens.chars, e.span.start);");
     w.line(
-        &"let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);",
+        &"let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);",
     );
     // Carry the active rule chain (innermost-first, as each rule wrapper pushed
     // it on the way up) so tooling can report the context that failed.
@@ -265,6 +265,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // speculative re-parse saves and restores it so a probe never aborts the
     // real parse.
     s.add_field(&"recovering", &"bool");
+    // Diagnostic code for the pending failure (`UnexpectedToken` for a plain
+    // mismatch, `NoViableAlternative` when no alternative applied); the entry
+    // surfaces it with `pending`.
+    s.add_field(&"pending_code", &"DiagnosticCode");
     // Cap on collected diagnostics (the `max_errors` entry parameter). Once
     // reached, recovery stops recording and folds the tree closed by setting
     // `recovering`; `<= 1` is effectively fail-fast (one diagnostic, partial
@@ -301,7 +305,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f.set_return_type(&"Parser");
     f.emit_begin(w);
     w.line(&"let kinds = tokens.kinds.to_array();");
-    let mut init = String::from("tokens, kinds, pos: 0, pending: null, recovering: false, max_errors: i32::MAX");
+    let mut init = String::from("tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX");
     if trace {
         init.push_str(&", trace_depth: 0");
     }
@@ -328,29 +332,23 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.blank();
 
     // Record a speculative failure as the "deepest" if it sits further into the
-    // token stream than any prior (used by the repetition recovery path).
-    let mut frd = FnSpec::new("record_deeper");
-    frd.set_receiver(&"&mut self");
-    frd.add_param(&"e", &"ParseError");
-    frd.emit_begin(w);
-    w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
-    w.begin(&"if take");
-    w.line(&"self.pending = Option::Some(e);");
-    w.end();
-    w.end();
-    w.blank();
-
-    // Record a match failure and enter recovery. Infallible replacement for the
-    // old `return Result::Err(...)`: the error is kept as the deepest pending
-    // failure and `recovering` short-circuits the rest of the descent.
+    // Record an unrecoverable match failure and enter recovery. Infallible
+    // replacement for the old `return Result::Err(...)`: the deepest failure is
+    // kept in `pending` (with its `code`) and `recovering` short-circuits the
+    // rest of the descent until the entry surfaces it.
     let mut ff = FnSpec::new("fail");
     ff.set_receiver(&"&mut self");
     ff.add_param(&"message", &"String");
     ff.add_param(&"span", &"Span");
     ff.add_param(&"expected", &"List<String>");
+    ff.add_param(&"code", &"DiagnosticCode");
     ff.emit_begin(w);
     w.line(&"let e = self.error(message, span, expected);");
-    w.line(&"self.record_deeper(e);");
+    w.line(&"let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };");
+    w.begin(&"if take");
+    w.line(&"self.pending = Option::Some(e);");
+    w.line(&"self.pending_code = code;");
+    w.end();
     w.line(&"self.recovering = true;");
     w.end();
     w.blank();
@@ -568,6 +566,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[name],");
+    w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
     w.line(&"return self.pos;");
@@ -589,6 +588,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"`expected any token, got \"{self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"any token\"],");
+    w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
     w.line(&"return self.pos;");
@@ -621,6 +621,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"set complement\"],");
+    w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
     w.line(&"return self.pos;");
@@ -651,6 +652,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"`unexpected token \"{self.tokens.token_text(self.pos)}\"`,");
     w.line(&"self.tokens.span_at(self.pos),");
     w.line(&"[\"token set\"],");
+    w.line(&"DiagnosticCode::UnexpectedToken,");
     w.dedent();
     w.line(&");");
     w.line(&"return self.pos;");
@@ -6315,6 +6317,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         w.write(&`{str_lit(expected[i])}`);
     }
     w.write(&"],\n");
+    w.line(&"DiagnosticCode::NoViableAlternative,");
     w.dedent();
     w.line(&");");
     w.line(&"return;");

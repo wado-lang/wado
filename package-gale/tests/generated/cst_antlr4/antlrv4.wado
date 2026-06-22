@@ -4321,6 +4321,7 @@ struct Parser {
     pos: i32,
     pending: Option<ParseError>,
     recovering: bool,
+    pending_code: DiagnosticCode,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -4329,7 +4330,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -4337,16 +4338,13 @@ impl Parser {
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
-    fn record_deeper(&mut self, e: ParseError) {
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
             self.pending = Option::Some(e);
+            self.pending_code = code;
         }
-    }
-
-    fn fail(&mut self, message: String, span: Span, expected: List<String>) {
-        let e = self.error(message, span, expected);
-        self.record_deeper(e);
         self.recovering = true;
     }
 
@@ -4475,6 +4473,7 @@ impl Parser {
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -4490,6 +4489,7 @@ impl Parser {
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -4515,6 +4515,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -4537,6 +4538,7 @@ impl Parser {
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
+            DiagnosticCode::UnexpectedToken,
         );
         return self.pos;
     }
@@ -6426,6 +6428,7 @@ fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected grammarType",
         p.peek_span(),
         ["TK_LEXER", "TK_PARSER", "TK_GRAMMAR"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -6468,6 +6471,7 @@ fn _parse_prequel_construct__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         "expected prequelConstruct",
         p.peek_span(),
         ["TK_OPTIONS", "TK_IMPORT", "TK_TOKENS", "TK_CHANNELS", "TK_AT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -6588,6 +6592,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected optionValue",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_STRING_LITERAL", "TK_ACTION", "TK_INT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -6707,6 +6712,7 @@ fn _parse_delegate_grammar__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         "expected delegateGrammar",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -6859,6 +6865,7 @@ fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         "expected actionScopeName",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_LEXER", "TK_PARSER"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7022,6 +7029,7 @@ fn _parse_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         "expected ruleSpec",
         p.peek_span(),
         ["TK_PUBLIC", "TK_PRIVATE", "TK_PROTECTED", "TK_FRAGMENT", "TK_RULE_REF", "TK_TOKEN_REF"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7187,6 +7195,7 @@ fn _parse_rule_prequel__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected rulePrequel",
         p.peek_span(),
         ["TK_OPTIONS", "TK_AT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7351,6 +7360,7 @@ fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected ruleModifier",
         p.peek_span(),
         ["TK_PUBLIC", "TK_PRIVATE", "TK_PROTECTED", "TK_FRAGMENT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7544,6 +7554,7 @@ fn _parse_lexer_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         "expected lexerAlt",
         p.peek_span(),
         ["TK_STRING_LITERAL", "TK_TOKEN_REF", "TK_NOT", "TK_LEXER_CHAR_SET", "TK_DOT", "TK_LPAREN", "TK_ACTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7598,6 +7609,7 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         "expected lexerElements",
         p.peek_span(),
         ["TK_STRING_LITERAL", "TK_TOKEN_REF", "TK_NOT", "TK_LEXER_CHAR_SET", "TK_DOT", "TK_LPAREN", "TK_ACTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7641,6 +7653,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected lexerElement",
         p.peek_span(),
         ["TK_STRING_LITERAL", "TK_TOKEN_REF", "TK_NOT", "TK_LEXER_CHAR_SET", "TK_DOT", "TK_LPAREN", "TK_ACTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7782,6 +7795,7 @@ fn _parse_lexer_command__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         "expected lexerCommand",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_MODE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7812,6 +7826,7 @@ fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected lexerCommandName",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_MODE"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7842,6 +7857,7 @@ fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &
         "expected lexerCommandExpr",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_INT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -7939,6 +7955,7 @@ fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected alternative",
         p.peek_span(),
         ["TK_LT", "TK_RULE_REF", "TK_TOKEN_REF", "TK_STRING_LITERAL", "TK_NOT", "TK_DOT", "TK_LPAREN", "TK_ACTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8060,6 +8077,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         "expected element",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF", "TK_STRING_LITERAL", "TK_NOT", "TK_DOT", "TK_LPAREN", "TK_ACTION"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8209,6 +8227,7 @@ fn _parse_predicate_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         "expected predicateOption",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8313,6 +8332,7 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected ebnfSuffix",
         p.peek_span(),
         ["TK_QUESTION", "TK_STAR", "TK_PLUS"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8370,6 +8390,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected lexerAtom",
         p.peek_span(),
         ["TK_STRING_LITERAL", "TK_TOKEN_REF", "TK_NOT", "TK_LEXER_CHAR_SET", "TK_DOT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8408,6 +8429,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         "expected atom",
         p.peek_span(),
         ["TK_TOKEN_REF", "TK_STRING_LITERAL", "TK_RULE_REF", "TK_NOT", "TK_DOT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8473,6 +8495,7 @@ fn _parse_not_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         "expected notSet",
         p.peek_span(),
         ["TK_NOT"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8606,6 +8629,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         "expected setElement",
         p.peek_span(),
         ["TK_TOKEN_REF", "TK_STRING_LITERAL", "TK_LEXER_CHAR_SET"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8749,6 +8773,7 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         "expected terminalDef",
         p.peek_span(),
         ["TK_TOKEN_REF", "TK_STRING_LITERAL"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8898,6 +8923,7 @@ fn _parse_element_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         "expected elementOption",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8924,6 +8950,7 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         "expected identifier",
         p.peek_span(),
         ["TK_RULE_REF", "TK_TOKEN_REF"],
+        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -8987,7 +9014,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
-            let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
             d.rule_stack = e.rule_stack;
             p.diagnostics.push(d);
         }
