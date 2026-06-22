@@ -909,6 +909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && resource.name == struct_name
                     && let Some(info) = self.find_resource_method_info(
                         resource,
+                        module_source,
                         method_name,
                         receiver_type_args.as_deref(),
                     )
@@ -920,12 +921,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Also search all modules for resources if no specific module
         if struct_module_source.is_none() {
-            for module in self.loaded_modules.values() {
+            for (module_source, module) in self.loaded_modules.iter() {
                 for item in &module.items {
                     if let Item::Resource(resource) = item
                         && resource.name == struct_name
                         && let Some(info) = self.find_resource_method_info(
                             resource,
+                            module_source,
                             method_name,
                             receiver_type_args.as_deref(),
                         )
@@ -960,6 +962,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn find_resource_method_info(
         &mut self,
         resource: &ast::ResourceDecl,
+        resource_module: &ModuleSource,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
@@ -992,30 +995,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            let return_type = method
-                .return_type
-                .as_ref()
-                .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT);
-            let param_types = scope.extract_param_types(&method.params);
-            let param_is_mut: Vec<bool> = method
-                .params
-                .iter()
-                .filter(|p| p.name != "self")
-                .map(|p| p.is_mut)
-                .collect();
-            let param_defaults: Vec<Option<ast::Expr>> = method
-                .params
-                .iter()
-                .filter(|p| p.name != "self")
-                .map(|p| p.default.clone())
-                .collect();
-            let param_names: Vec<String> = method
-                .params
-                .iter()
-                .filter(|p| p.name != "self")
-                .map(|p| p.name.clone())
-                .collect();
+            // Resolve the signature in the resource's defining module so its
+            // return/param types (`AsyncCall<Result<DescriptorStat, ErrorCode>>`,
+            // `Stream<DirectoryEntry>`) name types as that interface sees them,
+            // not as the caller does — otherwise a caller that does not import
+            // those types resolves them to `unknown` (issue #1416).
+            let target_scope = scope.tysys.trait_env.import_scope(resource_module);
+            let (return_type, param_types, param_is_mut, param_defaults, param_names) = scope
+                .with_module_perspective(resource_module.clone(), target_scope, |s| {
+                    let return_type = method
+                        .return_type
+                        .as_ref()
+                        .map(|t| s.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
+                    let param_types = s.extract_param_types(&method.params);
+                    let param_is_mut: Vec<bool> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.is_mut)
+                        .collect();
+                    let param_defaults: Vec<Option<ast::Expr>> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.default.clone())
+                        .collect();
+                    let param_names: Vec<String> = method
+                        .params
+                        .iter()
+                        .filter(|p| p.name != "self")
+                        .map(|p| p.name.clone())
+                        .collect();
+                    (
+                        return_type,
+                        param_types,
+                        param_is_mut,
+                        param_defaults,
+                        param_names,
+                    )
+                });
 
             drop(scope);
 
@@ -2137,9 +2156,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Set up associated type bindings for resolving Self::* types
+        // Set up associated type bindings for resolving Self::* types. Resolve
+        // in the impl's module so a binding naming a type private to that
+        // module (`type Iter = TreeSetIter<T>`) is not re-resolved by name in
+        // the caller's perspective, where it is invisible (issue #1416).
+        let impl_import_scope = scope.tysys.trait_env.import_scope(&impl_module_source);
         for (name, ty) in &assoc_bindings {
-            let type_id = scope.resolve_type(ty);
+            let im = impl_module_source.clone();
+            let isc = impl_import_scope.clone();
+            let type_id = scope.with_module_perspective(im, isc, |s| s.resolve_type(ty));
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2239,15 +2264,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.annotate_ctx.trait_ctx.self_type = Some(recv_id);
             }
 
-            let return_type = return_type_ast
-                .as_ref()
-                .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT);
-
-            // Extract param_types while method-level type params are still
-            // in scope — otherwise `&T` in a parameter would not resolve to
-            // the proper `TypeParam` id that inference expects.
-            let param_types = scope.extract_param_types(&params);
+            // Resolve the signature in the impl's module (see the
+            // `assoc_bindings` note above): the return / param types may name
+            // types private to that module.
+            let (return_type, param_types) = {
+                let im = impl_module_source.clone();
+                let isc = impl_import_scope.clone();
+                scope.with_module_perspective(im, isc, |s| {
+                    let return_type = return_type_ast
+                        .as_ref()
+                        .map(|t| s.resolve_type(t))
+                        .unwrap_or(TypeTable::UNIT);
+                    // Extract param_types while method-level type params are
+                    // still in scope — otherwise `&T` in a parameter would not
+                    // resolve to the proper `TypeParam` id inference expects.
+                    let param_types = s.extract_param_types(&params);
+                    (return_type, param_types)
+                })
+            };
 
             scope.annotate_ctx.trait_ctx.self_type = old_self_type;
 
@@ -2611,7 +2645,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) {
                     return None;
                 }
-                Some(s.resolve_type_with_param_mapping(&binding_ty, mapping))
+                // Resolve the binding's named types in the impl module's
+                // perspective: an associated type (`type Output = f32x4`,
+                // `type Item = IterMap<…>`) names types as the defining impl
+                // sees them, not as the caller does. Type parameters still
+                // substitute through `mapping`. Without this, a bare
+                // `[a, b, c, d]` coerced to `f32x4` at a call site that does
+                // not import the builder's types resolves the binding to an
+                // unrelated module (issue #1416 in reverse).
+                let impl_module = impl_ref.0.clone();
+                let impl_scope = s.tysys.trait_env.import_scope(&impl_module);
+                let mapping = mapping.clone();
+                Some(
+                    s.with_module_perspective(impl_module, impl_scope, move |s| {
+                        s.resolve_type_with_param_mapping(&binding_ty, &mapping)
+                    }),
+                )
             },
         )
     }

@@ -1349,11 +1349,12 @@ impl<'a> TypeLookup<'a> {
                 return None;
             }
         }
-        for m in all_per_module.values() {
-            if let Some(v) = m.get(name) {
-                return Some(v);
-            }
-        }
+        // No global-scan fallback. A bare name resolves only through locals,
+        // the current module, or imports (the prelude is injected into every
+        // module's import scope, so its types resolve through the import branch
+        // above). Scanning every module and returning the first same-named
+        // match is what let a type resolve to an unrelated module's same-named
+        // type (issue #1416).
         None
     }
 
