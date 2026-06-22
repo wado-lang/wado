@@ -7394,10 +7394,12 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let limit: i32;
     let count: i32;
     let truncated: bool;
-    let self_11: ref "core:prelude/string.wado//StrCharIter";
-    let s: ref "core:prelude/string.wado//String";
-    let _licm_buf_39: ref "core:prelude/string.wado//String";
-    let _licm_arith_40: bool;
+    let __local_8: ref "core:prelude/string.wado//String";
+    let __local_9: ref "core:prelude/format.wado//Formatter";
+    let self_14: ref "core:prelude/string.wado//StrCharIter";
+    let s_37: ref "core:prelude/string.wado//String";
+    let s_51: ref "core:prelude/string.wado//String";
+    let _licm_arith_52: bool;
     limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
         if f.precision == -2 {
             break __inline_Formatter__resolved_seq_limit_0: 256;
@@ -7407,16 +7409,15 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push"(f.buf, 34);
     count = 0;
     truncated = 0;
-    self_11 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
-    _licm_buf_39 = f.buf;
-    _licm_arith_40 = limit >= 0;
+    self_14 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
+    _licm_arith_52 = limit >= 0;
     b717: block {
         l718: loop {
-            let __sroa___match_7_discriminant: i32;
-            let __sroa___match_7_payload_0: char;
-            multivalue_bind [__sroa___match_7_discriminant, __sroa___match_7_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_11);
-            if __sroa___match_7_discriminant == 0 {
-                if (if _licm_arith_40 -> i32 {
+            let __sroa___match_10_discriminant: i32;
+            let __sroa___match_10_payload_0: char;
+            multivalue_bind [__sroa___match_10_discriminant, __sroa___match_10_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_14);
+            if __sroa___match_10_discriminant == 0 {
+                if (if _licm_arith_52 -> i32 {
                     count >= limit;
                 } else {
                     0;
@@ -7424,23 +7425,35 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                     truncated = 1;
                     break b717;
                 }
-                if __sroa___match_7_payload_0 == 34 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 34);
-                } else if __sroa___match_7_payload_0 == 92 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                } else if __sroa___match_7_payload_0 == 10 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 110);
-                } else if __sroa___match_7_payload_0 == 13 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 114);
-                } else if __sroa___match_7_payload_0 == 9 {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 92);
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, 116);
+                if __sroa___match_10_payload_0 == 34 {
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(f.buf, 34);
+                } else if __sroa___match_10_payload_0 == 92 {
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                } else if __sroa___match_10_payload_0 == 10 {
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(f.buf, 110);
+                } else if __sroa___match_10_payload_0 == 13 {
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(f.buf, 114);
+                } else if __sroa___match_10_payload_0 == 9 {
+                    "core:prelude/string.wado/String::push"(f.buf, 92);
+                    "core:prelude/string.wado/String::push"(f.buf, 116);
+                } else if (if __sroa___match_10_payload_0 < 32 -> i32 {
+                    1;
                 } else {
-                    "core:prelude/string.wado/String::push"(_licm_buf_39, __sroa___match_7_payload_0);
+                    __sroa___match_10_payload_0 == 127;
+                }) {
+                    s_37 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+                    "core:prelude/string.wado/String::push_str"(f.buf, s_37);
+                    __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+                    __local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_8 };
+                    "core:prelude/primitive.wado/u64::fmt_base"(builtin::i64_extend_i32_u(__sroa___match_10_payload_0), __local_9, 16, 0, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+                    "core:prelude/string.wado/String::push_str"(f.buf, __local_8);
+                    "core:prelude/string.wado/String::push"(f.buf, 125);
+                } else {
+                    "core:prelude/string.wado/String::push"(f.buf, __sroa___match_10_payload_0);
                 }
                 count = count + 1;
             } else {
@@ -7451,8 +7464,8 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
     if truncated {
-        s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
-        "core:prelude/string.wado/String::push_str"(f.buf, s);
+        s_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+        "core:prelude/string.wado/String::push_str"(f.buf, s_51);
     }
 }
 
@@ -7657,8 +7670,8 @@ fn "core:serde/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wa
     repr = self.repr;
     end = self.used;
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>" { repr: repr, index: 0, end: end };
-    b740: block {
-        l741: loop {
+    b742: block {
+        l743: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -7670,9 +7683,9 @@ fn "core:serde/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wa
                     return __qm_e_8;
                 }
             } else {
-                break b740;
+                break b742;
             }
-            continue l741;
+            continue l743;
         };
     };
     return "core:prelude/string.wado/String::push"(seq.buf, 93), ref.null none;
@@ -7794,8 +7807,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     repr = entries.repr;
     end = entries.used;
     __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>" { repr: repr, index: 0, end: end };
-    b752: block {
-        l753: loop {
+    b754: block {
+        l755: loop {
             __match_13 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^Iterator::next"(__iter_6);
             if ref.is_null(__match_13) == 0 {
                 let __variant_payload_1: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
@@ -7817,9 +7830,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
                     return __qm_e_12;
                 }
             } else {
-                break b752;
+                break b754;
             }
-            continue l753;
+            continue l755;
         };
     };
     return "core:prelude/string.wado/String::push"(m.buf, 125), ref.null none;
@@ -7850,8 +7863,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     _licm_repr_23 = _licm_nodes_20.repr;
     _licm_used_24 = _licm_entries_21.used;
     _licm_repr_25 = _licm_entries_21.repr;
-    b757: block {
-        l758: loop {
+    b759: block {
+        l760: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -7886,9 +7899,9 @@ condition: index < self.used
                     current = n.right;
                 }
             } else {
-                break b757;
+                break b759;
             }
-            continue l758;
+            continue l760;
         };
     };
     return -1;
@@ -7947,8 +7960,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Serialize::ser
     repr = entries.repr;
     end = entries.used;
     __iter_6 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>" { repr: repr, index: 0, end: end };
-    b768: block {
-        l769: loop {
+    b770: block {
+        l771: loop {
             __match_13 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_6);
             if ref.is_null(__match_13) == 0 {
                 let __variant_payload_1: ref "tuple//[core:prelude/string.wado/String, i32]";
@@ -7970,9 +7983,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Serialize::ser
                     return __qm_e_12;
                 }
             } else {
-                break b768;
+                break b770;
             }
-            continue l769;
+            continue l771;
         };
     };
     return "core:prelude/string.wado/String::push"(m.buf, 125), ref.null none;
@@ -8003,8 +8016,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::find_index"(s
     _licm_repr_23 = _licm_nodes_20.repr;
     _licm_used_24 = _licm_entries_21.used;
     _licm_repr_25 = _licm_entries_21.repr;
-    b773: block {
-        l774: loop {
+    b775: block {
+        l776: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -8039,9 +8052,9 @@ condition: index < self.used
                     current = n.right;
                 }
             } else {
-                break b773;
+                break b775;
             }
-            continue l774;
+            continue l776;
         };
     };
     return -1;
@@ -8172,8 +8185,8 @@ fn "core:serde/List<core:prelude/types.wado/Option<i32>>^Serialize::serialize<co
     repr = self.repr;
     end = self.used;
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/types.wado/Option<i32>>" { repr: repr, index: 0, end: end };
-    b792: block {
-        l793: loop {
+    b794: block {
+        l795: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -8185,9 +8198,9 @@ fn "core:serde/List<core:prelude/types.wado/Option<i32>>^Serialize::serialize<co
                     return __qm_e_8;
                 }
             } else {
-                break b792;
+                break b794;
             }
-            continue l793;
+            continue l795;
         };
     };
     return "core:prelude/string.wado/String::push"(seq.buf, 93), ref.null none;
@@ -8255,7 +8268,7 @@ fn "core:serde/List<core:prelude/types.wado/Option<i32>>^Deserialize::deserializ
         items = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: builtin::array_new<ref "core:prelude/types.wado//Option<i32>">(2), used: 0 };
         "core:prelude/list.wado/List<core:prelude/types.wado/Option<i32>>::push"(items, first_elem);
         block {
-            l802: loop {
+            l804: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/types.wado/Option<i32>>"(seq);
                 next_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/types.wado/Option<i32>>,core:serde/DeserializeError>::Ok"(__match_scrut_5)) -> ref null "core:prelude/types.wado//Option<i32>" {
@@ -8279,7 +8292,7 @@ fn "core:serde/List<core:prelude/types.wado/Option<i32>>^Deserialize::deserializ
                     }
                     return struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<core:prelude/types.wado/Option<i32>>,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: items };
                 }
-                continue l802;
+                continue l804;
             };
         };
     } else {
@@ -8395,8 +8408,8 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
     repr = self.repr;
     end = self.used;
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<i32>" { repr: repr, index: 0, end: end };
-    b814: block {
-        l815: loop {
+    b816: block {
+        l817: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<i32>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -8408,9 +8421,9 @@ fn "core:serde/List<i32>^Serialize::serialize<core:json/JsonSerializer>"(self, s
                     return __qm_e_8;
                 }
             } else {
-                break b814;
+                break b816;
             }
-            continue l815;
+            continue l817;
         };
     };
     return "core:prelude/string.wado/String::push"(seq.buf, 93), ref.null none;
@@ -8455,8 +8468,8 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Config^Deseri
         __local_2 = ref.cast "core:prelude/types.wado//Result<core:json/JsonStructAccess,core:serde/DeserializeError>::Ok"(__result).payload_0;
         __local_4 = 0;
         __local_3 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-        b820: block {
-            l821: loop {
+        b822: block {
+            l823: loop {
                 let __sroa___local_5_5_discriminant: i32;
                 let __sroa___local_5_5_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_5_5_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -8486,12 +8499,12 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Config^Deseri
                             }
                         }
                     } else {
-                        break b820;
+                        break b822;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Config,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_5_5_case1_payload_0) };
                 }
-                continue l821;
+                continue l823;
             };
         };
         if __local_4 == 0 {
@@ -8882,7 +8895,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Deserialize::d
     }));
     __b = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
     block {
-        l885: loop {
+        l887: loop {
             let __match_scrut_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
             __match_scrut_2 = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(map);
             key_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_2)) -> ref null "core:prelude/string.wado//String" {
@@ -8916,7 +8929,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Deserialize::d
                 }
                 return struct.new "core:prelude/types.wado//Result<core:collections/TreeMap<core:prelude/string.wado/String,i32>,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: __b };
             }
-            continue l885;
+            continue l887;
         };
     };
     "core:internal/unreachable"();
@@ -8957,8 +8970,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::entries"(self
     repr = self.entries.repr;
     end = self.entries.used;
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>" { repr: repr, index: 0, end: end };
-    b891: block {
-        l892: loop {
+    b893: block {
+        l894: loop {
             __match_5 = "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>^Iterator::next"(__iter_3);
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
@@ -8966,9 +8979,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>::entries"(self
                     "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>::push"(__b, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: entry.key, 1: entry.value });
                 }
             } else {
-                break b891;
+                break b893;
             }
-            continue l892;
+            continue l894;
         };
     };
     return __b;
@@ -9123,7 +9136,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     }));
     __b = "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::new"();
     block {
-        l909: loop {
+        l911: loop {
             let __match_scrut_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
             __match_scrut_2 = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(map);
             key_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_2)) -> ref null "core:prelude/string.wado//String" {
@@ -9158,7 +9171,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
                 }
                 return struct.new "core:prelude/types.wado//Result<core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: __b };
             }
-            continue l909;
+            continue l911;
         };
     };
     "core:internal/unreachable"();
@@ -9213,8 +9226,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
     repr = self.entries.repr;
     end = self.entries.used;
     __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>" { repr: repr, index: 0, end: end };
-    b916: block {
-        l917: loop {
+    b918: block {
+        l919: loop {
             __match_5 = "core:prelude/slice.wado/ArrayIter<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>^Iterator::next"(__iter_3);
             if ref.is_null(__match_5) == 0 {
                 entry = ref.as_non_null(__match_5);
@@ -9222,9 +9235,9 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string
                     "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(__b, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: entry.key, 1: entry.value });
                 }
             } else {
-                break b916;
+                break b918;
             }
-            continue l917;
+            continue l919;
         };
     };
     return __b;
@@ -9484,7 +9497,7 @@ fn "core:serde/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wa
         items = struct.new "core:prelude//List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>" { repr: builtin::array_new<ref "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner">(2), used: 0 };
         "core:prelude/list.wado/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>::push"(items, first_elem);
         block {
-            l946: loop {
+            l948: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>"(seq);
                 next_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>,core:serde/DeserializeError>::Ok"(__match_scrut_5)) -> ref null "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado//Inner" {
@@ -9508,7 +9521,7 @@ fn "core:serde/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wa
                     }
                     return struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner>,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: items };
                 }
-                continue l946;
+                continue l948;
             };
         };
     } else {
@@ -9592,8 +9605,8 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Outer^Deseria
         __local_6 = 0;
         __local_3 = ref.null none;
         __local_4 = 0;
-        b955: block {
-            l956: loop {
+        b957: block {
+            l958: loop {
                 let __sroa___local_7_discriminant: i32;
                 let __sroa___local_7_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_7_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -9633,12 +9646,12 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Outer^Deseria
                             }
                         }
                     } else {
-                        break b955;
+                        break b957;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Outer,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_7_case1_payload_0) };
                 }
-                continue l956;
+                continue l958;
             };
         };
         if __local_5_5 == 0 {
@@ -9737,8 +9750,8 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/FullStruct^De
         __local_7 = __b;
         __local_8 = ref.null none;
         __local_9 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
-        b970: block {
-            l971: loop {
+        b972: block {
+            l973: loop {
                 let __sroa___local_17_discriminant: i32;
                 let __sroa___local_17_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_17_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -9835,12 +9848,12 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/FullStruct^De
                             }
                         }
                     } else {
-                        break b970;
+                        break b972;
                     }
                 } else {
                     return struct.new "core:prelude/types.wado//Result<wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/FullStruct,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null(__sroa___local_17_case1_payload_0) };
                 }
-                continue l971;
+                continue l973;
             };
         };
         if __local_10 == 0 {
@@ -10037,8 +10050,8 @@ fn "core:serde/List<core:prelude/string.wado/String>^Serialize::serialize<core:j
     repr = self.repr;
     end = self.used;
     __iter_5 = struct.new "core:prelude/slice.wado//ArrayRefIter<core:prelude/string.wado/String>" { repr: repr, index: 0, end: end };
-    b1007: block {
-        l1008: loop {
+    b1009: block {
+        l1010: loop {
             __match_9 = "core:prelude/slice.wado/ArrayRefIter<core:prelude/string.wado/String>^Iterator::next"(__iter_5);
             if ref.is_null(__match_9) == 0 {
                 item = ref.as_non_null(__match_9);
@@ -10050,9 +10063,9 @@ fn "core:serde/List<core:prelude/string.wado/String>^Serialize::serialize<core:j
                     return __qm_e_8;
                 }
             } else {
-                break b1007;
+                break b1009;
             }
-            continue l1008;
+            continue l1010;
         };
     };
     return "core:prelude/string.wado/String::push"(seq.buf, 93), ref.null none;
@@ -10122,25 +10135,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_32 = _licm_input_29.repr;
     _licm_arith_33 = _licm_end_30 - _licm_start_31;
     __hfs_pos_34 = _licm_de_28.pos;
-    b1017: block {
-        l1018: loop {
+    b1019: block {
+        l1020: loop {
             if __hfs_pos_34 >= _licm_arith_33 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1017;
+                break b1019;
             }
             index_27 = __hfs_pos_34;
             b_4 = builtin::array_get<u8>(_licm_repr_32, _licm_start_31 + index_27);
             if b_4 == 34 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1017;
+                break b1019;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1017;
+                break b1019;
             }
             __hfs_pos_34 = __hfs_pos_34 + 1;
-            continue l1018;
+            continue l1020;
         };
     };
     if @likely(has_escape == 0) {
@@ -10253,25 +10266,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_32 = _licm_input_29.repr;
     _licm_arith_33 = _licm_end_30 - _licm_start_31;
     __hfs_pos_34 = _licm_de_28.pos;
-    b1034: block {
-        l1035: loop {
+    b1036: block {
+        l1037: loop {
             if __hfs_pos_34 >= _licm_arith_33 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1034;
+                break b1036;
             }
             index_27 = __hfs_pos_34;
             b_4 = builtin::array_get<u8>(_licm_repr_32, _licm_start_31 + index_27);
             if b_4 == 34 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1034;
+                break b1036;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1034;
+                break b1036;
             }
             __hfs_pos_34 = __hfs_pos_34 + 1;
-            continue l1035;
+            continue l1037;
         };
     };
     if @likely(has_escape == 0) {
@@ -10902,25 +10915,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_32 = _licm_input_29.repr;
     _licm_arith_33 = _licm_end_30 - _licm_start_31;
     __hfs_pos_34 = _licm_de_28.pos;
-    b1105: block {
-        l1106: loop {
+    b1107: block {
+        l1108: loop {
             if __hfs_pos_34 >= _licm_arith_33 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1105;
+                break b1107;
             }
             index_27 = __hfs_pos_34;
             b_4 = builtin::array_get<u8>(_licm_repr_32, _licm_start_31 + index_27);
             if b_4 == 34 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1105;
+                break b1107;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1105;
+                break b1107;
             }
             __hfs_pos_34 = __hfs_pos_34 + 1;
-            continue l1106;
+            continue l1108;
         };
     };
     if @likely(has_escape == 0) {
@@ -11046,7 +11059,7 @@ fn "core:serde/List<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d
         items = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(2), used: 0 };
         "core:prelude/list.wado/List<i32>::push"(items, first_elem);
         block {
-            l1123: loop {
+            l1125: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<i32>"(seq);
                 next_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,core:serde/DeserializeError>::Ok"(__match_scrut_5)) -> ref "core:prelude/types.wado//Option<i32>" {
@@ -11070,7 +11083,7 @@ fn "core:serde/List<i32>^Deserialize::deserialize<core:json/JsonDeserializer>"(d
                     }
                     return struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: items };
                 }
-                continue l1123;
+                continue l1125;
             };
         };
     } else {
@@ -11190,7 +11203,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Deserialize::d
     }));
     __b = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
     block {
-        l1141: loop {
+        l1143: loop {
             let __match_scrut_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
             __match_scrut_2 = "core:json/JsonMapAccess^DeserializeMap::next_key_string"(map);
             key_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_2)) -> ref null "core:prelude/string.wado//String" {
@@ -11224,7 +11237,7 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,i32>^Deserialize::d
                 }
                 return 0, __b, ref.null none;
             }
-            continue l1141;
+            continue l1143;
         };
     };
     "core:internal/unreachable"();
@@ -11301,8 +11314,8 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner^Deseria
         __local_6 = 0;
         __local_3 = 0;
         __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-        b1148: block {
-            l1149: loop {
+        b1150: block {
+            l1151: loop {
                 let __sroa___local_7_discriminant: i32;
                 let __sroa___local_7_case0_payload_0: ref null "core:prelude/types.wado//Option<i32>";
                 let __sroa___local_7_case1_payload_0: ref null "core:serde//DeserializeError";
@@ -11340,12 +11353,12 @@ fn "wado-compiler/tests/fixtures/serde_json_roundtrip_complex.wado/Inner^Deseria
                             }
                         }
                     } else {
-                        break b1148;
+                        break b1150;
                     }
                 } else {
                     return 1, ref.null none, ref.as_non_null(__sroa___local_7_case1_payload_0);
                 }
-                continue l1149;
+                continue l1151;
             };
         };
         if __local_5_5 == 0 {
@@ -11418,7 +11431,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<&m
         items = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(2), used: 0 };
         "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(items, first_elem);
         block {
-            l1165: loop {
+            l1167: loop {
                 let __match_scrut_5: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>";
                 __match_scrut_5 = "core:json/JsonSeqAccess^DeserializeSeq::next_element<core:prelude/string.wado/String>"(seq);
                 next_opt = (if @likely(ref.test "core:prelude/types.wado//Result<core:prelude/types.wado/Option<core:prelude/string.wado/String>,core:serde/DeserializeError>::Ok"(__match_scrut_5)) -> ref null "core:prelude/string.wado//String" {
@@ -11442,7 +11455,7 @@ fn "core:serde/List<core:prelude/string.wado/String>^Deserialize::deserialize<&m
                     }
                     return 0, items, ref.null none;
                 }
-                continue l1165;
+                continue l1167;
             };
         };
     } else {
@@ -11643,25 +11656,25 @@ fn "core:json/JsonStructAccess^DeserializeStruct::next_field<wado-compiler/tests
     _licm_repr_32 = _licm_input_29.repr;
     _licm_arith_33 = _licm_end_30 - _licm_start_31;
     __hfs_pos_34 = _licm_de_28.pos;
-    b1189: block {
-        l1190: loop {
+    b1191: block {
+        l1192: loop {
             if __hfs_pos_34 >= _licm_arith_33 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1189;
+                break b1191;
             }
             index_27 = __hfs_pos_34;
             b_4 = builtin::array_get<u8>(_licm_repr_32, _licm_start_31 + index_27);
             if b_4 == 34 {
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1189;
+                break b1191;
             }
             if b_4 == 92 {
                 has_escape = 1;
                 _licm_de_28.pos = __hfs_pos_34;
-                break b1189;
+                break b1191;
             }
             __hfs_pos_34 = __hfs_pos_34 + 1;
-            continue l1190;
+            continue l1192;
         };
     };
     if @likely(has_escape == 0) {

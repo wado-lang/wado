@@ -16,8 +16,8 @@ use {
     RepeatElement,
     LabelElement,
 } from "./ir.wado";
-use { escape_char, literal_const_name, gen_visibility_comment } from "./gen_util.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec } from "./wadopoet.wado";
+use { literal_const_name, gen_visibility_comment } from "./gen_util.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, char_lit } from "./wadopoet.wado";
 use { TreeMap } from "core:collections";
 
 pub struct LitToken {
@@ -742,7 +742,7 @@ fn gen_lexer_elem(w: &mut CodeWriter, elem: &LexerElement, all_rules: &List<Lexe
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    &`if pos >= chars.len() || !({escape_char(pair.0)} <= chars[pos] <= {escape_char(pair.1)}) \{ {fail_action}; \}`,
+                    &`if pos >= chars.len() || !({char_lit(pair.0)} <= chars[pos] <= {char_lit(pair.1)}) \{ {fail_action}; \}`,
                 );
                 w.line(&"pos += 1;");
             }
@@ -826,9 +826,9 @@ fn char_class_disjunction(cc: &CharClass) -> String {
         }
         first = false;
         if range.start == range.end {
-            s.push_str(&`chars[pos] == {escape_char(range.start)}`);
+            s.push_str(&`chars[pos] == {char_lit(range.start)}`);
         } else {
-            s.push_str(&`{escape_char(range.start)} <= chars[pos] <= {escape_char(range.end)}`);
+            s.push_str(&`{char_lit(range.start)} <= chars[pos] <= {char_lit(range.end)}`);
         }
     }
     return s;
@@ -1338,18 +1338,18 @@ fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `{access}.eq_ignore_ascii_case(&{escape_char(lower)})`;
+        return `{access}.eq_ignore_ascii_case(&{char_lit(lower)})`;
     }
-    return `{access} == {escape_char(c)}`;
+    return `{access} == {char_lit(c)}`;
 }
 
 fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `!{access}.eq_ignore_ascii_case(&{escape_char(lower)})`;
+        return `!{access}.eq_ignore_ascii_case(&{char_lit(lower)})`;
     }
-    return `{access} != {escape_char(c)}`;
+    return `{access} != {char_lit(c)}`;
 }
 
 fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
@@ -1361,9 +1361,9 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo) {
         }
         let lower = kw_chars[kc];
         if kw.char_ci[kc] {
-            w.write(&`chars[start + {kc}].eq_ignore_ascii_case(&{escape_char(lower)})`);
+            w.write(&`chars[start + {kc}].eq_ignore_ascii_case(&{char_lit(lower)})`);
         } else {
-            w.write(&`chars[start + {kc}] == {escape_char(lower)}`);
+            w.write(&`chars[start + {kc}] == {char_lit(lower)}`);
         }
     }
     w.write(&` \{ return TK_{kw.rule_name}; \}\n`);
@@ -1715,13 +1715,13 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         for let g of &mut groups {
             if arrays_equal(&g.calls, &matching) {
                 // Add char to existing group's guard
-                g.guard.push_str(&` || first_char == {escape_char(*c)}`);
+                g.guard.push_str(&` || first_char == {char_lit(*c)}`);
                 merged = true;
             }
         }
         if !merged {
             groups.push(DispatchGroup {
-                guard: `first_char == {escape_char(*c)}`,
+                guard: `first_char == {char_lit(*c)}`,
                 calls: matching,
             });
         }
@@ -1758,7 +1758,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         for let r of &calls[i].first_chars {
             if r[0] != r[1] {
                 // Build range guard
-                let guard = `{escape_char(r[0])} <= first_char <= {escape_char(r[1])}`;
+                let guard = `{char_lit(r[0])} <= first_char <= {char_lit(r[1])}`;
                 // Find or create group
                 let mut found_group = false;
                 for let g of &mut groups {

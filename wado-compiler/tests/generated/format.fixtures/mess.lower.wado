@@ -18082,8 +18082,8 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
     __for_of_5: {
         let mut __iter_5: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __match_7: Option<char> = __iter_5."StrCharIter^Iterator::next"();
-            match __match_7 {
+            let __match_10: Option<char> = __iter_5."StrCharIter^Iterator::next"();
+            match __match_10 {
                 Some(c) => {
                     if ((limit >= 0) && (count >= limit)) {
                         truncated = true;
@@ -18109,7 +18109,19 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                                         f.Formatter::write_char('\\');
                                         f.Formatter::write_char('t');
                                     } else {
-                                        f.Formatter::write_char(c);
+                                        let code: i32 = c as i32;
+                                        if ((code < 0x20) || (code == 0x7f)) {
+                                            f.Formatter::write_str(&"\\u{");
+                                            f.Formatter::write_str(&__tmpl: {
+                                                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(16);
+                                                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                                                Box<i32> { value: code }."i32^LowerHex::fmt"(&mut __f);
+                                                break __tmpl: __r;
+                                            });
+                                            f.Formatter::write_char('}');
+                                        } else {
+                                            f.Formatter::write_char(c);
+                                        }
                                     }
                                 }
                             }
