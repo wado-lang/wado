@@ -517,31 +517,28 @@ fn reseed_invariant_fields(engine: &mut Engine) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Loop-stable operand re-seed
-//
-// The guard / check matching reads the live (build-once, maintained) value
-// graph. Across `licm`'s structural edits the maintenance drops the leaf value
-// of every read of a reassigned local (`drop_local_readers`): the induction
-// variable (`i = i + 1`) and the hoisted bound (`let _licm_used = arr.used`)
-// both go value-less, so no comparison resolves. A fresh build would value
-// them — but rebuilding violates build-once.
-//
-// Restore them incrementally: a local whose value is constant across the reads
-// being matched (a *loop-stable* local — never reassigned in the body except as
-// the final induction update, never `&mut`-escaped) holds one value at every
-// such read. Re-seed each dropped read of such a local with a single stable
-// identity (`canonical_local`), so the guard's and the check's copies share a
-// `ValueId`. A field copy (`let L = src.field`) is re-seeded to the source
-// field's identity instead, so two copies of the same `src.field` hoisted in
-// different fixed-point iterations still match.
-//
-// Sound by construction: a re-seed only adds an equality the reads already
-// satisfy (refines a fresh build — `WADO_VERIFY_VG` is the oracle); a
-// reassigned / `&mut`-escaped local is excluded, so a guard variable or bound
-// the program actually mutates between guard and check is never merged.
-// ---------------------------------------------------------------------------
-
+/// Loop-stable operand re-seed.
+///
+/// The guard / check matching reads the live (build-once, maintained) value
+/// graph. Across `licm`'s structural edits the maintenance drops the leaf value
+/// of every read of a reassigned local (`drop_local_readers`): the induction
+/// variable (`i = i + 1`) and the hoisted bound (`let _licm_used = arr.used`)
+/// both go value-less, so no comparison resolves. A fresh build would value
+/// them — but rebuilding violates build-once.
+///
+/// Restore them incrementally: a local whose value is constant across the reads
+/// being matched (a *loop-stable* local — never reassigned in the body except as
+/// the final induction update, never `&mut`-escaped) holds one value at every
+/// such read. Re-seed each dropped read of such a local with a single stable
+/// identity (`canonical_local`), so the guard's and the check's copies share a
+/// `ValueId`. A field copy (`let L = src.field`) is re-seeded to the source
+/// field's identity instead, so two copies of the same `src.field` hoisted in
+/// different fixed-point iterations still match.
+///
+/// Sound by construction: a re-seed only adds an equality the reads already
+/// satisfy (refines a fresh build — `WADO_VERIFY_VG` is the oracle); a
+/// reassigned / `&mut`-escaped local is excluded, so a guard variable or bound
+/// the program actually mutates between guard and check is never merged.
 fn reseed_loop_stable_operands(engine: &mut Engine) {
     // Unbuilt graph: the upcoming first query builds it fresh (already correct);
     // only a present, maintenance-degraded graph needs the re-seed.
@@ -603,17 +600,28 @@ struct ReseedMaps {
     /// source's classification, so the guard's bound and the check's copy of it
     /// share one identity. Followed transitively by [`reseed_root`].
     copy_lets: IndexMap<u32, u32>,
+    /// Locals that are the bare-`Local` target of an `Assign` (`recv = other`)
+    /// somewhere in the body — i.e. rebound after their `let`. A
+    /// `construction_field_value` receiver in this set has a stale construction
+    /// value. (A `&mut`-escape is *not* a rebind: element/field mutation through
+    /// `&mut arr` leaves `arr.used` intact, so it stays eligible and is gated
+    /// separately by `mut_escaped` for callee field-writes.)
+    rebound: IndexSet<u32>,
 }
 
 fn build_reseed_maps(body: &Body) -> ReseedMaps {
     // Reassigned / `&mut`-escaped locals are excluded: a copy classification is
     // only valid for a single-assignment binding.
     let mut reassigned: IndexSet<u32> = IndexSet::default();
+    // Rebinds only (`L = other`), the subset that staleness-checks a
+    // construction value — kept apart from the `&mut`-escapes below.
+    let mut rebound: IndexSet<u32> = IndexSet::default();
     for (_, enode) in body.exprs.iter() {
         match &enode.kind {
             ExprKind::Assign { target, .. } => {
                 if let ExprKind::Local { index, .. } = body.exprs[*target].kind {
                     reassigned.insert(index);
+                    rebound.insert(index);
                 }
             }
             ExprKind::Unary {
@@ -678,30 +686,29 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
         field_copies,
         derived_lets,
         copy_lets,
+        rebound,
     }
 }
 
 /// The value `recv.field` was constructed with: the operand of `field` in the
-/// `let recv = … S { field: V … }` that defines `recv` (peering through block /
-/// labeled-block tails to the producing struct literal, as the builder's
-/// `seed_struct_literal_fields` does). Recovers the concrete value a hoisted
+/// `let recv = … S { field: V … }` that defines `recv` (peering through `Block`
+/// tails to the producing struct literal, like the builder's
+/// `seed_struct_literal_fields`). Recovers the concrete value a hoisted
 /// loop-invariant field copy lost — e.g. `List::filled(n)` constructs
 /// `used: n`, so a `_licm_used = arr.used` check bound resolves to `n` and a
 /// `i <= limit` / `arr.used == limit + 1` bounds check decomposes and folds.
 ///
-/// Gated on `recv` not being `mut_escaped`: a callee (or a `&mut` method like
-/// `pop()`) that may rewrite the field makes the construction value stale, so
-/// such a receiver falls back to the opaque field identity (no elimination).
-fn construction_field_value(engine: &mut Engine, recv: u32, field: u32) -> Option<ValueId> {
-    if engine.mut_escaped().contains(&recv) {
-        return None;
-    }
-    // A rebind (`recv = other`) after the defining `let` makes the construction
-    // value stale; the `mut_escaped` gate only covers callee field-writes.
-    if engine.body.exprs.values().any(|n| {
-        matches!(&n.kind, ExprKind::Assign { target, .. }
-            if matches!(engine.body.exprs[*target].kind, ExprKind::Local { index, .. } if index == recv))
-    }) {
+/// Gated on `recv` being neither `mut_escaped` (a callee / `&mut` method like
+/// `pop()` may rewrite the field) nor `rebound` (`recv = other` after the `let`
+/// makes the construction value stale); either falls back to the opaque field
+/// identity (no elimination).
+fn construction_field_value(
+    engine: &mut Engine,
+    recv: u32,
+    field: u32,
+    rebound: &IndexSet<u32>,
+) -> Option<ValueId> {
+    if engine.mut_escaped().contains(&recv) || rebound.contains(&recv) {
         return None;
     }
     let def = engine.local_def(recv)?;
@@ -816,7 +823,7 @@ fn reseed_loop(
                 if let Some(&v) = recv_values.get(&(recv.clone(), *field)) {
                     v
                 } else if let RecvKey::Local(src) = recv
-                    && let Some(cv) = construction_field_value(engine, *src, *field)
+                    && let Some(cv) = construction_field_value(engine, *src, *field, &maps.rebound)
                 {
                     // The field's construction value (`filled(n)` → `used: n`):
                     // a concrete value the bounds check can decompose, where the

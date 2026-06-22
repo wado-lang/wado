@@ -389,17 +389,14 @@ impl<'a> Engine<'a> {
         // non-escaping, so the real sets leave it untouched by calls — exactly
         // the forwarding we need to recover. (`pure_calls` is left empty here:
         // bumping at every call is conservative — it only forgoes a forward.)
-        let aliased = self.aliased_locals.clone();
-        let untrackable = self.untrackable_locals.clone();
-        let mut_escaped = self.mut_escaped_locals.clone();
         let vo = builder::build_scoped(
             self.body,
             root,
             0,
             &empty,
-            &aliased,
-            &untrackable,
-            &mut_escaped,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
             self.vg_type_table,
             &mut scratch,
             None,
