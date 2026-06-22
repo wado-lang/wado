@@ -991,7 +991,7 @@ impl crate::tir_visitor::TirMutVisitor for RemapLocals<'_> {
             TirExprKind::Local { index, .. } => {
                 *index = self.map(*index);
             }
-            TirExprKind::Closure { .. } => return,
+            TirExprKind::Closure { .. } => (),
             _ => self.walk_expr(expr),
         }
     }
@@ -999,7 +999,7 @@ impl crate::tir_visitor::TirMutVisitor for RemapLocals<'_> {
         match &mut stmt.kind {
             TirStmtKind::Let { local_index, .. } => *local_index = self.map(*local_index),
             TirStmtKind::VariadicForOf { binding_local, .. } => {
-                *binding_local = self.map(*binding_local)
+                *binding_local = self.map(*binding_local);
             }
             _ => {}
         }
