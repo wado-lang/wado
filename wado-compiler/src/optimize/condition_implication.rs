@@ -681,6 +681,58 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
     }
 }
 
+/// The value `recv.field` was constructed with: the operand of `field` in the
+/// `let recv = … S { field: V … }` that defines `recv` (peering through block /
+/// labeled-block tails to the producing struct literal, as the builder's
+/// `seed_struct_literal_fields` does). Recovers the concrete value a hoisted
+/// loop-invariant field copy lost — e.g. `List::filled(n)` constructs
+/// `used: n`, so a `_licm_used = arr.used` check bound resolves to `n` and a
+/// `i <= limit` / `arr.used == limit + 1` bounds check decomposes and folds.
+///
+/// Gated on `recv` not being `mut_escaped`: a callee (or a `&mut` method like
+/// `pop()`) that may rewrite the field makes the construction value stale, so
+/// such a receiver falls back to the opaque field identity (no elimination).
+fn construction_field_value(engine: &mut Engine, recv: u32, field: u32) -> Option<ValueId> {
+    if engine.mut_escaped().contains(&recv) {
+        return None;
+    }
+    // A rebind (`recv = other`) after the defining `let` makes the construction
+    // value stale; the `mut_escaped` gate only covers callee field-writes.
+    if engine.body.exprs.values().any(|n| {
+        matches!(&n.kind, ExprKind::Assign { target, .. }
+            if matches!(engine.body.exprs[*target].kind, ExprKind::Local { index, .. } if index == recv))
+    }) {
+        return None;
+    }
+    let def = engine.local_def(recv)?;
+    let StmtKind::Let {
+        value: Operand::Expr(v),
+        ..
+    } = &engine.body.stmts[def].kind
+    else {
+        return None;
+    };
+    let mut producer = *v;
+    loop {
+        match &engine.body.exprs[producer].kind {
+            ExprKind::StructLiteral { .. } => break,
+            ExprKind::Block(b) => {
+                let last = *engine.body.blocks[*b].stmts.last()?;
+                let StmtKind::Expr(Operand::Expr(tail)) = &engine.body.stmts[last].kind else {
+                    return None;
+                };
+                producer = *tail;
+            }
+            _ => return None,
+        }
+    }
+    let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[producer].kind else {
+        return None;
+    };
+    let field_value = fields.iter().find(|f| f.field_index == field)?.value;
+    engine.operand_value(field_value)
+}
+
 /// Follow a `let L = M` copy chain to its non-copy root (cycle-guarded).
 fn reseed_root(local: u32, copy_lets: &IndexMap<u32, u32>) -> u32 {
     let mut cur = local;
@@ -763,6 +815,13 @@ fn reseed_loop(
                 // copy was dropped.
                 if let Some(&v) = recv_values.get(&(recv.clone(), *field)) {
                     v
+                } else if let RecvKey::Local(src) = recv
+                    && let Some(cv) = construction_field_value(engine, *src, *field)
+                {
+                    // The field's construction value (`filled(n)` → `used: n`):
+                    // a concrete value the bounds check can decompose, where the
+                    // opaque field identity below only proves consistency.
+                    cv
                 } else {
                     let recv_val = match recv {
                         RecvKey::Local(src) => engine.body.values.canonical_local(*src, *recv_ty),
@@ -777,7 +836,11 @@ fn reseed_loop(
                     fv
                 }
             }
-            None => engine.body.values.canonical_local(root, ty),
+            None => engine
+                .body
+                .values
+                .existing_local_opaque(root)
+                .unwrap_or_else(|| engine.body.values.canonical_local(root, ty)),
         };
         engine.set_value(read, value);
     }

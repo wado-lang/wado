@@ -59,8 +59,20 @@ loop-scoped re-seed).
 Two more — `store_to_load_forwarding`, `field_forward_snapshot_after_mutation` —
 are now green via the post-SROA bare-scalar grow (below), and
 `bug_store_load_forward_mut_method_receiver` (a P0 miscompile, O0 + O2) via
-`&mut self`-receiver mutation modelling (below), taking the default `-O2` e2e to
-4 failing.
+`&mut self`-receiver mutation modelling (below). The construction-tracking pair
+`array_bounds_elim_le_guard_wir` and `optimize_bitmask_bce` then greened too
+(below), taking the default `-O2` e2e to **2 failing**
+(`opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`).
+
+Construction tracking (resolved): a hoisted loop-invariant field copy
+`let _licm_used = arr.used` lost the value `arr` was built with, so the BCE saw
+an opaque bound that would not decompose. `construction_field_value` recovers it
+from the defining `let arr = … List { used: V }` (`List::filled(n)` constructs
+`used: n`), and the loop leaf re-seed now prefers the build's existing param
+opaque (`existing_local_opaque`) so the guard's `limit` and the construction's
+`limit` unify — then `i <= limit` ⟹ `i < limit + 1 == arr.used` folds. Gated on
+the receiver being neither `mut_escaped` nor reassigned, so a `pop()`-shrunk or
+rebound bound falls back to the opaque identity (oob 14/14 still green).
 
 The remaining failures still need the **forwarded store value itself**, which the
 re-seed cannot supply. The re-seed restores _consistency_ — it gives the guard's
@@ -73,8 +85,9 @@ local's / stored field's value), different requirement — a store-value
 preservation, owned by the maintenance / store-load-forward passes:
 
 - **Construction tracking** — `array_bounds_elim_le_guard_wir`,
-  `optimize_bitmask_bce`: need `arr.used == N` from `List::filled(N)`'s inlined
-  `result.used = N` store, dropped from the maintained graph.
+  `optimize_bitmask_bce`: **resolved** (`construction_field_value` +
+  `existing_local_opaque` leaf re-seed, see above). Recovers `arr.used == N` from
+  `List::filled(N)`'s `used: N` construction for the hoisted bound copy.
 - **Store-to-load forwarding** — `store_to_load_forwarding`,
   `field_forward_snapshot_after_mutation`: **resolved** (`Engine::grow_bare_local_constants`).
   The real root cause was not `drop_local_readers` but that the build-once graph
