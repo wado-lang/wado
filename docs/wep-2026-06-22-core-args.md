@@ -152,9 +152,21 @@ alongside a subcommand `variant` is rejected (ambiguous boundary).
 
 ### Help, Version, Errors
 
-- [ ] `--help` walks the schema, drawing text from doc comments and rendering
-      each field's default inline. Worth its size: the line between a usable tool
-      and a hand-written help string.
+`core:args` uses two compile-time paths over the argument type: `Deserialize`
+for parsing, and **static reflection** for help. Parsing alone cannot render
+help — the synthesized `Deserialize` only fills values; it exposes no doc
+comments or default values. `--help` walks the type's reflected metadata
+(field name, `-`/`_`-folded option name, doc comment, required-ness, and the
+default's display string) and the `variant` cases (for subcommand help).
+
+- [ ] `--help` walks the reflected schema, drawing text from doc comments and
+      rendering each field's default inline (`--port <n>  (default: 8080)`).
+      Depends on static reflection exposing a per-field `default_display:
+      Option<String>` — the default value rendered via the field type's
+      `Display`. Defaults are pure and compile-time-known, so this is a compile
+      -time constant (no runtime reflection); `has_default` alone
+      ([reflect-derivation](./wep-2026-06-13-reflect-derivation.md)) gives
+      presence but not the value. The whole help text can be a `const`.
 - [ ] `--version` prints the package version.
 
 ```wado
