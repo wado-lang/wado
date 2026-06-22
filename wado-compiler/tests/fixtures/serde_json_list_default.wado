@@ -1,0 +1,37 @@
+// Regression: a struct field whose default is a list/sequence literal desugars
+// to a `SequenceLiteralBuilder` block with its own locals. The synthesized
+// Deserialize must relocate those locals so they don't alias the deserialize
+// function's params/locals (else codegen produced an invalid core Wasm module).
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+
+struct S {
+    tags: List<i32> = [1, 2],
+    name: String = "x",
+}
+impl Deserialize for S;
+
+test "missing list/string defaults materialize" {
+    let r = from_string::<S>(`\{\}`);
+    if let Ok(s) = r {
+        assert s.tags.len() == 2;
+        assert s.tags[0] == 1;
+        assert s.tags[1] == 2;
+        assert s.name == "x";
+    } else {
+        panic("deserialize with list default failed");
+    }
+}
+
+test "present value overrides list default" {
+    let r = from_string::<S>(`\{"tags":[9]\}`);
+    if let Ok(s) = r {
+        assert s.tags.len() == 1;
+        assert s.tags[0] == 9;
+    } else {
+        panic("deserialize override failed");
+    }
+}
+
+__DATA__
+{"test": {}}

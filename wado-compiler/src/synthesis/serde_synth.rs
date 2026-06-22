@@ -322,9 +322,9 @@ impl SerdeStdlibNames {
 }
 
 use super::common::{
-    alloc_local, assign, block, break_stmt, cast, deref_expr, expr_stmt, field_access, i32_const,
-    if_stmt, let_mut_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, param_local,
-    ref_expr, return_stmt, string_lit, synth_span,
+    alloc_local, alloc_named_local, assign, block, break_stmt, cast, deref_expr, expr_stmt,
+    field_access, i32_const, if_stmt, let_mut_stmt, local_ref, loop_stmt, null_expr, option_none,
+    option_some, param_local, ref_expr, return_stmt, string_lit, synth_span,
 };
 
 /// Wire-form name for a struct field.
@@ -913,6 +913,106 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
     )
 }
 
+/// Relocate the locals introduced by a struct field's default expression so
+/// they do not collide with the synthesised deserialize function's own locals.
+///
+/// A default expression is reified in the struct's own context (a fresh
+/// `FunctionContext` numbered from 0), so e.g. a `List` literal desugars to a
+/// `SequenceLiteralBuilder` block whose `__b` local takes index 0 — which
+/// aliases the deserialize function's `d` parameter. When that default is
+/// embedded as a field-local initializer, the aliasing produces a core-Wasm
+/// type mismatch. Re-allocate each `Let`-bound local with a fresh index (via
+/// `alloc_named_local`, keeping `next_local`/`locals` in sync) and rewrite every
+/// reference to it.
+fn relocate_default_locals(expr: &mut TirExpr, next_local: &mut u32, locals: &mut Vec<TirLocal>) {
+    use crate::tir_visitor::TirMutVisitor;
+    let mut lets: Vec<(u32, TypeId, String, bool)> = Vec::new();
+    collect_let_bindings(expr, &mut lets);
+    if lets.is_empty() {
+        return;
+    }
+    let max_old = lets.iter().map(|(i, ..)| *i).max().unwrap_or(0);
+    let mut remap: Vec<Option<u32>> = vec![None; max_old as usize + 1];
+    for (old, ty, name, is_mut) in lets {
+        let new = alloc_named_local(next_local, locals, Some(name), ty, is_mut);
+        remap[old as usize] = Some(new);
+    }
+    RemapLocals { remap: &remap }.visit_expr(expr);
+}
+
+/// Collect every `Let`-bound local in `expr` (index, type, name, mutability),
+/// not descending into nested closures (separate local scope).
+fn collect_let_bindings(expr: &TirExpr, out: &mut Vec<(u32, TypeId, String, bool)>) {
+    use crate::tir_visitor::TirRefVisitor;
+    struct Collect<'a>(&'a mut Vec<(u32, TypeId, String, bool)>);
+    impl TirRefVisitor for Collect<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if matches!(expr.kind, TirExprKind::Closure { .. }) {
+                return;
+            }
+            self.walk_expr(expr);
+        }
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if let TirStmtKind::Let {
+                local_index,
+                type_id,
+                name,
+                is_mut,
+                ..
+            } = &stmt.kind
+            {
+                self.0.push((*local_index, *type_id, name.clone(), *is_mut));
+            }
+            self.walk_stmt(stmt);
+        }
+    }
+    Collect(out).visit_expr(expr);
+}
+
+/// Rewrite local indices in place using `remap` (indexed by the old index).
+/// Indices absent from `remap` are left untouched; nested closures are skipped.
+struct RemapLocals<'a> {
+    remap: &'a [Option<u32>],
+}
+
+impl RemapLocals<'_> {
+    fn map(&self, idx: u32) -> u32 {
+        self.remap
+            .get(idx as usize)
+            .copied()
+            .flatten()
+            .unwrap_or(idx)
+    }
+}
+
+impl crate::tir_visitor::TirMutVisitor for RemapLocals<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } => {
+                *index = self.map(*index);
+            }
+            TirExprKind::Closure { .. } => return,
+            _ => self.walk_expr(expr),
+        }
+    }
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { local_index, .. } => *local_index = self.map(*local_index),
+            TirStmtKind::VariadicForOf { binding_local, .. } => {
+                *binding_local = self.map(*binding_local)
+            }
+            _ => {}
+        }
+        self.walk_stmt(stmt);
+    }
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        if let TirPattern::Binding { local_index, .. } = pattern {
+            *local_index = self.map(*local_index);
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
 fn generate_struct_serialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
@@ -1279,12 +1379,16 @@ fn generate_struct_deserialize(
             // Prefer the field's declared default expression (WEP 2026-04-11)
             // when available; fall back to `T::default()` for types with an
             // auto-derived Default impl; otherwise null.
-            let default_val = struct_def
-                .fields
-                .get(i)
-                .and_then(|f| f.default_expr.as_ref())
-                .map(|e| (**e).clone())
-                .unwrap_or_else(|| default_value_for_type(*type_id, &tt, span));
+            let default_val = match struct_def.fields.get(i).and_then(|f| f.default_expr.as_ref()) {
+                Some(e) => {
+                    let mut v = (**e).clone();
+                    // The default was reified in the struct's own context;
+                    // relocate its locals so they don't alias this function's.
+                    relocate_default_locals(&mut v, &mut next_local, &mut locals);
+                    v
+                }
+                None => default_value_for_type(*type_id, &tt, span),
+            };
             then_stmts.push(let_mut_stmt(
                 field_name,
                 field_locals[i],
