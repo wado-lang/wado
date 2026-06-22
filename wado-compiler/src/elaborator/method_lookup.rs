@@ -899,8 +899,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Search resource declarations in loaded modules for instance methods
-        // Resource methods have &self or &mut self parameter (first param is reference to resource type)
+        // Search resource declarations in instance methods. A resource
+        // receiver's `ResolvedType::Resource` / `GenericResource` always
+        // carries the resource's defining `module_source` (resolved through
+        // imports, re-export chains included), so the method is found in that
+        // module directly — no global scan. The `None`-module receivers
+        // (primitives, `Array`, `()`, tuples) are never resources, so there is
+        // no scan fallback to reach them (issue #1416).
         if let Some(ref module_source) = struct_module_source
             && let Some(module) = self.loaded_modules.get(module_source)
         {
@@ -915,25 +920,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 {
                     return Some(info);
-                }
-            }
-        }
-
-        // Also search all modules for resources if no specific module
-        if struct_module_source.is_none() {
-            for (module_source, module) in self.loaded_modules.iter() {
-                for item in &module.items {
-                    if let Item::Resource(resource) = item
-                        && resource.name == struct_name
-                        && let Some(info) = self.find_resource_method_info(
-                            resource,
-                            module_source,
-                            method_name,
-                            receiver_type_args.as_deref(),
-                        )
-                    {
-                        return Some(info);
-                    }
                 }
             }
         }
