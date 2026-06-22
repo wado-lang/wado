@@ -26,6 +26,8 @@ irreducible core: tokenize argv, pull values, honor `--`.
 
 - [Serde](./wep-2026-02-28-serde.md) — `core:args` is a `Deserializer` and uses
   its per-field positional resolution.
+- [Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md) — scalar tokens
+  are converted with `LenientFromStr`.
 
 ## Decision
 
@@ -72,6 +74,17 @@ This is the language's "has default → optional" rule extended to argv; the
 common case needs no attributes. Option names fold `-`/`_`, so `--dry-run` binds
 `dry_run` (a `core:args` normalization before `FieldSchema::lookup`; wire names
 unchanged).
+
+### Value Conversion
+
+The `ArgvDeserializer`'s scalar `deserialize_*` methods convert the token with
+[`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md), not strict `FromStr`:
+`--jobs 0x10`, `--retries 1_000`, `--verbose=1` all parse, matching CLI
+conventions. The boundary is clean — argv tokens become scalar leaves via
+`LenientFromStr`, composite structure via serde. Tokens are already
+shell-split, so no trimming; a failed conversion is `InvalidValue`. Parsing an
+`enum` from a bare value (`--color red`) needs a lenient enum derive and is
+deferred (see that WEP's future work).
 
 ### Positional Arguments
 
@@ -178,12 +191,14 @@ Unix convention).
 ### Future Extensions
 
 - [ ] Combinator layer for count flags, optional-value flags, exclusive groups.
+- [ ] `enum`-valued options (`--color red`) once a lenient enum derive lands.
 - [ ] Shell completion from the schema.
 - [ ] `core:cli` helper wiring `from_env` + error printing + exit codes.
 
 ## References
 
 - [Serde](./wep-2026-02-28-serde.md),
+  [Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md),
   [Variant Payload Design](./wep-2026-01-25-variant-payload-design.md),
   [Effect System Design](./wep-2026-01-27-effect-system-design.md)
 - [serde_args](https://docs.rs/serde_args/), [bpaf](https://docs.rs/bpaf/),
