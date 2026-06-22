@@ -434,36 +434,12 @@ impl FunctionTranslator<'_, '_> {
                 // depth, producing invalid core Wasm (issue #1418). Collapsing to
                 // one `If` keeps `result` at a single depth and also avoids the
                 // 2^N clone explosion for many guarded arms.
-                let guard_expr = self.translate_expr(*guard);
+                let guard_expr = self.translate_operand(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
-<<<<<<< HEAD
-                if pattern_is_trivially_true {
-                    // Pattern always matches — just use the guard as the sole condition.
-                    // Emit pattern bindings before the guard expression so that bound
-                    // variables (e.g., `__lit_N`) are available when evaluating the guard
-                    // (e.g., `__lit_N.eq("str")`). Since the pattern is irrefutable
-                    // (Binding/Wildcard), these bindings are safe to emit unconditionally.
-                    // We embed bindings into the condition via Seq so that the If is the
-                    // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_operand(*guard);
-                    let condition_with_bindings = if bindings.is_empty() {
-||||||| fbcdbc362
-                if pattern_is_trivially_true {
-                    // Pattern always matches — just use the guard as the sole condition.
-                    // Emit pattern bindings before the guard expression so that bound
-                    // variables (e.g., `__lit_N`) are available when evaluating the guard
-                    // (e.g., `__lit_N.eq("str")`). Since the pattern is irrefutable
-                    // (Binding/Wildcard), these bindings are safe to emit unconditionally.
-                    // We embed bindings into the condition via Seq so that the If is the
-                    // top-level instruction (required for value-producing match expressions).
-                    let guard_expr = self.translate_expr(*guard);
-                    let condition_with_bindings = if bindings.is_empty() {
-=======
                 let folded_condition = if pattern_is_trivially_true {
                     // Pattern always matches: bindings are safe to emit
                     // unconditionally, so the condition is just `bindings; guard`.
                     if bindings.is_empty() {
->>>>>>> origin/main
                         guard_expr
                     } else {
                         let mut seq = bindings.clone();
@@ -471,71 +447,6 @@ impl FunctionTranslator<'_, '_> {
                         WirInstr::Seq(seq)
                     }
                 } else {
-<<<<<<< HEAD
-                    let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_operand(*guard);
-                    // Bindings run once, before the guard, in the
-                    // `inner_then` prefix below — the guard may reference
-                    // them. The inner-if's `then_body` is the arm body
-                    // alone; re-emitting bindings inside it would produce
-                    // duplicate `_n = i; if guard { _n = i; … }` writes
-                    // that no later pass cleans up.
-                    let inner_if = WirInstr::If {
-                        condition: Box::new(guard_expr),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result.clone()]),
-                    };
-                    inner_then.push(inner_if);
-                    // Outer if: check pattern condition
-                    result = WirInstr::If {
-                        condition: Box::new(condition),
-                        result: result_wir_type.clone(),
-                        then_body: inner_then,
-                        else_body: Some(vec![result]),
-                    };
-                }
-            } else {
-                let then_body = body_instrs;
-                let else_body = Some(vec![result]);
-                result = WirInstr::If {
-                    condition: Box::new(condition),
-                    result: result_wir_type.clone(),
-                    then_body,
-                    else_body,
-||||||| fbcdbc362
-                    let mut inner_then = bindings.clone();
-                    let guard_expr = self.translate_expr(*guard);
-                    // Bindings run once, before the guard, in the
-                    // `inner_then` prefix below — the guard may reference
-                    // them. The inner-if's `then_body` is the arm body
-                    // alone; re-emitting bindings inside it would produce
-                    // duplicate `_n = i; if guard { _n = i; … }` writes
-                    // that no later pass cleans up.
-                    let inner_if = WirInstr::If {
-                        condition: Box::new(guard_expr),
-                        result: result_wir_type.clone(),
-                        then_body: vec![body.clone()],
-                        else_body: Some(vec![result.clone()]),
-                    };
-                    inner_then.push(inner_if);
-                    // Outer if: check pattern condition
-                    result = WirInstr::If {
-                        condition: Box::new(condition),
-                        result: result_wir_type.clone(),
-                        then_body: inner_then,
-                        else_body: Some(vec![result]),
-                    };
-                }
-            } else {
-                let then_body = body_instrs;
-                let else_body = Some(vec![result]);
-                result = WirInstr::If {
-                    condition: Box::new(condition),
-                    result: result_wir_type.clone(),
-                    then_body,
-                    else_body,
-=======
                     // Refutable pattern: short-circuit as
                     // `if pattern { bindings; guard } else { false }` so the
                     // bindings (e.g. `ref.cast`) run only after the pattern
@@ -548,7 +459,6 @@ impl FunctionTranslator<'_, '_> {
                         guarded_then,
                         vec![WirInstr::I32Const(0)],
                     )
->>>>>>> origin/main
                 };
                 // Bindings already ran inside the condition, so the arm body is
                 // emitted alone.
