@@ -1379,7 +1379,11 @@ fn generate_struct_deserialize(
             // Prefer the field's declared default expression (WEP 2026-04-11)
             // when available; fall back to `T::default()` for types with an
             // auto-derived Default impl; otherwise null.
-            let default_val = match struct_def.fields.get(i).and_then(|f| f.default_expr.as_ref()) {
+            let default_val = match struct_def
+                .fields
+                .get(i)
+                .and_then(|f| f.default_expr.as_ref())
+            {
                 Some(e) => {
                     let mut v = (**e).clone();
                     // The default was reified in the struct's own context;
