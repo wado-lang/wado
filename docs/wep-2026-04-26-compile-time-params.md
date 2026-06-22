@@ -107,7 +107,7 @@ The defaults are strict where a mistake is likely (`unknown`, `invalid`) and len
 The flags choose _what_ a bad value means, not _when_ it is detected. The compiler applies the chosen policy at the earliest point it can know the outcome:
 
 - For the built-in parameter types (see [Supported Types](#supported-types-v1)), conversion is performed by the compiler at resolution time, so `--param-invalid` is enforced at compile time — a bad value with the default policy fails the build.
-- For user-defined types, the compiler cannot convert without evaluating user code. v1 does not support them (see [Supported Types](#supported-types-v1)); v2 introduces a `FromParam` trait and evaluates it through the wasm-CTFE backend, at which point the same policy is enforced at compile time. Until then there is no path on which a user-typed conversion runs.
+- For user-defined types, the compiler cannot convert without evaluating user code. v1 does not support them (see [Supported Types](#supported-types-v1)); v2 adopts [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) and evaluates it through the wasm-CTFE backend, at which point the same policy is enforced at compile time. Until then there is no path on which a user-typed conversion runs.
 
 This "diagnose as early as possible" rule keeps one policy meaning across both timings: the flag says how a bad value is handled; the compiler shifts the check left whenever it has enough information.
 
@@ -121,7 +121,7 @@ The `from_env` value is also a free-form string and shares the operating system'
 
 ### Conversion
 
-v1 converts override strings to the declared type entirely inside the compiler — there is no user-facing conversion trait. The accepted set is fixed (see [Supported Types](#supported-types-v1)) and may be more lenient than general string parsing (e.g. `bool` accepts `"1"` / `"0"`); leniency here does not touch `FromStr` or other parsing in user code. v2 generalizes conversion to arbitrary types by introducing a `FromParam` trait evaluated at compile time (see [Future Extensions](#future-extensions)).
+v1 converts override strings to the declared type entirely inside the compiler — there is no user-facing conversion trait. The accepted set is fixed (see [Supported Types](#supported-types-v1)) and may be more lenient than general string parsing (e.g. `bool` accepts `"1"` / `"0"`); leniency here does not touch `FromStr` or other parsing in user code. These accepted forms match the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md), the general forgiving-parse trait, so v2 — which adopts that trait and evaluates it at compile time (see [Future Extensions](#future-extensions)) — preserves v1 behavior for the built-in types.
 
 #### Trimming
 
@@ -141,7 +141,7 @@ v1 supports `#[param]` only on these built-in types. The compiler converts them 
 
 Anything else — a hex prefix on an integer, `"yes"` for `bool` — fails conversion and is handled per `--param-invalid`. The accepted set may be extended in future WEPs.
 
-A `#[param]` on any other type is a compile error in v1: `#[param] on <Type>: only built-in types are supported (planned for v2)`. The conversions above are implemented natively in the compiler. v2 lifts the restriction by introducing a `FromParam` trait and evaluating user impls at compile time through the wasm-CTFE backend (see [niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
+A `#[param]` on any other type is a compile error in v1: `#[param] on <Type>: only built-in types are supported (planned for v2)`. The conversions above are implemented natively in the compiler. v2 lifts the restriction by adopting [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) and evaluating user impls at compile time through the wasm-CTFE backend (see [niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 
 ### Resolution Timing and Optimization
 
@@ -176,7 +176,7 @@ wado compile --param-missing=error -D API_URL=… -D PORT=80 -D BUILD_ID=… app
 
 These are intentionally deferred:
 
-- User-defined parameter types and the `FromParam` trait — v1 supports only the built-in types ([Supported Types](#supported-types-v1)) and adds no conversion trait. Arbitrary types need compile-time evaluation; v2 introduces `FromParam` and evaluates it through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
+- User-defined parameter types — v1 supports only the built-in types ([Supported Types](#supported-types-v1)) and adds no conversion trait. Arbitrary types need compile-time evaluation; v2 adopts [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) and evaluates it through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 - Parameter file (`WADO_PARAM_FILE`) — keep core feature minimal; can be added once the trade-offs are concrete.
 - Per-package scoping for `-D` — the flat namespace is enough for the v1 use cases. Add a structured override key (e.g., `-D 'auth-lib:NAME=...'` keyed on `[dependencies]` import names) only if user demand emerges.
 - Per-parameter `required` — `--param-missing=error` already enforces "every parameter must be supplied" globally. A per-declaration `#[param(required)]` (and the matching initializer-less `global` syntax) is a separate, finer-grained feature; see [Future Extensions](#future-extensions).
@@ -217,7 +217,7 @@ The CLI host implements these by reading `clap` arguments and `std::env::var` re
 
 v1 adds no traits or prelude functions. The resolution pass converts override strings to the built-in types directly in Rust — the same parsing the runtime `FromStr` impls perform, plus trimming and the documented leniency. `FromStr` already exists in `core:prelude` and is unchanged.
 
-v2 introduces a `FromParam` trait (`Result`-returning, sibling to `FromStr`) and executes user impls through the wasm-CTFE backend, replacing the native built-in conversions with direct evaluation.
+v2 adopts [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) — a `Result`-returning, forgiving sibling of `FromStr` — and executes user impls through the wasm-CTFE backend, replacing the native built-in conversions with direct evaluation.
 
 ### Errors
 
@@ -261,12 +261,12 @@ For an `invalid` value sourced from `from_env`, the message names the environmen
 
 - Flat namespace pushes collision avoidance to library authors. Acceptable: the same constraint applies to OS environment variables, which library authors already deal with.
 - v1 supports only built-in parameter types. Accepted deliberately: every v1 use case (API URLs, ports, build IDs, flags) is a built-in type, and built-ins convert at compile time without compile-time function evaluation. User-defined types wait for v2's wasm-CTFE backend rather than forcing a runtime-conversion path with weaker (runtime) diagnostics.
-- v1's native conversion duplicates the parsing logic of the runtime `FromStr` impls. Accepted because it is small and avoids an interpreter; v2 removes it by introducing a `FromParam` trait and executing it directly through wasm-CTFE.
+- v1's native conversion duplicates the parsing logic of the runtime `FromStr` impls. Accepted because it is small and avoids an interpreter; v2 removes it by adopting [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) and executing it directly through wasm-CTFE.
 - `String` parameters cannot carry meaningful surrounding whitespace because trim is unconditional. Acceptable for the target use cases (API URLs, identifiers, level names).
 
 ### Future Extensions
 
-- A `FromParam` trait plus arbitrary user types, evaluated through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)) — v2's headline addition: the conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning for user types too.
+- Arbitrary user types via [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md), evaluated through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)) — v2's headline addition: the conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning for user types too.
 - Parameter file (`WADO_PARAM_FILE` or `wado.toml [params]`) once the convenience of grouping many overrides is demanded.
 - Per-package scoping for `-D` to override a specific dependency's parameter without affecting same-named parameters elsewhere.
 - Per-declaration `#[param(required)]` with initializer-less `global` syntax, for parameters that have no sensible default (finer-grained than the global `--param-missing=error`).
