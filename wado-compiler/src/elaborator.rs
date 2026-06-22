@@ -334,6 +334,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         result
     }
 
+    /// Run `body` in `module`'s perspective, but skip the swap entirely when
+    /// `module` is already the current perspective — the common case on the
+    /// method / associated-type lookup path, where the receiver's impl usually
+    /// lives in the current module. Skipping avoids the `import_scope` clone
+    /// and, unlike [`Self::with_module_perspective`], leaves the in-progress
+    /// locals in place — which a same-module lookup legitimately resolves
+    /// against.
+    pub(super) fn with_module_perspective_for<R>(
+        &mut self,
+        module: &ModuleSource,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if self.current_module_source == *module {
+            return body(self);
+        }
+        let scope = self.tysys.trait_env.import_scope(module);
+        self.with_module_perspective(module.clone(), scope, body)
+    }
+
     /// Run `body` with use→def reference recording suppressed, restoring the
     /// previous setting on return. Used by type-checking queries that resolve
     /// foreign declaration signatures (see

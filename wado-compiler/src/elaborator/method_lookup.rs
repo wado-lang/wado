@@ -899,13 +899,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Search resource declarations in instance methods. A resource
-        // receiver's `ResolvedType::Resource` / `GenericResource` always
-        // carries the resource's defining `module_source` (resolved through
-        // imports, re-export chains included), so the method is found in that
-        // module directly — no global scan. The `None`-module receivers
-        // (primitives, `Array`, `()`, tuples) are never resources, so there is
-        // no scan fallback to reach them (issue #1416).
+        // Instance methods declared on a resource. A resource receiver's
+        // `ResolvedType::Resource` / `GenericResource` always carries the
+        // resource's defining `module_source` (resolved through imports,
+        // re-export chains included), so the method is found in that module
+        // directly — no global scan. `None`-module receivers (primitives,
+        // `Array`, `()`, tuples) are never resources, so nothing falls through
+        // to a scan (issue #1416).
         if let Some(ref module_source) = struct_module_source
             && let Some(module) = self.loaded_modules.get(module_source)
         {
@@ -986,9 +986,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `Stream<DirectoryEntry>`) name types as that interface sees them,
             // not as the caller does — otherwise a caller that does not import
             // those types resolves them to `unknown` (issue #1416).
-            let target_scope = scope.tysys.trait_env.import_scope(resource_module);
             let (return_type, param_types, param_is_mut, param_defaults, param_names) = scope
-                .with_module_perspective(resource_module.clone(), target_scope, |s| {
+                .with_module_perspective_for(resource_module, |s| {
                     let return_type = method
                         .return_type
                         .as_ref()
@@ -2146,11 +2145,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // in the impl's module so a binding naming a type private to that
         // module (`type Iter = TreeSetIter<T>`) is not re-resolved by name in
         // the caller's perspective, where it is invisible (issue #1416).
-        let impl_import_scope = scope.tysys.trait_env.import_scope(&impl_module_source);
         for (name, ty) in &assoc_bindings {
-            let im = impl_module_source.clone();
-            let isc = impl_import_scope.clone();
-            let type_id = scope.with_module_perspective(im, isc, |s| s.resolve_type(ty));
+            let type_id =
+                scope.with_module_perspective_for(&impl_module_source, |s| s.resolve_type(ty));
             scope
                 .annotate_ctx
                 .trait_ctx
@@ -2253,10 +2250,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Resolve the signature in the impl's module (see the
             // `assoc_bindings` note above): the return / param types may name
             // types private to that module.
-            let (return_type, param_types) = {
-                let im = impl_module_source.clone();
-                let isc = impl_import_scope.clone();
-                scope.with_module_perspective(im, isc, |s| {
+            let (return_type, param_types) =
+                scope.with_module_perspective_for(&impl_module_source, |s| {
                     let return_type = return_type_ast
                         .as_ref()
                         .map(|t| s.resolve_type(t))
@@ -2266,8 +2261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // resolve to the proper `TypeParam` id inference expects.
                     let param_types = s.extract_param_types(&params);
                     (return_type, param_types)
-                })
-            };
+                });
 
             scope.annotate_ctx.trait_ctx.self_type = old_self_type;
 
@@ -2640,13 +2634,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // not import the builder's types resolves the binding to an
                 // unrelated module (issue #1416 in reverse).
                 let impl_module = impl_ref.0.clone();
-                let impl_scope = s.tysys.trait_env.import_scope(&impl_module);
                 let mapping = mapping.clone();
-                Some(
-                    s.with_module_perspective(impl_module, impl_scope, move |s| {
-                        s.resolve_type_with_param_mapping(&binding_ty, &mapping)
-                    }),
-                )
+                Some(s.with_module_perspective_for(&impl_module, move |s| {
+                    s.resolve_type_with_param_mapping(&binding_ty, &mapping)
+                }))
             },
         )
     }
