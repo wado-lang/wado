@@ -148,7 +148,7 @@ externally-tagged variant representation: the leading non-option token is the
 external tag selecting the case; its payload struct is parsed from the rest.
 
 ```wado
-struct AddArgs    { #[serde(positional)] path: String, #[serde(default)] all: bool }
+struct AddArgs    { #[serde(positional)] path: String, all: bool = false }
 struct CommitArgs { message: String }
 
 variant Command {
@@ -163,8 +163,7 @@ variant RemoteCmd {        // sub-subcommands under `remote`
 }
 
 struct Cli {
-    #[serde(default)]
-    verbose: bool,         // global flag
+    verbose: bool = false, // global flag
     command: Command,      // leading bare token picks the case
 }
 impl Deserialize for Cli;
