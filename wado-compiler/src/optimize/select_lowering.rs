@@ -126,7 +126,7 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 /// pass doc for the full rationale.
 fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
     op.as_expr()
-        .map_or(false, |e| is_select_eligible(body, e, type_table))
+        .is_some_and(|e| is_select_eligible(body, e, type_table))
 }
 
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {

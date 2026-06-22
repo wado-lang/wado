@@ -35,7 +35,7 @@ pub fn verify_enabled() -> bool {
 
 #[derive(Default)]
 struct Acc {
-    /// Per-function root-statement (hash, node_count) at its last build.
+    /// Per-function root-statement (hash, `node_count`) at its last build.
     prev: Vec<Option<Vec<(u64, u64)>>>,
     builds: u64,
     first_builds: u64,
@@ -311,7 +311,7 @@ pub fn report() {
         );
         eprint!("savable-fraction histogram (per rebuild, 0%..100%): ");
         for (i, c) in a.frac_buckets.iter().enumerate() {
-            eprint!("{}0%={} ", i, c);
+            eprint!("{i}0%={c} ");
         }
         eprintln!();
         let edits = a.created_nodes + a.inplace_edits;

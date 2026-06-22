@@ -264,7 +264,6 @@ fn "wado-compiler/tests/fixtures/ice_treeset_iter_by_ref.wado/run"() {
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __match_16: ref null "core:prelude/string.wado//String";
     let __match_17: ref "core:prelude/types.wado//Option<i32>";
-    let value_19: ref "core:prelude/string.wado//String";
     let before_20: i32;
     let before_26: i32;
     let __sroa_set_int_inner: ref "core:collections//TreeMap<i32,()>";
@@ -276,9 +275,8 @@ fn "wado-compiler/tests/fixtures/ice_treeset_iter_by_ref.wado/run"() {
         global:__modules_initialized = 1;
     };
     __sroa_set_str_inner = "core:collections/TreeMap<core:prelude/string.wado/String,()>::new"();
-    value_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
     before_20 = __sroa_set_str_inner.size;
-    "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(__sroa_set_str_inner, value_19);
+    "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(__sroa_set_str_inner, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
     drop(__sroa_set_str_inner.size > before_20);
     set_str_count = 0;
     __iter_2 = struct.new "core:collections//TreeSetIter<core:prelude/string.wado/String>" { entries: __sroa_set_str_inner.entries, index: 0 };
@@ -445,6 +443,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -453,8 +452,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b16: block {
             l17: loop {
                 break_if b16 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l17;
             };
@@ -496,12 +495,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -727,30 +725,38 @@ fn "core:prelude/format.wado/Formatter::prepare_int_write"(self, is_negative, pr
 fn "core:collections/TreeSetIter<i32>^Iterator::next"(self) {
     let entry: ref "core:collections//TreeMapEntry<i32,()>";
     let index: i32;
-    let __cse_10: bool;
-    let _licm_entries_11: ref "core:prelude//List<core:collections/TreeMapEntry<i32,()>>";
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref "Array<core:collections/TreeMapEntry<i32,()>>";
-    let __hfs_index_14: i32;
-    let __hfs_call_15: ref "core:prelude/types.wado//Option<i32>";
-    _licm_entries_11 = self.entries;
-    _licm_used_12 = _licm_entries_11.used;
-    _licm_repr_13 = _licm_entries_11.repr;
-    __hfs_index_14 = self.index;
+    let __cond: bool;
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let _licm_entries_10: ref "core:prelude//List<core:collections/TreeMapEntry<i32,()>>";
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref "Array<core:collections/TreeMapEntry<i32,()>>";
+    let __hfs_index_13: i32;
+    let __hfs_call_14: ref "core:prelude/types.wado//Option<i32>";
+    _licm_entries_10 = self.entries;
+    _licm_used_11 = _licm_entries_10.used;
+    _licm_repr_12 = _licm_entries_10.repr;
+    __hfs_index_13 = self.index;
     b55: block {
         l56: loop {
-            __cse_10 = __hfs_index_14 < _licm_used_12;
-            if __cse_10 == 0 {
-                self.index = __hfs_index_14;
+            if __hfs_index_13 >= _licm_used_11 {
+                self.index = __hfs_index_13;
                 break b55;
             }
-            index = __hfs_index_14;
-            entry = builtin::array_get<ref "core:collections//TreeMapEntry<i32,()>">(_licm_repr_13, index);
-            __hfs_index_14 = __hfs_index_14 + 1;
+            __cond = local.tee index(__hfs_index_13) < _licm_used_11;
+            if @unlikely(__cond == 0) {
+                cold_path;
+                "core:internal/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: index < self.used
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_11 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+                unreachable;
+            }
+            entry = builtin::array_get<ref "core:collections//TreeMapEntry<i32,()>">(_licm_repr_12, index);
+            __hfs_index_13 = __hfs_index_13 + 1;
             if entry.deleted == 0 {
-                __hfs_call_15 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: entry.key };
-                self.index = __hfs_index_14;
-                return __hfs_call_15;
+                __hfs_call_14 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: entry.key };
+                self.index = __hfs_index_13;
+                return __hfs_call_14;
             }
             continue l56;
         };
@@ -761,32 +767,40 @@ fn "core:collections/TreeSetIter<i32>^Iterator::next"(self) {
 fn "core:collections/TreeSetIter<core:prelude/string.wado/String>^Iterator::next"(self) {
     let entry: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>";
     let index: i32;
-    let __cse_10: bool;
-    let _licm_entries_11: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
-    let _licm_used_12: i32;
-    let _licm_repr_13: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
-    let __hfs_index_14: i32;
-    let __hfs_call_15: ref null "core:prelude/string.wado//String";
-    _licm_entries_11 = self.entries;
-    _licm_used_12 = _licm_entries_11.used;
-    _licm_repr_13 = _licm_entries_11.repr;
-    __hfs_index_14 = self.index;
-    b59: block {
-        l60: loop {
-            __cse_10 = __hfs_index_14 < _licm_used_12;
-            if __cse_10 == 0 {
-                self.index = __hfs_index_14;
-                break b59;
+    let __cond: bool;
+    let __local_5: ref "core:prelude/string.wado//String";
+    let __local_6: ref "core:prelude/format.wado//Formatter";
+    let _licm_entries_10: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
+    let _licm_used_11: i32;
+    let _licm_repr_12: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
+    let __hfs_index_13: i32;
+    let __hfs_call_14: ref null "core:prelude/string.wado//String";
+    _licm_entries_10 = self.entries;
+    _licm_used_11 = _licm_entries_10.used;
+    _licm_repr_12 = _licm_entries_10.repr;
+    __hfs_index_13 = self.index;
+    b60: block {
+        l61: loop {
+            if __hfs_index_13 >= _licm_used_11 {
+                self.index = __hfs_index_13;
+                break b60;
             }
-            index = __hfs_index_14;
-            entry = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(_licm_repr_13, index);
-            __hfs_index_14 = __hfs_index_14 + 1;
+            __cond = local.tee index(__hfs_index_13) < _licm_used_11;
+            if @unlikely(__cond == 0) {
+                cold_path;
+                "core:internal/panic"(__local_5 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push"(__local_5, 97); "core:prelude/string.wado/String::push"(__local_5, 116); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5, 58); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+condition: index < self.used
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_11 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
+                unreachable;
+            }
+            entry = builtin::array_get<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(_licm_repr_12, index);
+            __hfs_index_13 = __hfs_index_13 + 1;
             if entry.deleted == 0 {
-                __hfs_call_15 = entry.key;
-                self.index = __hfs_index_14;
-                return __hfs_call_15;
+                __hfs_call_14 = entry.key;
+                self.index = __hfs_index_13;
+                return __hfs_call_14;
             }
-            continue l60;
+            continue l61;
         };
     };
     return ref.null none;
@@ -1011,8 +1025,8 @@ fn "core:collections/TreeMap<i32,()>::find_index"(self, key) {
     _licm_repr_27 = _licm_nodes_24.repr;
     _licm_used_28 = _licm_entries_25.used;
     _licm_repr_29 = _licm_entries_25.repr;
-    b80: block {
-        l81: loop {
+    b82: block {
+        l83: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -1056,9 +1070,9 @@ condition: index < self.used
                     current = n.right;
                 }
             } else {
-                break b80;
+                break b82;
             }
-            continue l81;
+            continue l83;
         };
     };
     return -1;
@@ -1202,8 +1216,8 @@ fn "core:collections/TreeMap<core:prelude/string.wado/String,()>::find_index"(se
     _licm_repr_23 = _licm_nodes_20.repr;
     _licm_used_24 = _licm_entries_21.used;
     _licm_repr_25 = _licm_entries_21.repr;
-    b101: block {
-        l102: loop {
+    b103: block {
+        l104: loop {
             let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
             __match_scrut_0 = current;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
@@ -1238,9 +1252,9 @@ condition: index < self.used
                     current = n.right;
                 }
             } else {
-                break b101;
+                break b103;
             }
-            continue l102;
+            continue l104;
         };
     };
     return -1;
@@ -1250,9 +1264,8 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/strin
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,()>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,()>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1474,9 +1487,8 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapEntry<i32,()>>::grow"(se
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:collections/TreeMapEntry<i32,()>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<i32,()>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "core:collections//TreeMapEntry<i32,()>">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "core:collections//TreeMapEntry<i32,()>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1698,9 +1710,8 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapNode<i32>>::grow"(self) 
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:collections/TreeMapNode<i32>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapNode<i32>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "core:collections//TreeMapNode<i32>">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "core:collections//TreeMapNode<i32>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1709,9 +1720,8 @@ fn "core:prelude/list.wado/List<core:collections/TreeMapNode<core:prelude/string
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

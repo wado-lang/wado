@@ -1474,7 +1474,7 @@ fn reduce_local_block_splices_const_true_if_stmt() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition.into(),
+            condition: condition,
             then_block,
             else_block: Some(else_block),
         },
@@ -1502,7 +1502,7 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition.into(),
+            condition: condition,
             then_block,
             else_block: None,
         },
@@ -1527,7 +1527,7 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition.into(),
+            condition: condition,
             then_block,
             else_block: None,
         },
@@ -2123,7 +2123,7 @@ fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
         ArmData {
             pattern,
             guard: None,
-            body: body.into(),
+            body: body,
             span: Span::default(),
         }
     })
@@ -2132,12 +2132,12 @@ fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
 fn arm_with_guard(pattern: PatBuild, guard: Build, body: Build) -> ArmBuild {
     Rc::new(move |b| {
         let pattern = pattern(b);
-        let guard = Some(guard(b).into());
+        let guard = Some(guard(b));
         let body = body(b);
         ArmData {
             pattern,
             guard,
-            body: body.into(),
+            body: body,
             span: Span::default(),
         }
     })
@@ -3182,7 +3182,7 @@ fn variant_pat(
 fn constant_value_pat(expr: Build) -> PatBuild {
     Rc::new(move |b| {
         let e = expr(b);
-        pp(b, PatKind::ConstantValue { expr: e.into() })
+        pp(b, PatKind::ConstantValue { expr: e })
     })
 }
 
@@ -3348,12 +3348,7 @@ fn ps(body: &mut Body, kind: StmtKind) -> StmtId {
 fn return_stmt(value: Build) -> StmtBuild {
     Rc::new(move |b| {
         let v = value(b);
-        ps(
-            b,
-            StmtKind::Return {
-                value: Some(v.into()),
-            },
-        )
+        ps(b, StmtKind::Return { value: Some(v) })
     })
 }
 
@@ -3380,7 +3375,7 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value: value.into(),
+                value: value,
                 skip_value_copy: false,
             },
         )
@@ -3474,7 +3469,7 @@ fn call_expr(func: &NirFunction, args: Vec<Build>) -> Build {
         let call_args = args
             .iter()
             .map(|e| wado_compiler::nir_arena::ArenaCallArg {
-                expr: e(b).into(),
+                expr: e(b),
                 is_mut: false,
             })
             .collect();

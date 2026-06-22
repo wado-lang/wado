@@ -73,7 +73,7 @@ impl Value {
 
     /// Project an [`Operand`] to a `Value` when it is a pure scalar constant.
     /// The constant lives in the function's `ValuePool` (the source of truth for
-    /// pure scalars; WEP: The Live ValueGraph) — only `Operand::Value` can be one,
+    /// pure scalars; WEP: The Live `ValueGraph`) — only `Operand::Value` can be one,
     /// since scalars no longer occupy skeleton `ExprId` slots. Only `Int` (tracked
     /// int prims), `Float` (`f32`/`f64`), `Bool`, and `Char` project; `i128` /
     /// `u128` and non-primitive types yield `None`.

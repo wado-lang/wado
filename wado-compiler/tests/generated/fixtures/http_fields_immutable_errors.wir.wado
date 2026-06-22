@@ -1036,7 +1036,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
         l68: loop {
             break_if b67 __i_7 >= __count_5;
             __base_9 = builtin::load_i32(local.tee __elem_addr_8(__base_4 + (__i_7 * 8)));
-            __result_11 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_10(builtin::load_i32(__elem_addr_8 + 4))), used: 0 };
+            __result_11 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_10(builtin::load_i32((__base_4 + (__i_7 * 8)) + 4))), used: 0 };
             __i_12 = 0;
             b69: block {
                 l70: loop {
@@ -1161,7 +1161,7 @@ condition: index < self.used
             len_27 = __value_elem.used;
             __elem_packed = "core:internal/cm_lower_list_u8"(data, len_27);
             builtin::store_i32(__value_addr, builtin::i32_wrap_i64(__elem_packed));
-            builtin::store_i32(__value_addr + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
+            builtin::store_i32((__value_base + (__value_i * 8)) + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
             __value_i = __value_i + 1;
             continue l80;
         };
@@ -1278,7 +1278,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
             l96: loop {
                 break_if b95 __i_9 >= __count_7;
                 __base_11 = builtin::load_i32(local.tee __elem_addr_10(__base_6 + (__i_9 * 8)));
-                __result_13 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_12(builtin::load_i32(__elem_addr_10 + 4))), used: 0 };
+                __result_13 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_12(builtin::load_i32((__base_6 + (__i_9 * 8)) + 4))), used: 0 };
                 __i_14 = 0;
                 b97: block {
                     l98: loop {
@@ -1333,7 +1333,6 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     let __count_3: i32;
     let __result_4: ref "core:prelude//List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";
     let __i_5: i32;
-    let __elem_addr_6: i32;
     let __lifted_result_7: ref "core:prelude/string.wado//String";
     let __base_8: i32;
     let __count_9: i32;
@@ -1351,13 +1350,12 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
     b106: block {
         l107: loop {
             break_if b106 __i_5 >= __count_3;
-            __elem_addr_6 = __base_2 + (__i_5 * 16);
-            ptr = builtin::load_i32(__elem_addr_6 + 0);
-            len_15 = builtin::load_i32((__elem_addr_6 + 0) + 4);
+            ptr = builtin::load_i32((__base_2 + (__i_5 * 16)) + 0);
+            len_15 = builtin::load_i32(((__base_2 + (__i_5 * 16)) + 0) + 4);
             arr = "core:internal/memory_to_gc_array"(ptr, len_15);
             __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_15 };
-            __base_8 = builtin::load_i32(__elem_addr_6 + 8);
-            __result_10 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_9(builtin::load_i32((__elem_addr_6 + 8) + 4))), used: 0 };
+            __base_8 = builtin::load_i32((__base_2 + (__i_5 * 16)) + 8);
+            __result_10 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee __count_9(builtin::load_i32(((__base_2 + (__i_5 * 16)) + 8) + 4))), used: 0 };
             __i_11 = 0;
             b108: block {
                 l109: loop {
@@ -1372,7 +1370,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding_
                 drop("mem/realloc"(__base_8, __count_9 * 1, 1, 0));
             }
             "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>::push"(__result_4, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: __lifted_result_7, 1: __result_10 });
-            drop("mem/realloc"(builtin::load_i32(__elem_addr_6 + 0), builtin::load_i32((__elem_addr_6 + 0) + 4), 1, 0));
+            drop("mem/realloc"(builtin::load_i32((__base_2 + (__i_5 * 16)) + 0), builtin::load_i32(((__base_2 + (__i_5 * 16)) + 0) + 4), 1, 0));
             __i_5 = __i_5 + 1;
             continue l107;
         };
@@ -1570,6 +1568,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -1578,8 +1577,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b124: block {
             l125: loop {
                 break_if b124 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l125;
             };
@@ -1621,12 +1620,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1847,9 +1845,8 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1858,9 +1855,8 @@ fn "core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/list.wado/List<u8>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "core:prelude//List<u8>">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "core:prelude//List<u8>">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "core:prelude//List<u8>">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1869,9 +1865,8 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/list.wado/List<u8>>>";
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

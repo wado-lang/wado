@@ -119,7 +119,6 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/string_insert_str_panic_boundary.wado/__cm_export__run"() {
     let s_0: ref "core:prelude/string.wado//String";
-    let s_3: ref "core:prelude/string.wado//String";
     let __v0: bool;
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
@@ -136,7 +135,6 @@ fn "wado-compiler/tests/fixtures/string_insert_str_panic_boundary.wado/__cm_expo
         global:__modules_initialized = 1;
     };
     s_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
-    s_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(88), used: 1 };
     __v0 = "core:prelude/string.wado/String::is_char_boundary"(s_0, 2);
     if @unlikely(__v0 == 0) {
         cold_path;
@@ -145,7 +143,7 @@ condition: self.is_char_boundary(byte_index)
 "), used: 46 }); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.is_char_boundary(byte_index): "), used: 35 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/bool^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: __v0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
     }
-    "core:prelude/string.wado/String::insert_str_unchecked"(s_0, 2, s_3);
+    "core:prelude/string.wado/String::insert_str_unchecked"(s_0, 2, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(88), used: 1 });
     "wasi/task-return"(0);
 }
 
@@ -253,6 +251,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -261,8 +260,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b9: block {
             l10: loop {
                 break_if b9 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l10;
             };
@@ -309,12 +308,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

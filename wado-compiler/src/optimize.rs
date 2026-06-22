@@ -119,7 +119,7 @@ use crate::nir_package::NirPackage;
 
 /// Whether the operand-promotion keystone runs early (before the value passes).
 /// Unconditional: operand promotion is the production path (the live
-/// ValueGraph). See `docs/wep-2026-06-15-live-value-graph.md`.
+/// `ValueGraph`). See `docs/wep-2026-06-15-live-value-graph.md`.
 pub(crate) fn promote_early_enabled() -> bool {
     true
 }

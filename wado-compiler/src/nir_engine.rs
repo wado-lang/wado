@@ -357,7 +357,7 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// Grow the live ValueGraph with the forwarded constant value of every read
+    /// Grow the live `ValueGraph` with the forwarded constant value of every read
     /// of a bare scalar local in `scalars`, re-deriving them through a scratch
     /// re-walk (the same splice-point growth `inline` uses — no live rebuild).
     ///
@@ -929,7 +929,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
-    /// in its parent (WEP: The Live ValueGraph). Interns `value` width-preserving
+    /// in its parent (WEP: The Live `ValueGraph`). Interns `value` width-preserving
     /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
     /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
     /// own `Local` mention, if any, is dropped from the use index, matching
@@ -951,7 +951,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: redirect `id`'s parent operand slot to `new` (WEP: The Live
-    /// ValueGraph). Used to splice a promoted constant — or an existing
+    /// `ValueGraph`). Used to splice a promoted constant — or an existing
     /// sub-expression — into the position `id` occupies, orphaning `id`'s node.
     /// Returns `false` (a no-op) when `id` has no parent or the parent references
     /// it through a non-operand slot.
@@ -1080,7 +1080,7 @@ impl<'a> Engine<'a> {
     }
 
     /// Edit API: intern a fresh constant value into the function's pool and
-    /// return it as an `Operand::Value` (WEP: The Live ValueGraph). For passes
+    /// return it as an `Operand::Value` (WEP: The Live `ValueGraph`). For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
     pub fn const_operand(
@@ -1983,7 +1983,7 @@ mod tests {
                 b,
                 ExprKind::Assign {
                     target,
-                    value: seven.into(),
+                    value: seven,
                 },
             );
             let assign_stmt = s(b, StmtKind::Expr(assign.into()));

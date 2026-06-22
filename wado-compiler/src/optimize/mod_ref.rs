@@ -1111,7 +1111,7 @@ mod tests {
             ps(
                 b,
                 StmtKind::If {
-                    condition: cond.into(),
+                    condition: cond,
                     then_block,
                     else_block: Some(else_block),
                 },
@@ -1147,7 +1147,7 @@ mod tests {
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
-                        body: arm_body.into(),
+                        body: arm_body,
                         span: sp(),
                     }],
                 },
@@ -1319,7 +1319,7 @@ mod tests {
             ps(
                 b,
                 StmtKind::If {
-                    condition: cond.into(),
+                    condition: cond,
                     then_block,
                     else_block: None,
                 },
@@ -1508,7 +1508,7 @@ mod tests {
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
-                        body: arm_body.into(),
+                        body: arm_body,
                         span: sp(),
                     }],
                 },
@@ -1575,7 +1575,7 @@ mod tests {
             let inner = ps(
                 b,
                 StmtKind::If {
-                    condition: cond.into(),
+                    condition: cond,
                     then_block,
                     else_block: None,
                 },

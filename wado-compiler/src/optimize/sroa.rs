@@ -401,7 +401,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
 
 fn is_candidate_local_operand(body: &Body, op: Operand, candidates: &IndexSet<u32>) -> Option<u32> {
     op.as_expr()
-        .map_or(None, |e| is_candidate_local(body, e, candidates))
+        .and_then(|e| is_candidate_local(body, e, candidates))
 }
 
 fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> Option<u32> {

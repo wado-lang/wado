@@ -370,7 +370,7 @@ pub(crate) trait EditSink {
     /// existing node's content into `e`.
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
     /// Promote `e` to the folded pure scalar `value`, returning whether the edit
-    /// was applied (WEP: The Live ValueGraph). The engine backend swaps `e`'s
+    /// was applied (WEP: The Live `ValueGraph`). The engine backend swaps `e`'s
     /// parent operand to an `Operand::Value`; the scratch CTFE backend is a no-op
     /// (`false`) — its reads recompute the value through the value lattice, so it
     /// needs no node write-back.
@@ -926,11 +926,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } = &body.stmts[s].kind
             {
-                if let Some(value) = operand_bool(body, *condition) {
-                    Some((value, *then_block, *else_block))
-                } else {
-                    None
-                }
+                operand_bool(body, *condition).map(|value| (value, *then_block, *else_block))
             } else {
                 None
             };
@@ -1725,7 +1721,7 @@ fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
 /// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
 /// is always speculatable.
 fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
-    op.as_expr().map_or(true, |e| is_speculatable_a(body, e))
+    op.as_expr().is_none_or(|e| is_speculatable_a(body, e))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

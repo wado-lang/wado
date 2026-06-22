@@ -88,7 +88,7 @@ type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(
 
 type "functype//core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(33)
 
-type "functype//wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(34)
+type "functype//wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(34)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
@@ -308,12 +308,14 @@ fn "core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls
     return result;
 }
 
-fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call"(__outptr) {
+fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call"(self, __outptr) {
     return "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_lift__Connector_connect"(__outptr);
 }
 
 fn "closure/wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/wasi_tls_result_error.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/wasi_tls_result_error.wado/__cm_export__run" as "run"

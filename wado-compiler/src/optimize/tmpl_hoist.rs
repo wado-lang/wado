@@ -1123,7 +1123,7 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
 /// unit test below.
 fn references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
     op.as_expr()
-        .map_or(false, |e| references_local(body, e, local_index))
+        .is_some_and(|e| references_local(body, e, local_index))
 }
 
 fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
@@ -1141,7 +1141,7 @@ fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
 /// Handles both `&mut local` (NIR form) and `ref.as_non_null(local)` patterns.
 fn buf_field_references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
     op.as_expr()
-        .map_or(false, |e| buf_field_references_local(body, e, local_index))
+        .is_some_and(|e| buf_field_references_local(body, e, local_index))
 }
 
 fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
@@ -1180,7 +1180,7 @@ fn is_constant_expr(body: &Body, e: ExprId) -> bool {
 /// Operand form of [`is_constant_expr`]: a promoted scalar (`Operand::Value`)
 /// is always a compile-time constant.
 fn is_constant_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().map_or(true, |e| is_constant_expr(body, e))
+    op.as_expr().is_none_or(|e| is_constant_expr(body, e))
 }
 
 /// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.

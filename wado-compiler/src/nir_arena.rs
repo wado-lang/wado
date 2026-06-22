@@ -22,7 +22,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 /// An operand position in the skeleton — an expression's value, after operand
-/// promotion (WEP: The Live ValueGraph). It is either a pure value living in the
+/// promotion (WEP: The Live `ValueGraph`). It is either a pure value living in the
 /// function's [`ValuePool`] (literals, `Binary`, pure `Unary`, `Cast`, and the
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
 /// / control subtree kept in the skeleton (`Call`, `MethodCall`, allocation
@@ -376,14 +376,14 @@ pub struct Body {
     pub address_taken_locals: IndexSet<u32>,
     pub stores_aliased_locals: IndexSet<u32>,
     /// The function's pure-value graph — the source of truth for every
-    /// [`Operand::Value`] in the skeleton (WEP: The Live ValueGraph). Built once
+    /// [`Operand::Value`] in the skeleton (WEP: The Live `ValueGraph`). Built once
     /// by `lower::translate` and maintained in place by the optimizer's edits;
     /// never re-derived from the skeleton. Empty on a body built before operand
     /// promotion populates it.
     pub values: ValuePool,
     /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
     /// here so it survives across optimizer passes instead of living as a
-    /// per-`Engine`-session cache (WEP: The Live ValueGraph, build-once). `None`
+    /// per-`Engine`-session cache (WEP: The Live `ValueGraph`, build-once). `None`
     /// until the first value query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
@@ -597,7 +597,7 @@ impl Body {
 
     /// Apply `f` to every operand slot in the body, replacing it in place. Used
     /// by promotion to lift pure operands to `Operand::Value` (WEP: The Live
-    /// ValueGraph). `f` is the only mutator; it does not borrow the body.
+    /// `ValueGraph`). `f` is the only mutator; it does not borrow the body.
     pub fn map_operands(&mut self, mut f: impl FnMut(Operand) -> Operand) {
         let eids: Vec<ExprId> = self.exprs.keys().collect();
         for id in eids {
@@ -688,7 +688,7 @@ impl Body {
     pub fn map_stmt_operands(&mut self, id: StmtId, f: &mut impl FnMut(Operand) -> Operand) {
         match &mut self.stmts[id].kind {
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                *value = f(*value)
+                *value = f(*value);
             }
             StmtKind::Return { value } | StmtKind::Break { value, .. } => {
                 if let Some(v) = value {
@@ -1172,7 +1172,7 @@ impl Body {
     /// positions [`Body::for_each_child`] descends through as `op_child`; non-operand
     /// `ExprId` slots (`Assign::target`) and structural children (blocks, patterns)
     /// are untouched. Used by the engine to promote a folded subtree to an
-    /// `Operand::Value` in its parent (WEP: The Live ValueGraph).
+    /// `Operand::Value` in its parent (WEP: The Live `ValueGraph`).
     pub fn replace_operand_to(&mut self, node: NodeRef, target: ExprId, new: Operand) -> bool {
         let mut changed = false;
         let mut swap = |o: &mut Operand| {

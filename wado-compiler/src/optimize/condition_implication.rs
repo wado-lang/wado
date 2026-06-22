@@ -327,7 +327,7 @@ fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
 }
 
 /// Run condition implication at the body root on an existing engine session.
-/// The combined `licm` session reuses its (value-preserving) ValueGraph, so
+/// The combined `licm` session reuses its (value-preserving) `ValueGraph`, so
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
@@ -369,7 +369,7 @@ fn reseed_invariant_fields(engine: &mut Engine) {
     // Reassigned receivers and directly-assigned `(receiver, field)` slots.
     let mut reassigned: IndexSet<u32> = IndexSet::default();
     let mut assigned_fields: IndexSet<(u32, u32)> = IndexSet::default();
-    for (_, enode) in engine.body.exprs.iter() {
+    for (_, enode) in &engine.body.exprs {
         if let ExprKind::Assign { target, .. } = &enode.kind {
             match &engine.body.exprs[*target].kind {
                 ExprKind::Local { index, .. } => {
@@ -427,7 +427,7 @@ fn reseed_invariant_fields(engine: &mut Engine) {
     }
     let mut groups: IndexMap<(RecvKey, u32), (crate::tir::TypeId, Vec<ExprId>)> =
         IndexMap::default();
-    for (e, enode) in engine.body.exprs.iter() {
+    for (e, enode) in &engine.body.exprs {
         if let ExprKind::FieldAccess {
             expr: inner,
             field_index,
@@ -559,7 +559,7 @@ fn collect_recv_field_values(
     let Some(graph) = engine.body.value_graph.as_ref() else {
         return out;
     };
-    for (e, enode) in engine.body.exprs.iter() {
+    for (e, enode) in &engine.body.exprs {
         if let ExprKind::Local { index, .. } = enode.kind
             && let Some((recv, field, _)) = maps.field_copies.get(&index)
             && let Some(&v) = graph.value_of.get(&e)
@@ -612,7 +612,7 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
     // Rebinds only (`L = other`), the subset that staleness-checks a
     // construction value — kept apart from the `&mut`-escapes below.
     let mut rebound: IndexSet<u32> = IndexSet::default();
-    for (_, enode) in body.exprs.iter() {
+    for (_, enode) in &body.exprs {
         match &enode.kind {
             ExprKind::Assign { target, .. } => {
                 if let ExprKind::Local { index, .. } = body.exprs[*target].kind {
@@ -636,7 +636,7 @@ fn build_reseed_maps(body: &Body) -> ReseedMaps {
     let mut field_copies = IndexMap::default();
     let mut derived_lets = Vec::new();
     let mut copy_lets = IndexMap::default();
-    for (_, node) in body.stmts.iter() {
+    for (_, node) in &body.stmts {
         let StmtKind::Let {
             local_index,
             value: Operand::Expr(v),
@@ -739,7 +739,7 @@ fn construction_field_value(
 /// Follow a `let L = M` copy chain to its non-copy root (cycle-guarded).
 fn reseed_root(local: u32, copy_lets: &IndexMap<u32, u32>) -> u32 {
     let mut cur = local;
-    for _ in 0..copy_lets.len() + 1 {
+    for _ in 0..=copy_lets.len() {
         match copy_lets.get(&cur) {
             Some(&src) => cur = src,
             None => break,

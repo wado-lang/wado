@@ -677,7 +677,7 @@ fn recognize_init_operand(
     sig_kinds: &SigKindIndex,
 ) -> Option<CandidateInit> {
     op.as_expr()
-        .map_or(None, |e| recognize_init(body, e, sig_kinds))
+        .and_then(|e| recognize_init(body, e, sig_kinds))
 }
 
 /// Recognize the supported initializer form for container-SROA candidates.
@@ -710,7 +710,7 @@ fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Optio
     // The capacity expression is cloned once per per-field constructor
     // call during rewrite, so it must be side-effect-free. A promoted constant
     // is trivially duplicable.
-    if !cap.as_expr().map_or(true, |e| is_duplicable_expr(body, e)) {
+    if !cap.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
         return None;
     }
     Some(CandidateInit { capacity: cap })
@@ -996,7 +996,7 @@ impl WhitelistChecker<'_> {
                 }
                 // The rewrite clones the index expression N times (once per
                 // field). A promoted constant index is trivially duplicable.
-                if !arg0.as_expr().map_or(true, |e| is_duplicable_expr(body, e)) {
+                if !arg0.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
                     // Fall through to a normal visit so `other` gets marked
                     // escaped via the bare `index_value` branch in `visit_expr`.
                     self.visit_expr(body, e);
@@ -1445,7 +1445,7 @@ impl Rewriter<'_, '_> {
                 let idx_expr = args[0].expr;
                 if !idx_expr
                     .as_expr()
-                    .map_or(true, |e| is_duplicable_expr(engine.body, e))
+                    .is_none_or(|e| is_duplicable_expr(engine.body, e))
                 {
                     return None;
                 }
@@ -1871,5 +1871,5 @@ fn is_duplicable_expr(body: &Body, e: ExprId) -> bool {
 /// Operand form of [`is_duplicable_expr`]: a promoted constant (`Operand::Value`)
 /// is always duplicable.
 fn is_duplicable_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().map_or(true, |e| is_duplicable_expr(body, e))
+    op.as_expr().is_none_or(|e| is_duplicable_expr(body, e))
 }

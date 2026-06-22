@@ -155,9 +155,9 @@ type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/Gene
 
 type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>^Iterator::next" = fn(ref "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//GenericMapIter<core:prelude/slice.wado/ArrayIter<i32>,i32>") -> ref "core:prelude/types.wado//Option<i32>";  // TypeId(53)
 
-type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call" = fn(i32) -> i32;  // TypeId(54)
+type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_2", i32) -> i32;  // TypeId(54)
 
-type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call" = fn(i32) -> char;  // TypeId(55)
+type "functype//wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_3", i32) -> char;  // TypeId(55)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
 
@@ -447,6 +447,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -455,8 +456,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b21: block {
             l22: loop {
                 break_if b21 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l22;
             };
@@ -493,12 +494,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -697,20 +697,24 @@ fn "core:prelude/slice.wado/ArrayIter<i32>^Iterator::next"(self) {
     return 0, item;
 }
 
-fn "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call"(x) {
+fn "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call"(self, x) {
     return x * 2;
 }
 
-fn "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call"(x) {
+fn "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call"(self, x) {
     return x;
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__closure_wrapper_1"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_3";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_generic_map_test.wado//__Closure_3"(__env);
+    return "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__Closure_3::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/iterator_generic_map_test.wado/__cm_export____test_0_generic_map_iterator_doubles_values" as "__test_0_generic_map_iterator_doubles_values"

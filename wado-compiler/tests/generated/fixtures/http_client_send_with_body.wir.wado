@@ -350,7 +350,7 @@ type "functype//core:prelude/list.wado/List<u8>::push" = fn(ref "core:prelude//L
 
 type "functype//core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(83)
 
-type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call" = fn(i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(84)
+type "functype//wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call" = fn(ref "wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2", i32) -> ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";  // TypeId(84)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(85)
 
@@ -1523,19 +1523,20 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
 
-fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call"(__outptr) {
+fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call"(self, __outptr) {
     return "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_lift__Client_send"(__outptr);
 }
 
 fn "closure/wado-compiler/tests/fixtures/http_client_send_with_body.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/http_client_send_with_body.wado//__Closure_2"(__env);
+    return "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__Closure_2::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/http_client_send_with_body.wado/__cm_export__handle" as "handle"

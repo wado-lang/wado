@@ -438,7 +438,7 @@ fn array_new_capacity(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>)
 }
 
 fn place_path_operand(body: &Body, op: Operand, local: u32) -> Option<Vec<u32>> {
-    op.as_expr().map_or(None, |e| place_path(body, e, local))
+    op.as_expr().and_then(|e| place_path(body, e, local))
 }
 
 /// If `receiver` is `local` reached through zero or more field accesses,

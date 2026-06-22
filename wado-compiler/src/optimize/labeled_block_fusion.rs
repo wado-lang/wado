@@ -499,9 +499,8 @@ fn find_break_case_index_for_name_in_operand(
     label: &str,
     variant_name: &str,
 ) -> Option<u32> {
-    op.as_expr().map_or(None, |e| {
-        find_break_case_index_for_name_in_expr(body, e, label, variant_name)
-    })
+    op.as_expr()
+        .and_then(|e| find_break_case_index_for_name_in_expr(body, e, label, variant_name))
 }
 
 fn find_break_case_index_for_name_in_expr(
@@ -626,7 +625,7 @@ fn check_lb_breaks_in_stmt(
         } if l == label => {
             // A break carrying no value, or a promoted `Null` placeholder, is
             // the empty/None break the fusion accepts.
-            let Some(e) = value.and_then(|v| v.as_expr()) else {
+            let Some(e) = value.and_then(super::super::nir_arena::Operand::as_expr) else {
                 return value.is_none_or(|v| {
                     v.as_value().is_some_and(|vid| {
                         matches!(
@@ -695,9 +694,8 @@ fn check_lb_breaks_in_operand(
     case_index: u32,
     payload_type: &mut Option<TypeId>,
 ) -> bool {
-    op.as_expr().map_or(false, |e| {
-        check_lb_breaks_in_expr(body, e, label, case_index, payload_type)
-    })
+    op.as_expr()
+        .is_some_and(|e| check_lb_breaks_in_expr(body, e, label, case_index, payload_type))
 }
 
 fn check_lb_breaks_in_expr(

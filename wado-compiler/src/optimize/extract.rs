@@ -1,5 +1,5 @@
-//! Extraction: materialize pure values from the live ValueGraph back into the
-//! SkelTree.
+//! Extraction: materialize pure values from the live `ValueGraph` back into the
+//! `SkelTree`.
 //!
 //! In the live-ValueGraph design (see
 //! `docs/wep-2026-06-15-live-value-graph.md`) pure-value rewrites prove
@@ -24,7 +24,7 @@ use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::{ValueId, ValueKind};
 
-/// Rewrite a pure expression whose ValueGraph representative is a literal into
+/// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
 /// is left untouched, so the worklist retry terminates.
 pub(super) struct ExtractLiteralRule;

@@ -3112,7 +3112,7 @@ fn emit_convergence_at_arm_body_end(
 
 fn is_immut_ref_arg_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
     op.as_expr()
-        .map_or(false, |e| is_immut_ref_arg(body, e, type_table))
+        .is_some_and(|e| is_immut_ref_arg(body, e, type_table))
 }
 
 /// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
@@ -3234,7 +3234,7 @@ fn add_sync_fields_for_arg(
 
 fn extract_gc_local_index_operand(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
     op.as_expr()
-        .map_or(None, |e| extract_gc_local_index(body, e, type_table))
+        .and_then(|e| extract_gc_local_index(body, e, type_table))
 }
 
 fn extract_gc_local_index(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<u32> {

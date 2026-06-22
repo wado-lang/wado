@@ -625,7 +625,7 @@ impl FunctionTranslator<'_, '_> {
                 is_mut: false,
                 is_reactive: false,
                 type_id: inner_type_id,
-                value: val_nir.into(),
+                value: val_nir,
                 skip_value_copy: true,
             },
             span,

@@ -213,7 +213,7 @@ fn stmt_blocks(body: &Body, stmt: StmtId) -> Vec<BlockId> {
 
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
     op.as_expr()
-        .map_or(true, |e| is_globalizable_const(body, e, bound))
+        .is_none_or(|e| is_globalizable_const(body, e, bound))
 }
 
 /// Recursively true when `expr` is a closed constant aggregate value.
@@ -357,7 +357,7 @@ fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
         StmtKind::Let { value, .. } => expr_readonly_operand(body, *value, idx, gate),
         StmtKind::Expr(e) => e
             .as_expr()
-            .map_or(true, |e| expr_readonly(body, e, idx, gate)),
+            .is_none_or(|e| expr_readonly(body, e, idx, gate)),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
             value.is_none_or(|v| expr_readonly_operand(body, v, idx, gate))
         }
@@ -381,7 +381,7 @@ fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
 
 fn expr_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
     op.as_expr()
-        .map_or(true, |e| expr_readonly(body, e, idx, gate))
+        .is_none_or(|e| expr_readonly(body, e, idx, gate))
 }
 
 fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
@@ -516,7 +516,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
 
 fn call_arg_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
     op.as_expr()
-        .map_or(true, |e| call_arg_readonly(body, e, idx, gate))
+        .is_none_or(|e| call_arg_readonly(body, e, idx, gate))
 }
 
 /// A binding handed to a call as an argument. `&` borrow is a read; `&mut`

@@ -2582,7 +2582,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2871,7 +2871,7 @@ mod tests {
         let switch_e = alloc_expr(
             &mut body,
             ExprKind::Switch {
-                scrutinee: scrut.into(),
+                scrutinee: scrut,
                 min_value: 0,
                 arms: vec![arm0, arm1],
                 default,
@@ -2915,7 +2915,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: Some(else_block),
             },
@@ -2954,7 +2954,7 @@ mod tests {
         let if_inside = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: Some(else_block),
             },
@@ -3009,7 +3009,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: None,
             },
@@ -3044,7 +3044,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: None,
             },
@@ -3081,7 +3081,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: None,
             },
@@ -3212,12 +3212,12 @@ mod tests {
                 fields: vec![
                     crate::nir_arena::ArenaStructField {
                         name: "f0".to_string(),
-                        value: five.into(),
+                        value: five,
                         field_index: 0,
                     },
                     crate::nir_arena::ArenaStructField {
                         name: "f1".to_string(),
-                        value: six.into(),
+                        value: six,
                         field_index: 1,
                     },
                 ],
@@ -3360,7 +3360,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: None,
             },
@@ -3392,7 +3392,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: None,
             },
@@ -3433,7 +3433,7 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond.into(),
+                condition: cond,
                 then_block,
                 else_block: Some(else_block),
             },
@@ -3468,13 +3468,13 @@ mod tests {
         let ref_v2 = ref_of_local(&mut body, 1);
         let assign = assign_stmt(&mut body, 2, ref_v2);
         let tru = bool_lit(&mut body, true);
-        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru.into()));
+        let tru_stmt = alloc_stmt(&mut body, StmtKind::Expr(tru));
         let rhs_block = block_with(&mut body, vec![assign, tru_stmt]);
         let rhs_expr = alloc_expr(&mut body, ExprKind::Block(rhs_block));
         let and = alloc_expr(
             &mut body,
             ExprKind::Binary {
-                left: cond.into(),
+                left: cond,
                 op: NirBinaryOp::And,
                 right: rhs_expr.into(),
             },

@@ -1110,7 +1110,7 @@ fn is_self_derived_operand(
     tt: &Rc<RefCell<TypeTable>>,
 ) -> bool {
     op.as_expr()
-        .map_or(false, |e| is_self_derived(body, e, tainted, tt))
+        .is_some_and(|e| is_self_derived(body, e, tainted, tt))
 }
 
 /// True when the expression at `id` produces a value that may alias `self`'s

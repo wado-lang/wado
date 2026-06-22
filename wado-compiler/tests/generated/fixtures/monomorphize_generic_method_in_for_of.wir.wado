@@ -209,6 +209,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     __sroa_acc_total = 0;
     v_5 = items.0;
     drop(__sroa_acc_total = 0 + v_5; __sroa_acc_total + 0);
+    drop(items.1);
     drop(__sroa_acc_total = __sroa_acc_total + 100; __sroa_acc_total + 0);
     drop(__sroa_acc_total = __sroa_acc_total + 1; __sroa_acc_total + 0);
     v_10 = items.3;
@@ -223,6 +224,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     __sroa_acc_total = 0;
     v_5 = items.0;
     drop(local.tee __sroa_acc_total(0 + v_5));
+    drop(items.1);
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_10 = items.3;
@@ -249,6 +251,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
             continue l6;
         };
     };
+    drop(items.1);
     once_7 = 1;
     b7: block {
         l8: loop {
@@ -287,6 +290,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     __sroa_acc_total = 0;
     v_4 = items.0;
     drop(local.tee __sroa_acc_total(0 + v_4));
+    drop(items.1);
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_7 = items.3;
@@ -301,6 +305,7 @@ fn "wado-compiler/tests/fixtures/monomorphize_generic_method_in_for_of.wado/sum_
     __sroa_acc_total = 0;
     v_4 = items.0;
     drop(local.tee __sroa_acc_total(0 + v_4));
+    drop(items.1);
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 100));
     drop(local.tee __sroa_acc_total(__sroa_acc_total + 1));
     v_7 = items.3;
@@ -412,6 +417,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -420,8 +426,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b21: block {
             l22: loop {
                 break_if b21 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l22;
             };
@@ -463,12 +469,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

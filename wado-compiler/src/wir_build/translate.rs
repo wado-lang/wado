@@ -1856,7 +1856,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
-    /// WEP: The Live ValueGraph). Each kind lowers from the pool using the source
+    /// WEP: The Live `ValueGraph`). Each kind lowers from the pool using the source
     /// type recorded by the builder; composite kinds (`Binary`, `Select`,
     /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
     pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
