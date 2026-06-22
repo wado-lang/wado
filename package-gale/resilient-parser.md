@@ -130,7 +130,7 @@ impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
 
 ### Deferred
 
-- **No-viable `K_ERROR` *node*.** The no-viable fallback carries the
+- **No-viable `K_ERROR` _node_.** The no-viable fallback carries the
   `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
   the diagnostic's `rule_stack` is built on unwind, which is incompatible
   with placing a node and continuing. The fold represents the error region.
