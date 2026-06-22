@@ -276,8 +276,7 @@ impl<'a> Engine<'a> {
         self.ensure_value_graph();
         self.body
             .value_graph
-            .as_ref()
-            .unwrap()
+            .as_ref()?
             .loop_entry_values
             .get(&loop_body)?
             .get(&local)
