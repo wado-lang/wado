@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782058166174,
+  "lastUpdate": 1782099396652,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34685,6 +34685,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b045ed89e9fefab6eddeee068a548fde6e07db11"
         },
         "date": 1782058165563,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d0190daf1b834711cf17ef7f624478921b905b7e",
+          "message": "Merge pull request #1427 from wado-lang/claude/module-type-collision-fix-7nuurz\n\nfix(compiler): resolve type and case names through imports, not a global scan (#1416)",
+          "timestamp": "2026-06-22T12:27:45+09:00",
+          "tree_id": "21a41abdf2338d28f3af6651572928aea796d2cd",
+          "url": "https://github.com/wado-lang/wado/commit/d0190daf1b834711cf17ef7f624478921b905b7e"
+        },
+        "date": 1782099396347,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
