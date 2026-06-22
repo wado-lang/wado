@@ -28,3 +28,25 @@ test "error position: malformed item under `item* '}'`" {
 test "error position: non-item token stays put" {
     assert first_diag_col(&"let x = y ; +") == 12, `expected col 12 (the '+')`;
 }
+
+// Error-token trees: the resilient parser must repair broken input in place and
+// the repair must round-trip through the tree (insert -> `<missing>`, delete ->
+// `<skip>`). A clean parse keeps these markers absent.
+fn assert_tree(input: &String, expected: &String) {
+    let r = errrec::parse(input);
+    let actual = errrec::to_string_tree(&r);
+    assert actual == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {actual}`;
+}
+
+// `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)
+// is the rule's own next terminal, so recovery inserts a synthetic ID and keeps
+// parsing — yielding a complete `item` with one missing leaf.
+test "tree: insert missing terminal" {
+    assert_tree(&"let x = ;", &"(prog (item let x = <missing ID> ;))");
+}
+
+// A spurious extra ID before `=`; peek(1) is the expected `=`, so the extra
+// token is deleted (skipped) and `=` consumed.
+test "tree: delete extra terminal" {
+    assert_tree(&"let x y = z ;", &"(prog (item let x <skip y> = z ;))");
+}
