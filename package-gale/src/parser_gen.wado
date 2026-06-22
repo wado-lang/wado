@@ -269,6 +269,13 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // mismatch, `NoViableAlternative` when no alternative applied); the entry
     // surfaces it with `pending`.
     s.add_field(&"pending_code", &"DiagnosticCode");
+    // Set while a speculative parse runs (a scan-gated repeat's recovery probe,
+    // an LR alt save-and-rewind). Recovery edits are suppressed: a mismatch
+    // fails (records the deepest error, sets `recovering`) instead of
+    // inserting / deleting / skipping, so the caller can cleanly backtrack —
+    // static scan cannot tell a malformed element from a valid one that belongs
+    // to the caller's continuation, so committing edits here would steal tokens.
+    s.add_field(&"speculating", &"bool");
     // Cap on collected diagnostics (the `max_errors` entry parameter). Once
     // reached, recovery stops recording and folds the tree closed by setting
     // `recovering`; `<= 1` is effectively fail-fast (one diagnostic, partial
@@ -305,7 +312,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f.set_return_type(&"Parser");
     f.emit_begin(w);
     w.line(&"let kinds = tokens.kinds.to_array();");
-    let mut init = String::from("tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX");
+    let mut init = String::from("tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX");
     if trace {
         init.push_str(&", trace_depth: 0");
     }
@@ -507,6 +514,14 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"return self.pos;");
     w.end();
     emit_consume_return(w);
+    w.end();
+    // In a speculative parse, do not apply recovery edits — fail so the caller
+    // backtracks (committing an edit here could steal tokens that belong to the
+    // caller's continuation, which static scan cannot rule out).
+    w.begin(&"if self.speculating");
+    w.line(&"let name = token_kind_name(kind);");
+    w.line(&"self.fail(`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);");
+    w.line(&"return self.pos;");
     w.end();
     // single-token deletion: the current token is spurious, the expected one
     // follows it.
@@ -4736,10 +4751,10 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
 /// Emit the `if {scan_pos} < 0 { break; }` loop-exit, augmented with
 /// error-path recovery for RuleRef inners: when the lookahead is in the
 /// inner's FIRST set (so an element plausibly starts here) but the scan
-/// failed, speculatively re-parse the inner to capture its precise deep error
-/// in `p.pending`, then restore the cursor and exit. Pure diagnostic — the
-/// parse decision (exit the loop) is unchanged, and the speculative parse runs
-/// only on this already-doomed branch.
+/// failed, re-parse the inner for real. The result is kept only if it actually
+/// recovered (a diagnostic was recorded or `recovering` was set), so a broken
+/// element lands in the tree; a clean re-parse is undone and the loop breaks,
+/// preserving valid-input behaviour where the scan merely under-approximated.
 fn gen_rep_break_with_recovery(
     w: &mut CodeWriter,
     scan_pos: &String,
@@ -4762,13 +4777,29 @@ fn gen_rep_break_with_recovery(
         }
         w.begin(&`if {scan_pos} < 0`);
         // The scan failed but the lookahead is in the body's FIRST set, so a
-        // malformed element *starts* here. Parse it for real: the body recovers
-        // in place (inserting / deleting / skipping into a `<error>` region),
-        // its edits stay in the tree, and the cursor advances past what it
-        // consumed. This is what makes a broken element appear in the tree
-        // instead of being swept away by the loop exit.
+        // malformed element *plausibly* starts here. Parse it for real and keep
+        // the result only if it actually recovered (recorded a diagnostic or set
+        // `recovering`): then its repair edits stay in the tree and the cursor
+        // advances past the broken element. If instead it parsed cleanly, the
+        // scan merely under-approximated a valid element that belongs to the
+        // caller's continuation — undo the speculative parse and break, the
+        // behaviour-preserving loop exit. (Without this guard, stealing such an
+        // element from the caller mis-parses valid input.)
         w.begin(&`if {ctx.first_check_str(loop_first)}`);
+        // Speculative, diagnostic-only re-parse: the lookahead is in the body's
+        // FIRST set, so an element *plausibly* starts here, but the scan failed.
+        // Static scan cannot tell a malformed element (recover, keep) from a
+        // valid one that belongs to the caller's continuation (yield, drop) — a
+        // trailing `expression?` after `statement*` looks identical to a
+        // malformed statement. Committing edits would steal the caller's tokens,
+        // so run the probe under `speculating` (no edits), keep only the deepest
+        // error it records in `pending` (surfaced if the overall parse fails),
+        // restore the cursor / tree / flags, and exit the loop.
         w.line(&"let _rec_pos = p.pos;");
+        w.line(&"let _rec_cp = p.b.checkpoint();");
+        w.line(&"let _rec_sav = p.recovering;");
+        w.line(&"let _rec_spec = p.speculating;");
+        w.line(&"p.speculating = true;");
         // Stamp the call's exact ATN return state, just as a normal parse call
         // does, so a context-sensitive callee (`??` / ATN-class LR) sees the
         // right caller frame.
@@ -4776,12 +4807,10 @@ fn gen_rep_break_with_recovery(
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
         }
         w.line(&`{call};`);
-        // Stop the loop if the element could not be recovered locally
-        // (`recovering`) or made no progress (guards against an infinite loop
-        // when the body only inserts). Otherwise keep iterating: a clean tail
-        // after a recovered element still parses.
-        w.line(&"if p.recovering || p.pos == _rec_pos { break; }");
-        w.line(&"continue;");
+        w.line(&"p.speculating = _rec_spec;");
+        w.line(&"p.recovering = _rec_sav;");
+        w.line(&"p.pos = _rec_pos;");
+        w.line(&"p.b.truncate(_rec_cp);");
         w.end();
         w.line(&"break;");
         w.end();
