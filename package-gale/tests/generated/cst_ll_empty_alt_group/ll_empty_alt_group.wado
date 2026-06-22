@@ -2461,6 +2461,22 @@ impl Parser {
         return String::from("");
     }
 
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
     fn peek_start(&self) -> i32 {
         return self.tokens.starts[self.pos];
     }
@@ -2490,7 +2506,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> i32 {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -2500,6 +2516,25 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -2657,13 +2692,10 @@ fn _parse_start__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if rep_scan_pos < 0 {
                 if _kind_set_0(p.peek_kind()) {
                     let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
                     p.atn_ret_pending = 10;
                     _parse_statement(p, &EMPTY_FOLLOW);
-                    p.recovering = _rec_sav;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
+                    if p.recovering || p.pos == _rec_pos { break; }
+                    continue;
                 }
                 break;
             }
@@ -2694,7 +2726,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
-        let lit_x = p.expect(TK_LIT_X);
+        let lit_x = p.expect(TK_LIT_X, []);
         return;
     }
     if kind == TK_LIT_IF {
@@ -2727,12 +2759,12 @@ fn _parse_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lit_if = p.expect(TK_LIT_IF);
-    let lit_y = p.expect(TK_LIT_Y);
+    let lit_if = p.expect(TK_LIT_IF, [TK_LIT_Y]);
+    let lit_y = p.expect(TK_LIT_Y, [TK_LIT_X, TK_LIT_IF]);
     p.atn_ret_pending = 29;
     let statement = _parse_statement(p, follow);
     if atn_ng_optional_enter(&ATN_SIM, 2, &p.atn_stack, &p.kinds, p.pos, TK_EOF) {
-        let lit_else = p.expect(TK_LIT_ELSE);
+        let lit_else = p.expect(TK_LIT_ELSE, []);
         p.atn_ret_pending = 38;
         let statement = _parse_statement(p, follow);
     }

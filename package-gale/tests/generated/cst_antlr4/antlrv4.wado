@@ -4360,6 +4360,22 @@ impl Parser {
         return String::from("");
     }
 
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
     fn peek_start(&self) -> i32 {
         return self.tokens.starts[self.pos];
     }
@@ -4389,7 +4405,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> i32 {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -4399,6 +4415,25 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -6271,12 +6306,9 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if rep_scan_pos < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_prequel_construct(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -6296,18 +6328,15 @@ fn _parse_grammar_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if rep_scan_pos_2 < 0 {
             if p.peek_kind() == TK_MODE {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_mode_spec(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let mode_spec = _parse_mode_spec(p, &EMPTY_FOLLOW);
     }
-    let eof = p.expect(TK_EOF);
+    let eof = p.expect(TK_EOF, []);
     return;
 }
 
@@ -6326,7 +6355,7 @@ fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let grammar_type = _parse_grammar_type(p, &FOLLOW_MASK_2);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_3);
-    let semi = p.expect(TK_SEMI);
+    let semi = p.expect(TK_SEMI, []);
     return;
 }
 
@@ -6345,17 +6374,17 @@ fn _parse_grammar_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LEXER {
-        let lexer = p.expect(TK_LEXER);
-        let grammar = p.expect(TK_GRAMMAR);
+        let lexer = p.expect(TK_LEXER, [TK_GRAMMAR]);
+        let grammar = p.expect(TK_GRAMMAR, []);
         return;
     }
     if kind == TK_PARSER {
-        let parser = p.expect(TK_PARSER);
-        let grammar = p.expect(TK_GRAMMAR);
+        let parser = p.expect(TK_PARSER, [TK_GRAMMAR]);
+        let grammar = p.expect(TK_GRAMMAR, []);
         return;
     }
     if kind == TK_GRAMMAR {
-        let grammar = p.expect(TK_GRAMMAR);
+        let grammar = p.expect(TK_GRAMMAR, []);
         return;
     }
     p.fail(
@@ -6421,7 +6450,7 @@ fn _parse_prequel_construct(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let options = p.expect(TK_OPTIONS);
+    let options = p.expect(TK_OPTIONS, [TK_RULE_REF, TK_TOKEN_REF, TK_RBRACE]);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -6442,9 +6471,9 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         let option = _parse_option(p, &FOLLOW_MASK_3);
-        let semi = p.expect(TK_SEMI);
+        let semi = p.expect(TK_SEMI, []);
     }
-    let rbrace = p.expect(TK_RBRACE);
+    let rbrace = p.expect(TK_RBRACE, []);
     return;
 }
 
@@ -6462,7 +6491,7 @@ fn _parse_options_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4);
-    let assign = p.expect(TK_ASSIGN);
+    let assign = p.expect(TK_ASSIGN, [TK_RULE_REF, TK_TOKEN_REF, TK_STRING_LITERAL, TK_ACTION, TK_INT]);
     let option_value = _parse_option_value(p, follow);
     return;
 }
@@ -6503,13 +6532,13 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let dot = p.expect(TK_DOT);
+            let dot = p.expect(TK_DOT, []);
             let identifier = _parse_identifier(p, follow);
         }
         return;
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, []);
         return;
     }
     if kind == TK_ACTION {
@@ -6517,7 +6546,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         return;
     }
     if kind == TK_INT {
-        let int = p.expect(TK_INT);
+        let int = p.expect(TK_INT, []);
         return;
     }
     p.fail(
@@ -6541,7 +6570,7 @@ fn _parse_option_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let import_ = p.expect(TK_IMPORT);
+    let import_ = p.expect(TK_IMPORT, [TK_RULE_REF, TK_TOKEN_REF]);
     let delegate_grammar = _parse_delegate_grammar(p, &FOLLOW_MASK_5);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -6562,10 +6591,10 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let delegate_grammar = _parse_delegate_grammar(p, follow);
     }
-    let semi = p.expect(TK_SEMI);
+    let semi = p.expect(TK_SEMI, []);
     return;
 }
 
@@ -6596,7 +6625,7 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: 
 fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4);
-    let assign = p.expect(TK_ASSIGN);
+    let assign = p.expect(TK_ASSIGN, [TK_RULE_REF, TK_TOKEN_REF]);
     let identifier_2 = _parse_identifier(p, follow);
     return;
 }
@@ -6660,11 +6689,11 @@ fn _parse_delegate_grammar(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_tokens_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let tokens = p.expect(TK_TOKENS);
+    let tokens = p.expect(TK_TOKENS, [TK_RULE_REF, TK_TOKEN_REF, TK_RBRACE]);
     if _kind_set_1(p.peek_kind()) {
         let id_list = _parse_id_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_RBRACE);
+    let rbrace = p.expect(TK_RBRACE, []);
     return;
 }
 
@@ -6681,11 +6710,11 @@ fn _parse_tokens_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_channels_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let channels = p.expect(TK_CHANNELS);
+    let channels = p.expect(TK_CHANNELS, [TK_RULE_REF, TK_TOKEN_REF, TK_RBRACE]);
     if _kind_set_1(p.peek_kind()) {
         let id_list = _parse_id_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_RBRACE);
+    let rbrace = p.expect(TK_RBRACE, []);
     return;
 }
 
@@ -6723,11 +6752,11 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let identifier = _parse_identifier(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
     }
     return;
 }
@@ -6745,7 +6774,7 @@ fn _parse_id_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let at = p.expect(TK_AT);
+    let at = p.expect(TK_AT, [TK_RULE_REF, TK_TOKEN_REF, TK_LEXER, TK_PARSER]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -6758,7 +6787,7 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     }
     if opt_scan_pos >= 0 {
         let action_scope_name = _parse_action_scope_name(p, &FOLLOW_MASK_6);
-        let coloncolon = p.expect(TK_COLONCOLON);
+        let coloncolon = p.expect(TK_COLONCOLON, []);
     }
     let identifier = _parse_identifier(p, &FOLLOW_MASK_7);
     let action_block = _parse_action_block(p, follow);
@@ -6784,11 +6813,11 @@ fn _parse_action_scope_name__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         return;
     }
     if kind == TK_LEXER {
-        let lexer = p.expect(TK_LEXER);
+        let lexer = p.expect(TK_LEXER, []);
         return;
     }
     if kind == TK_PARSER {
-        let parser = p.expect(TK_PARSER);
+        let parser = p.expect(TK_PARSER, []);
         return;
     }
     p.fail(
@@ -6812,7 +6841,7 @@ fn _parse_action_scope_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let action = p.expect(TK_ACTION);
+    let action = p.expect(TK_ACTION, []);
     return;
 }
 
@@ -6829,11 +6858,11 @@ fn _parse_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_arg_action_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let begin_argument = p.expect(TK_BEGIN_ARGUMENT);
+    let begin_argument = p.expect(TK_BEGIN_ARGUMENT, [TK_ARGUMENT_CONTENT, TK_END_ARGUMENT]);
     while p.peek_kind() == TK_ARGUMENT_CONTENT {
-        let argument_content = p.expect(TK_ARGUMENT_CONTENT);
+        let argument_content = p.expect(TK_ARGUMENT_CONTENT, []);
     }
-    let end_argument = p.expect(TK_END_ARGUMENT);
+    let end_argument = p.expect(TK_END_ARGUMENT, []);
     return;
 }
 
@@ -6850,9 +6879,9 @@ fn _parse_arg_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let mode = p.expect(TK_MODE);
+    let mode = p.expect(TK_MODE, [TK_RULE_REF, TK_TOKEN_REF]);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_3);
-    let semi = p.expect(TK_SEMI);
+    let semi = p.expect(TK_SEMI, [TK_FRAGMENT, TK_TOKEN_REF]);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -6867,12 +6896,9 @@ fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         if rep_scan_pos < 0 {
             if _kind_set_3(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_lexer_rule_spec(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -6908,12 +6934,9 @@ fn _parse_rules__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         if rep_scan_pos < 0 {
             if _kind_set_4(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_rule_spec(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -6984,7 +7007,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     if _kind_set_5(p.peek_kind()) {
         let rule_modifiers = _parse_rule_modifiers(p, &EMPTY_FOLLOW);
     }
-    let rule_ref = p.expect(TK_RULE_REF);
+    let rule_ref = p.expect(TK_RULE_REF, [TK_BEGIN_ARGUMENT, TK_RETURNS, TK_THROWS, TK_LOCALS, TK_OPTIONS, TK_AT, TK_COLON]);
     if p.peek_kind() == TK_BEGIN_ARGUMENT {
         let arg_action_block = _parse_arg_action_block(p, &EMPTY_FOLLOW);
     }
@@ -7010,20 +7033,17 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if rep_scan_pos < 0 {
             if _kind_set_6(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_rule_prequel(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let rule_prequel = _parse_rule_prequel(p, &EMPTY_FOLLOW);
     }
-    let colon = p.expect(TK_COLON);
+    let colon = p.expect(TK_COLON, [TK_LT, TK_RULE_REF, TK_TOKEN_REF, TK_STRING_LITERAL, TK_NOT, TK_DOT, TK_LPAREN, TK_ACTION]);
     let rule_block = _parse_rule_block(p, &FOLLOW_MASK_3);
-    let semi = p.expect(TK_SEMI);
+    let semi = p.expect(TK_SEMI, [TK_CATCH, TK_FINALLY]);
     let exception_group = _parse_exception_group(p, follow);
     return;
 }
@@ -7055,12 +7075,9 @@ fn _parse_exception_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_CATCH {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_exception_handler(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -7085,7 +7102,7 @@ fn _parse_exception_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let catch = p.expect(TK_CATCH);
+    let catch = p.expect(TK_CATCH, [TK_BEGIN_ARGUMENT]);
     let arg_action_block = _parse_arg_action_block(p, &FOLLOW_MASK_7);
     let action_block = _parse_action_block(p, follow);
     return;
@@ -7104,7 +7121,7 @@ fn _parse_exception_handler(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_finally_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let finally = p.expect(TK_FINALLY);
+    let finally = p.expect(TK_FINALLY, [TK_ACTION]);
     let action_block = _parse_action_block(p, follow);
     return;
 }
@@ -7152,7 +7169,7 @@ fn _parse_rule_prequel(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_rule_returns__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let returns = p.expect(TK_RETURNS);
+    let returns = p.expect(TK_RETURNS, [TK_BEGIN_ARGUMENT]);
     let arg_action_block = _parse_arg_action_block(p, follow);
     return;
 }
@@ -7170,7 +7187,7 @@ fn _parse_rule_returns(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let throws = p.expect(TK_THROWS);
+    let throws = p.expect(TK_THROWS, [TK_RULE_REF, TK_TOKEN_REF]);
     let qualified_identifier = _parse_qualified_identifier(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -7192,7 +7209,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let qualified_identifier = _parse_qualified_identifier(p, follow);
     }
     return;
@@ -7211,7 +7228,7 @@ fn _parse_throws_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_locals_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let locals = p.expect(TK_LOCALS);
+    let locals = p.expect(TK_LOCALS, [TK_BEGIN_ARGUMENT]);
     let arg_action_block = _parse_arg_action_block(p, follow);
     return;
 }
@@ -7229,7 +7246,7 @@ fn _parse_locals_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let at = p.expect(TK_AT);
+    let at = p.expect(TK_AT, [TK_RULE_REF, TK_TOKEN_REF]);
     let identifier = _parse_identifier(p, &FOLLOW_MASK_7);
     let action_block = _parse_action_block(p, follow);
     return;
@@ -7264,12 +7281,9 @@ fn _parse_rule_modifiers__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if rep_scan_pos < 0 {
                 if _kind_set_5(p.peek_kind()) {
                     let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
                     _parse_rule_modifier(p, &EMPTY_FOLLOW);
-                    p.recovering = _rec_sav;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
+                    if p.recovering || p.pos == _rec_pos { break; }
+                    continue;
                 }
                 break;
             }
@@ -7295,7 +7309,7 @@ fn _parse_rule_modifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -7357,7 +7371,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR);
+        let or = p.expect(TK_OR, []);
         let labeled_alt = _parse_labeled_alt(p, follow);
     }
     return;
@@ -7378,7 +7392,7 @@ fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let alternative = _parse_alternative(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
-        let pound = p.expect(TK_POUND);
+        let pound = p.expect(TK_POUND, []);
         let identifier = _parse_identifier(p, follow);
     }
     return;
@@ -7398,15 +7412,15 @@ fn _parse_labeled_alt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_FRAGMENT {
-        let fragment = p.expect(TK_FRAGMENT);
+        let fragment = p.expect(TK_FRAGMENT, []);
     }
-    let token_ref = p.expect(TK_TOKEN_REF);
+    let token_ref = p.expect(TK_TOKEN_REF, [TK_OPTIONS, TK_COLON]);
     if p.peek_kind() == TK_OPTIONS {
         let options_spec = _parse_options_spec(p, &EMPTY_FOLLOW);
     }
-    let colon = p.expect(TK_COLON);
+    let colon = p.expect(TK_COLON, [TK_STRING_LITERAL, TK_TOKEN_REF, TK_NOT, TK_LEXER_CHAR_SET, TK_DOT, TK_LPAREN, TK_ACTION]);
     let lexer_rule_block = _parse_lexer_rule_block(p, &FOLLOW_MASK_3);
-    let semi = p.expect(TK_SEMI);
+    let semi = p.expect(TK_SEMI, []);
     return;
 }
 
@@ -7461,7 +7475,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR);
+        let or = p.expect(TK_OR, []);
         let lexer_alt = _parse_lexer_alt(p, follow);
     }
     return;
@@ -7530,12 +7544,9 @@ fn _parse_lexer_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 if rep_scan_pos < 0 {
                     if _kind_set_7(p.peek_kind()) {
                         let _rec_pos = p.pos;
-                        let _rec_cp = p.b.checkpoint();
-                        let _rec_sav = p.recovering;
                         _parse_lexer_element(p, &EMPTY_FOLLOW);
-                        p.recovering = _rec_sav;
-                        p.pos = _rec_pos;
-                        p.b.truncate(_rec_cp);
+                        if p.recovering || p.pos == _rec_pos { break; }
+                        continue;
                     }
                     break;
                 }
@@ -7587,7 +7598,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_8, follow));
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
-            let question = p.expect(TK_QUESTION);
+            let question = p.expect(TK_QUESTION, []);
         }
         return;
     }
@@ -7612,9 +7623,9 @@ fn _parse_lexer_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN);
+    let lparen = p.expect(TK_LPAREN, [TK_STRING_LITERAL, TK_TOKEN_REF, TK_NOT, TK_LEXER_CHAR_SET, TK_DOT, TK_LPAREN, TK_ACTION]);
     let lexer_alt_list = _parse_lexer_alt_list(p, &FOLLOW_MASK_9);
-    let rparen = p.expect(TK_RPAREN);
+    let rparen = p.expect(TK_RPAREN, []);
     return;
 }
 
@@ -7631,7 +7642,7 @@ fn _parse_lexer_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let rarrow = p.expect(TK_RARROW);
+    let rarrow = p.expect(TK_RARROW, [TK_RULE_REF, TK_TOKEN_REF, TK_MODE]);
     let lexer_command = _parse_lexer_command(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -7653,7 +7664,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let lexer_command = _parse_lexer_command(p, follow);
     }
     return;
@@ -7686,9 +7697,9 @@ fn _parse_lexer_command__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Li
 fn _parse_lexer_command__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let lexer_command_name = _parse_lexer_command_name(p, &FOLLOW_MASK_10);
-    let lparen = p.expect(TK_LPAREN);
+    let lparen = p.expect(TK_LPAREN, [TK_RULE_REF, TK_TOKEN_REF, TK_INT]);
     let lexer_command_expr = _parse_lexer_command_expr(p, &FOLLOW_MASK_9);
-    let rparen = p.expect(TK_RPAREN);
+    let rparen = p.expect(TK_RPAREN, []);
     return;
 }
 
@@ -7759,7 +7770,7 @@ fn _parse_lexer_command_name__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     if kind == TK_MODE {
-        let mode = p.expect(TK_MODE);
+        let mode = p.expect(TK_MODE, []);
         return;
     }
     p.fail(
@@ -7789,7 +7800,7 @@ fn _parse_lexer_command_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &
         return;
     }
     if kind == TK_INT {
-        let int = p.expect(TK_INT);
+        let int = p.expect(TK_INT, []);
         return;
     }
     p.fail(
@@ -7834,7 +7845,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR);
+        let or = p.expect(TK_OR, []);
         let alternative = _parse_alternative(p, follow);
     }
     return;
@@ -7874,12 +7885,9 @@ fn _parse_alternative__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 if rep_scan_pos < 0 {
                     if _kind_set_11(p.peek_kind()) {
                         let _rec_pos = p.pos;
-                        let _rec_cp = p.b.checkpoint();
-                        let _rec_sav = p.recovering;
                         _parse_element(p, &EMPTY_FOLLOW);
-                        p.recovering = _rec_sav;
-                        p.pos = _rec_pos;
-                        p.b.truncate(_rec_cp);
+                        if p.recovering || p.pos == _rec_pos { break; }
+                        continue;
                     }
                     break;
                 }
@@ -8006,7 +8014,7 @@ fn _parse_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     if kind == TK_ACTION {
         let action_block = _parse_action_block(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
-            let question = p.expect(TK_QUESTION);
+            let question = p.expect(TK_QUESTION, []);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let predicate_options = _parse_predicate_options(p, &EMPTY_FOLLOW);
@@ -8034,7 +8042,7 @@ fn _parse_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lt = p.expect(TK_LT);
+    let lt = p.expect(TK_LT, [TK_RULE_REF, TK_TOKEN_REF]);
     let predicate_option = _parse_predicate_option(p, &FOLLOW_MASK_11);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8055,10 +8063,10 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let predicate_option = _parse_predicate_option(p, follow);
     }
-    let gt = p.expect(TK_GT);
+    let gt = p.expect(TK_GT, []);
     return;
 }
 
@@ -8089,14 +8097,14 @@ fn _parse_predicate_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
 fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4);
-    let assign = p.expect(TK_ASSIGN);
+    let assign = p.expect(TK_ASSIGN, [TK_ACTION, TK_INT, TK_STRING_LITERAL]);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
         let action_block = _parse_action_block(p, follow);
     } else if grp_kind == TK_INT {
-        let int = p.expect(TK_INT);
+        let int = p.expect(TK_INT, []);
     } else if grp_kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, []);
     }
     return;
 }
@@ -8246,23 +8254,23 @@ fn _parse_ebnf_suffix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_QUESTION {
-        let question = p.expect(TK_QUESTION);
+        let question = p.expect(TK_QUESTION, [TK_QUESTION]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
-            let question = p.expect(TK_QUESTION);
+            let question = p.expect(TK_QUESTION, []);
         }
         return;
     }
     if kind == TK_STAR {
-        let star = p.expect(TK_STAR);
+        let star = p.expect(TK_STAR, [TK_QUESTION]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
-            let question = p.expect(TK_QUESTION);
+            let question = p.expect(TK_QUESTION, []);
         }
         return;
     }
     if kind == TK_PLUS {
-        let plus = p.expect(TK_PLUS);
+        let plus = p.expect(TK_PLUS, [TK_QUESTION]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
-            let question = p.expect(TK_QUESTION);
+            let question = p.expect(TK_QUESTION, []);
         }
         return;
     }
@@ -8316,7 +8324,7 @@ fn _parse_lexer_atom__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         return;
     }
     if kind == TK_LEXER_CHAR_SET {
-        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET);
+        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET, []);
         return;
     }
     if kind == TK_DOT {
@@ -8382,7 +8390,7 @@ fn _parse_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_wildcard__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dot = p.expect(TK_DOT);
+    let dot = p.expect(TK_DOT, [TK_LT]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8402,14 +8410,14 @@ fn _parse_wildcard(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 
 fn _parse_not_set__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let not = p.expect(TK_NOT);
+    let not = p.expect(TK_NOT, [TK_TOKEN_REF, TK_STRING_LITERAL, TK_LEXER_CHAR_SET]);
     let set_element = _parse_set_element(p, follow);
     return;
 }
 
 fn _parse_not_set__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let not = p.expect(TK_NOT);
+    let not = p.expect(TK_NOT, [TK_LPAREN]);
     let block_set = _parse_block_set(p, follow);
     return;
 }
@@ -8447,7 +8455,7 @@ fn _parse_not_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN);
+    let lparen = p.expect(TK_LPAREN, [TK_TOKEN_REF, TK_STRING_LITERAL, TK_LEXER_CHAR_SET]);
     let set_element = _parse_set_element(p, &FOLLOW_MASK_13);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8468,10 +8476,10 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR);
+        let or = p.expect(TK_OR, []);
         let set_element = _parse_set_element(p, follow);
     }
-    let rparen = p.expect(TK_RPAREN);
+    let rparen = p.expect(TK_RPAREN, []);
     return;
 }
 
@@ -8488,7 +8496,7 @@ fn _parse_block_set(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_set_element__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL);
+    let string_literal = p.expect(TK_STRING_LITERAL, [TK_LT]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
         let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
     }
@@ -8524,7 +8532,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF);
+        let token_ref = p.expect(TK_TOKEN_REF, [TK_LT]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8556,7 +8564,7 @@ fn _parse_set_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
     }
     if kind == TK_LEXER_CHAR_SET {
-        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET);
+        let lexer_char_set = p.expect(TK_LEXER_CHAR_SET, []);
         return;
     }
     p.fail(
@@ -8580,7 +8588,7 @@ fn _parse_set_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN);
+    let lparen = p.expect(TK_LPAREN, [TK_OPTIONS, TK_AT, TK_COLON, TK_LT, TK_RULE_REF, TK_TOKEN_REF, TK_STRING_LITERAL, TK_NOT, TK_DOT, TK_LPAREN, TK_ACTION]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -8617,21 +8625,18 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_AT {
                     let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
                     _parse_rule_action(p, &EMPTY_FOLLOW);
-                    p.recovering = _rec_sav;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
+                    if p.recovering || p.pos == _rec_pos { break; }
+                    continue;
                 }
                 break;
             }
             let rule_action = _parse_rule_action(p, &EMPTY_FOLLOW);
         }
-        let colon = p.expect(TK_COLON);
+        let colon = p.expect(TK_COLON, []);
     }
     let alt_list = _parse_alt_list(p, &FOLLOW_MASK_9);
-    let rparen = p.expect(TK_RPAREN);
+    let rparen = p.expect(TK_RPAREN, []);
     return;
 }
 
@@ -8648,7 +8653,7 @@ fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 
 fn _parse_ruleref__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let rule_ref = p.expect(TK_RULE_REF);
+    let rule_ref = p.expect(TK_RULE_REF, [TK_BEGIN_ARGUMENT, TK_LT]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_BEGIN_ARGUMENT) {
         let arg_action_block = _parse_arg_action_block(p, &EMPTY_FOLLOW);
     }
@@ -8671,9 +8676,9 @@ fn _parse_ruleref(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_character_range__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL);
-    let range = p.expect(TK_RANGE);
-    let string_literal_2 = p.expect(TK_STRING_LITERAL);
+    let string_literal = p.expect(TK_STRING_LITERAL, [TK_RANGE]);
+    let range = p.expect(TK_RANGE, [TK_STRING_LITERAL]);
+    let string_literal_2 = p.expect(TK_STRING_LITERAL, []);
     return;
 }
 
@@ -8692,14 +8697,14 @@ fn _parse_terminal_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TOKEN_REF {
-        let token_ref = p.expect(TK_TOKEN_REF);
+        let token_ref = p.expect(TK_TOKEN_REF, [TK_LT]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
         return;
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, [TK_LT]);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LT) {
             let element_options = _parse_element_options(p, &EMPTY_FOLLOW);
         }
@@ -8726,7 +8731,7 @@ fn _parse_terminal_def(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lt = p.expect(TK_LT);
+    let lt = p.expect(TK_LT, [TK_RULE_REF, TK_TOKEN_REF]);
     let element_option = _parse_element_option(p, &FOLLOW_MASK_11);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -8747,10 +8752,10 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA);
+        let comma = p.expect(TK_COMMA, []);
         let element_option = _parse_element_option(p, follow);
     }
-    let gt = p.expect(TK_GT);
+    let gt = p.expect(TK_GT, []);
     return;
 }
 
@@ -8781,14 +8786,14 @@ fn _parse_element_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &L
 fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let identifier = _parse_identifier(p, &FOLLOW_MASK_4);
-    let assign = p.expect(TK_ASSIGN);
+    let assign = p.expect(TK_ASSIGN, [TK_RULE_REF, TK_TOKEN_REF, TK_STRING_LITERAL, TK_INT]);
     let grp_kind = p.peek_kind();
     if _kind_set_1(grp_kind) {
         let qualified_identifier = _parse_qualified_identifier(p, follow);
     } else if grp_kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, []);
     } else if grp_kind == TK_INT {
-        let int = p.expect(TK_INT);
+        let int = p.expect(TK_INT, []);
     }
     return;
 }
@@ -8877,7 +8882,7 @@ fn _parse_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -8922,7 +8927,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let dot = p.expect(TK_DOT);
+        let dot = p.expect(TK_DOT, []);
         let identifier = _parse_identifier(p, follow);
     }
     return;

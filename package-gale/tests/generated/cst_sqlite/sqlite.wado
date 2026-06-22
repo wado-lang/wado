@@ -2798,6 +2798,22 @@ impl Parser {
         return String::from("");
     }
 
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
     fn peek_start(&self) -> i32 {
         return self.tokens.starts[self.pos];
     }
@@ -2827,7 +2843,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> i32 {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -2837,6 +2853,25 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -9126,7 +9161,7 @@ fn _parse_parse__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             let error = _parse_error(p, &EMPTY_FOLLOW);
         }
     }
-    let eof = p.expect(TK_EOF);
+    let eof = p.expect(TK_EOF, []);
     return;
 }
 
@@ -9143,7 +9178,7 @@ fn _parse_parse(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 
 fn _parse_error__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let unexpected_char = p.expect(TK_UNEXPECTED_CHAR);
+    let unexpected_char = p.expect(TK_UNEXPECTED_CHAR, []);
     return;
 }
 
@@ -9171,7 +9206,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
     }
     let sql_stmt = _parse_sql_stmt(p, follow);
     loop {
@@ -9215,7 +9250,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 if rep_scan_pos < 0 { break; }
             }
             _plus_first = false;
-            let semicolon = p.expect(TK_LIT_SEMI);
+            let semicolon = p.expect(TK_LIT_SEMI, []);
         }
         let sql_stmt = _parse_sql_stmt(p, follow);
     }
@@ -9231,7 +9266,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos_3 = pos;
         }
         if rep_scan_pos_3 < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
     }
     return;
 }
@@ -9250,10 +9285,10 @@ fn _parse_sql_stmt_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 fn _parse_sql_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_K_EXPLAIN {
-        let k_explain = p.expect(TK_K_EXPLAIN);
+        let k_explain = p.expect(TK_K_EXPLAIN, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_QUERY && p.peek_at(1) == TK_K_PLAN) {
-            let k_query = p.expect(TK_K_QUERY);
-            let k_plan = p.expect(TK_K_PLAN);
+            let k_query = p.expect(TK_K_QUERY, []);
+            let k_plan = p.expect(TK_K_PLAN, []);
         }
     }
     let grp_kind = p.peek_kind();
@@ -9469,8 +9504,8 @@ fn _parse_sql_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 
 fn _parse_alter_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_alter = p.expect(TK_K_ALTER);
-    let k_table = p.expect(TK_K_TABLE);
+    let k_alter = p.expect(TK_K_ALTER, [TK_K_TABLE]);
+    let k_table = p.expect(TK_K_TABLE, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -9483,18 +9518,18 @@ fn _parse_alter_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, &FOLLOW_MASK_1);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_RENAME {
-        let k_rename = p.expect(TK_K_RENAME);
-        let k_to = p.expect(TK_K_TO);
+        let k_rename = p.expect(TK_K_RENAME, []);
+        let k_to = p.expect(TK_K_TO, []);
         let new_table_name = _parse_new_table_name(p, follow);
     } else if grp_kind == TK_K_ADD {
-        let k_add = p.expect(TK_K_ADD);
+        let k_add = p.expect(TK_K_ADD, []);
         if p.peek_kind() == TK_K_COLUMN {
-            let k_column = p.expect(TK_K_COLUMN);
+            let k_column = p.expect(TK_K_COLUMN, []);
         }
         let column_def = _parse_column_def(p, follow);
     }
@@ -9514,7 +9549,7 @@ fn _parse_alter_table_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_analyze_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_analyze = p.expect(TK_K_ANALYZE);
+    let k_analyze = p.expect(TK_K_ANALYZE, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -9577,7 +9612,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
             if gd_winner == 0 {
                 let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-                let dot = p.expect(TK_LIT_DOT);
+                let dot = p.expect(TK_LIT_DOT, []);
                 let table_or_index_name = _parse_table_or_index_name(p, follow);
             } else if gd_winner == 1 {
                 let database_name = _parse_database_name(p, follow);
@@ -9602,12 +9637,12 @@ fn _parse_analyze_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_attach_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_attach = p.expect(TK_K_ATTACH);
+    let k_attach = p.expect(TK_K_ATTACH, [TK_K_DATABASE, TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     if p.peek_kind() == TK_K_DATABASE {
-        let k_database = p.expect(TK_K_DATABASE);
+        let k_database = p.expect(TK_K_DATABASE, []);
     }
     let expr = _parse_expr(p, &FOLLOW_MASK_2);
-    let k_as = p.expect(TK_K_AS);
+    let k_as = p.expect(TK_K_AS, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let database_name = _parse_database_name(p, follow);
     return;
 }
@@ -9625,7 +9660,7 @@ fn _parse_attach_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_begin_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_begin = p.expect(TK_K_BEGIN);
+    let k_begin = p.expect(TK_K_BEGIN, [TK_K_DEFERRED, TK_K_IMMEDIATE, TK_K_EXCLUSIVE, TK_K_TRANSACTION]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -9658,7 +9693,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let k_deferred_or_k_immediate_or_k_exclusive = p.match_set([TK_K_DEFERRED, TK_K_IMMEDIATE, TK_K_EXCLUSIVE]);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
-        let k_transaction = p.expect(TK_K_TRANSACTION);
+        let k_transaction = p.expect(TK_K_TRANSACTION, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let transaction_name = _parse_transaction_name(p, &EMPTY_FOLLOW);
         }
@@ -9681,7 +9716,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let k_commit_or_k_end = p.match_set([TK_K_COMMIT, TK_K_END]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
-        let k_transaction = p.expect(TK_K_TRANSACTION);
+        let k_transaction = p.expect(TK_K_TRANSACTION, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let transaction_name = _parse_transaction_name(p, &EMPTY_FOLLOW);
         }
@@ -9760,20 +9795,20 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_UNION {
-            let k_union = p.expect(TK_K_UNION);
+            let k_union = p.expect(TK_K_UNION, []);
             if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ALL) {
-                let k_all = p.expect(TK_K_ALL);
+                let k_all = p.expect(TK_K_ALL, []);
             }
         } else if grp_kind == TK_K_INTERSECT {
-            let k_intersect = p.expect(TK_K_INTERSECT);
+            let k_intersect = p.expect(TK_K_INTERSECT, []);
         } else if grp_kind == TK_K_EXCEPT {
-            let k_except = p.expect(TK_K_EXCEPT);
+            let k_except = p.expect(TK_K_EXCEPT, []);
         }
         let select_core = _parse_select_core(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
-        let k_order = p.expect(TK_K_ORDER);
-        let k_by = p.expect(TK_K_BY);
+        let k_order = p.expect(TK_K_ORDER, []);
+        let k_by = p.expect(TK_K_BY, []);
         let ordering_term = _parse_ordering_term(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -9795,12 +9830,12 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let ordering_term = _parse_ordering_term(p, follow);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -9847,15 +9882,15 @@ fn _parse_compound_select_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 
 fn _parse_create_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_create = p.expect(TK_K_CREATE);
+    let k_create = p.expect(TK_K_CREATE, [TK_K_UNIQUE, TK_K_INDEX]);
     if p.peek_kind() == TK_K_UNIQUE {
-        let k_unique = p.expect(TK_K_UNIQUE);
+        let k_unique = p.expect(TK_K_UNIQUE, []);
     }
-    let k_index = p.expect(TK_K_INDEX);
+    let k_index = p.expect(TK_K_INDEX, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_not = p.expect(TK_K_NOT);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_not = p.expect(TK_K_NOT, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -9869,12 +9904,12 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let index_name = _parse_index_name(p, &FOLLOW_MASK_4);
-    let k_on = p.expect(TK_K_ON);
+    let k_on = p.expect(TK_K_ON, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let table_name = _parse_table_name(p, &FOLLOW_MASK_5);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let indexed_column = _parse_indexed_column(p, &FOLLOW_MASK_6);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -9895,12 +9930,12 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let indexed_column = _parse_indexed_column(p, follow);
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_K_WHERE]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-        let k_where = p.expect(TK_K_WHERE);
+        let k_where = p.expect(TK_K_WHERE, []);
         let expr = _parse_expr(p, follow);
     }
     return;
@@ -9919,7 +9954,7 @@ fn _parse_create_index_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_create_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_create = p.expect(TK_K_CREATE);
+    let k_create = p.expect(TK_K_CREATE, [TK_K_TEMP, TK_K_TEMPORARY, TK_K_TABLE]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -9945,11 +9980,11 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     if opt_scan_pos >= 0 {
         let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
-    let k_table = p.expect(TK_K_TABLE);
+    let k_table = p.expect(TK_K_TABLE, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_not = p.expect(TK_K_NOT);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_not = p.expect(TK_K_NOT, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos_2: i32 = -1;
     opt_scan_2: {
@@ -9963,15 +9998,15 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     }
     if opt_scan_pos_2 >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, &FOLLOW_MASK_7);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let column_def = _parse_column_def(p, &FOLLOW_MASK_6);
         while (p.peek_kind() == TK_LIT_COMMA) && (_kind_set_68(p.peek_at(1))) {
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let column_def = _parse_column_def(p, follow);
         }
         loop {
@@ -9993,16 +10028,16 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let table_constraint = _parse_table_constraint(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WITHOUT && p.peek_at(1) == TK_IDENTIFIER) {
-            let k_without = p.expect(TK_K_WITHOUT);
-            let identifier = p.expect(TK_IDENTIFIER);
+            let k_without = p.expect(TK_K_WITHOUT, []);
+            let identifier = p.expect(TK_IDENTIFIER, []);
         }
     } else if grp_kind == TK_K_AS {
-        let k_as = p.expect(TK_K_AS);
+        let k_as = p.expect(TK_K_AS, []);
         let select_stmt = _parse_select_stmt(p, follow);
     }
     return;
@@ -10021,7 +10056,7 @@ fn _parse_create_table_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_create = p.expect(TK_K_CREATE);
+    let k_create = p.expect(TK_K_CREATE, [TK_K_TEMP, TK_K_TEMPORARY, TK_K_TRIGGER]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -10047,11 +10082,11 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
     if opt_scan_pos >= 0 {
         let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
-    let k_trigger = p.expect(TK_K_TRIGGER);
+    let k_trigger = p.expect(TK_K_TRIGGER, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_not = p.expect(TK_K_NOT);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_not = p.expect(TK_K_NOT, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos_2: i32 = -1;
     opt_scan_2: {
@@ -10065,7 +10100,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     if opt_scan_pos_2 >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let trigger_name = _parse_trigger_name(p, &FOLLOW_MASK_8);
     let mut opt_scan_pos_3: i32 = -1;
@@ -10100,23 +10135,23 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     if opt_scan_pos_3 >= 0 {
         if p.peek_kind() == TK_K_BEFORE {
-            let k_before = p.expect(TK_K_BEFORE);
+            let k_before = p.expect(TK_K_BEFORE, []);
         } else if p.peek_kind() == TK_K_AFTER {
-            let k_after = p.expect(TK_K_AFTER);
+            let k_after = p.expect(TK_K_AFTER, []);
         } else {
-            let k_instead = p.expect(TK_K_INSTEAD);
-            let k_of = p.expect(TK_K_OF);
+            let k_instead = p.expect(TK_K_INSTEAD, []);
+            let k_of = p.expect(TK_K_OF, []);
         }
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_DELETE {
-        let k_delete = p.expect(TK_K_DELETE);
+        let k_delete = p.expect(TK_K_DELETE, []);
     } else if grp_kind == TK_K_INSERT {
-        let k_insert = p.expect(TK_K_INSERT);
+        let k_insert = p.expect(TK_K_INSERT, []);
     } else if grp_kind == TK_K_UPDATE {
-        let k_update = p.expect(TK_K_UPDATE);
+        let k_update = p.expect(TK_K_UPDATE, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_OF) {
-            let k_of = p.expect(TK_K_OF);
+            let k_of = p.expect(TK_K_OF, []);
             let column_name = _parse_column_name(p, follow);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -10138,12 +10173,12 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let column_name = _parse_column_name(p, follow);
             }
         }
     }
-    let k_on = p.expect(TK_K_ON);
+    let k_on = p.expect(TK_K_ON, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos_4: i32 = -1;
     opt_scan_4: {
         let tokens = &p.kinds;
@@ -10156,19 +10191,19 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     if opt_scan_pos_4 >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, &FOLLOW_MASK_9);
     if p.peek_kind() == TK_K_FOR && p.peek_at(1) == TK_K_EACH && p.peek_at(2) == TK_K_ROW {
-        let k_for = p.expect(TK_K_FOR);
-        let k_each = p.expect(TK_K_EACH);
-        let k_row = p.expect(TK_K_ROW);
+        let k_for = p.expect(TK_K_FOR, []);
+        let k_each = p.expect(TK_K_EACH, []);
+        let k_row = p.expect(TK_K_ROW, []);
     }
     if p.peek_kind() == TK_K_WHEN {
-        let k_when = p.expect(TK_K_WHEN);
+        let k_when = p.expect(TK_K_WHEN, []);
         let expr = _parse_expr(p, follow);
     }
-    let k_begin = p.expect(TK_K_BEGIN);
+    let k_begin = p.expect(TK_K_BEGIN, [TK_K_WITH, TK_K_UPDATE, TK_K_INSERT, TK_K_REPLACE, TK_K_DELETE, TK_K_SELECT, TK_K_VALUES]);
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -10262,9 +10297,9 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 let select_stmt = _parse_select_stmt(p, &EMPTY_FOLLOW);
             }
         }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
     }
-    let k_end = p.expect(TK_K_END);
+    let k_end = p.expect(TK_K_END, []);
     return;
 }
 
@@ -10281,7 +10316,7 @@ fn _parse_create_trigger_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_create_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_create = p.expect(TK_K_CREATE);
+    let k_create = p.expect(TK_K_CREATE, [TK_K_TEMP, TK_K_TEMPORARY, TK_K_VIEW]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -10307,11 +10342,11 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     if opt_scan_pos >= 0 {
         let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
-    let k_view = p.expect(TK_K_VIEW);
+    let k_view = p.expect(TK_K_VIEW, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_not = p.expect(TK_K_NOT);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_not = p.expect(TK_K_NOT, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos_2: i32 = -1;
     opt_scan_2: {
@@ -10325,10 +10360,10 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     }
     if opt_scan_pos_2 >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let view_name = _parse_view_name(p, &FOLLOW_MASK_2);
-    let k_as = p.expect(TK_K_AS);
+    let k_as = p.expect(TK_K_AS, [TK_K_WITH, TK_K_SELECT, TK_K_VALUES]);
     let select_stmt = _parse_select_stmt(p, follow);
     return;
 }
@@ -10346,13 +10381,13 @@ fn _parse_create_view_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_create = p.expect(TK_K_CREATE);
-    let k_virtual = p.expect(TK_K_VIRTUAL);
-    let k_table = p.expect(TK_K_TABLE);
+    let k_create = p.expect(TK_K_CREATE, [TK_K_VIRTUAL]);
+    let k_virtual = p.expect(TK_K_VIRTUAL, [TK_K_TABLE]);
+    let k_table = p.expect(TK_K_TABLE, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_not = p.expect(TK_K_NOT);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_not = p.expect(TK_K_NOT, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -10366,13 +10401,13 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: &List<List<i3
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, &FOLLOW_MASK_10);
-    let k_using = p.expect(TK_K_USING);
+    let k_using = p.expect(TK_K_USING, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let module_name = _parse_module_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LPAREN) {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let module_argument = _parse_module_argument(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -10393,10 +10428,10 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: &List<List<i3
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let module_argument = _parse_module_argument(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     }
     return;
 }
@@ -10417,11 +10452,11 @@ fn _parse_delete_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p, &EMPTY_FOLLOW);
     }
-    let k_delete = p.expect(TK_K_DELETE);
-    let k_from = p.expect(TK_K_FROM);
+    let k_delete = p.expect(TK_K_DELETE, [TK_K_FROM]);
+    let k_from = p.expect(TK_K_FROM, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let qualified_table_name = _parse_qualified_table_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-        let k_where = p.expect(TK_K_WHERE);
+        let k_where = p.expect(TK_K_WHERE, []);
         let expr = _parse_expr(p, follow);
     }
     return;
@@ -10443,11 +10478,11 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p, &EMPTY_FOLLOW);
     }
-    let k_delete = p.expect(TK_K_DELETE);
-    let k_from = p.expect(TK_K_FROM);
+    let k_delete = p.expect(TK_K_DELETE, [TK_K_FROM]);
+    let k_from = p.expect(TK_K_FROM, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let qualified_table_name = _parse_qualified_table_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-        let k_where = p.expect(TK_K_WHERE);
+        let k_where = p.expect(TK_K_WHERE, []);
         let expr = _parse_expr(p, follow);
     }
     let mut opt_scan_pos: i32 = -1;
@@ -10521,8 +10556,8 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
-            let k_order = p.expect(TK_K_ORDER);
-            let k_by = p.expect(TK_K_BY);
+            let k_order = p.expect(TK_K_ORDER, []);
+            let k_by = p.expect(TK_K_BY, []);
             let ordering_term = _parse_ordering_term(p, follow);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -10544,11 +10579,11 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let ordering_term = _parse_ordering_term(p, follow);
             }
         }
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -10595,9 +10630,9 @@ fn _parse_delete_stmt_limited(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_detach_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_detach = p.expect(TK_K_DETACH);
+    let k_detach = p.expect(TK_K_DETACH, [TK_K_DATABASE, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_DATABASE {
-        let k_database = p.expect(TK_K_DATABASE);
+        let k_database = p.expect(TK_K_DATABASE, []);
     }
     let database_name = _parse_database_name(p, follow);
     return;
@@ -10616,11 +10651,11 @@ fn _parse_detach_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_drop_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_drop = p.expect(TK_K_DROP);
-    let k_index = p.expect(TK_K_INDEX);
+    let k_drop = p.expect(TK_K_DROP, [TK_K_INDEX]);
+    let k_index = p.expect(TK_K_INDEX, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -10634,7 +10669,7 @@ fn _parse_drop_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let index_name = _parse_index_name(p, follow);
     return;
@@ -10653,11 +10688,11 @@ fn _parse_drop_index_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_drop_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_drop = p.expect(TK_K_DROP);
-    let k_table = p.expect(TK_K_TABLE);
+    let k_drop = p.expect(TK_K_DROP, [TK_K_TABLE]);
+    let k_table = p.expect(TK_K_TABLE, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -10671,7 +10706,7 @@ fn _parse_drop_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, follow);
     return;
@@ -10690,11 +10725,11 @@ fn _parse_drop_table_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_drop = p.expect(TK_K_DROP);
-    let k_trigger = p.expect(TK_K_TRIGGER);
+    let k_drop = p.expect(TK_K_DROP, [TK_K_TRIGGER]);
+    let k_trigger = p.expect(TK_K_TRIGGER, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -10708,7 +10743,7 @@ fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let trigger_name = _parse_trigger_name(p, follow);
     return;
@@ -10727,11 +10762,11 @@ fn _parse_drop_trigger_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_drop_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_drop = p.expect(TK_K_DROP);
-    let k_view = p.expect(TK_K_VIEW);
+    let k_drop = p.expect(TK_K_DROP, [TK_K_VIEW]);
+    let k_view = p.expect(TK_K_VIEW, [TK_K_IF, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_EXISTS {
-        let k_if = p.expect(TK_K_IF);
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_if = p.expect(TK_K_IF, []);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -10745,7 +10780,7 @@ fn _parse_drop_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let view_name = _parse_view_name(p, follow);
     return;
@@ -10792,8 +10827,8 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
         let select_core = _parse_select_core(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
-        let k_order = p.expect(TK_K_ORDER);
-        let k_by = p.expect(TK_K_BY);
+        let k_order = p.expect(TK_K_ORDER, []);
+        let k_by = p.expect(TK_K_BY, []);
         let ordering_term = _parse_ordering_term(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -10815,12 +10850,12 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let ordering_term = _parse_ordering_term(p, follow);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -10936,32 +10971,32 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             }
         }
         if gd_winner == 0 {
-            let k_insert = p.expect(TK_K_INSERT);
-            let k_or = p.expect(TK_K_OR);
-            let k_replace = p.expect(TK_K_REPLACE);
+            let k_insert = p.expect(TK_K_INSERT, []);
+            let k_or = p.expect(TK_K_OR, []);
+            let k_replace = p.expect(TK_K_REPLACE, []);
         } else if gd_winner == 1 {
-            let k_insert = p.expect(TK_K_INSERT);
-            let k_or = p.expect(TK_K_OR);
-            let k_rollback = p.expect(TK_K_ROLLBACK);
+            let k_insert = p.expect(TK_K_INSERT, []);
+            let k_or = p.expect(TK_K_OR, []);
+            let k_rollback = p.expect(TK_K_ROLLBACK, []);
         } else if gd_winner == 2 {
-            let k_insert = p.expect(TK_K_INSERT);
-            let k_or = p.expect(TK_K_OR);
-            let k_abort = p.expect(TK_K_ABORT);
+            let k_insert = p.expect(TK_K_INSERT, []);
+            let k_or = p.expect(TK_K_OR, []);
+            let k_abort = p.expect(TK_K_ABORT, []);
         } else if gd_winner == 3 {
-            let k_insert = p.expect(TK_K_INSERT);
-            let k_or = p.expect(TK_K_OR);
-            let k_fail = p.expect(TK_K_FAIL);
+            let k_insert = p.expect(TK_K_INSERT, []);
+            let k_or = p.expect(TK_K_OR, []);
+            let k_fail = p.expect(TK_K_FAIL, []);
         } else if gd_winner == 4 {
-            let k_insert = p.expect(TK_K_INSERT);
-            let k_or = p.expect(TK_K_OR);
-            let k_ignore = p.expect(TK_K_IGNORE);
+            let k_insert = p.expect(TK_K_INSERT, []);
+            let k_or = p.expect(TK_K_OR, []);
+            let k_ignore = p.expect(TK_K_IGNORE, []);
         } else {
-            let k_insert = p.expect(TK_K_INSERT);
+            let k_insert = p.expect(TK_K_INSERT, []);
         }
     } else if grp_kind == TK_K_REPLACE {
-        let k_replace = p.expect(TK_K_REPLACE);
+        let k_replace = p.expect(TK_K_REPLACE, []);
     }
-    let k_into = p.expect(TK_K_INTO);
+    let k_into = p.expect(TK_K_INTO, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -10974,11 +11009,11 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, &FOLLOW_MASK_12);
     if p.peek_kind() == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -10999,10 +11034,10 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let column_name = _parse_column_name(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     }
     let grp_kind_2 = p.peek_kind();
     if _kind_set_3(grp_kind_2) {
@@ -11073,8 +11108,8 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             }
         }
         if gd_winner_2 == 0 {
-            let k_values = p.expect(TK_K_VALUES);
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let k_values = p.expect(TK_K_VALUES, []);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let expr = _parse_expr(p, &FOLLOW_MASK_6);
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -11095,10 +11130,10 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                 let mut rep_scan_pos_2: i32 = -1;
@@ -11138,8 +11173,8 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     rep_scan_pos_2 = pos;
                 }
                 if rep_scan_pos_2 < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
-                let lparen = p.expect(TK_LIT_LPAREN);
+                let comma = p.expect(TK_LIT_COMMA, []);
+                let lparen = p.expect(TK_LIT_LPAREN, []);
                 let expr = _parse_expr(p, &FOLLOW_MASK_6);
                 loop {
                     let mut rep_scan_pos: i32 = -1;
@@ -11160,17 +11195,17 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                         rep_scan_pos = pos;
                     }
                     if rep_scan_pos < 0 { break; }
-                    let comma = p.expect(TK_LIT_COMMA);
+                    let comma = p.expect(TK_LIT_COMMA, []);
                     let expr = _parse_expr(p, follow);
                 }
-                let rparen = p.expect(TK_LIT_RPAREN);
+                let rparen = p.expect(TK_LIT_RPAREN, []);
             }
         } else {
             let select_stmt = _parse_select_stmt(p, follow);
         }
     } else if grp_kind_2 == TK_K_DEFAULT {
-        let k_default = p.expect(TK_K_DEFAULT);
-        let k_values = p.expect(TK_K_VALUES);
+        let k_default = p.expect(TK_K_DEFAULT, []);
+        let k_values = p.expect(TK_K_VALUES, []);
     }
     return;
 }
@@ -11188,7 +11223,7 @@ fn _parse_insert_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_pragma = p.expect(TK_K_PRAGMA);
+    let k_pragma = p.expect(TK_K_PRAGMA, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -11201,7 +11236,7 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let pragma_name = _parse_pragma_name(p, follow);
     let mut opt_scan_pos_2: i32 = -1;
@@ -11234,12 +11269,12 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
         if p.peek_kind() == TK_LIT_EQ {
-            let eq = p.expect(TK_LIT_EQ);
+            let eq = p.expect(TK_LIT_EQ, []);
             let pragma_value = _parse_pragma_value(p, follow);
         } else {
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let pragma_value = _parse_pragma_value(p, &FOLLOW_MASK_13);
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
         }
     }
     return;
@@ -11258,7 +11293,7 @@ fn _parse_pragma_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_reindex_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_reindex = p.expect(TK_K_REINDEX);
+    let k_reindex = p.expect(TK_K_REINDEX, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -11345,7 +11380,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 }
                 if opt_scan_pos >= 0 {
                     let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-                    let dot = p.expect(TK_LIT_DOT);
+                    let dot = p.expect(TK_LIT_DOT, []);
                 }
                 let grp_kind = p.peek_kind();
                 if _kind_set_8(grp_kind) {
@@ -11385,9 +11420,9 @@ fn _parse_reindex_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_release_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_release = p.expect(TK_K_RELEASE);
+    let k_release = p.expect(TK_K_RELEASE, [TK_K_SAVEPOINT, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_SAVEPOINT {
-        let k_savepoint = p.expect(TK_K_SAVEPOINT);
+        let k_savepoint = p.expect(TK_K_SAVEPOINT, []);
     }
     let savepoint_name = _parse_savepoint_name(p, follow);
     return;
@@ -11406,17 +11441,17 @@ fn _parse_release_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_rollback_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_rollback = p.expect(TK_K_ROLLBACK);
+    let k_rollback = p.expect(TK_K_ROLLBACK, [TK_K_TRANSACTION, TK_K_TO]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
-        let k_transaction = p.expect(TK_K_TRANSACTION);
+        let k_transaction = p.expect(TK_K_TRANSACTION, []);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let transaction_name = _parse_transaction_name(p, &EMPTY_FOLLOW);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TO) {
-        let k_to = p.expect(TK_K_TO);
+        let k_to = p.expect(TK_K_TO, []);
         if p.peek_kind() == TK_K_SAVEPOINT {
-            let k_savepoint = p.expect(TK_K_SAVEPOINT);
+            let k_savepoint = p.expect(TK_K_SAVEPOINT, []);
         }
         let savepoint_name = _parse_savepoint_name(p, follow);
     }
@@ -11436,7 +11471,7 @@ fn _parse_rollback_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_savepoint_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_savepoint = p.expect(TK_K_SAVEPOINT);
+    let k_savepoint = p.expect(TK_K_SAVEPOINT, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let savepoint_name = _parse_savepoint_name(p, follow);
     return;
 }
@@ -11459,8 +11494,8 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &
     }
     let select_core = _parse_select_core(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
-        let k_order = p.expect(TK_K_ORDER);
-        let k_by = p.expect(TK_K_BY);
+        let k_order = p.expect(TK_K_ORDER, []);
+        let k_by = p.expect(TK_K_BY, []);
         let ordering_term = _parse_ordering_term(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -11482,12 +11517,12 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let ordering_term = _parse_ordering_term(p, follow);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -11562,8 +11597,8 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         let select_or_values = _parse_select_or_values(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
-        let k_order = p.expect(TK_K_ORDER);
-        let k_by = p.expect(TK_K_BY);
+        let k_order = p.expect(TK_K_ORDER, []);
+        let k_by = p.expect(TK_K_BY, []);
         let ordering_term = _parse_ordering_term(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -11585,12 +11620,12 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let ordering_term = _parse_ordering_term(p, follow);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -11639,7 +11674,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
-        let k_select = p.expect(TK_K_SELECT);
+        let k_select = p.expect(TK_K_SELECT, [TK_K_DISTINCT, TK_K_ALL, TK_LIT_STAR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN, TK_NUMERIC_LITERAL, TK_BLOB_LITERAL, TK_BIND_PARAMETER, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -11686,11 +11721,11 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let result_column = _parse_result_column(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM) {
-            let k_from = p.expect(TK_K_FROM);
+            let k_from = p.expect(TK_K_FROM, []);
             let grp_kind = p.peek_kind();
             if _kind_set_8(grp_kind) {
                 let mut gd_winner: i32 = -1;
@@ -11728,19 +11763,19 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                             rep_scan_pos = pos;
                         }
                         if rep_scan_pos < 0 { break; }
-                        let comma = p.expect(TK_LIT_COMMA);
+                        let comma = p.expect(TK_LIT_COMMA, []);
                         let table_or_subquery = _parse_table_or_subquery(p, follow);
                     }
                 }
             }
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-            let k_where = p.expect(TK_K_WHERE);
+            let k_where = p.expect(TK_K_WHERE, []);
             let expr = _parse_expr(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY) {
-            let k_group = p.expect(TK_K_GROUP);
-            let k_by = p.expect(TK_K_BY);
+            let k_group = p.expect(TK_K_GROUP, []);
+            let k_by = p.expect(TK_K_BY, []);
             let expr = _parse_expr(p, follow);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -11762,19 +11797,19 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
             if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING) {
-                let k_having = p.expect(TK_K_HAVING);
+                let k_having = p.expect(TK_K_HAVING, []);
                 let expr = _parse_expr(p, follow);
             }
         }
         return;
     }
     if kind == TK_K_VALUES {
-        let k_values = p.expect(TK_K_VALUES);
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let k_values = p.expect(TK_K_VALUES, [TK_LIT_LPAREN]);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
         let expr = _parse_expr(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -11795,10 +11830,10 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let expr = _parse_expr(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, [TK_LIT_COMMA]);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos_2: i32 = -1;
@@ -11838,8 +11873,8 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos_2 = pos;
             }
             if rep_scan_pos_2 < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let comma = p.expect(TK_LIT_COMMA, []);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let expr = _parse_expr(p, &FOLLOW_MASK_6);
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -11860,10 +11895,10 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
         }
         return;
     }
@@ -11891,7 +11926,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p, &EMPTY_FOLLOW);
     }
-    let k_update = p.expect(TK_K_UPDATE);
+    let k_update = p.expect(TK_K_UPDATE, [TK_K_OR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -11991,27 +12026,27 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 }
             }
             if gd_winner == 0 {
-                let k_or = p.expect(TK_K_OR);
-                let k_rollback = p.expect(TK_K_ROLLBACK);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_rollback = p.expect(TK_K_ROLLBACK, []);
             } else if gd_winner == 1 {
-                let k_or = p.expect(TK_K_OR);
-                let k_abort = p.expect(TK_K_ABORT);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_abort = p.expect(TK_K_ABORT, []);
             } else if gd_winner == 2 {
-                let k_or = p.expect(TK_K_OR);
-                let k_replace = p.expect(TK_K_REPLACE);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_replace = p.expect(TK_K_REPLACE, []);
             } else if gd_winner == 3 {
-                let k_or = p.expect(TK_K_OR);
-                let k_fail = p.expect(TK_K_FAIL);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_fail = p.expect(TK_K_FAIL, []);
             } else {
-                let k_or = p.expect(TK_K_OR);
-                let k_ignore = p.expect(TK_K_IGNORE);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_ignore = p.expect(TK_K_IGNORE, []);
             }
         }
     }
     let qualified_table_name = _parse_qualified_table_name(p, &FOLLOW_MASK_14);
-    let k_set = p.expect(TK_K_SET);
+    let k_set = p.expect(TK_K_SET, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let column_name = _parse_column_name(p, &FOLLOW_MASK_15);
-    let eq = p.expect(TK_LIT_EQ);
+    let eq = p.expect(TK_LIT_EQ, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     let expr = _parse_expr(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -12037,13 +12072,13 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_15);
-        let eq = p.expect(TK_LIT_EQ);
+        let eq = p.expect(TK_LIT_EQ, []);
         let expr = _parse_expr(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-        let k_where = p.expect(TK_K_WHERE);
+        let k_where = p.expect(TK_K_WHERE, []);
         let expr = _parse_expr(p, follow);
     }
     return;
@@ -12065,7 +12100,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     if p.peek_kind() == TK_K_WITH {
         let with_clause = _parse_with_clause(p, &EMPTY_FOLLOW);
     }
-    let k_update = p.expect(TK_K_UPDATE);
+    let k_update = p.expect(TK_K_UPDATE, [TK_K_OR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -12165,27 +12200,27 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 }
             }
             if gd_winner == 0 {
-                let k_or = p.expect(TK_K_OR);
-                let k_rollback = p.expect(TK_K_ROLLBACK);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_rollback = p.expect(TK_K_ROLLBACK, []);
             } else if gd_winner == 1 {
-                let k_or = p.expect(TK_K_OR);
-                let k_abort = p.expect(TK_K_ABORT);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_abort = p.expect(TK_K_ABORT, []);
             } else if gd_winner == 2 {
-                let k_or = p.expect(TK_K_OR);
-                let k_replace = p.expect(TK_K_REPLACE);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_replace = p.expect(TK_K_REPLACE, []);
             } else if gd_winner == 3 {
-                let k_or = p.expect(TK_K_OR);
-                let k_fail = p.expect(TK_K_FAIL);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_fail = p.expect(TK_K_FAIL, []);
             } else {
-                let k_or = p.expect(TK_K_OR);
-                let k_ignore = p.expect(TK_K_IGNORE);
+                let k_or = p.expect(TK_K_OR, []);
+                let k_ignore = p.expect(TK_K_IGNORE, []);
             }
         }
     }
     let qualified_table_name = _parse_qualified_table_name(p, &FOLLOW_MASK_14);
-    let k_set = p.expect(TK_K_SET);
+    let k_set = p.expect(TK_K_SET, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let column_name = _parse_column_name(p, &FOLLOW_MASK_15);
-    let eq = p.expect(TK_LIT_EQ);
+    let eq = p.expect(TK_LIT_EQ, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     let expr = _parse_expr(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -12211,13 +12246,13 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_15);
-        let eq = p.expect(TK_LIT_EQ);
+        let eq = p.expect(TK_LIT_EQ, []);
         let expr = _parse_expr(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-        let k_where = p.expect(TK_K_WHERE);
+        let k_where = p.expect(TK_K_WHERE, []);
         let expr = _parse_expr(p, follow);
     }
     let mut opt_scan_pos_2: i32 = -1;
@@ -12291,8 +12326,8 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
         if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
-            let k_order = p.expect(TK_K_ORDER);
-            let k_by = p.expect(TK_K_BY);
+            let k_order = p.expect(TK_K_ORDER, []);
+            let k_by = p.expect(TK_K_BY, []);
             let ordering_term = _parse_ordering_term(p, follow);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -12314,11 +12349,11 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let ordering_term = _parse_ordering_term(p, follow);
             }
         }
-        let k_limit = p.expect(TK_K_LIMIT);
+        let k_limit = p.expect(TK_K_LIMIT, []);
         let expr = _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -12365,7 +12400,7 @@ fn _parse_update_stmt_limited(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_vacuum_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_vacuum = p.expect(TK_K_VACUUM);
+    let k_vacuum = p.expect(TK_K_VACUUM, []);
     return;
 }
 
@@ -12400,12 +12435,9 @@ fn _parse_column_def__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if rep_scan_pos < 0 {
             if _kind_set_25(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_column_constraint(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -12487,15 +12519,15 @@ fn _parse_type_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 }
             }
             if gd_winner == 0 {
-                let lparen = p.expect(TK_LIT_LPAREN);
+                let lparen = p.expect(TK_LIT_LPAREN, []);
                 let signed_number = _parse_signed_number(p, &FOLLOW_MASK_16);
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let signed_number_2 = _parse_signed_number(p, &FOLLOW_MASK_13);
-                let rparen = p.expect(TK_LIT_RPAREN);
+                let rparen = p.expect(TK_LIT_RPAREN, []);
             } else {
-                let lparen = p.expect(TK_LIT_LPAREN);
+                let lparen = p.expect(TK_LIT_LPAREN, []);
                 let signed_number = _parse_signed_number(p, &FOLLOW_MASK_13);
-                let rparen = p.expect(TK_LIT_RPAREN);
+                let rparen = p.expect(TK_LIT_RPAREN, []);
             }
         }
     }
@@ -12516,13 +12548,13 @@ fn _parse_type_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 fn _parse_column_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_K_CONSTRAINT {
-        let k_constraint = p.expect(TK_K_CONSTRAINT);
+        let k_constraint = p.expect(TK_K_CONSTRAINT, []);
         let name = _parse_name(p, follow);
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_PRIMARY {
-        let k_primary = p.expect(TK_K_PRIMARY);
-        let k_key = p.expect(TK_K_KEY);
+        let k_primary = p.expect(TK_K_PRIMARY, []);
+        let k_key = p.expect(TK_K_KEY, []);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -12550,24 +12582,24 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
         let conflict_clause = _parse_conflict_clause(p, &follow_prepend(&FOLLOW_MASK_17, follow));
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AUTOINCREMENT) {
-            let k_autoincrement = p.expect(TK_K_AUTOINCREMENT);
+            let k_autoincrement = p.expect(TK_K_AUTOINCREMENT, []);
         }
     } else if _kind_set_26(grp_kind) {
         if p.peek_kind() == TK_K_NOT {
-            let k_not = p.expect(TK_K_NOT);
+            let k_not = p.expect(TK_K_NOT, []);
         }
-        let k_null = p.expect(TK_K_NULL);
+        let k_null = p.expect(TK_K_NULL, []);
         let conflict_clause = _parse_conflict_clause(p, follow);
     } else if grp_kind == TK_K_UNIQUE {
-        let k_unique = p.expect(TK_K_UNIQUE);
+        let k_unique = p.expect(TK_K_UNIQUE, []);
         let conflict_clause = _parse_conflict_clause(p, follow);
     } else if grp_kind == TK_K_CHECK {
-        let k_check = p.expect(TK_K_CHECK);
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let k_check = p.expect(TK_K_CHECK, []);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let expr = _parse_expr(p, &FOLLOW_MASK_13);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     } else if grp_kind == TK_K_DEFAULT {
-        let k_default = p.expect(TK_K_DEFAULT);
+        let k_default = p.expect(TK_K_DEFAULT, []);
         let grp_kind = p.peek_kind();
         if _kind_set_69(grp_kind) {
             let mut gd_winner: i32 = -1;
@@ -12587,12 +12619,12 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 let literal_value = _parse_literal_value(p, follow);
             }
         } else if grp_kind == TK_LIT_LPAREN {
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let expr = _parse_expr(p, &FOLLOW_MASK_13);
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
         }
     } else if grp_kind == TK_K_COLLATE {
-        let k_collate = p.expect(TK_K_COLLATE);
+        let k_collate = p.expect(TK_K_COLLATE, []);
         let collation_name = _parse_collation_name(p, follow);
     } else if grp_kind == TK_K_REFERENCES {
         let foreign_key_clause = _parse_foreign_key_clause(p, follow);
@@ -12614,8 +12646,8 @@ fn _parse_column_constraint(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 fn _parse_conflict_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT) {
-        let k_on = p.expect(TK_K_ON);
-        let k_conflict = p.expect(TK_K_CONFLICT);
+        let k_on = p.expect(TK_K_ON, []);
+        let k_conflict = p.expect(TK_K_CONFLICT, []);
         let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.match_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL, TK_K_IGNORE, TK_K_REPLACE]);
     }
     return;
@@ -12634,12 +12666,12 @@ fn _parse_conflict_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_expr__inner_alt_15(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_cast = p.expect(TK_K_CAST);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let k_cast = p.expect(TK_K_CAST, [TK_LIT_LPAREN]);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     let expr = _parse_expr(p, &FOLLOW_MASK_2);
-    let k_as = p.expect(TK_K_AS);
+    let k_as = p.expect(TK_K_AS, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let type_name = _parse_type_name(p, &FOLLOW_MASK_13);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -12662,7 +12694,7 @@ fn _parse_expr__inner_scan_15(tokens: &Array<i32>, pos: i32, follow: &List<List<
 
 fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_case = p.expect(TK_K_CASE);
+    let k_case = p.expect(TK_K_CASE, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     if _kind_set_34(p.peek_kind()) {
         let expr = _parse_expr(p, &EMPTY_FOLLOW);
     }
@@ -12693,16 +12725,16 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let k_when = p.expect(TK_K_WHEN);
+        let k_when = p.expect(TK_K_WHEN, []);
         let expr = _parse_expr(p, &FOLLOW_MASK_19);
-        let k_then = p.expect(TK_K_THEN);
+        let k_then = p.expect(TK_K_THEN, []);
         let expr_2 = _parse_expr(p, follow);
     }
     if p.peek_kind() == TK_K_ELSE {
-        let k_else = p.expect(TK_K_ELSE);
+        let k_else = p.expect(TK_K_ELSE, []);
         let expr = _parse_expr(p, follow);
     }
-    let k_end = p.expect(TK_K_END);
+    let k_end = p.expect(TK_K_END, []);
     return;
 }
 
@@ -12771,15 +12803,15 @@ fn _parse_expr__inner_alt_21(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     if p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_EXISTS {
         if p.peek_kind() == TK_K_NOT {
-            let k_not = p.expect(TK_K_NOT);
+            let k_not = p.expect(TK_K_NOT, []);
         }
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     } else if p.peek_kind() == TK_K_EXISTS {
-        let k_exists = p.expect(TK_K_EXISTS);
+        let k_exists = p.expect(TK_K_EXISTS, []);
     }
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_K_WITH, TK_K_SELECT, TK_K_VALUES]);
     let select_stmt = _parse_select_stmt(p, &FOLLOW_MASK_13);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -12809,9 +12841,9 @@ fn _parse_expr__inner_scan_21(tokens: &Array<i32>, pos: i32, follow: &List<List<
 
 fn _parse_expr__inner_alt_14(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
     let expr = _parse_expr(p, &FOLLOW_MASK_13);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -12855,7 +12887,7 @@ fn _parse_expr__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let function_name = _parse_function_name(p, &FOLLOW_MASK_5);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_K_DISTINCT, TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE, TK_LIT_STAR, TK_LIT_RPAREN]);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -12901,7 +12933,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     if opt_scan_pos >= 0 {
         if _kind_set_13(p.peek_kind()) {
             if p.peek_kind() == TK_K_DISTINCT {
-                let k_distinct = p.expect(TK_K_DISTINCT);
+                let k_distinct = p.expect(TK_K_DISTINCT, []);
             }
             let expr = _parse_expr(p, follow);
             loop {
@@ -12924,14 +12956,14 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
         } else {
-            let star = p.expect(TK_LIT_STAR);
+            let star = p.expect(TK_LIT_STAR, []);
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -13017,13 +13049,13 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         if opt_scan_pos >= 0 {
             let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-            let dot = p.expect(TK_LIT_DOT);
+            let dot = p.expect(TK_LIT_DOT, []);
         }
         let table_name = _parse_table_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     } else if _kind_set_8(p.peek_kind()) && p.peek_at(1) == TK_LIT_DOT {
         let table_name = _parse_table_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let column_name = _parse_column_name(p, follow);
     return;
@@ -13314,7 +13346,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
     }
     if kind == TK_BIND_PARAMETER {
-        let bind_parameter = p.expect(TK_BIND_PARAMETER);
+        let bind_parameter = p.expect(TK_BIND_PARAMETER, []);
         return;
     }
     p.fail(
@@ -13339,7 +13371,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE);
+                let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE, []);
                 let expr_2 = _parse_expr(p, follow, 15);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13413,9 +13445,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
-                    let k_in = p.expect(TK_K_IN);
+                    let k_in = p.expect(TK_K_IN, []);
                     let mut gd_winner: i32 = -1;
                     gd_dispatch: {
                         gd_scan: {
@@ -13467,7 +13499,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         }
                     }
                     if gd_winner == 0 {
-                        let lparen = p.expect(TK_LIT_LPAREN);
+                        let lparen = p.expect(TK_LIT_LPAREN, []);
                         if _kind_set_13(p.peek_kind()) {
                             let mut gd_winner_2: i32 = -1;
                             gd_dispatch_2: {
@@ -13485,16 +13517,16 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             } else {
                                 let expr = _parse_expr(p, follow, 9);
                                 while p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                                    let comma = p.expect(TK_LIT_COMMA);
+                                    let comma = p.expect(TK_LIT_COMMA, []);
                                     let expr = _parse_expr(p, follow, 9);
                                 }
                             }
                         }
-                        let rparen = p.expect(TK_LIT_RPAREN);
+                        let rparen = p.expect(TK_LIT_RPAREN, []);
                     } else {
                         if _kind_set_8(p.peek_kind()) {
                             let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-                            let dot = p.expect(TK_LIT_DOT);
+                            let dot = p.expect(TK_LIT_DOT, []);
                         }
                         let table_name = _parse_table_name(p, follow);
                     }
@@ -13509,12 +13541,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
                     let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                        let k_escape = p.expect(TK_K_ESCAPE);
+                        let k_escape = p.expect(TK_K_ESCAPE, []);
                         let expr = _parse_expr(p, follow, 5);
                     }
                     p.b.finish_node(p.last_end());
@@ -13528,12 +13560,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
                     let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                        let k_escape = p.expect(TK_K_ESCAPE);
+                        let k_escape = p.expect(TK_K_ESCAPE, []);
                         let expr = _parse_expr(p, follow, 5);
                     }
                     p.b.finish_node(p.last_end());
@@ -13547,12 +13579,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
                     let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                        let k_escape = p.expect(TK_K_ESCAPE);
+                        let k_escape = p.expect(TK_K_ESCAPE, []);
                         let expr = _parse_expr(p, follow, 5);
                     }
                     p.b.finish_node(p.last_end());
@@ -13566,12 +13598,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
                     let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                        let k_escape = p.expect(TK_K_ESCAPE);
+                        let k_escape = p.expect(TK_K_ESCAPE, []);
                         let expr = _parse_expr(p, follow, 5);
                     }
                     p.b.finish_node(p.last_end());
@@ -13586,12 +13618,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     let _gk = p.peek_kind();
                     if _gk == TK_K_ISNULL {
-                        let k_isnull = p.expect(TK_K_ISNULL);
+                        let k_isnull = p.expect(TK_K_ISNULL, []);
                     } else if _gk == TK_K_NOTNULL {
-                        let k_notnull = p.expect(TK_K_NOTNULL);
+                        let k_notnull = p.expect(TK_K_NOTNULL, []);
                     } else if _gk == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
-                        let k_null = p.expect(TK_K_NULL);
+                        let k_not = p.expect(TK_K_NOT, []);
+                        let k_null = p.expect(TK_K_NULL, []);
                     } else {
                         let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                     }
@@ -13607,12 +13639,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     let _gk = p.peek_kind();
                     if _gk == TK_K_ISNULL {
-                        let k_isnull = p.expect(TK_K_ISNULL);
+                        let k_isnull = p.expect(TK_K_ISNULL, []);
                     } else if _gk == TK_K_NOTNULL {
-                        let k_notnull = p.expect(TK_K_NOTNULL);
+                        let k_notnull = p.expect(TK_K_NOTNULL, []);
                     } else if _gk == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
-                        let k_null = p.expect(TK_K_NULL);
+                        let k_not = p.expect(TK_K_NOT, []);
+                        let k_null = p.expect(TK_K_NULL, []);
                     } else {
                         let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                     }
@@ -13627,11 +13659,11 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     p.b.start_node_at(_cp, RK_EXPR, _start);
                     if p.peek_kind() == TK_K_NOT {
-                        let k_not = p.expect(TK_K_NOT);
+                        let k_not = p.expect(TK_K_NOT, []);
                     }
-                    let k_between = p.expect(TK_K_BETWEEN);
+                    let k_between = p.expect(TK_K_BETWEEN, []);
                     let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 8);
-                    let k_and = p.expect(TK_K_AND);
+                    let k_and = p.expect(TK_K_AND, []);
                     let expr_3 = _parse_expr(p, follow, 8);
                     p.b.finish_node(p.last_end());
                 } else {
@@ -13645,9 +13677,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
-                            let k_not = p.expect(TK_K_NOT);
+                            let k_not = p.expect(TK_K_NOT, []);
                         }
-                        let k_in = p.expect(TK_K_IN);
+                        let k_in = p.expect(TK_K_IN, []);
                         let mut gd_winner_3: i32 = -1;
                         gd_dispatch_3: {
                             gd_scan_3: {
@@ -13699,7 +13731,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             }
                         }
                         if gd_winner_3 == 0 {
-                            let lparen = p.expect(TK_LIT_LPAREN);
+                            let lparen = p.expect(TK_LIT_LPAREN, []);
                             if _kind_set_13(p.peek_kind()) {
                                 let mut gd_winner_4: i32 = -1;
                                 gd_dispatch_4: {
@@ -13717,16 +13749,16 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                 } else {
                                     let expr = _parse_expr(p, follow, 9);
                                     while p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                                        let comma = p.expect(TK_LIT_COMMA);
+                                        let comma = p.expect(TK_LIT_COMMA, []);
                                         let expr = _parse_expr(p, follow, 9);
                                     }
                                 }
                             }
-                            let rparen = p.expect(TK_LIT_RPAREN);
+                            let rparen = p.expect(TK_LIT_RPAREN, []);
                         } else {
                             if _kind_set_8(p.peek_kind()) {
                                 let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-                                let dot = p.expect(TK_LIT_DOT);
+                                let dot = p.expect(TK_LIT_DOT, []);
                             }
                             let table_name = _parse_table_name(p, follow);
                         }
@@ -13741,12 +13773,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
-                            let k_not = p.expect(TK_K_NOT);
+                            let k_not = p.expect(TK_K_NOT, []);
                         }
                         let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                         let expr_2 = _parse_expr(p, follow, 5);
                         if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
-                            let k_escape = p.expect(TK_K_ESCAPE);
+                            let k_escape = p.expect(TK_K_ESCAPE, []);
                             let expr = _parse_expr(p, follow, 5);
                         }
                         p.b.finish_node(p.last_end());
@@ -13761,12 +13793,12 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         let _gk = p.peek_kind();
                         if _gk == TK_K_ISNULL {
-                            let k_isnull = p.expect(TK_K_ISNULL);
+                            let k_isnull = p.expect(TK_K_ISNULL, []);
                         } else if _gk == TK_K_NOTNULL {
-                            let k_notnull = p.expect(TK_K_NOTNULL);
+                            let k_notnull = p.expect(TK_K_NOTNULL, []);
                         } else if _gk == TK_K_NOT {
-                            let k_not = p.expect(TK_K_NOT);
-                            let k_null = p.expect(TK_K_NULL);
+                            let k_not = p.expect(TK_K_NOT, []);
+                            let k_null = p.expect(TK_K_NULL, []);
                         } else {
                             let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                         }
@@ -13781,11 +13813,11 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         }
                         p.b.start_node_at(_cp, RK_EXPR, _start);
                         if p.peek_kind() == TK_K_NOT {
-                            let k_not = p.expect(TK_K_NOT);
+                            let k_not = p.expect(TK_K_NOT, []);
                         }
-                        let k_between = p.expect(TK_K_BETWEEN);
+                        let k_between = p.expect(TK_K_BETWEEN, []);
                         let expr_2 = _parse_expr(p, &FOLLOW_MASK_20, 8);
-                        let k_and = p.expect(TK_K_AND);
+                        let k_and = p.expect(TK_K_AND, []);
                         let expr_3 = _parse_expr(p, follow, 8);
                         p.b.finish_node(p.last_end());
                     } else {
@@ -13799,7 +13831,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let k_and = p.expect(TK_K_AND);
+                let k_and = p.expect(TK_K_AND, []);
                 let expr_2 = _parse_expr(p, follow, 8);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13811,7 +13843,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let k_or = p.expect(TK_K_OR);
+                let k_or = p.expect(TK_K_OR, []);
                 let expr_2 = _parse_expr(p, follow, 7);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13823,7 +13855,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let k_collate = p.expect(TK_K_COLLATE);
+                let k_collate = p.expect(TK_K_COLLATE, []);
                 let collation_name = _parse_collation_name(p, follow);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13835,9 +13867,9 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let k_is = p.expect(TK_K_IS);
+                let k_is = p.expect(TK_K_IS, []);
                 if p.peek_kind() == TK_K_NOT {
-                    let k_not = p.expect(TK_K_NOT);
+                    let k_not = p.expect(TK_K_NOT, []);
                 }
                 let expr_2 = _parse_expr(p, follow, 3);
                 p.b.finish_node(p.last_end());
@@ -13861,10 +13893,10 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_pre
 
 fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_references = p.expect(TK_K_REFERENCES);
+    let k_references = p.expect(TK_K_REFERENCES, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let foreign_table = _parse_foreign_table(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LPAREN) {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -13885,10 +13917,10 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let column_name = _parse_column_name(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     }
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -13984,7 +14016,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         if rep_scan_pos < 0 { break; }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ON {
-            let k_on = p.expect(TK_K_ON);
+            let k_on = p.expect(TK_K_ON, []);
             let k_delete_or_k_update = p.match_set([TK_K_DELETE, TK_K_UPDATE]);
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_SET {
@@ -14002,30 +14034,30 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
                     }
                 }
                 if gd_winner == 0 {
-                    let k_set = p.expect(TK_K_SET);
-                    let k_null = p.expect(TK_K_NULL);
+                    let k_set = p.expect(TK_K_SET, []);
+                    let k_null = p.expect(TK_K_NULL, []);
                 } else {
-                    let k_set = p.expect(TK_K_SET);
-                    let k_default = p.expect(TK_K_DEFAULT);
+                    let k_set = p.expect(TK_K_SET, []);
+                    let k_default = p.expect(TK_K_DEFAULT, []);
                 }
             } else if grp_kind == TK_K_CASCADE {
-                let k_cascade = p.expect(TK_K_CASCADE);
+                let k_cascade = p.expect(TK_K_CASCADE, []);
             } else if grp_kind == TK_K_RESTRICT {
-                let k_restrict = p.expect(TK_K_RESTRICT);
+                let k_restrict = p.expect(TK_K_RESTRICT, []);
             } else if grp_kind == TK_K_NO {
-                let k_no = p.expect(TK_K_NO);
-                let k_action = p.expect(TK_K_ACTION);
+                let k_no = p.expect(TK_K_NO, []);
+                let k_action = p.expect(TK_K_ACTION, []);
             }
         } else if grp_kind == TK_K_MATCH {
-            let k_match = p.expect(TK_K_MATCH);
+            let k_match = p.expect(TK_K_MATCH, []);
             let name = _parse_name(p, follow);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE && p.peek_at(2) == TK_K_INITIALLY) {
         if p.peek_kind() == TK_K_NOT {
-            let k_not = p.expect(TK_K_NOT);
+            let k_not = p.expect(TK_K_NOT, []);
         }
-        let k_deferrable = p.expect(TK_K_DEFERRABLE);
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, []);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -14071,16 +14103,16 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
                     }
                 }
                 if gd_winner == 0 {
-                    let k_initially = p.expect(TK_K_INITIALLY);
-                    let k_deferred = p.expect(TK_K_DEFERRED);
+                    let k_initially = p.expect(TK_K_INITIALLY, []);
+                    let k_deferred = p.expect(TK_K_DEFERRED, []);
                 } else {
-                    let k_initially = p.expect(TK_K_INITIALLY);
-                    let k_immediate = p.expect(TK_K_IMMEDIATE);
+                    let k_initially = p.expect(TK_K_INITIALLY, []);
+                    let k_immediate = p.expect(TK_K_IMMEDIATE, []);
                 }
             }
         }
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_DEFERRABLE && p.peek_at(1) == TK_K_INITIALLY) {
-        let k_deferrable = p.expect(TK_K_DEFERRABLE);
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, []);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -14126,21 +14158,21 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
                     }
                 }
                 if gd_winner == 0 {
-                    let k_initially = p.expect(TK_K_INITIALLY);
-                    let k_deferred = p.expect(TK_K_DEFERRED);
+                    let k_initially = p.expect(TK_K_INITIALLY, []);
+                    let k_deferred = p.expect(TK_K_DEFERRED, []);
                 } else {
-                    let k_initially = p.expect(TK_K_INITIALLY);
-                    let k_immediate = p.expect(TK_K_IMMEDIATE);
+                    let k_initially = p.expect(TK_K_INITIALLY, []);
+                    let k_immediate = p.expect(TK_K_IMMEDIATE, []);
                 }
             }
         }
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_NOT && p.peek_at(1) == TK_K_DEFERRABLE) {
         if p.peek_kind() == TK_K_NOT {
-            let k_not = p.expect(TK_K_NOT);
+            let k_not = p.expect(TK_K_NOT, []);
         }
-        let k_deferrable = p.expect(TK_K_DEFERRABLE);
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, []);
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_DEFERRABLE) {
-        let k_deferrable = p.expect(TK_K_DEFERRABLE);
+        let k_deferrable = p.expect(TK_K_DEFERRABLE, []);
     }
     return;
 }
@@ -14158,17 +14190,17 @@ fn _parse_foreign_key_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 
 fn _parse_raise_function__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_raise = p.expect(TK_K_RAISE);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let k_raise = p.expect(TK_K_RAISE, [TK_LIT_LPAREN]);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_K_IGNORE, TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL]);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_IGNORE {
-        let k_ignore = p.expect(TK_K_IGNORE);
+        let k_ignore = p.expect(TK_K_IGNORE, []);
     } else if _kind_set_39(grp_kind) {
         let k_rollback_or_k_abort_or_k_fail = p.match_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL]);
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let error_message = _parse_error_message(p, follow);
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -14187,7 +14219,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let start = p.peek_start();
     let column_name = _parse_column_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE) {
-        let k_collate = p.expect(TK_K_COLLATE);
+        let k_collate = p.expect(TK_K_COLLATE, []);
         let collation_name = _parse_collation_name(p, follow);
     }
     let mut opt_scan_pos: i32 = -1;
@@ -14232,19 +14264,19 @@ fn _parse_indexed_column(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_K_CONSTRAINT {
-        let k_constraint = p.expect(TK_K_CONSTRAINT);
+        let k_constraint = p.expect(TK_K_CONSTRAINT, []);
         let name = _parse_name(p, follow);
     }
     let grp_kind = p.peek_kind();
     if _kind_set_41(grp_kind) {
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_PRIMARY {
-            let k_primary = p.expect(TK_K_PRIMARY);
-            let k_key = p.expect(TK_K_KEY);
+            let k_primary = p.expect(TK_K_PRIMARY, []);
+            let k_key = p.expect(TK_K_KEY, []);
         } else if grp_kind == TK_K_UNIQUE {
-            let k_unique = p.expect(TK_K_UNIQUE);
+            let k_unique = p.expect(TK_K_UNIQUE, []);
         }
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let indexed_column = _parse_indexed_column(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -14265,20 +14297,20 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let indexed_column = _parse_indexed_column(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         let conflict_clause = _parse_conflict_clause(p, follow);
     } else if grp_kind == TK_K_CHECK {
-        let k_check = p.expect(TK_K_CHECK);
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let k_check = p.expect(TK_K_CHECK, []);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let expr = _parse_expr(p, &FOLLOW_MASK_13);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     } else if grp_kind == TK_K_FOREIGN {
-        let k_foreign = p.expect(TK_K_FOREIGN);
-        let k_key = p.expect(TK_K_KEY);
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let k_foreign = p.expect(TK_K_FOREIGN, []);
+        let k_key = p.expect(TK_K_KEY, []);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -14299,10 +14331,10 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let column_name = _parse_column_name(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         let foreign_key_clause = _parse_foreign_key_clause(p, follow);
     }
     return;
@@ -14321,9 +14353,9 @@ fn _parse_table_constraint(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_with_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_with = p.expect(TK_K_WITH);
+    let k_with = p.expect(TK_K_WITH, [TK_K_RECURSIVE, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if p.peek_kind() == TK_K_RECURSIVE {
-        let k_recursive = p.expect(TK_K_RECURSIVE);
+        let k_recursive = p.expect(TK_K_RECURSIVE, []);
     }
     let common_table_expression = _parse_common_table_expression(p, follow);
     loop {
@@ -14346,7 +14378,7 @@ fn _parse_with_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let common_table_expression = _parse_common_table_expression(p, follow);
     }
     return;
@@ -14377,7 +14409,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
     }
     if opt_scan_pos >= 0 {
         let database_name = _parse_database_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, follow);
     let mut opt_scan_pos_2: i32 = -1;
@@ -14410,12 +14442,12 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow: &List<List<i32>> =
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
         if p.peek_kind() == TK_K_INDEXED {
-            let k_indexed = p.expect(TK_K_INDEXED);
-            let k_by = p.expect(TK_K_BY);
+            let k_indexed = p.expect(TK_K_INDEXED, []);
+            let k_by = p.expect(TK_K_BY, []);
             let index_name = _parse_index_name(p, follow);
         } else {
-            let k_not = p.expect(TK_K_NOT);
-            let k_indexed = p.expect(TK_K_INDEXED);
+            let k_not = p.expect(TK_K_NOT, []);
+            let k_indexed = p.expect(TK_K_INDEXED, []);
         }
     }
     return;
@@ -14436,7 +14468,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE) {
-        let k_collate = p.expect(TK_K_COLLATE);
+        let k_collate = p.expect(TK_K_COLLATE, []);
         let collation_name = _parse_collation_name(p, follow);
     }
     let mut opt_scan_pos: i32 = -1;
@@ -14493,7 +14525,7 @@ fn _parse_pragma_value__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Lis
 
 fn _parse_pragma_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL);
+    let string_literal = p.expect(TK_STRING_LITERAL, []);
     return;
 }
 
@@ -14561,7 +14593,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow: &List<List<i32>
     let start = p.peek_start();
     let table_name = _parse_table_name(p, &FOLLOW_MASK_7);
     if p.peek_kind() == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, []);
         let column_name = _parse_column_name(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -14582,15 +14614,15 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow: &List<List<i32>
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let column_name = _parse_column_name(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
     }
-    let k_as = p.expect(TK_K_AS);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let k_as = p.expect(TK_K_AS, [TK_LIT_LPAREN]);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_K_WITH, TK_K_SELECT, TK_K_VALUES]);
     let select_stmt = _parse_select_stmt(p, &FOLLOW_MASK_13);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -14608,8 +14640,8 @@ fn _parse_common_table_expression(p: &mut Parser, follow: &List<List<i32>> = &EM
 fn _parse_result_column__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let table_name = _parse_table_name(p, &FOLLOW_MASK_21);
-    let dot = p.expect(TK_LIT_DOT);
-    let star = p.expect(TK_LIT_STAR);
+    let dot = p.expect(TK_LIT_DOT, [TK_LIT_STAR]);
+    let star = p.expect(TK_LIT_STAR, []);
     return;
 }
 
@@ -14629,7 +14661,7 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = 
     let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AS && _kind_set_45(p.peek_at(1))) {
         if p.peek_kind() == TK_K_AS {
-            let k_as = p.expect(TK_K_AS);
+            let k_as = p.expect(TK_K_AS, []);
         }
         let column_alias = _parse_column_alias(p, follow);
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_45(p.peek_kind())) {
@@ -14662,7 +14694,7 @@ fn _parse_result_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_STAR {
-        let star = p.expect(TK_LIT_STAR);
+        let star = p.expect(TK_LIT_STAR, []);
         return;
     }
     if _kind_set_13(kind) {
@@ -14713,12 +14745,12 @@ fn _parse_result_column(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_K_WITH, TK_K_SELECT, TK_K_VALUES]);
     let select_stmt = _parse_select_stmt(p, &FOLLOW_MASK_13);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_K_AS, TK_IDENTIFIER, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AS && _kind_set_47(p.peek_at(1))) {
         if p.peek_kind() == TK_K_AS {
-            let k_as = p.expect(TK_K_AS);
+            let k_as = p.expect(TK_K_AS, []);
         }
         let table_alias = _parse_table_alias(p, follow);
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_47(p.peek_kind())) {
@@ -14753,7 +14785,7 @@ fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     let grp_kind = p.peek_kind();
     if _kind_set_8(grp_kind) {
         let mut gd_winner: i32 = -1;
@@ -14791,12 +14823,12 @@ fn _parse_table_or_subquery__inner_alt_2(p: &mut Parser, follow: &List<List<i32>
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let table_or_subquery = _parse_table_or_subquery(p, follow);
             }
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -14859,10 +14891,10 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
     }
     if opt_scan_pos >= 0 {
         let schema_name = _parse_schema_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_function_name = _parse_table_function_name(p, &FOLLOW_MASK_5);
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE, TK_LIT_RPAREN]);
     let mut opt_scan_pos_2: i32 = -1;
     opt_scan_2: {
         let tokens = &p.kinds;
@@ -14908,14 +14940,14 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow: &List<List<i32>
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let expr = _parse_expr(p, follow);
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_K_AS, TK_IDENTIFIER, TK_STRING_LITERAL, TK_LIT_LPAREN]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AS && _kind_set_47(p.peek_at(1))) {
         if p.peek_kind() == TK_K_AS {
-            let k_as = p.expect(TK_K_AS);
+            let k_as = p.expect(TK_K_AS, []);
         }
         let table_alias = _parse_table_alias(p, follow);
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_47(p.peek_kind())) {
@@ -15003,12 +15035,12 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
     }
     if opt_scan_pos >= 0 {
         let schema_name = _parse_schema_name(p, &FOLLOW_MASK_0);
-        let dot = p.expect(TK_LIT_DOT);
+        let dot = p.expect(TK_LIT_DOT, []);
     }
     let table_name = _parse_table_name(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AS && _kind_set_47(p.peek_at(1))) {
         if p.peek_kind() == TK_K_AS {
-            let k_as = p.expect(TK_K_AS);
+            let k_as = p.expect(TK_K_AS, []);
         }
         let table_alias = _parse_table_alias(p, follow);
     } else if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_47(p.peek_kind())) {
@@ -15044,12 +15076,12 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow: &List<List<i32>
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos_2 >= 0) {
         if p.peek_kind() == TK_K_INDEXED {
-            let k_indexed = p.expect(TK_K_INDEXED);
-            let k_by = p.expect(TK_K_BY);
+            let k_indexed = p.expect(TK_K_INDEXED, []);
+            let k_by = p.expect(TK_K_BY, []);
             let index_name = _parse_index_name(p, follow);
         } else {
-            let k_not = p.expect(TK_K_NOT);
-            let k_indexed = p.expect(TK_K_INDEXED);
+            let k_not = p.expect(TK_K_NOT, []);
+            let k_indexed = p.expect(TK_K_INDEXED, []);
         }
     }
     return;
@@ -15246,12 +15278,12 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_COMMA {
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         return;
     }
     if _kind_set_49(kind) {
         if p.peek_kind() == TK_K_NATURAL {
-            let k_natural = p.expect(TK_K_NATURAL);
+            let k_natural = p.expect(TK_K_NATURAL, []);
         }
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
@@ -15288,17 +15320,17 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         if opt_scan_pos >= 0 {
             if p.peek_kind() == TK_K_LEFT {
-                let k_left = p.expect(TK_K_LEFT);
+                let k_left = p.expect(TK_K_LEFT, []);
                 if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_OUTER) {
-                    let k_outer = p.expect(TK_K_OUTER);
+                    let k_outer = p.expect(TK_K_OUTER, []);
                 }
             } else if p.peek_kind() == TK_K_INNER {
-                let k_inner = p.expect(TK_K_INNER);
+                let k_inner = p.expect(TK_K_INNER, []);
             } else {
-                let k_cross = p.expect(TK_K_CROSS);
+                let k_cross = p.expect(TK_K_CROSS, []);
             }
         }
-        let k_join = p.expect(TK_K_JOIN);
+        let k_join = p.expect(TK_K_JOIN, []);
         return;
     }
     p.fail(
@@ -15369,11 +15401,11 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
         if p.peek_kind() == TK_K_ON {
-            let k_on = p.expect(TK_K_ON);
+            let k_on = p.expect(TK_K_ON, []);
             let expr = _parse_expr(p, follow);
         } else {
-            let k_using = p.expect(TK_K_USING);
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let k_using = p.expect(TK_K_USING, []);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let column_name = _parse_column_name(p, &FOLLOW_MASK_6);
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -15394,10 +15426,10 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let column_name = _parse_column_name(p, follow);
             }
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
         }
     }
     return;
@@ -15418,7 +15450,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_K_SELECT {
-        let k_select = p.expect(TK_K_SELECT);
+        let k_select = p.expect(TK_K_SELECT, [TK_K_DISTINCT, TK_K_ALL, TK_LIT_STAR, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN, TK_NUMERIC_LITERAL, TK_BLOB_LITERAL, TK_BIND_PARAMETER, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -15465,11 +15497,11 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let result_column = _parse_result_column(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM) {
-            let k_from = p.expect(TK_K_FROM);
+            let k_from = p.expect(TK_K_FROM, []);
             let grp_kind = p.peek_kind();
             if _kind_set_8(grp_kind) {
                 let mut gd_winner: i32 = -1;
@@ -15507,19 +15539,19 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                             rep_scan_pos = pos;
                         }
                         if rep_scan_pos < 0 { break; }
-                        let comma = p.expect(TK_LIT_COMMA);
+                        let comma = p.expect(TK_LIT_COMMA, []);
                         let table_or_subquery = _parse_table_or_subquery(p, follow);
                     }
                 }
             }
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
-            let k_where = p.expect(TK_K_WHERE);
+            let k_where = p.expect(TK_K_WHERE, []);
             let expr = _parse_expr(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY) {
-            let k_group = p.expect(TK_K_GROUP);
-            let k_by = p.expect(TK_K_BY);
+            let k_group = p.expect(TK_K_GROUP, []);
+            let k_by = p.expect(TK_K_BY, []);
             let expr = _parse_expr(p, follow);
             loop {
                 if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -15541,19 +15573,19 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
             if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING) {
-                let k_having = p.expect(TK_K_HAVING);
+                let k_having = p.expect(TK_K_HAVING, []);
                 let expr = _parse_expr(p, follow);
             }
         }
         return;
     }
     if kind == TK_K_VALUES {
-        let k_values = p.expect(TK_K_VALUES);
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let k_values = p.expect(TK_K_VALUES, [TK_LIT_LPAREN]);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_NUMERIC_LITERAL, TK_STRING_LITERAL, TK_BLOB_LITERAL, TK_K_NULL, TK_K_CURRENT_TIME, TK_K_CURRENT_DATE, TK_K_CURRENT_TIMESTAMP, TK_BIND_PARAMETER, TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_LIT_TILDE]);
         let expr = _parse_expr(p, &FOLLOW_MASK_6);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -15574,10 +15606,10 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
+            let comma = p.expect(TK_LIT_COMMA, []);
             let expr = _parse_expr(p, follow);
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, [TK_LIT_COMMA]);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos_2: i32 = -1;
@@ -15617,8 +15649,8 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos_2 = pos;
             }
             if rep_scan_pos_2 < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA);
-            let lparen = p.expect(TK_LIT_LPAREN);
+            let comma = p.expect(TK_LIT_COMMA, []);
+            let lparen = p.expect(TK_LIT_LPAREN, []);
             let expr = _parse_expr(p, &FOLLOW_MASK_6);
             loop {
                 let mut rep_scan_pos: i32 = -1;
@@ -15639,10 +15671,10 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA);
+                let comma = p.expect(TK_LIT_COMMA, []);
                 let expr = _parse_expr(p, follow);
             }
-            let rparen = p.expect(TK_LIT_RPAREN);
+            let rparen = p.expect(TK_LIT_RPAREN, []);
         }
         return;
     }
@@ -15667,8 +15699,8 @@ fn _parse_select_core(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_compound_operator__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_union = p.expect(TK_K_UNION);
-    let k_all = p.expect(TK_K_ALL);
+    let k_union = p.expect(TK_K_UNION, [TK_K_ALL]);
+    let k_all = p.expect(TK_K_ALL, []);
     return;
 }
 
@@ -15683,7 +15715,7 @@ fn _parse_compound_operator__inner_scan_1(tokens: &Array<i32>, pos: i32, follow:
 
 fn _parse_compound_operator__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_union = p.expect(TK_K_UNION);
+    let k_union = p.expect(TK_K_UNION, []);
     return;
 }
 
@@ -15721,11 +15753,11 @@ fn _parse_compound_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         return _parse_compound_operator__inner_alt_0(p, follow);
     }
     if kind == TK_K_INTERSECT {
-        let k_intersect = p.expect(TK_K_INTERSECT);
+        let k_intersect = p.expect(TK_K_INTERSECT, []);
         return;
     }
     if kind == TK_K_EXCEPT {
-        let k_except = p.expect(TK_K_EXCEPT);
+        let k_except = p.expect(TK_K_EXCEPT, []);
         return;
     }
     p.fail(
@@ -15774,7 +15806,7 @@ fn _parse_signed_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS]);
     }
-    let numeric_literal = p.expect(TK_NUMERIC_LITERAL);
+    let numeric_literal = p.expect(TK_NUMERIC_LITERAL, []);
     return;
 }
 
@@ -15793,7 +15825,7 @@ fn _parse_literal_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -15819,7 +15851,7 @@ fn _parse_unary_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_67(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -15843,7 +15875,7 @@ fn _parse_unary_operator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_error_message__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let string_literal = p.expect(TK_STRING_LITERAL);
+    let string_literal = p.expect(TK_STRING_LITERAL, []);
     return;
 }
 
@@ -15936,7 +15968,7 @@ fn _parse_column_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_45(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -15962,7 +15994,7 @@ fn _parse_keyword__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_53(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(
@@ -16277,17 +16309,17 @@ fn _parse_table_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
-        let identifier = p.expect(TK_IDENTIFIER);
+        let identifier = p.expect(TK_IDENTIFIER, []);
         return;
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, []);
         return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_IDENTIFIER, TK_STRING_LITERAL, TK_LIT_LPAREN]);
         let table_alias = _parse_table_alias(p, &FOLLOW_MASK_13);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         return;
     }
     p.fail(
@@ -16330,7 +16362,7 @@ fn _parse_any_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
-        let identifier = p.expect(TK_IDENTIFIER);
+        let identifier = p.expect(TK_IDENTIFIER, []);
         return;
     }
     if _kind_set_53(kind) {
@@ -16338,13 +16370,13 @@ fn _parse_any_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         return;
     }
     if kind == TK_STRING_LITERAL {
-        let string_literal = p.expect(TK_STRING_LITERAL);
+        let string_literal = p.expect(TK_STRING_LITERAL, []);
         return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_IDENTIFIER, TK_K_ABORT, TK_K_ACTION, TK_K_ADD, TK_K_AFTER, TK_K_ALL, TK_K_ALTER, TK_K_ANALYZE, TK_K_AND, TK_K_AS, TK_K_ASC, TK_K_ATTACH, TK_K_AUTOINCREMENT, TK_K_BEFORE, TK_K_BEGIN, TK_K_BETWEEN, TK_K_BY, TK_K_CASCADE, TK_K_CASE, TK_K_CAST, TK_K_CHECK, TK_K_COLLATE, TK_K_COLUMN, TK_K_COMMIT, TK_K_CONFLICT, TK_K_CONSTRAINT, TK_K_CREATE, TK_K_CROSS, TK_K_CURRENT_DATE, TK_K_CURRENT_TIME, TK_K_CURRENT_TIMESTAMP, TK_K_DATABASE, TK_K_DEFAULT, TK_K_DEFERRABLE, TK_K_DEFERRED, TK_K_DELETE, TK_K_DESC, TK_K_DETACH, TK_K_DISTINCT, TK_K_DROP, TK_K_EACH, TK_K_ELSE, TK_K_END, TK_K_ESCAPE, TK_K_EXCEPT, TK_K_EXCLUSIVE, TK_K_EXISTS, TK_K_EXPLAIN, TK_K_FAIL, TK_K_FOR, TK_K_FOREIGN, TK_K_FROM, TK_K_FULL, TK_K_GLOB, TK_K_GROUP, TK_K_HAVING, TK_K_IF, TK_K_IGNORE, TK_K_IMMEDIATE, TK_K_IN, TK_K_INDEX, TK_K_INDEXED, TK_K_INITIALLY, TK_K_INNER, TK_K_INSERT, TK_K_INSTEAD, TK_K_INTERSECT, TK_K_INTO, TK_K_IS, TK_K_ISNULL, TK_K_JOIN, TK_K_KEY, TK_K_LEFT, TK_K_LIKE, TK_K_LIMIT, TK_K_MATCH, TK_K_NATURAL, TK_K_NO, TK_K_NOT, TK_K_NOTNULL, TK_K_NULL, TK_K_OF, TK_K_OFFSET, TK_K_ON, TK_K_OR, TK_K_ORDER, TK_K_OUTER, TK_K_PLAN, TK_K_PRAGMA, TK_K_PRIMARY, TK_K_QUERY, TK_K_RAISE, TK_K_RECURSIVE, TK_K_REFERENCES, TK_K_REGEXP, TK_K_REINDEX, TK_K_RELEASE, TK_K_RENAME, TK_K_REPLACE, TK_K_RESTRICT, TK_K_RIGHT, TK_K_ROLLBACK, TK_K_ROW, TK_K_SAVEPOINT, TK_K_SELECT, TK_K_SET, TK_K_TABLE, TK_K_TEMP, TK_K_TEMPORARY, TK_K_THEN, TK_K_TO, TK_K_TRANSACTION, TK_K_TRIGGER, TK_K_UNION, TK_K_UNIQUE, TK_K_UPDATE, TK_K_USING, TK_K_VACUUM, TK_K_VALUES, TK_K_VIEW, TK_K_VIRTUAL, TK_K_WHEN, TK_K_WHERE, TK_K_WITH, TK_K_WITHOUT, TK_STRING_LITERAL, TK_LIT_LPAREN]);
         let any_name = _parse_any_name(p, &FOLLOW_MASK_13);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         return;
     }
     p.fail(

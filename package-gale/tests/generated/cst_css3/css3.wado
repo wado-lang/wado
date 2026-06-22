@@ -28397,6 +28397,22 @@ impl Parser {
         return String::from("");
     }
 
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
     fn peek_start(&self) -> i32 {
         return self.tokens.starts[self.pos];
     }
@@ -28426,7 +28442,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> i32 {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -28436,6 +28452,25 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -32544,7 +32579,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
-    let eof = p.expect(TK_EOF);
+    let eof = p.expect(TK_EOF, []);
     return;
 }
 
@@ -32562,11 +32597,11 @@ fn _parse_stylesheet(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let charset = p.expect(TK_Charset);
+    let charset = p.expect(TK_Charset, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_2);
-    let string_ = p.expect(TK_String_);
+    let string_ = p.expect(TK_String_, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI);
+    let semicolon = p.expect(TK_LIT_SEMI, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -32591,9 +32626,9 @@ fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let charset = p.expect(TK_Charset);
+    let charset = p.expect(TK_Charset, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_2);
-    let string_ = p.expect(TK_String_);
+    let string_ = p.expect(TK_String_, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -32658,17 +32693,17 @@ fn _parse_charset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let import_ = p.expect(TK_Import);
+    let import_ = p.expect(TK_Import, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_5);
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI);
+    let semicolon = p.expect(TK_LIT_SEMI, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -32712,16 +32747,16 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let import_ = p.expect(TK_Import);
+    let import_ = p.expect(TK_Import, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI);
+    let semicolon = p.expect(TK_LIT_SEMI, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -32763,11 +32798,11 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(2);
-    let import_ = p.expect(TK_Import);
+    let import_ = p.expect(TK_Import, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
@@ -32811,11 +32846,11 @@ fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
 fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(3);
-    let import_ = p.expect(TK_Import);
+    let import_ = p.expect(TK_Import, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
@@ -32916,7 +32951,7 @@ fn _parse_imports(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let namespace = p.expect(TK_Namespace);
+    let namespace = p.expect(TK_Namespace, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -32934,12 +32969,12 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
-    let semicolon = p.expect(TK_LIT_SEMI);
+    let semicolon = p.expect(TK_LIT_SEMI, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -32995,7 +33030,7 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
 fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let namespace = p.expect(TK_Namespace);
+    let namespace = p.expect(TK_Namespace, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -33013,7 +33048,7 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
     } else if _kind_set_2(grp_kind) {
         let url = _parse_url(p, follow);
     }
@@ -33128,7 +33163,7 @@ fn _parse_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_media__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let media = p.expect(TK_Media);
+    let media = p.expect(TK_Media, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_5);
     let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_7);
     let group_rule_body = _parse_group_rule_body(p, follow);
@@ -33198,7 +33233,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_Comma);
+            let comma = p.expect(TK_Comma, []);
             let ws = _parse_ws(p, &FOLLOW_MASK_5);
             let media_query = _parse_media_query(p, follow);
         }
@@ -33272,7 +33307,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And);
+            let and = p.expect(TK_And, []);
             let ws = _parse_ws(p, &FOLLOW_MASK_9);
             let media_expression = _parse_media_expression(p, follow);
         }
@@ -33302,7 +33337,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And);
+            let and = p.expect(TK_And, []);
             let ws = _parse_ws(p, &FOLLOW_MASK_9);
             let media_expression = _parse_media_expression(p, follow);
         }
@@ -33346,15 +33381,15 @@ fn _parse_media_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let media_feature = _parse_media_feature(p, &FOLLOW_MASK_10);
     if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON);
+        let colon = p.expect(TK_LIT_COLON, []);
         let ws = _parse_ws(p, &FOLLOW_MASK_11);
         let expr = _parse_expr(p, follow);
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -33390,12 +33425,12 @@ fn _parse_media_feature(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let page = p.expect(TK_Page);
+    let page = p.expect(TK_Page, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_12);
     if p.peek_kind() == TK_LIT_COLON {
         let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
         let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -33424,13 +33459,13 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -33448,7 +33483,7 @@ fn _parse_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Ident, TK_MediaOnly, TK_Not, TK_And, TK_Or, TK_From, TK_To]);
     let ident = _parse_ident(p, follow);
     let ws = _parse_ws(p, follow);
     return;
@@ -33490,7 +33525,7 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma);
+        let comma = p.expect(TK_Comma, []);
         let ws = _parse_ws(p, &FOLLOW_MASK_14);
         let selector = _parse_selector(p, follow);
     }
@@ -33556,22 +33591,22 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Plus {
-        let plus = p.expect(TK_Plus);
+        let plus = p.expect(TK_Plus, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Greater {
-        let greater = p.expect(TK_Greater);
+        let greater = p.expect(TK_Greater, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Tilde {
-        let tilde = p.expect(TK_Tilde);
+        let tilde = p.expect(TK_Tilde, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Space {
-        let space = p.expect(TK_Space);
+        let space = p.expect(TK_Space, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -33665,7 +33700,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             if rep_scan_pos < 0 { break; }
             if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash);
+                let hash = p.expect(TK_Hash, []);
             } else if p.peek_kind() == TK_LIT_DOT {
                 let class_name = _parse_class_name(p, follow);
             } else if p.peek_kind() == TK_LIT_LBRACKET {
@@ -33731,7 +33766,7 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             _plus_first = false;
             if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash);
+                let hash = p.expect(TK_Hash, []);
             } else if p.peek_kind() == TK_LIT_DOT {
                 let class_name = _parse_class_name(p, follow);
             } else if p.peek_kind() == TK_LIT_LBRACKET {
@@ -33811,10 +33846,10 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
         if _kind_set_4(p.peek_kind()) {
             let ident = _parse_ident(p, follow);
         } else {
-            let star = p.expect(TK_LIT_STAR);
+            let star = p.expect(TK_LIT_STAR, []);
         }
     }
-    let pipe = p.expect(TK_LIT_PIPE);
+    let pipe = p.expect(TK_LIT_PIPE, []);
     return;
 }
 
@@ -33851,7 +33886,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if _kind_set_14(p.peek_kind()) {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
     }
-    let star = p.expect(TK_LIT_STAR);
+    let star = p.expect(TK_LIT_STAR, []);
     return;
 }
 
@@ -33868,7 +33903,7 @@ fn _parse_universal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dot = p.expect(TK_LIT_DOT);
+    let dot = p.expect(TK_LIT_DOT, [TK_Ident, TK_MediaOnly, TK_Not, TK_And, TK_Or, TK_From, TK_To]);
     let ident = _parse_ident(p, follow);
     return;
 }
@@ -33886,7 +33921,7 @@ fn _parse_class_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbracket = p.expect(TK_LIT_LBRACKET);
+    let lbracket = p.expect(TK_LIT_LBRACKET, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_15);
     if _kind_set_12(p.peek_kind()) {
         let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
@@ -33969,11 +34004,11 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         if _kind_set_4(grp_kind) {
             let ident = _parse_ident(p, follow);
         } else if grp_kind == TK_String_ {
-            let string_ = p.expect(TK_String_);
+            let string_ = p.expect(TK_String_, []);
         }
         let ws_2 = _parse_ws(p, follow);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET);
+    let rbracket = p.expect(TK_LIT_RBRACKET, []);
     return;
 }
 
@@ -33990,9 +34025,9 @@ fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_LIT_COLON, TK_Ident, TK_MediaOnly, TK_Not, TK_And, TK_Or, TK_From, TK_To, TK_Function_]);
     if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON);
+        let colon = p.expect(TK_LIT_COLON, []);
     }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
@@ -34016,10 +34051,10 @@ fn _parse_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function_ = p.expect(TK_Function_);
+    let function_ = p.expect(TK_Function_, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_19);
     let expression = _parse_expression(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -34109,17 +34144,17 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Plus {
-            let plus = p.expect(TK_Plus);
+            let plus = p.expect(TK_Plus, []);
         } else if grp_kind == TK_Minus {
-            let minus = p.expect(TK_Minus);
+            let minus = p.expect(TK_Minus, []);
         } else if grp_kind == TK_Dimension {
-            let dimension = p.expect(TK_Dimension);
+            let dimension = p.expect(TK_Dimension, []);
         } else if grp_kind == TK_UnknownDimension {
-            let unknowndimension = p.expect(TK_UnknownDimension);
+            let unknowndimension = p.expect(TK_UnknownDimension, []);
         } else if grp_kind == TK_Number {
-            let number = p.expect(TK_Number);
+            let number = p.expect(TK_Number, []);
         } else if grp_kind == TK_String_ {
-            let string_ = p.expect(TK_String_);
+            let string_ = p.expect(TK_String_, []);
         } else if _kind_set_4(grp_kind) {
             let ident = _parse_ident(p, follow);
         }
@@ -34141,11 +34176,11 @@ fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let pseudonot = p.expect(TK_PseudoNot);
+    let pseudonot = p.expect(TK_PseudoNot, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_21);
     let negation_arg = _parse_negation_arg(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -34233,7 +34268,7 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash);
+        let hash = p.expect(TK_Hash, []);
         return;
     }
     if kind == TK_LIT_DOT {
@@ -34272,25 +34307,25 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     let kind = p.peek_kind();
     if kind == TK_LIT_SLASH {
         p.b.set_alt(0);
-        let slash = p.expect(TK_LIT_SLASH);
+        let slash = p.expect(TK_LIT_SLASH, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Comma {
         p.b.set_alt(1);
-        let comma = p.expect(TK_Comma);
+        let comma = p.expect(TK_Comma, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Space {
         p.b.set_alt(2);
-        let space = p.expect(TK_Space);
+        let space = p.expect(TK_Space, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_EQ {
         p.b.set_alt(3);
-        let eq = p.expect(TK_LIT_EQ);
+        let eq = p.expect(TK_LIT_EQ, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -34324,19 +34359,19 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     }
     if kind == TK_Variable {
         p.b.set_alt(1);
-        let variable = p.expect(TK_Variable);
+        let variable = p.expect(TK_Variable, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_STAR {
         p.b.set_alt(2);
-        let star = p.expect(TK_LIT_STAR);
+        let star = p.expect(TK_LIT_STAR, [TK_Ident, TK_MediaOnly, TK_Not, TK_And, TK_Or, TK_From, TK_To]);
         let ident = _parse_ident(p, follow);
         return;
     }
     if kind == TK_LIT_U5f {
         p.b.set_alt(3);
-        let lit_u5f = p.expect(TK_LIT_U5f);
+        let lit_u5f = p.expect(TK_LIT_U5f, [TK_Ident, TK_MediaOnly, TK_Not, TK_And, TK_Or, TK_From, TK_To]);
         let ident = _parse_ident(p, follow);
         return;
     }
@@ -34375,23 +34410,20 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if _kind_set_20(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_any_(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -34424,12 +34456,12 @@ fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     p.b.set_alt(0);
     let selector_group = _parse_selector_group(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -34525,7 +34557,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws = _parse_ws(p, follow);
     }
     let declaration = _parse_declaration(p, follow);
@@ -34555,7 +34587,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
@@ -34579,7 +34611,7 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &E
     let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Important) {
@@ -34610,7 +34642,7 @@ fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &E
     let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_23);
     let value = _parse_value(p, follow);
     return;
@@ -34677,7 +34709,7 @@ fn _parse_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_prio__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let important = p.expect(TK_Important);
+    let important = p.expect(TK_Important, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, follow);
     return;
 }
@@ -34741,7 +34773,7 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         } else if p.peek_kind() == TK_LIT_LBRACE {
             let block = _parse_block(p, follow);
         } else {
-            let atkeyword = p.expect(TK_AtKeyword);
+            let atkeyword = p.expect(TK_AtKeyword, []);
             let ws = _parse_ws(p, follow);
         }
     }
@@ -34872,13 +34904,13 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     if kind == TK_String_ {
         p.b.set_alt(3);
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_UnicodeRange {
         p.b.set_alt(4);
-        let unicoderange = p.expect(TK_UnicodeRange);
+        let unicoderange = p.expect(TK_UnicodeRange, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -34940,10 +34972,10 @@ fn _parse_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function_ = p.expect(TK_Function_);
+    let function_ = p.expect(TK_Function_, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -34961,10 +34993,10 @@ fn _parse_function_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 
 fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dximagetransform = p.expect(TK_DxImageTransform);
+    let dximagetransform = p.expect(TK_DxImageTransform, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -34982,7 +35014,7 @@ fn _parse_dx_image_transform(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 
 fn _parse_hexcolor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let hash = p.expect(TK_Hash);
+    let hash = p.expect(TK_Hash, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, follow);
     return;
 }
@@ -35025,7 +35057,7 @@ fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let number = p.expect(TK_Number);
+    let number = p.expect(TK_Number, []);
     return;
 }
 
@@ -35067,7 +35099,7 @@ fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let percentage = p.expect(TK_Percentage);
+    let percentage = p.expect(TK_Percentage, []);
     return;
 }
 
@@ -35109,7 +35141,7 @@ fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let dimension = p.expect(TK_Dimension);
+    let dimension = p.expect(TK_Dimension, []);
     return;
 }
 
@@ -35151,7 +35183,7 @@ fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     if opt_scan_pos >= 0 {
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let unknowndimension = p.expect(TK_UnknownDimension);
+    let unknowndimension = p.expect(TK_UnknownDimension, []);
     return;
 }
 
@@ -35234,7 +35266,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
     }
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -35244,32 +35276,32 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         return;
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash);
+        let hash = p.expect(TK_Hash, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_UnicodeRange {
-        let unicoderange = p.expect(TK_UnicodeRange);
+        let unicoderange = p.expect(TK_UnicodeRange, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Includes {
-        let includes = p.expect(TK_Includes);
+        let includes = p.expect(TK_Includes, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_DashMatch {
-        let dashmatch = p.expect(TK_DashMatch);
+        let dashmatch = p.expect(TK_DashMatch, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON);
+        let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Function_ {
-        let function_ = p.expect(TK_Function_);
+        let function_ = p.expect(TK_Function_, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, &FOLLOW_MASK_24);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -35305,12 +35337,12 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, &FOLLOW_MASK_24);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -35346,12 +35378,12 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET);
+        let lbracket = p.expect(TK_LIT_LBRACKET, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, &FOLLOW_MASK_25);
         loop {
             let mut rep_scan_pos: i32 = -1;
@@ -35387,7 +35419,7 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET);
+        let rbracket = p.expect(TK_LIT_RBRACKET, [TK_Comment, TK_Space]);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
@@ -35413,7 +35445,7 @@ fn _parse_any_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let atkeyword = p.expect(TK_AtKeyword);
+    let atkeyword = p.expect(TK_AtKeyword, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_26);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -35428,12 +35460,9 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         if rep_scan_pos < 0 {
             if _kind_set_20(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_any_(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
@@ -35443,7 +35472,7 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     if grp_kind == TK_LIT_LBRACE {
         let block = _parse_block(p, follow);
     } else if grp_kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws = _parse_ws(p, follow);
     }
     return;
@@ -35468,22 +35497,22 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         return;
     }
     if kind == TK_AtKeyword {
-        let atkeyword = p.expect(TK_AtKeyword);
+        let atkeyword = p.expect(TK_AtKeyword, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Cdo {
-        let cdo = p.expect(TK_Cdo);
+        let cdo = p.expect(TK_Cdo, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
     if kind == TK_Cdc {
-        let cdc = p.expect(TK_Cdc);
+        let cdc = p.expect(TK_Cdc, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, follow);
         return;
     }
@@ -35508,7 +35537,7 @@ fn _parse_unused(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_27);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -35618,10 +35647,10 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 }
             }
             if gd_winner == 0 {
-                let atkeyword = p.expect(TK_AtKeyword);
+                let atkeyword = p.expect(TK_AtKeyword, []);
                 let ws = _parse_ws(p, follow);
             } else if gd_winner == 1 {
-                let semicolon = p.expect(TK_LIT_SEMI);
+                let semicolon = p.expect(TK_LIT_SEMI, []);
                 let ws = _parse_ws(p, follow);
             } else if gd_winner == 2 {
                 let declaration_list = _parse_declaration_list(p, follow);
@@ -35634,7 +35663,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             }
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -35714,7 +35743,7 @@ fn _parse_nested_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_28);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -35729,18 +35758,15 @@ fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if rep_scan_pos < 0 {
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_nested_statement(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let nested_statement = _parse_nested_statement(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -35758,7 +35784,7 @@ fn _parse_group_rule_body(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_supports_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports = p.expect(TK_Supports);
+    let supports = p.expect(TK_Supports, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_29);
     let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
@@ -35877,11 +35903,11 @@ fn _parse_supports_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 
 fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_29);
     let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -35984,9 +36010,9 @@ fn _parse_supports_condition_in_parens(p: &mut Parser, follow: &List<List<i32>> 
 
 fn _parse_supports_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let not = p.expect(TK_Not);
+    let not = p.expect(TK_Not, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_30);
-    let space = p.expect(TK_Space);
+    let space = p.expect(TK_Space, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_31);
     let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     return;
@@ -36043,11 +36069,11 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         _plus_first = false;
         let ws = _parse_ws(p, &FOLLOW_MASK_30);
-        let space = p.expect(TK_Space);
+        let space = p.expect(TK_Space, []);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_32);
-        let and = p.expect(TK_And);
+        let and = p.expect(TK_And, []);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_30);
-        let space_2 = p.expect(TK_Space);
+        let space_2 = p.expect(TK_Space, []);
         let ws_4 = _parse_ws(p, &FOLLOW_MASK_31);
         let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
@@ -36105,11 +36131,11 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         _plus_first = false;
         let ws = _parse_ws(p, &FOLLOW_MASK_30);
-        let space = p.expect(TK_Space);
+        let space = p.expect(TK_Space, []);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_33);
-        let or = p.expect(TK_Or);
+        let or = p.expect(TK_Or, []);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_30);
-        let space_2 = p.expect(TK_Space);
+        let space_2 = p.expect(TK_Space, []);
         let ws_4 = _parse_ws(p, &FOLLOW_MASK_31);
         let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
@@ -36129,10 +36155,10 @@ fn _parse_supports_disjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 
 fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN);
+    let lparen = p.expect(TK_LIT_LPAREN, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_34);
     let declaration = _parse_declaration(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -36184,7 +36210,7 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             let unused = _parse_unused(p, &EMPTY_FOLLOW);
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, []);
     return;
 }
 
@@ -36203,15 +36229,15 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Url_ {
-        let url_ = p.expect(TK_Url_);
+        let url_ = p.expect(TK_Url_, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, &FOLLOW_MASK_2);
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, [TK_Comment, TK_Space]);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, []);
         return;
     }
     if kind == TK_Url {
-        let url = p.expect(TK_Url);
+        let url = p.expect(TK_Url, []);
         return;
     }
     p.fail(
@@ -36235,11 +36261,11 @@ fn _parse_url(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let var = p.expect(TK_Var);
+    let var = p.expect(TK_Var, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_35);
-    let variable = p.expect(TK_Variable);
+    let variable = p.expect(TK_Variable, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -36257,10 +36283,10 @@ fn _parse_var_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let calc = p.expect(TK_Calc);
+    let calc = p.expect(TK_Calc, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_36);
     let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
-    let rparen = p.expect(TK_LIT_RPAREN);
+    let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -36323,11 +36349,11 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let space = p.expect(TK_Space);
+        let space = p.expect(TK_Space, []);
         let ws = _parse_ws(p, &FOLLOW_MASK_37);
         let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_30);
-        let space_2 = p.expect(TK_Space);
+        let space_2 = p.expect(TK_Space, []);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_36);
         let calc_product = _parse_calc_product(p, follow);
     }
@@ -36388,11 +36414,11 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         if p.peek_kind() == TK_LIT_STAR {
-            let star = p.expect(TK_LIT_STAR);
+            let star = p.expect(TK_LIT_STAR, []);
             let ws = _parse_ws(p, &FOLLOW_MASK_36);
             let calc_value = _parse_calc_value(p, follow);
         } else {
-            let slash = p.expect(TK_LIT_SLASH);
+            let slash = p.expect(TK_LIT_SLASH, []);
             let ws = _parse_ws(p, &FOLLOW_MASK_38);
             let number = _parse_number(p, follow);
             let ws_2 = _parse_ws(p, follow);
@@ -36475,10 +36501,10 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN);
+        let lparen = p.expect(TK_LIT_LPAREN, [TK_Comment, TK_Space]);
         let ws = _parse_ws(p, &FOLLOW_MASK_36);
         let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
-        let rparen = p.expect(TK_LIT_RPAREN);
+        let rparen = p.expect(TK_LIT_RPAREN, [TK_Comment, TK_Space]);
         let ws_2 = _parse_ws(p, follow);
         return;
     }
@@ -36503,9 +36529,9 @@ fn _parse_calc_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let fontface = p.expect(TK_FontFace);
+    let fontface = p.expect(TK_FontFace, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
         let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
@@ -36534,13 +36560,13 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
             let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -36560,7 +36586,7 @@ fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<
     let start = p.peek_start();
     p.b.set_alt(0);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_11);
     let expr = _parse_expr(p, follow);
     return;
@@ -36583,7 +36609,7 @@ fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<
     let start = p.peek_start();
     p.b.set_alt(1);
     let property_ = _parse_property_(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_23);
     let value = _parse_value(p, follow);
     return;
@@ -36650,13 +36676,13 @@ fn _parse_font_face_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPT
 
 fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let keyframes = p.expect(TK_Keyframes);
+    let keyframes = p.expect(TK_Keyframes, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_30);
-    let space = p.expect(TK_Space);
+    let space = p.expect(TK_Space, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_8);
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_4 = _parse_ws(p, &FOLLOW_MASK_39);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -36671,18 +36697,15 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         if rep_scan_pos < 0 {
             if _kind_set_32(p.peek_kind()) {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_keyframe_block(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let keyframe_block = _parse_keyframe_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_5 = _parse_ws(p, follow);
     return;
 }
@@ -36701,12 +36724,12 @@ fn _parse_keyframes_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let keyframe_selector = _parse_keyframe_selector(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, []);
     let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, []);
     let ws_2 = _parse_ws(p, follow);
     return;
 }
@@ -36770,7 +36793,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma);
+        let comma = p.expect(TK_Comma, []);
         let ws = _parse_ws(p, &FOLLOW_MASK_40);
         let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage]);
         let ws_2 = _parse_ws(p, follow);
@@ -36791,14 +36814,14 @@ fn _parse_keyframe_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 
 fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let viewport = p.expect(TK_Viewport);
+    let viewport = p.expect(TK_Viewport, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -36816,16 +36839,16 @@ fn _parse_viewport(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 
 fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let counterstyle = p.expect(TK_CounterStyle);
+    let counterstyle = p.expect(TK_CounterStyle, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_8);
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
         let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_4 = _parse_ws(p, follow);
     return;
 }
@@ -36843,11 +36866,11 @@ fn _parse_counter_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let fontfeaturevalues = p.expect(TK_FontFeatureValues);
+    let fontfeaturevalues = p.expect(TK_FontFeatureValues, [TK_Comment, TK_Space]);
     let ws = _parse_ws(p, &FOLLOW_MASK_18);
     let font_family_name_list = _parse_font_family_name_list(p, &FOLLOW_MASK_16);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, &FOLLOW_MASK_41);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -36862,18 +36885,15 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_AtKeyword {
                 let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
                 _parse_feature_value_block(p, &EMPTY_FOLLOW);
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
+                if p.recovering || p.pos == _rec_pos { break; }
+                continue;
             }
             break;
         }
         let feature_value_block = _parse_feature_value_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_4 = _parse_ws(p, follow);
     return;
 }
@@ -36917,7 +36937,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> 
         }
         if rep_scan_pos < 0 { break; }
         let ws = _parse_ws(p, &FOLLOW_MASK_42);
-        let comma = p.expect(TK_Comma);
+        let comma = p.expect(TK_Comma, []);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_18);
         let font_family_name = _parse_font_family_name(p, follow);
     }
@@ -36939,7 +36959,7 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_);
+        let string_ = p.expect(TK_String_, []);
         return;
     }
     if _kind_set_4(kind) {
@@ -36992,7 +37012,7 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
     let start = p.peek_start();
     let feature_type = _parse_feature_type(p, &FOLLOW_MASK_16);
     let ws = _parse_ws(p, &FOLLOW_MASK_7);
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_43);
     if _kind_set_4(p.peek_kind()) {
         let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
@@ -37024,13 +37044,13 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let ws = _parse_ws(p, &FOLLOW_MASK_3);
-        let semicolon = p.expect(TK_LIT_SEMI);
+        let semicolon = p.expect(TK_LIT_SEMI, []);
         let ws_2 = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
             let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, [TK_Comment, TK_Space]);
     let ws_3 = _parse_ws(p, follow);
     return;
 }
@@ -37048,7 +37068,7 @@ fn _parse_feature_value_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_feature_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let atkeyword = p.expect(TK_AtKeyword);
+    let atkeyword = p.expect(TK_AtKeyword, []);
     return;
 }
 
@@ -37067,7 +37087,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32
     let start = p.peek_start();
     let ident = _parse_ident(p, &FOLLOW_MASK_16);
     let ws = _parse_ws(p, &FOLLOW_MASK_22);
-    let colon = p.expect(TK_LIT_COLON);
+    let colon = p.expect(TK_LIT_COLON, [TK_Comment, TK_Space]);
     let ws_2 = _parse_ws(p, &FOLLOW_MASK_38);
     let number = _parse_number(p, follow);
     loop {
@@ -37111,7 +37131,7 @@ fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
-        let _ = p.expect(kind);
+        let _ = p.expect(kind, []);
         return;
     }
     p.fail(

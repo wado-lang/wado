@@ -1481,6 +1481,22 @@ impl Parser {
         return String::from("");
     }
 
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
     fn peek_start(&self) -> i32 {
         return self.tokens.starts[self.pos];
     }
@@ -1510,7 +1526,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> i32 {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1520,6 +1536,25 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -1782,7 +1817,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_json__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let value = _parse_value(p);
-    let eof = p.expect(TK_EOF);
+    let eof = p.expect(TK_EOF, []);
     return;
 }
 
@@ -1799,7 +1834,7 @@ fn _parse_json(p: &mut Parser) -> () {
 
 fn _parse_obj__inner_alt_0(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_STRING]);
     let pair = _parse_pair(p);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1820,17 +1855,17 @@ fn _parse_obj__inner_alt_0(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let pair = _parse_pair(p);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let rbrace = p.expect(TK_LIT_RBRACE, []);
     return;
 }
 
 fn _parse_obj__inner_alt_1(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE);
-    let rbrace = p.expect(TK_LIT_RBRACE);
+    let lbrace = p.expect(TK_LIT_LBRACE, [TK_LIT_RBRACE]);
+    let rbrace = p.expect(TK_LIT_RBRACE, []);
     return;
 }
 
@@ -1867,8 +1902,8 @@ fn _parse_obj(p: &mut Parser) -> () {
 
 fn _parse_pair__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let string = p.expect(TK_STRING);
-    let colon = p.expect(TK_LIT_COLON);
+    let string = p.expect(TK_STRING, [TK_LIT_COLON]);
+    let colon = p.expect(TK_LIT_COLON, [TK_STRING, TK_NUMBER, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_TRUE, TK_LIT_FALSE, TK_LIT_NULL]);
     let value = _parse_value(p);
     return;
 }
@@ -1886,7 +1921,7 @@ fn _parse_pair(p: &mut Parser) -> () {
 
 fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbracket = p.expect(TK_LIT_LBRACKET);
+    let lbracket = p.expect(TK_LIT_LBRACKET, [TK_STRING, TK_NUMBER, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_TRUE, TK_LIT_FALSE, TK_LIT_NULL]);
     let value = _parse_value(p);
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -1907,17 +1942,17 @@ fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA);
+        let comma = p.expect(TK_LIT_COMMA, []);
         let value = _parse_value(p);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET);
+    let rbracket = p.expect(TK_LIT_RBRACKET, []);
     return;
 }
 
 fn _parse_arr__inner_alt_1(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lbracket = p.expect(TK_LIT_LBRACKET);
-    let rbracket = p.expect(TK_LIT_RBRACKET);
+    let lbracket = p.expect(TK_LIT_LBRACKET, [TK_LIT_RBRACKET]);
+    let rbracket = p.expect(TK_LIT_RBRACKET, []);
     return;
 }
 
@@ -1956,11 +1991,11 @@ fn _parse_value__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_STRING {
-        let string = p.expect(TK_STRING);
+        let string = p.expect(TK_STRING, []);
         return;
     }
     if kind == TK_NUMBER {
-        let number = p.expect(TK_NUMBER);
+        let number = p.expect(TK_NUMBER, []);
         return;
     }
     if kind == TK_LIT_LBRACE {
@@ -1972,15 +2007,15 @@ fn _parse_value__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_LIT_TRUE {
-        let lit_true = p.expect(TK_LIT_TRUE);
+        let lit_true = p.expect(TK_LIT_TRUE, []);
         return;
     }
     if kind == TK_LIT_FALSE {
-        let lit_false = p.expect(TK_LIT_FALSE);
+        let lit_false = p.expect(TK_LIT_FALSE, []);
         return;
     }
     if kind == TK_LIT_NULL {
-        let lit_null = p.expect(TK_LIT_NULL);
+        let lit_null = p.expect(TK_LIT_NULL, []);
         return;
     }
     p.fail(
