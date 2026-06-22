@@ -88,23 +88,17 @@ Parameter names share one flat namespace across the whole compilation unit (root
 
 ### Conversion
 
-v1 converts override strings to the declared type natively in the compiler — no user-facing trait. The accepted forms match the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) (trimming, plus leniency such as `bool` accepting `"1"` / `"0"`), so v2 — which adopts that trait — preserves v1 behavior. Whitespace is trimmed unconditionally, `String` included, so parameter values carry no meaningful surrounding whitespace.
+v1 converts override strings to the declared type natively in the compiler — no user-facing trait. The pass trims the override first (whitespace from a CLI/env value is noise), then converts. Accepted forms match the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) — radix prefixes, `_` digit separators, `nan`/`inf`, `1`/`0` for `bool` — so v2, which adopts that trait, preserves v1 behavior. (The trait itself does not trim; trimming is this pass's policy.)
 
 #### Supported Types (v1)
 
-| Type                              | Accepted (after trim)                          |
-| --------------------------------- | ---------------------------------------------- |
-| `String`                          | Any string (identity)                          |
-| `i8`, `i16`, `i32`, `i64`, `i128` | Decimal integer (sign optional)                |
-| `u8`, `u16`, `u32`, `u64`, `u128` | Decimal non-negative integer                   |
-| `f32`, `f64`                      | Standard float literal (`3.14`, `-1e9`)        |
-| `bool`                            | `true` / `false` / `1` / `0`, case-insensitive |
+v1 supports `#[param]` on the built-in scalar types only: `String`, `char`, the integer types, `f32` / `f64`, and `bool`. Their accepted spellings are the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md).
 
-Unaccepted input (a hex integer, `"yes"` for `bool`) is an invalid value, handled per `--param-invalid`. `#[param]` on any other type is an error — `#[param] on <Type>: only built-in types are supported in v1`. v2 lifts this by evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for arbitrary types through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
+An unaccepted value (a `"yes"` for `bool`, an out-of-range integer) is an invalid value, handled per `--param-invalid`. `#[param]` on any other type is an error — `#[param] on <Type>: only built-in types are supported in v1`. v2 lifts this by evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for arbitrary types through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 
 ### Resolution Timing
 
-On a resolved override the param-resolution pass converts the string natively and either replaces the global's initializer with the resulting literal, or — on failure — applies `--param-invalid` (keeping the initializer unless the level is `error`). No interpreter runs, so the pass sits after symbol resolution, before lowering. The rewritten global is then ordinary: scalar literals are eligible for Constant Global Promotion to a Wasm constant, `String` uses the existing lazy-init path. No new optimization is needed.
+On a resolved override the param-resolution pass trims and converts the string natively, then either replaces the global's initializer with the resulting literal, or — on failure — applies `--param-invalid` (keeping the initializer unless the level is `error`). No interpreter runs, so the pass sits after symbol resolution, before lowering. The rewritten global is then ordinary: scalar literals are eligible for Constant Global Promotion to a Wasm constant, `String` uses the existing lazy-init path. No new optimization is needed.
 
 ### CLI Surface
 
@@ -204,7 +198,7 @@ An `invalid` value from `from_env` names the env var instead. At `warn` / `ignor
 - Flat namespace pushes collision avoidance onto library authors — same as OS env vars.
 - v1 is built-in types only. Deliberate: every v1 use case (URLs, ports, IDs, flags) is built-in and converts at compile time without CTFE; user types wait for v2 rather than forcing a weaker runtime-conversion path.
 - The native conversion duplicates `FromStr` parsing logic — small, and removed in v2 by [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) over wasm-CTFE.
-- Unconditional trimming means `String` parameters can't carry surrounding whitespace — fine for URLs, identifiers, level names.
+- The pass trims every override, so `String` / `char` parameters can't carry surrounding whitespace — fine for URLs, identifiers, level names. (The `LenientFromStr` trait itself is faithful; trimming is the pass's policy.)
 
 ### Future Extensions
 
