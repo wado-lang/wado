@@ -281,8 +281,8 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            if let Some(inner_e) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
             {
                 Some(*index)
             } else {
@@ -1238,30 +1238,28 @@ fn count_field_accesses_in_expr(
             // The latter occurs for `&mut local.field` which NIR represents as
             // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
             let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
-            let local_info = match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Local { index, name } => Some((
-                    *index,
-                    name.clone(),
-                    body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
-                )),
-                ExprKind::Unary {
-                    op: NirUnaryOp::MutRef,
-                    expr: ref_inner,
-                } => {
-                    let ref_inner = *ref_inner;
-                    if let ExprKind::Local { index, name } =
-                        &body.exprs[ref_inner.as_expr().expect("skeleton operand")].kind
-                    {
-                        Some((
-                            *index,
-                            name.clone(),
-                            body.exprs[ref_inner.as_expr().expect("skeleton operand")].type_id,
-                        ))
-                    } else {
-                        None
+            // A promoted `Operand::Value` receiver names no scalarizable local.
+            let local_info = match inner.as_expr() {
+                Some(inner_e) => match &body.exprs[inner_e].kind {
+                    ExprKind::Local { index, name } => {
+                        Some((*index, name.clone(), body.exprs[inner_e].type_id))
                     }
-                }
-                _ => None,
+                    ExprKind::Unary {
+                        op: NirUnaryOp::MutRef,
+                        expr: ref_inner,
+                    } => {
+                        let ref_inner = *ref_inner;
+                        if let Some(re) = ref_inner.as_expr()
+                            && let ExprKind::Local { index, name } = &body.exprs[re].kind
+                        {
+                            Some((*index, name.clone(), body.exprs[re].type_id))
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                },
+                None => None,
             };
             if let Some((index, name, local_type_id)) = local_info {
                 let key = (index, field_index);
@@ -2412,8 +2410,8 @@ fn field_assign_to_candidate(
         field_index,
         ..
     } = &body.exprs[target].kind
-        && let ExprKind::Local { index, .. } =
-            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2434,8 +2432,8 @@ fn field_read_to_candidate(
         field_index,
         ..
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, .. } =
-            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
     {
         for (i, c) in ctx.candidates.iter().enumerate() {
             if c.local_index == *index && c.field_index == *field_index {
@@ -2508,7 +2506,7 @@ fn recurse_into_call_args(
             ),
             ExprKind::IndirectCall { callee, args, .. } => (
                 None,
-                Some(callee.as_expr().expect("skeleton operand")),
+                callee.as_expr(),
                 args.iter().filter_map(|a| a.as_expr()).collect(),
             ),
             _ => unreachable!("recurse_into_call_args called on non-call expr"),

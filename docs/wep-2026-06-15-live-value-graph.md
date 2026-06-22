@@ -315,6 +315,17 @@ The three are mutually reinforcing: deleting the cache (3) requires removing the
 re-derivation it caches, which is the build-once change (1), which is what
 produces the speedup (2). Any one unmet means the goal is unmet.
 
+Merge gate (overrides incidental proxies): the full suite is green — `mise run
+test` (every crate, all e2e fixtures at O0/O2) **and** `mise run test-wado`, with
+no pre-existing failure left standing. The operand-promotion migration is part of
+this: a promoted `Operand::Value` (e.g. a constant struct receiver of a
+`FieldAccess`) must never hit an `as_expr().expect("skeleton operand")` in any
+pass the suite exercises. `gale_cli` (kiln-generated code, which exercises
+promoted shapes the mainline fixtures do not) is part of the gate. The remaining
+`expect("skeleton operand")` sites in passes the suite does not yet drive with a
+promoted operand are migrated test-first as Phase B.2 enables `WADO_PROMOTE_EARLY`
+(which promotes more positions and so exercises them).
+
 ## Context
 
 A sampling profile (samply, 1 kHz, dev/debug `wado`) of

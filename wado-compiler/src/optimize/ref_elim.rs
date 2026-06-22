@@ -136,9 +136,11 @@ impl Rule for RefElimRule {
                 expr: inner,
             } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } =
-                    &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
-                else {
+                // A promoted `Operand::Value` inner names no local — no rewrite.
+                let Some(inner_e) = inner.as_expr() else {
+                    return false;
+                };
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind else {
                     return false;
                 };
                 let Some(&source_e) = self.deref_sources.get(index) else {
@@ -170,12 +172,14 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
             Some(info) => Step::Tracked(info.referent_e),
             None => Step::Leaf,
         },
+        // A promoted `Operand::Value` receiver has no skeleton place to splice
+        // through; clone the field access as-is (`Step::Leaf`).
         ExprKind::FieldAccess {
             expr: inner,
             field_index,
             field_name,
-        } => Step::Field(
-            inner.as_expr().expect("skeleton operand"),
+        } if inner.as_expr().is_some() => Step::Field(
+            inner.as_expr().expect("checked some"),
             *field_index,
             field_name.clone(),
             engine.body.exprs[e].type_id,
@@ -206,9 +210,10 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 fn is_valid_referent(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            is_valid_referent(body, inner.as_expr().expect("skeleton operand"))
-        }
+        // A promoted `Operand::Value` receiver is not a pure local-read chain.
+        ExprKind::FieldAccess { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|ie| is_valid_referent(body, ie)),
         _ => false,
     }
 }
@@ -455,8 +460,9 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            // A promoted `Operand::Value` inner names no local candidate.
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
                 let index = *index;
                 if let Some(info) = refs.get_mut(&index) {

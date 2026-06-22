@@ -697,9 +697,10 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
 fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            is_pure_field_chain(body, inner.as_expr().expect("skeleton operand"))
-        }
+        // A promoted `Operand::Value` receiver is not a pure local-read chain.
+        ExprKind::FieldAccess { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|e| is_pure_field_chain(body, e)),
         _ => false,
     }
 }
@@ -764,11 +765,10 @@ fn record_written_field_type(
         field_index,
         ..
     } = &body.exprs[target].kind
+        // A write place's receiver is never a promoted `Operand::Value`.
+        && let Some(inner_e) = inner.as_expr()
     {
-        let pointee = strip_references(
-            body.exprs[inner.as_expr().expect("skeleton operand")].type_id,
-            type_table,
-        );
+        let pointee = strip_references(body.exprs[inner_e].type_id, type_table);
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
@@ -793,13 +793,18 @@ fn mark_assignment_target_as_modified(
             let inner = *inner;
             let field_index = *field_index;
             record_written_field_type(body, e, modified, type_table);
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            if let Some(inner_e) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
             {
                 modified.insert_field(*index, field_index);
-            } else if is_pure_field_chain(body, inner.as_expr().expect("skeleton operand")) {
+            } else if inner
+                .as_expr()
+                .is_some_and(|ie| is_pure_field_chain(body, ie))
+            {
                 // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
             } else {
+                // A promoted-value receiver (or other shape) falls back to the
+                // conservative whole-local invalidation.
                 mark_local_as_fully_modified_operand(body, inner, modified);
             }
         }
@@ -1276,8 +1281,8 @@ fn find_hoist_candidates_in_expr(
         field_index,
         field_name,
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, name } =
-            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, name } = &body.exprs[inner_e].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
@@ -2115,8 +2120,8 @@ fn replace_hoisted_in_expr(
         field_index,
         ..
     } = &engine.body.exprs[e].kind
-        && let ExprKind::Local { index, .. } =
-            &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind
     {
         let index = *index;
         let field_index = *field_index;
