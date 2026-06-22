@@ -2,34 +2,25 @@
 
 ## Context
 
-Programs frequently need build inputs that vary between environments: API endpoints differ between development, staging, and production; build identifiers come from CI; feature flags are toggled at compile time. The values are not known when the source is written but must be baked into the artifact at compile time.
+Programs need build inputs that vary by environment — API endpoints, CI build IDs, feature flags — not known when the source is written but baked into the artifact at compile time.
 
-Existing Wado compile-time literals cover related but distinct needs:
+Existing compile-time literals don't cover this: `#file` / `#line` / `#function` (location), `#data` (`__DATA__`), `#include_str` / `#include_bytes` (file contents) all read from the source tree. Rust's `env!()` reads process env vars implicitly, making builds non-deterministic and hiding which vars a project consumes.
 
-- `#file`, `#line`, `#function` — source location
-- `#data` — co-located inline data via `__DATA__`
-- `#include_str`, `#include_bytes` — external file contents
-
-None of these accept values from outside the source tree. Rust's `env!()` solves the same problem but reads process environment variables implicitly, which makes builds non-deterministic and hides which environment variables a project actually consumes.
-
-This WEP adds named, declarative compile-time parameters whose values come from the `wado` invocation (CLI flags or — when explicitly opted in — environment variables).
+This WEP adds named, declarative compile-time parameters fed by the `wado` invocation (CLI flags, or env vars when opted in).
 
 ### Why an Attribute on `global`, Not a New Literal
 
-A natural-looking alternative is a dedicated literal such as `#param("API_URL")`, mirroring `#include_str`. The chosen design instead reuses `global` with a `#[param]` attribute:
+Rather than a dedicated literal like `#param("API_URL")`, the design reuses `global` with a `#[param]` attribute:
 
 ```wado
 #[param]
 global API_URL: String = "http://localhost";
 ```
 
-Reasons:
-
-- No new compile-time literal needs to be added; the language surface stays small.
-- The `global`'s type annotation supplies the parameter's type — no turbofish required.
-- The initializer expression provides the fallback value, reusing the existing semantics that allows arbitrary expressions for `global` initializers.
-- Read sites are ordinary global references that interact naturally with format strings, pattern matching, and other expressions.
-- IDE/LSP can attach hover information about `#[param]` declarations without learning a new literal form.
+- No new literal; the language surface stays small.
+- The type annotation gives the parameter's type (no turbofish); the initializer gives the fallback.
+- Read sites are ordinary global references, working with format strings, patterns, etc.
+- IDE/LSP can hover `#[param]` without learning a new form.
 
 ## Decision
 
@@ -52,128 +43,108 @@ global BUILD_ID: String = "dev";
 global VERSION: String = "0.0.0-local";
 ```
 
-The attribute is allowed on `global` declarations. The parameter name defaults to the global's identifier and can be overridden with `name = "..."`. Optional named arguments:
+`#[param]` applies to `global` declarations. Optional named arguments:
 
-| Argument   | Type     | Description                                                                                             |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `name`     | `String` | Parameter name used by `-D NAME=value`. Defaults to the global's identifier.                            |
-| `from_env` | `String` | Environment variable name to read at compile time. Optional. The env var name is independent of `name`. |
+| Argument   | Type     | Description                                                              |
+| ---------- | -------- | ------------------------------------------------------------------------ |
+| `name`     | `String` | Parameter name for `-D NAME=value`. Defaults to the global's identifier. |
+| `from_env` | `String` | Env var read at compile time. Independent of `name`.                     |
 
-The `name` value is an arbitrary non-empty string. Wado does not restrict its character set: any string suits the source declaration, and matching it from a CLI invocation or environment variable is the caller's responsibility (subject to the `-D NAME=value` parser splitting on the first `=` and the host shell's quoting rules).
-
-Multiple `#[param]` declarations may share the same name across packages; see [Flat Namespace](#flat-namespace).
+`name` is any non-empty string; matching it from the CLI or env is the caller's responsibility (the `-D NAME=value` parser splits on the first `=`). Names may collide across packages — see [Flat Namespace](#flat-namespace).
 
 ### Constraints
 
-- Allowed only on `global` (immutable). `global mut` with `#[param]` is a compile error: parameters bind a compile-time value, and pairing that with runtime mutability mixes two unrelated concepts.
-- `pub` is allowed. The global is then visible to other modules in the same package, just like any `pub global`.
-- `export` is out of scope for v1 (see [Future Extensions](#future-extensions)).
-- The initializer expression must satisfy the existing `global` rules. It is the fallback when no override resolves.
+- `global` only (immutable). `#[param]` on `global mut` is an error — a compile-time value paired with runtime mutability mixes unrelated concepts.
+- `pub` is allowed (visible like any `pub global`); `export` is out of scope ([Future Extensions](#future-extensions)).
+- The initializer follows ordinary `global` rules and is the fallback when no override resolves.
 
 ### Resolution Sources
 
-Each `#[param]` declaration resolves independently. Sources are checked in this priority order, highest first:
+Each declaration resolves independently, highest priority first:
 
-1. CLI override: `-D NAME=value` (or `--define NAME=value`)
-2. Environment variable named by `from_env`, if the attribute declares one
+1. CLI override `-D NAME=value` (alias `--define`)
+2. The `from_env` environment variable, if declared
 3. The initializer expression
 
-If a higher-priority source produces a value, lower-priority sources are not consulted.
+A higher source short-circuits the lower ones. Overrides (1, 2) are strings, converted to the declared type (see [Conversion](#conversion)); a failed conversion is handled per the [Resolution Policy](#resolution-policy), not automatically fatal. The initializer (3) is type-checked as written and takes effect whenever no override resolves or a conversion is rejected.
 
-CLI overrides and environment variables yield strings. They are converted to the global's declared type via the [`FromParam`](#fromparam-trait) trait. Conversion failure is a compile error.
+### Resolution Policy
 
-The initializer expression is type-checked as written; no `FromParam` is involved on that path.
+Three failures can occur, each a diagnostic class with a CLI-set level (`error`, `warn`, `ignore`):
 
-### Unknown `-D` Names
+| Class             | Situation                                       | Flag              | Default  |
+| ----------------- | ----------------------------------------------- | ----------------- | -------- |
+| unknown `-D` name | `-D NAME=value` matching no `#[param]`          | `--param-unknown` | `error`  |
+| invalid value     | override resolved but unconvertible to the type | `--param-invalid` | `error`  |
+| missing value     | no override; the initializer would be used      | `--param-missing` | `ignore` |
 
-`-D NAME=value` whose `NAME` does not match any `#[param]` declaration in the program is a compile error. This catches typos and prevents silent build drift. A future per-package scoping mechanism may relax this for cases where a single CLI invocation targets multiple build configurations.
+Levels: `error` fails the build; `warn` diagnoses and falls back to the initializer (for `unknown`, ignores the stray `-D`); `ignore` falls back silently. Defaults are strict where a mistake is likely, lenient where the default is normal. (`--param-unknown=warn` suits one invocation targeting several build configs — the eventual per-package scoping case.)
+
+The flags choose _what_ a bad value means, not _when_ it is caught: the compiler applies the policy as early as it can. v1's built-in types (see [Supported Types](#supported-types-v1)) convert at resolution time, so the policy is enforced at compile time. User types need v2; no path runs them in v1.
 
 ### Flat Namespace
 
-Parameter names live in a single flat namespace shared across the entire compilation unit (root package and all dependencies). Two `#[param]` declarations with the same parameter name — whether the name is taken from the identifier or set explicitly with `name = "..."`, in the same package or in different packages — are both subject to the same `-D NAME=value` override.
+Parameter names share one flat namespace across the whole compilation unit (root package and dependencies): same-named `#[param]`s — by identifier or explicit `name`, in any package — answer to the same `-D NAME=value`. This mirrors OS environment variables; library authors avoid collisions by prefixing (e.g. `MYLIB_LOG_LEVEL`). Wado has no structured namespace because the manifest offers no globally-unique short prefix: `[dependencies]` keys are import-local aliases, and canonical package identity (`registry+URL/ns:name@version`) is unusable as a name component. `from_env` shares the OS env namespace; same convention.
 
-This mirrors how operating system environment variables work. Library authors are responsible for choosing names that do not collide with applications or other libraries (the convention is to prefix names, e.g., `MYLIB_LOG_LEVEL`). Wado does not introduce a structured namespace because the package manifest does not provide a globally unique short name to use as a prefix: dependency keys in `[dependencies]` are import-local aliases, and the canonical package identity is a structured descriptor (`registry+URL/ns:name@version`) unsuitable as a name component.
+### Conversion
 
-The `from_env` value is also a free-form string and shares the operating system's environment namespace; the same convention applies.
+v1 converts override strings to the declared type natively in the compiler — no user-facing trait. The pass trims the override first (whitespace from a CLI/env value is noise), then converts. Accepted forms match the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) — radix prefixes, `_` digit separators, `nan`/`inf`, `1`/`0` for `bool` — so v2, which adopts that trait, preserves v1 behavior. (The trait itself does not trim; trimming is this pass's policy.)
 
-### `FromParam` Trait
+#### Supported Types (v1)
 
-CLI and environment variable values are strings. Conversion to the global's type uses a dedicated trait:
+v1 supports `#[param]` on the built-in scalar types only: `String`, `char`, the integer types, `f32` / `f64`, and `bool`. Their accepted spellings are the built-in impls of [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md).
 
-```wado
-pub trait FromParam {
-    type Err;
-    fn from_param(s: &String) -> Result<Self, Self::Err>;
-}
-```
+An unaccepted value (a `"yes"` for `bool`, an out-of-range integer) is an invalid value, handled per `--param-invalid`. `#[param]` on any other type is an error — `#[param] on <Type>: only built-in types are supported in v1`. v2 lifts this by evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) for arbitrary types through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 
-`FromParam` is intentionally separate from `FromStr` (the general string parsing trait introduced alongside this WEP). `FromParam` is permitted to be more lenient — for example, accepting both `"true"` and `"1"` for `bool` — without affecting the semantics of general string parsing in user code.
+### Resolution Timing
 
-#### Trimming
-
-All built-in `FromParam` implementations trim leading and trailing ASCII whitespace from the input before parsing. This applies to `String` as well: parameter values cannot contain meaningful leading or trailing whitespace.
-
-#### Built-In Implementations
-
-| Type                              | Accepted form                                          |
-| --------------------------------- | ------------------------------------------------------ |
-| `String`                          | Any string (after trim, identity)                      |
-| `i8`, `i16`, `i32`, `i64`, `i128` | Decimal integer (sign optional)                        |
-| `u8`, `u16`, `u32`, `u64`, `u128` | Decimal non-negative integer                           |
-| `f32`, `f64`                      | Standard floating-point literal (e.g., `3.14`, `-1e9`) |
-| `bool`                            | `"true"`, `"false"`, `"1"`, `"0"` (case-insensitive)   |
-
-Anything else — for example, a hex prefix on an integer, or `"yes"` for `bool` — is a parse error and therefore a compile error. The accepted set may be extended in future WEPs.
-
-User-defined types may implement `FromParam` to be usable as `#[param]` types. This is supported but not exercised by the v1 implementation; the focus is the built-in set above.
-
-### Resolution Timing and Optimization
-
-A `#[param]` global is resolved during compilation, before any runtime initialization sequencing. After resolution the global behaves like any other `global` whose initializer happens to be a literal:
-
-- Constant Global Promotion (CGP) folds it to an immutable Wasm constant when the resolved value is scalar (numeric, `bool`).
-- For object-typed parameters (currently only `String`), the value participates in the existing lazy-initialization path.
-
-No new optimization is required. The naturally-arising constant folding is sufficient for the common cases.
+On a resolved override the param-resolution pass trims and converts the string natively, then either replaces the global's initializer with the resulting literal, or — on failure — applies `--param-invalid` (keeping the initializer unless the level is `error`). No interpreter runs, so the pass sits after symbol resolution, before lowering. The rewritten global is then ordinary: scalar literals are eligible for Constant Global Promotion to a Wasm constant, `String` uses the existing lazy-init path. No new optimization is needed.
 
 ### CLI Surface
 
-`wado compile`, `wado run`, `wado serve`, `wado test`, and `wado dump` all accept `-D NAME=value` (repeatable). The flag is parsed before module loading so that resolution can happen during compilation.
+`wado compile`, `run`, `serve`, `test`, and `dump` accept `-D NAME=value` (repeatable) and the three policy flags, parsed before module loading.
 
 ```sh
 wado compile -D API_URL=https://prod.example.com -D PORT=80 app.wado
 wado run -D LOG_LEVEL=debug script.wado
+
+# Relax: tolerate a stray -D and a bad value, fall back to defaults
+wado compile --param-unknown=warn --param-invalid=warn -D EXTRA=1 -D PORT=eighty app.wado
+
+# Tighten: require every parameter to be supplied
+wado compile --param-missing=error -D API_URL=… -D PORT=80 -D BUILD_ID=… app.wado
 ```
 
 ### Out of Scope (v1)
 
-These are intentionally deferred:
-
-- Parameter file (`WADO_PARAM_FILE`) — keep core feature minimal; can be added once the trade-offs are concrete.
-- Per-package scoping for `-D` — the flat namespace is enough for the v1 use cases. Add a structured override key (e.g., `-D 'auth-lib:NAME=...'` keyed on `[dependencies]` import names) only if user demand emerges.
-- Optional vs required distinction — v1 always falls back to the initializer expression, so a parameter without an override is just the initializer's value.
-- `export` interaction — exposing a `#[param]` global at the Component Model boundary, and the question of whether a consumer can override a producer's compiled-in value, is an independent design problem.
+- User-defined parameter types — built-in types only; arbitrary types need compile-time evaluation, deferred to v2 (wasm-CTFE / [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md)).
+- Parameter file (`WADO_PARAM_FILE`) — added once the trade-offs are concrete.
+- Per-package `-D` scoping (e.g. `-D 'auth-lib:NAME=...'`) — the flat namespace suffices for now.
+- Per-declaration `#[param(required)]` — `--param-missing=error` already enforces this globally; the finer-grained form is a [Future Extension](#future-extensions).
+- `export #[param]` and cross-component override — an independent design problem.
 
 ## Implementation Strategy
 
 ### Manifest
 
-No changes to `wado.toml`. `#[param]` is purely a source-level construct.
+None. `#[param]` is purely source-level.
 
 ### Compiler Pipeline
 
-1. **Parser**: `#[param]` is recognized as a global attribute. The parser accepts the named-argument form (`from_env = "..."`).
-2. **Symbol/Type pass**: each `#[param]` declaration registers its parameter name (`name = "..."` if given, otherwise the global's identifier) and the optional `from_env` mapping in a per-compilation parameter table.
-3. **Param resolution pass** (new, runs after symbol resolution and before TIR lowering):
-   - For each `-D NAME=value` from the CLI, look up `NAME` in the parameter table. Unknown names → compile error.
-   - For each `#[param]` declaration, in priority order, find a string value from `-D`, then from the declared `from_env` environment variable, otherwise mark the global as using its initializer.
-   - For overridden globals, run the resolved string through `FromParam::from_param` for the declared type. Failure → compile error.
-   - Replace the global's initializer in the AST/TIR with a literal of the resolved value.
-4. **Existing optimizations** (CGP, etc.) operate on the rewritten globals without further changes.
+1. Parser: accept `#[param]` (with `name` / `from_env`) on globals.
+2. Symbol pass: register each parameter's name and optional `from_env` in a per-compilation table.
+3. Param resolution pass (after symbol resolution, before lowering):
+   - Reject `#[param]` on non-built-in types.
+   - Map `-D NAME=value` to the table; apply `--param-unknown` to misses.
+   - Per declaration, take a value from `-D`, then `from_env`; if none, apply `--param-missing` and keep the initializer.
+   - On an override, convert natively: success replaces the initializer with the literal; failure applies `--param-invalid`.
+4. Existing optimizations (constant folding, CGP) run unchanged on the rewritten globals.
+
+v1 adds no traits or prelude functions — the pass parses in Rust, matching what the `FromStr` impls do plus trimming/leniency. `FromStr` is unchanged. v2 swaps the native path for evaluating [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) via wasm-CTFE.
 
 ### `CompilerHost`
 
-A new method on `CompilerHost` provides the `-D` overrides and access to environment variables, so that the compiler crate itself remains pure:
+A new host method supplies overrides and env access, keeping the compiler crate pure:
 
 ```rust
 trait CompilerHost {
@@ -183,53 +154,56 @@ trait CompilerHost {
 }
 ```
 
-The CLI host implements these by reading `clap` arguments and `std::env::var` respectively. The test host can stub both.
-
-### `FromParam` and `FromStr`
-
-This WEP introduces both:
-
-- `FromStr` — Rust-compatible. Implementations for `i*`, `u*`, `f*`, and `String` are retrofit on top of the existing `T::from_str` functions in `core:prelude`. `bool::from_str` is added with the strict `"true"` / `"false"` accepted set.
-- `FromParam` — separate trait, lenient where it makes sense (`bool` accepts `"1"` / `"0"`), trims unconditionally.
-
-Both traits live in `core:prelude` and are auto-imported.
+The CLI host reads `clap` args and `std::env::var`; the test host stubs both. Policy levels travel with the compile options, not the host.
 
 ### Errors
 
-| Condition                                           | Error                                                            |
-| --------------------------------------------------- | ---------------------------------------------------------------- |
-| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global`                 |
-| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`                              |
-| `name = ""` (empty string)                          | `#[param] name must not be empty`                                |
-| `-D NAME=value` for an undeclared parameter         | `unknown compile-time parameter: NAME`                           |
-| `FromParam::from_param` returns `Err`               | `cannot parse "<value>" as <Type> for parameter <NAME>`          |
-| `from_env` value present but not parseable          | same as above, with the env var name mentioned in the diagnostic |
+Structural mistakes are always errors:
+
+| Condition                                          | Error                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------- |
+| `#[param]` on `global mut`                         | `#[param] cannot be applied to a mutable global`              |
+| `#[param]` argument other than `name` / `from_env` | `unknown #[param] argument: <name>`                           |
+| `name = ""`                                        | `#[param] name must not be empty`                             |
+| `#[param]` on a non-built-in type                  | `#[param] on <Type>: only built-in types are supported in v1` |
+
+The three resolution diagnostics report at their flag's level ([Resolution Policy](#resolution-policy)); same message as error or warning:
+
+| Class         | Flag (default)             | Message                                                 |
+| ------------- | -------------------------- | ------------------------------------------------------- |
+| unknown name  | `--param-unknown` (error)  | `unknown compile-time parameter: <NAME>`                |
+| invalid value | `--param-invalid` (error)  | `cannot parse "<value>" as <Type> for parameter <NAME>` |
+| missing value | `--param-missing` (ignore) | `compile-time parameter <NAME> was not provided`        |
+
+An `invalid` value from `from_env` names the env var instead. At `warn` / `ignore`, `invalid` and `missing` fall back to the initializer.
 
 ### Documentation
 
-- Update `docs/cheatsheet.md` with a short Compile-Time Parameters section.
-- Update `core:prelude` reference (`docs/stdlib-core-prelude.md`) with `FromParam` and `FromStr`.
+- Add a short Compile-Time Parameters section to `docs/cheatsheet.md`.
+- No `core:prelude` changes (v1 adds nothing to the prelude).
 
 ## Consequences
 
 ### Positive
 
-- Programs can declare typed, named build inputs in source, with defaults co-located with the declaration.
-- No new literal syntax; `#[param]` slots into the existing attribute family alongside `#[inline]`, `#[expect_trap]`, etc.
-- Type and default come from the `global` itself, eliminating turbofish and avoiding redundant manifest schemas.
-- Bake-in semantics fall out of the existing global pipeline plus CGP — minimal new optimization work.
-- Build inputs are explicit: only declared parameters can be set, and `-D` typos are caught.
-- `from_env` makes the set of consumed environment variables a documented, opt-in subset, avoiding Rust `env!()`'s "any env var leaks in" failure mode.
+- Typed, named build inputs declared in source, defaults co-located.
+- No new literal syntax; `#[param]` joins `#[inline]`, `#[expect_trap]`, etc.
+- Type and default come from the `global`, avoiding turbofish and manifest schemas.
+- Verified at compile time: undeclared names and bad values fail the build by default, catching typos in names _and_ values.
+- Bake-in falls out of the global pipeline plus CGP — minimal optimizer work.
+- `from_env` documents consumed env vars as an opt-in subset, avoiding `env!()`'s leak-anything behavior.
 
 ### Trade-offs
 
-- Flat namespace pushes collision avoidance to library authors. Acceptable: the same constraint applies to OS environment variables, which library authors already deal with.
-- `FromParam` is a dedicated trait and not `FromStr`, so there is some duplication. The benefit — keeping lenient parameter parsing out of general string parsing semantics — is judged worth the cost.
-- `String` parameters cannot carry meaningful surrounding whitespace because trim is unconditional. Acceptable for the target use cases (API URLs, identifiers, level names).
+- Flat namespace pushes collision avoidance onto library authors — same as OS env vars.
+- v1 is built-in types only. Deliberate: every v1 use case (URLs, ports, IDs, flags) is built-in and converts at compile time without CTFE; user types wait for v2 rather than forcing a weaker runtime-conversion path.
+- The native conversion duplicates `FromStr` parsing logic — small, and removed in v2 by [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) over wasm-CTFE.
+- The pass trims every override, so `String` / `char` parameters can't carry surrounding whitespace — fine for URLs, identifiers, level names. (The `LenientFromStr` trait itself is faithful; trimming is the pass's policy.)
 
 ### Future Extensions
 
-- Parameter file (`WADO_PARAM_FILE` or `wado.toml [params]`) once the convenience of grouping many overrides is demanded.
-- Per-package scoping for `-D` to override a specific dependency's parameter without affecting same-named parameters elsewhere.
-- Optional/required parameter distinction, with `Option<T>` typing or an explicit `required` flag.
-- `export #[param]` and the associated cross-component override design.
+- Arbitrary user types via [`LenientFromStr`](./wep-2026-06-22-lenient-from-str.md) over wasm-CTFE ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)): conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning.
+- Parameter file (`WADO_PARAM_FILE` or `wado.toml [params]`).
+- Per-package `-D` scoping.
+- Per-declaration `#[param(required)]` with initializer-less `global` syntax.
+- `export #[param]` with cross-component override.
