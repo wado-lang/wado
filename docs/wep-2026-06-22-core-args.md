@@ -54,28 +54,32 @@ E2E tests and subcommand dispatch feed a `List<String>` directly.
 
 ### Object Mapping
 
-Struct fields become `--long` options. The field type selects arity, exactly as
-in `core:json` — no argument-specific attributes for the common case:
+Struct fields become `--long` options. The field type and whether it carries a
+declared default select arity — no argument-specific attributes:
 
-| Wado field type              | argv meaning                         |
-| ---------------------------- | ------------------------------------ |
-| `T` (scalar)                 | required `--name <value>`            |
-| `Option<T>`                  | optional `--name <value>`            |
-| `bool` + `#[serde(default)]` | flag `--name` (absent → `false`)     |
-| `List<T>`                    | repeatable `--name a --name b`       |
-| any + `#[serde(default)]`    | uses the type's zero-value if absent |
+| Wado field type  | argv meaning                               |
+| ---------------- | ------------------------------------------ |
+| `T` (no default) | required `--name <value>`                  |
+| `T = expr`       | optional `--name <value>`, absent → `expr` |
+| `Option<T>`      | optional `--name <value>`, absent → `null` |
+| `bool = false`   | flag `--name`, absent → `false`            |
+| `List<T>`        | repeatable, required (≥1 occurrence)       |
+| `List<T> = []`   | repeatable, optional (≥0 occurrence)       |
 
 ```wado
 struct Cli {
-    jobs: i32,                 // --jobs <n>      (required)
-    output: Option<String>,    // --output <v>    (optional)
-    #[serde(default)]
-    verbose: bool,             // --verbose       (flag)
-    #[serde(default)]
-    include: List<String>,     // --include <v>   (repeatable)
+    input: String,             // --input <v>   (required)
+    jobs: i32 = 1,             // --jobs <n>    (optional, default 1)
+    output: Option<String>,    // --output <v>  (optional, absent → null)
+    verbose: bool = false,     // --verbose     (flag)
+    include: List<String> = [], // --include <v> (repeatable, optional)
 }
 impl Deserialize for Cli;
 ```
+
+This is the language's "has default → optional, no default → required" rule
+(see [Interaction with Default Field Values](#interaction-with-default-field-values)),
+extended to argv. The common case carries no serde attributes at all.
 
 Option names are matched with `-`/`_` folding, so `--dry-run` binds the field
 `dry_run` without a per-field rename. This is a format-level normalization in
@@ -93,25 +97,49 @@ struct Cli {
     #[serde(positional)]
     input: String,             // 1st positional (required)
     #[serde(positional)]
-    out: Option<String>,       // 2nd positional (optional)
+    out: String = "out.txt",   // 2nd positional (optional, default)
     #[serde(positional)]
-    rest: List<String>,        // remaining positionals (variadic)
+    rest: List<String> = [],   // remaining positionals (variadic)
 
-    jobs: i32,                 // --jobs <n>
-    #[serde(default)]
-    verbose: bool,             // --verbose
+    jobs: i32 = 1,             // --jobs <n>
+    verbose: bool = false,     // --verbose
 }
 impl Deserialize for Cli;
 // myprog in.txt out.txt a b --jobs 4 --verbose
 ```
 
-Because the hint is explicit, optional (`Option<T>`) and variadic (`List<T>`)
-positionals are supported — unlike `serde_args`' implicit scheme. Validation
-(checked when the parser walks the schema):
+Because the hint is explicit, optional positionals — via a declared default
+(`out` above) or `Option<T>` — and variadic positionals (`List<T> = []`) are
+supported, unlike `serde_args`' implicit scheme. Validation (checked when the
+parser walks the schema):
 
 - Positionals form a contiguous group in declaration order.
 - Required positionals precede optional ones.
 - At most one variadic positional, and it must be last.
+
+### Interaction with Default Field Values
+
+[Default field values](./wep-2026-04-11-default-arguments.md) are the backbone
+of the arity model above. A declared field default makes the field optional on
+deserialize (see the serde WEP's [Default Values for Missing Fields](./wep-2026-02-28-serde.md#default-values-for-missing-fields)),
+so `core:args` needs no argument-specific default mechanism — it inherits the
+language's uniform "has default → optional" rule:
+
+- **Sensible defaults, not zero-values.** `port: i32 = 8080` makes `--port`
+  optional defaulting to `8080`, the equivalent of clap's `default_value_t`,
+  expressed in the language rather than an attribute. `#[serde(default)]` (which
+  falls back to the type's zero-value) is rarely needed for CLIs.
+- **`--help` shows defaults for free.** Default expressions are pure and
+  compile-time-known, so help renders `--port <n>  (default: 8080)` without any
+  per-field annotation — bpaf's `display_fallback` with no extra API.
+- **Optional positionals.** A positional field with a default is an optional
+  positional (`#[serde(positional)] dir: String = "."`).
+- **Total empty-argv path.** A struct whose fields all have defaults
+  auto-derives `Default`, so a no-argument invocation is exactly `Cli::default()`
+  and parsing an empty argv cannot fail.
+
+Defaults are restricted to pure expressions by the effect system, which CLI
+defaults (literals, constants) always satisfy.
 
 ### Subcommands as Variants
 
@@ -152,9 +180,10 @@ the same struct as a subcommand `variant` is rejected (ambiguous boundary).
 ### Help and Version
 
 - [ ] `--help` is generated by walking the (statically known) schema, with text
-      drawn from doc comments on the type and fields. This is the one feature beyond
-      the minimal engine worth its size — it is what separates a usable tool from a
-      hand-written help constant.
+      drawn from doc comments on the type and fields, and the default value of each
+      defaulted field rendered inline (`--port <n>  (default: 8080)`). This is the
+      one feature beyond the minimal engine worth its size — it is what separates a
+      usable tool from a hand-written help constant.
 - [ ] `--version` prints the package version.
 
 ### Errors
