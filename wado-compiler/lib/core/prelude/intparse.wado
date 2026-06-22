@@ -99,12 +99,16 @@ pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
 /// through unchanged, so a `_` inside it (`i_nf`) stays invalid.
 pub fn lenient_float_preprocess(s: &String) -> String {
     let len = s.len();
-    let head = if len > 0 && (s.get_byte_unchecked(0) == '+' as u8 || s.get_byte_unchecked(0) == '-' as u8) { 1 } else { 0 };
+    let head = if len > 0 && (s.get_byte_unchecked(0) == '+' as u8 || s.get_byte_unchecked(0) == '-' as u8) {
+        1;
+    } else {
+        0;
+    };
     if head >= len {
         return *s;
     }
     let first = s.get_byte_unchecked(head);
-    let is_numeric = (first >= '0' as u8 && first <= '9' as u8) || first == '.' as u8;
+    let is_numeric = first >= '0' as u8 && first <= '9' as u8 || first == '.' as u8;
     if !is_numeric {
         return *s;
     }
