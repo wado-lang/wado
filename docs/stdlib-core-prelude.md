@@ -898,6 +898,10 @@ A borrowed, zero-copy view over a byte buffer.
 
 #### `pub fn to_string(&self) -> String`
 
+#### `impl LenientFromStr for bool`
+
+##### `fn from_str_lenient(s: &String) -> Result<bool, LenientParseError>`
+
 #### `impl Display for bool`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1002,6 +1006,10 @@ Returns the number of bytes this character needs in UTF-8 encoding.
 
 Encodes this character as UTF-8, returning the bytes.
 
+#### `impl LenientFromStr for char`
+
+##### `fn from_str_lenient(s: &String) -> Result<char, LenientParseError>`
+
 #### `impl Display for char`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1049,6 +1057,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl FromStr for i8`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i8, ParseIntError>`
+
+#### `impl LenientFromStr for i8`
+
+##### `fn from_str_lenient(s: &String) -> Result<i8, LenientParseError>`
 
 #### `impl Display for i8`
 
@@ -1142,6 +1154,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u8, ParseIntError>`
 
+#### `impl LenientFromStr for u8`
+
+##### `fn from_str_lenient(s: &String) -> Result<u8, LenientParseError>`
+
 #### `impl Display for u8`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1229,6 +1245,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl FromStr for i16`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i16, ParseIntError>`
+
+#### `impl LenientFromStr for i16`
+
+##### `fn from_str_lenient(s: &String) -> Result<i16, LenientParseError>`
 
 #### `impl Display for i16`
 
@@ -1325,6 +1345,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl FromStr for u16`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u16, ParseIntError>`
+
+#### `impl LenientFromStr for u16`
+
+##### `fn from_str_lenient(s: &String) -> Result<u16, LenientParseError>`
 
 #### `impl Display for u16`
 
@@ -1425,6 +1449,10 @@ Counts the number of set bits (population count).
 #### `impl FromStr for i32`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i32, ParseIntError>`
+
+#### `impl LenientFromStr for i32`
+
+##### `fn from_str_lenient(s: &String) -> Result<i32, LenientParseError>`
 
 #### `impl Display for i32`
 
@@ -1529,6 +1557,10 @@ Counts the number of set bits (population count).
 #### `impl FromStr for u32`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u32, ParseIntError>`
+
+#### `impl LenientFromStr for u32`
+
+##### `fn from_str_lenient(s: &String) -> Result<u32, LenientParseError>`
 
 #### `impl Display for u32`
 
@@ -1641,6 +1673,10 @@ Counts the number of set bits (population count).
 #### `impl FromStr for i64`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i64, ParseIntError>`
+
+#### `impl LenientFromStr for i64`
+
+##### `fn from_str_lenient(s: &String) -> Result<i64, LenientParseError>`
 
 #### `impl Display for i64`
 
@@ -1757,6 +1793,10 @@ Counts the number of set bits (population count).
 #### `impl FromStr for u64`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError>`
+
+#### `impl LenientFromStr for u64`
+
+##### `fn from_str_lenient(s: &String) -> Result<u64, LenientParseError>`
 
 #### `impl Display for u64`
 
@@ -2022,6 +2062,10 @@ Creates an f32 from its bit representation.
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<f32, ParseFloatError>`
 
+#### `impl LenientFromStr for f32`
+
+##### `fn from_str_lenient(s: &String) -> Result<f32, LenientParseError>`
+
 #### `impl Display for f32`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2259,6 +2303,10 @@ Creates an f64 from its bit representation.
 #### `impl FromStr for f64`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError>`
+
+#### `impl LenientFromStr for f64`
+
+##### `fn from_str_lenient(s: &String) -> Result<f64, LenientParseError>`
 
 #### `impl Display for f64`
 
@@ -2639,6 +2687,10 @@ Convert u128 to String (for template string interpolation)
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError>`
 
+#### `impl LenientFromStr for u128`
+
+##### `fn from_str_lenient(s: &String) -> Result<u128, LenientParseError>`
+
 #### `impl Display for u128`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -2850,6 +2902,10 @@ Convert i128 to String (for template string interpolation)
 #### `impl FromStr for i128`
 
 ##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError>`
+
+#### `impl LenientFromStr for i128`
+
+##### `fn from_str_lenient(s: &String) -> Result<i128, LenientParseError>`
 
 #### `impl Display for i128`
 
@@ -3618,6 +3674,12 @@ Returns an iterator over characters with their byte indices.
 ##### `pub fn eq(&self, other: &Self) -> bool`
 
 ##### `fn eq_bytes(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool`
+
+#### `impl LenientFromStr for String`
+
+##### `fn from_str_lenient(s: &String) -> Result<String, LenientParseError>`
+
+Identity: any string parses to itself. Never fails.
 
 #### `impl Ord for String`
 

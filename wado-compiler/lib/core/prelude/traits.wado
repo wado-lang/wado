@@ -818,3 +818,34 @@ pub trait FromStr {
         return Self::from_str_range(s, 0, s.len());
     }
 }
+
+/// Error returned by the lenient string parsers (`LenientFromStr`). All
+/// built-in impls share this single type, carrying a short human-readable
+/// reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
+pub struct LenientParseError {
+    reason: String,
+}
+
+impl LenientParseError {
+    pub fn new(reason: String) -> LenientParseError {
+        return LenientParseError { reason };
+    }
+
+    /// A short description of why parsing failed.
+    pub fn reason(&self) -> String {
+        return self.reason;
+    }
+}
+
+/// Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
+/// the common spelling variations for the type (casing, radix prefixes,
+/// digit separators, alternate boolean words). Leniency widens accepted
+/// spellings only — an undenotable value still yields `Err`, and whitespace
+/// is never trimmed (that is the caller's concern). See
+/// `docs/wep-2026-06-22-lenient-from-str.md`.
+pub trait LenientFromStr {
+    type Err;
+
+    /// Parse the entire string as `Self`, accepting forgiving spellings.
+    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+}

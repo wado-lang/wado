@@ -6,6 +6,7 @@
 
 
 use { Eq, Ord, Iterator, IntoIterator, Add, Default, From, Ordering } from "core:prelude/traits.wado";
+use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { ArraySlice } from "core:prelude/slice.wado";
@@ -357,6 +358,15 @@ impl Eq for String {
             }
         }
         return true;
+    }
+}
+
+impl LenientFromStr for String {
+    type Err = LenientParseError;
+
+    /// Identity: any string parses to itself. Never fails.
+    fn from_str_lenient(s: &String) -> Result<String, LenientParseError> {
+        return Result::Ok(*s);
     }
 }
 

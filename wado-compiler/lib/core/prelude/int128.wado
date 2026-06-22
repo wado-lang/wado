@@ -11,6 +11,8 @@ use {
     parse_signed_prefix_range,
     parse_unsigned_prefix_range,
     assert_radix,
+    lenient_int_preprocess,
+    lenient_int_error,
 } from "core:prelude/intparse.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
@@ -34,6 +36,8 @@ use {
     Ordering,
     Default,
     FromStr,
+    LenientFromStr,
+    LenientParseError,
     ConvertError,
     Display,
     Inspect,
@@ -399,6 +403,23 @@ impl FromStr for u128 {
 
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError> {
         return u128::from_str_radix_range(s, start, end, 10);
+    }
+}
+
+impl LenientFromStr for u128 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient(s: &String) -> Result<u128, LenientParseError> {
+        let [cleaned, radix] = match lenient_int_preprocess(s) {
+            Ok(p) => p,
+            Err(e) => {
+                return Result::Err(e);
+            },
+        };
+        return match u128::from_str_radix(&cleaned, radix) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => Result::Err(lenient_int_error(e)),
+        };
     }
 }
 
@@ -883,6 +904,23 @@ impl FromStr for i128 {
 
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError> {
         return i128::from_str_radix_range(s, start, end, 10);
+    }
+}
+
+impl LenientFromStr for i128 {
+    type Err = LenientParseError;
+
+    fn from_str_lenient(s: &String) -> Result<i128, LenientParseError> {
+        let [cleaned, radix] = match lenient_int_preprocess(s) {
+            Ok(p) => p,
+            Err(e) => {
+                return Result::Err(e);
+            },
+        };
+        return match i128::from_str_radix(&cleaned, radix) {
+            Ok(v) => Result::Ok(v),
+            Err(e) => Result::Err(lenient_int_error(e)),
+        };
     }
 }
 

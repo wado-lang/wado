@@ -130,3 +130,4 @@ It may include TODOs on WIP.
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
 - [The Live ValueGraph — ValueGraph as the Pure-Value IR](./wep-2026-06-15-live-value-graph.md)
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
+- [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
