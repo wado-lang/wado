@@ -88,11 +88,26 @@ pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
     return LenientParseError::new(reason);
 }
 
-/// Strip `_` separators from a human-supplied float string for a lenient
-/// parse. Whitespace is not touched; the result is handed to the float
-/// `FromStr` (which already accepts `nan`/`inf`/`infinity` case-insensitively).
+/// Strip `_` separators from the digit body of a human-supplied float string
+/// for a lenient parse. Whitespace is not touched; the result is handed to the
+/// float `FromStr` (which already accepts `nan`/`inf`/`infinity`
+/// case-insensitively).
+///
+/// `_` is only a digit-grouping separator, so it is stripped only when the
+/// token is numeric (starts, after an optional sign, with a digit or `.`).
+/// A special word like `inf` / `nan` starts with a letter and is handed
+/// through unchanged, so a `_` inside it (`i_nf`) stays invalid.
 pub fn lenient_float_preprocess(s: &String) -> String {
     let len = s.len();
+    let head = if len > 0 && (s.get_byte_unchecked(0) == '+' as u8 || s.get_byte_unchecked(0) == '-' as u8) { 1 } else { 0 };
+    if head >= len {
+        return *s;
+    }
+    let first = s.get_byte_unchecked(head);
+    let is_numeric = (first >= '0' as u8 && first <= '9' as u8) || first == '.' as u8;
+    if !is_numeric {
+        return *s;
+    }
     let mut cleaned = String::with_capacity(len);
     for let mut j = 0; j < len; j += 1 {
         let b = s.get_byte_unchecked(j);

@@ -87,6 +87,21 @@ test "float special words" {
 test "float errors" {
     assert f64::from_str_lenient(&" 1.0 ") matches { Err(_) };
     assert f64::from_str_lenient(&"hello") matches { Err(_) };
+    // `_` is a digit-grouping separator only — it must not be stripped from
+    // inside a special word, so these stay invalid.
+    assert f64::from_str_lenient(&"i_nf") matches { Err(_) };
+    assert f64::from_str_lenient(&"n_an") matches { Err(_) };
+    assert f64::from_str_lenient(&"infi_nity") matches { Err(_) };
+}
+
+test "int prefix and underscore edges" {
+    // A lone radix prefix has no digits.
+    assert i32::from_str_lenient(&"0x") matches { Err(_) };
+    // Leading / trailing underscores in the digit body are tolerated.
+    assert i32::from_str_lenient(&"_5") matches { Ok(v) && v == 5 };
+    assert i32::from_str_lenient(&"5_") matches { Ok(v) && v == 5 };
+    // A sign with no digits is invalid.
+    assert i32::from_str_lenient(&"+") matches { Err(_) };
 }
 
 test "bool forms" {
