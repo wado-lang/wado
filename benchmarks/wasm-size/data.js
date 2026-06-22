@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782130764305,
+  "lastUpdate": 1782167088613,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34817,6 +34817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9900a469e26c90f9aa64fb1663eed89ea647032a"
         },
         "date": 1782130763918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b9c4fcf327b7f9113c62d088e2c2097064a7f4ff",
+          "message": "Merge pull request #1430 from wado-lang/claude/stdlib-cli-arg-parsing-35bfka\n\nfeat!: design core:args; replace #[serde(default)] with field defaults",
+          "timestamp": "2026-06-23T07:10:40+09:00",
+          "tree_id": "c02d765e58ff2082b80072ba506be749195b70b6",
+          "url": "https://github.com/wado-lang/wado/commit/b9c4fcf327b7f9113c62d088e2c2097064a7f4ff"
+        },
+        "date": 1782167087991,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
