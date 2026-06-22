@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782099396652,
+  "lastUpdate": 1782124205461,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34729,6 +34729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d0190daf1b834711cf17ef7f624478921b905b7e"
         },
         "date": 1782099396347,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e62b97ee132f065c8b299ace243dd5e448a095ed",
+          "message": "Merge pull request #1428 from wado-lang/claude/wadopoet-misplaced-features-dw6igp\n\nrefactor(gale): own Wado literal escaping in wadopoet",
+          "timestamp": "2026-06-22T19:20:16+09:00",
+          "tree_id": "ba6638789ef2130fb84ac04833eaa2295f664f27",
+          "url": "https://github.com/wado-lang/wado/commit/e62b97ee132f065c8b299ace243dd5e448a095ed"
+        },
+        "date": 1782124204852,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
