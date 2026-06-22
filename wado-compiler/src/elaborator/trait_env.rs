@@ -80,9 +80,8 @@ pub(super) fn module_import_scope(
                             scope.original_names.insert(local_name.clone(), def_name);
                         }
                         // Importing a variant/enum/flags type brings its case
-                        // names into scope so they resolve unqualified
-                        // (`Some`, `Ok`, …) through the import branch rather
-                        // than the removed global scan.
+                        // names into scope so bare `Some` / `Ok` / enum cases
+                        // resolve through the import branch.
                         if let Some(sym) = resolved {
                             collect_case_names(&mut pending_cases, sym, &def_source);
                         }
