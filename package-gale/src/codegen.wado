@@ -9,7 +9,7 @@ use {
 } from "./ir.wado";
 use { rule_type_name, all_alts_are_single_token } from "./gen_util.wado";
 use { collect_literal_tokens, gen_token_constants, gen_lexer } from "./lexer_gen.wado";
-use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals } from "./parser_gen.wado";
+use { gen_parser, gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./parser_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
@@ -153,6 +153,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // The scan emission may intern kind-set helpers (`_kind_set_N`);
     // emit whatever was interned (a no-op when none).
     gen_kind_set_helpers(&mut w, &lowered, &ctx);
+    gen_sync_set_globals(&mut w, &ctx);
     if ef {
         gen_follow_mask_globals(&mut w, &ctx);
     }

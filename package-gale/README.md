@@ -213,6 +213,41 @@ You can confirm a rule is ALL(\*)-class with `gale dump` (it prints
 `Ambiguous(...)` for such a decision) and inspect the automaton with
 `gale dump --atn`.
 
+## Resilient parsing
+
+A generated parser is **infallible**: it never throws and never bails on a
+syntax error. It always returns a tree plus a list of diagnostics, repairing
+the input locally and recording every repair _in the tree_ — so a broken file
+still yields a usable, complete tree. This is what editors, linters, and
+language servers need: they run on half-typed code far more often than on
+valid code.
+
+Feed the calculator a trailing operator and parse still succeeds, with the
+stray `*` captured and one diagnostic:
+
+```wado
+let r = arith::parse(&"1 + 2 *");
+// r.ok() == false
+// arith::to_string_tree(&r) == "(prog (expr (expr 1) + (expr 2)) <skip *>)"
+// r.diagnostics[0]: code ExtraToken at 1:6  ("extraneous input \"*\"")
+```
+
+Recovery is three first-class edits, each representable in the tree, so the
+original tokens always round-trip:
+
+| Edit                       | Tree                                | Diagnostic code   |
+| -------------------------- | ----------------------------------- | ----------------- |
+| delete a spurious terminal | `<skip x>` (`CstChild::Skipped`)    | `ExtraToken`      |
+| insert a missing terminal  | `<missing X>` (`CstChild::Missing`) | `MissingToken`    |
+| skip an unrecoverable run  | `<error>` region (`K_ERROR` node)   | `UnexpectedToken` |
+
+A token that doesn't start any alternative produces a `NoViableAlternative`
+diagnostic; the parser then folds the open nodes closed and carries on. The
+`parse(input, max_errors)` overload caps how many diagnostics are collected
+before recovery stops and folds the rest (`max_errors` defaults to unbounded
+and must be `>= 1`); `<= 1` is effectively fail-fast while still returning a
+partial tree.
+
 ## The generated parser API
 
 Every generated parser module exports, at minimum:

@@ -184,7 +184,7 @@ test "generate wildcard element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"let wildcard = p.match_any()?;");
+    assert str_contains(&output, &"let wildcard = p.any();");
 }
 
 test "generate parser not element" {
@@ -217,7 +217,7 @@ test "generate parser not element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"let not_comma = p.match_not([TK_COMMA])?;");
+    assert str_contains(&output, &"let not_comma = p.expect_not([TK_COMMA]);");
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
@@ -248,8 +248,8 @@ test "generate scalar-labeled single-alt group `t=(A B)`" {
         "(test)",
     );
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"p.expect(TK_A)");
-    assert str_contains(&output, &"p.expect(TK_B)");
+    assert str_contains(&output, &"p.expect(TK_A,");
+    assert str_contains(&output, &"p.expect(TK_B,");
 }
 
 test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
@@ -260,7 +260,7 @@ test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
     // wildcard-in-set / wildcard-in-group ANTLR4 patterns.
     let mut grammar = parse_grammar("grammar T; a : t=(.)* ; A : 'a' ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"match_any");
+    assert str_contains(&output, &"any");
 }
 
 test "generate lexer set_mode" {
@@ -569,8 +569,8 @@ WS : [ \\t\\n]+ -> skip ;
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
     // The self-refs in the Send suffix must be stamped with min_prec 2.
-    assert !str_contains(&helper, &"_parse_expr(p)?");
-    assert str_contains(&helper, &"_parse_expr(p, 2)?");
+    assert !str_contains(&helper, &"_parse_expr(p)");
+    assert str_contains(&helper, &"_parse_expr(p, 2)");
     let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
     assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)");
     assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)");
@@ -592,8 +592,8 @@ WS : [ \\t\\n]+ -> skip ;
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
     assert helper.len() > 0;
-    assert !str_contains(&helper, &"_parse_expr(p)?");
-    assert str_contains(&helper, &"_parse_expr(p, 2)?");
+    assert !str_contains(&helper, &"_parse_expr(p)");
+    assert str_contains(&helper, &"_parse_expr(p, 2)");
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -633,7 +633,7 @@ b : 'y' ;
     // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
     assert str_contains(
         &output,
-        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult",
+        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
@@ -657,7 +657,7 @@ b : 'y' ;
     assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
     assert str_contains(&traced, &"trace_depth: i32,");
     assert str_contains(&traced, &"trace_enter(p, &\"a\");");
-    assert str_contains(&traced, &"trace_fail(p, &\"a\", &e.message);");
+    assert str_contains(&traced, &"trace_fail(p, &\"a\", &p.pending_message());");
     assert str_contains(&traced, &"trace_ok(p, &\"b\");");
 
     // Default generation (trace off) must contain none of it — the feature
@@ -765,7 +765,7 @@ test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
     // so any token at that position was silently consumed. Surfaced
     // by `ParserErrors/SingleTokenDeletionExpectingSet` and
     // `ParserErrors/SingleTokenDeletionBeforeAlt`. After the fix the
-    // emit routes through `p.match_set([...])?` which fails when the
+    // emit routes through `p.expect_set([...])?` which fails when the
     // current token is outside the set. Regression fixture:
     // `tests/grammars/parser_set_group_dispatch.g4`.
     let input = "grammar Test;
@@ -774,7 +774,7 @@ a : 'a' ('b' | 'c') 'd' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_a__inner(");
-    assert str_contains(&body, &"p.match_set([");
+    assert str_contains(&body, &"p.expect_set([");
     assert !str_contains(&body, &"let lit_b_or_lit_c = p.advance();");
 }
 
@@ -1073,7 +1073,7 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert str_contains(&output, &"first_char == 'B'");
 }
 
-test "set list-label `name+=(A | B)*` emits List<Token> + match_set" {
+test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
     let input = "grammar T;
 b : ID val+=(INT | FLOAT)* ;
 ID : 'a'..'z'+ ;
@@ -1084,7 +1084,7 @@ WS : (' '|'\\n') -> skip ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"p.match_set([TK_INT, TK_FLOAT])");
+    assert str_contains(&body, &"p.expect_set([TK_INT, TK_FLOAT])");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {

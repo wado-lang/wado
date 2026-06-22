@@ -1875,6 +1875,23 @@ pub global RK_EXPRESSION: NodeKind = 1;
 
 global RULE_NAMES: List<String> = ["prog", "expression"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
+    }
+}
+
 pub enum ExpressionAlt {
     doFunction,
     doParenthesis,
@@ -1945,6 +1962,10 @@ struct Parser {
     kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
+    recovering: bool,
+    pending_code: DiagnosticCode,
+    speculating: bool,
+    max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1952,7 +1973,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1960,11 +1981,53 @@ impl Parser {
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
-    fn record_deeper(&mut self, e: ParseError) {
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
             self.pending = Option::Some(e);
+            self.pending_code = code;
         }
+        self.recovering = true;
+    }
+
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
+    fn push_rule_stack(&mut self, name: String) {
+        if let Some(e) = &mut self.pending {
+            e.rule_stack.push(name);
+        }
+    }
+
+    fn pending_message(&self) -> String {
+        if let Some(e) = &self.pending { return e.message; }
+        return String::from("");
+    }
+
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
+    fn report_unexpected(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1996,46 +2059,95 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 self.b.token(self.pos);
-                return Result::Ok(self.pos);
+                return self.pos;
             }
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
+        }
+        if !sync.is_empty() {
+            self.report_unexpected(self.tokens.span_at(self.pos));
+            if self.kinds[self.pos] != TK_EOF {
+                self.b.start_error(self.tokens.span_at(self.pos).start);
+                loop {
+                    let _k = self.kinds[self.pos];
+                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    let _sk = self.advance();
+                    self.tokens.mark_skipped(_sk);
+                    self.b.skip(_sk);
+                }
+                self.b.finish_node(self.last_end());
+            }
+            if self.kinds[self.pos] == kind {
+                if kind == TK_EOF {
+                    self.b.token(self.pos);
+                    return self.pos;
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+            let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn2);
+            return _syn2;
         }
         let name = token_kind_name(kind);
-        return Result::Err(self.error(
+        self.fail(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn fail(&self, name: String) -> Result<i32, ParseError> {
-        return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            [name],
-        ));
-    }
-
-    fn match_any(&mut self) -> Result<i32, ParseError> {
+    fn any(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
-        return Result::Err(self.error(
+        self.fail(
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -2048,34 +2160,39 @@ impl Parser {
             if !blocked {
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
                     self.b.token(self.pos);
-                    return Result::Ok(self.pos);
+                    return self.pos;
                 }
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 }
 
@@ -2568,32 +2685,32 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
-fn _parse_prog__inner(p: &mut Parser) -> Result<(), ParseError> {
+fn _parse_prog__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let expression = _parse_expression(p)?;
-    let eof = p.expect(TK_EOF)?;
-    return Result::Ok(());
+    let expression = _parse_expression(p);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
+    return;
 }
 
-fn _parse_prog(p: &mut Parser) -> Result<(), ParseError> {
+fn _parse_prog(p: &mut Parser) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PROG, _start);
-    let r = _parse_prog__inner(p);
+    _parse_prog__inner(p);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("prog");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("prog");
     }
-    return Result::Ok(());
 }
 
-fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
+fn _parse_expression__inner_alt_0(p: &mut Parser) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let id = p.expect(TK_ID)?;
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let expression = _parse_expression(p)?;
+    let id = p.expect(TK_ID, &SYNC_0);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
+    let expression = _parse_expression(p);
     loop {
+        if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -2612,11 +2729,11 @@ fn _parse_expression__inner_alt_0(p: &mut Parser) -> Result<(), ParseError> {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA)?;
-        let expression = _parse_expression(p)?;
+        let comma = p.expect(TK_LIT_COMMA, &SYNC_1);
+        let expression = _parse_expression(p);
     }
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+    return;
 }
 
 fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -2647,11 +2764,11 @@ fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expression__inner_alt_25(p: &mut Parser) -> Result<(), ParseError> {
+fn _parse_expression__inner_alt_25(p: &mut Parser) -> () {
     let start = p.peek_start();
     p.b.set_alt(25);
-    let id = p.expect(TK_ID)?;
-    return Result::Ok(());
+    let id = p.expect(TK_ID, &EMPTY_SYNC);
+    return;
 }
 
 fn _parse_expression__inner_scan_25(tokens: &Array<i32>, pos: i32) -> i32 {
@@ -2661,7 +2778,7 @@ fn _parse_expression__inner_scan_25(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expression__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
+fn _parse_expression__inner_atom(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2689,34 +2806,35 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
     }
     if kind == TK_LIT_LPAREN {
         p.b.set_alt(1);
-        let lparen = p.expect(TK_LIT_LPAREN)?;
-        let expression = _parse_expression(p)?;
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        return Result::Ok(());
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
+        let expression = _parse_expression(p);
+        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_LIT_BANG {
         p.b.set_alt(2);
-        let bang = p.expect(TK_LIT_BANG)?;
-        let expression = _parse_expression(p, 16)?;
-        return Result::Ok(());
+        let bang = p.expect(TK_LIT_BANG, &SYNC_1);
+        let expression = _parse_expression(p, 16);
+        return;
     }
     if kind == TK_LIT_MINUS {
         p.b.set_alt(3);
-        let minus = p.expect(TK_LIT_MINUS)?;
-        let expression = _parse_expression(p, 16)?;
-        return Result::Ok(());
+        let minus = p.expect(TK_LIT_MINUS, &SYNC_1);
+        let expression = _parse_expression(p, 16);
+        return;
     }
     if kind == TK_LIT_PLUS {
         p.b.set_alt(4);
-        let plus = p.expect(TK_LIT_PLUS)?;
-        let expression = _parse_expression(p, 16)?;
-        return Result::Ok(());
+        let plus = p.expect(TK_LIT_PLUS, &SYNC_1);
+        let expression = _parse_expression(p, 16);
+        return;
     }
     if kind == TK_LIT_LBRACKET {
         p.b.set_alt(20);
-        let lbracket = p.expect(TK_LIT_LBRACKET)?;
-        let expression = _parse_expression(p)?;
+        let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_1);
+        let expression = _parse_expression(p);
         loop {
+            if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -2735,56 +2853,58 @@ fn _parse_expression__inner_atom(p: &mut Parser) -> Result<(), ParseError> {
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA)?;
-            let expression = _parse_expression(p)?;
+            let comma = p.expect(TK_LIT_COMMA, &SYNC_1);
+            let expression = _parse_expression(p);
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET)?;
-        return Result::Ok(());
+        let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_K_TRUE {
         p.b.set_alt(21);
-        let k_true = p.expect(TK_K_TRUE)?;
-        return Result::Ok(());
+        let k_true = p.expect(TK_K_TRUE, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_K_FALSE {
         p.b.set_alt(22);
-        let k_false = p.expect(TK_K_FALSE)?;
-        return Result::Ok(());
+        let k_false = p.expect(TK_K_FALSE, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_NUMBER {
         p.b.set_alt(23);
-        let number = p.expect(TK_NUMBER)?;
-        return Result::Ok(());
+        let number = p.expect(TK_NUMBER, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_DATE {
         p.b.set_alt(24);
-        let date = p.expect(TK_DATE)?;
-        return Result::Ok(());
+        let date = p.expect(TK_DATE, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_SQ_STRING {
         p.b.set_alt(26);
-        let sq_string = p.expect(TK_SQ_STRING)?;
-        return Result::Ok(());
+        let sq_string = p.expect(TK_SQ_STRING, &EMPTY_SYNC);
+        return;
     }
     if kind == TK_K_NULL {
         p.b.set_alt(27);
-        let k_null = p.expect(TK_K_NULL)?;
-        return Result::Ok(());
+        let k_null = p.expect(TK_K_NULL, &EMPTY_SYNC);
+        return;
     }
-    return Result::Err(p.error(
+    p.no_viable(
         "expected expression",
         p.peek_span(),
         ["TK_ID", "TK_LIT_LPAREN", "TK_LIT_BANG", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_LBRACKET", "TK_K_TRUE", "TK_K_FALSE", "TK_NUMBER", "TK_DATE", "TK_SQ_STRING", "TK_K_NULL"],
-    ));
+    );
+    return;
 }
 
-fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> {
+fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    _parse_expression__inner_atom(p)?;
+    _parse_expression__inner_atom(p);
     p.b.finish_node(p.last_end());
     loop {
+        if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_CARET {
             if 15 >= min_prec {
@@ -2793,8 +2913,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(5);
-                let caret = p.expect(TK_LIT_CARET)?;
-                let expression_2 = _parse_expression(p, 16)?;
+                let caret = p.expect(TK_LIT_CARET, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 16);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2806,8 +2926,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(6);
-                let star = p.expect(TK_LIT_STAR)?;
-                let expression_2 = _parse_expression(p, 15)?;
+                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 15);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2819,8 +2939,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(7);
-                let slash = p.expect(TK_LIT_SLASH)?;
-                let expression_2 = _parse_expression(p, 14)?;
+                let slash = p.expect(TK_LIT_SLASH, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 14);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2832,8 +2952,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(8);
-                let percent = p.expect(TK_LIT_PERCENT)?;
-                let expression_2 = _parse_expression(p, 13)?;
+                let percent = p.expect(TK_LIT_PERCENT, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 13);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2845,8 +2965,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(9);
-                let minus = p.expect(TK_LIT_MINUS)?;
-                let expression_2 = _parse_expression(p, 12)?;
+                let minus = p.expect(TK_LIT_MINUS, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 12);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2858,8 +2978,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(10);
-                let plus = p.expect(TK_LIT_PLUS)?;
-                let expression_2 = _parse_expression(p, 11)?;
+                let plus = p.expect(TK_LIT_PLUS, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 11);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2871,8 +2991,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(11);
-                let eq = p.expect(TK_LIT_EQ)?;
-                let expression_2 = _parse_expression(p, 10)?;
+                let eq = p.expect(TK_LIT_EQ, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 10);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2884,8 +3004,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(12);
-                let lit_bangeq = p.expect(TK_LIT_BANGEQ)?;
-                let expression_2 = _parse_expression(p, 9)?;
+                let lit_bangeq = p.expect(TK_LIT_BANGEQ, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 9);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2897,8 +3017,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(13);
-                let gt = p.expect(TK_LIT_GT)?;
-                let expression_2 = _parse_expression(p, 8)?;
+                let gt = p.expect(TK_LIT_GT, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 8);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2910,8 +3030,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(14);
-                let lit_gteq = p.expect(TK_LIT_GTEQ)?;
-                let expression_2 = _parse_expression(p, 7)?;
+                let lit_gteq = p.expect(TK_LIT_GTEQ, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 7);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2923,8 +3043,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(15);
-                let lt = p.expect(TK_LIT_LT)?;
-                let expression_2 = _parse_expression(p, 6)?;
+                let lt = p.expect(TK_LIT_LT, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 6);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2936,8 +3056,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(16);
-                let lit_lteq = p.expect(TK_LIT_LTEQ)?;
-                let expression_2 = _parse_expression(p, 5)?;
+                let lit_lteq = p.expect(TK_LIT_LTEQ, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 5);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2949,14 +3069,14 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(17);
-                let k_in = p.expect(TK_K_IN)?;
-                let lparen = p.expect(TK_LIT_LPAREN)?;
-                let expression_2 = _parse_expression(p, 4)?;
-                while p.peek_kind() == TK_LIT_COMMA {
-                    let comma = p.expect(TK_LIT_COMMA)?;
-                    let expression = _parse_expression(p, 4)?;
+                let k_in = p.expect(TK_K_IN, &EMPTY_SYNC);
+                let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+                let expression_2 = _parse_expression(p, 4);
+                while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
+                    let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                    let expression = _parse_expression(p, 4);
                 }
-                let rparen = p.expect(TK_LIT_RPAREN)?;
+                let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2968,8 +3088,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(18);
-                let _ = p.match_set([TK_LIT_AMP, TK_K_AND])?;
-                let expression_2 = _parse_expression(p, 3)?;
+                let _ = p.expect_set([TK_LIT_AMP, TK_K_AND]);
+                let expression_2 = _parse_expression(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2981,8 +3101,8 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
                 }
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(19);
-                let _ = p.match_set([TK_LIT_PIPE, TK_K_OR])?;
-                let expression_2 = _parse_expression(p, 2)?;
+                let _ = p.expect_set([TK_LIT_PIPE, TK_K_OR]);
+                let expression_2 = _parse_expression(p, 2);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2991,29 +3111,30 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> Result<(), Par
             break;
         }
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> Result<(), ParseError> {
-    let r = _parse_expression__inner(p, min_prec);
-    if let Err(mut e) = r {
-        e.rule_stack.push("expression");
-        return Result::Err(e);
+fn _parse_expression(p: &mut Parser, min_prec: i32 = 0) -> () {
+    if p.recovering { return; }
+    _parse_expression__inner(p, min_prec);
+    if p.recovering {
+        p.push_rule_stack("expression");
     }
-    return Result::Ok(());
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
-    let _ = max_errors;
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
-    let _r = entry(&mut p);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
+    p.max_errors = max_errors;
+    entry(&mut p);
+    if p.recovering && p.diagnostics.len() < max_errors {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
     }
     return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
@@ -3063,4 +3184,8 @@ fn _kind_set_0(k: i32) -> bool {
 fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_K_OR | TK_LIT_PIPE };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_LIT_LPAREN];
+global SYNC_1: List<i32> = [TK_DATE, TK_ID, TK_K_FALSE, TK_K_NULL, TK_K_TRUE, TK_LIT_BANG, TK_LIT_LBRACKET, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_PLUS, TK_NUMBER, TK_SQ_STRING];
 

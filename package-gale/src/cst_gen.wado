@@ -64,6 +64,28 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     names.push(']');
     w.line(&`global RULE_NAMES: List<String> = {names};`);
     w.blank();
+    // `NodeKind` is a newtype over `i32` (in `tree.wado`); give it name-aware
+    // `Display` / `Inspect` here, where the grammar's `RULE_NAMES` table is in
+    // scope, so `{node.kind}` prints the rule name and `{node.kind:?}` prints
+    // `name(id)`. `K_ERROR` renders as `<error>`.
+    w.begin(&"impl Display for NodeKind");
+    w.begin(&"fn fmt(&self, f: &mut Formatter)");
+    w.begin(&"if *self == K_ERROR");
+    w.line(&"f.write_str(&\"<error>\");");
+    w.else_begin(&"else");
+    w.line(&"f.write_str(&RULE_NAMES[*self as i32]);");
+    w.end();
+    w.end();
+    w.end();
+    w.blank();
+    w.begin(&"impl Inspect for NodeKind");
+    w.begin(&"fn inspect(&self, f: &mut Formatter)");
+    // Reuse Display for the name, then append the numeric id.
+    w.line(&"self.fmt(f);");
+    w.line(&"f.write_str(&`({*self as i32})`);");
+    w.end();
+    w.end();
+    w.blank();
 }
 
 /// Emit, for every parser rule whose alternatives carry `# Label`s, a

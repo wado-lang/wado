@@ -71,6 +71,11 @@ pub struct GenContext {
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
     /// `FollowMaskEntry`.
     follow_mask_registry: TreeMap<String, FollowMaskEntry>,
+    /// Registry of recovery sync sets (a leaf's FIRST-of-rest) keyed by
+    /// canonical representation. Each distinct non-empty set becomes one
+    /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
+    /// terminal on the valid hot path never rebuilds or copies the set.
+    sync_set_registry: TreeMap<String, KindSetEntry>,
     /// Cache of `tail_greedy_first(rule)` keyed by rule name.
     tail_greedy_cache: TreeMap<String, List<String>>,
     /// Prediction-strategy diagnostics raised during lowering, in the
@@ -147,6 +152,7 @@ impl GenContext {
             single_alt_owner,
             kind_set_registry: TreeMap::new(),
             follow_mask_registry: TreeMap::new(),
+            sync_set_registry: TreeMap::new(),
             tail_greedy_cache: TreeMap::new(),
             diagnostics: [],
             caller_follow_gate_seen: false,
@@ -966,6 +972,29 @@ impl GenContext {
     /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
     pub fn kind_sets(&self) -> List<KindSetEntry> {
         return self.kind_set_registry.values();
+    }
+
+    /// Intern a recovery sync set (a leaf's FIRST-of-rest). Returns the
+    /// `SYNC_<id>` global's id, or `null` for an empty set (the caller passes
+    /// `&EMPTY_SYNC`). IDs are insertion-order so names are stable across runs.
+    pub fn intern_sync_set(&mut self, tokens: &List<String>) -> Option<i32> {
+        let canonical = canonical_kind_set(tokens);
+        if canonical.is_empty() {
+            return null;
+        }
+        let key = join_pipe(&canonical);
+        if let Some(entry) = self.sync_set_registry.get(key) {
+            return Option::<i32>::Some(entry.id);
+        }
+        let id = self.sync_set_registry.len();
+        self.sync_set_registry[key] = KindSetEntry { id, tokens: canonical };
+        return Option::<i32>::Some(id);
+    }
+
+    /// All interned sync sets in `SYNC_<id>` order. Consumed by the
+    /// global-emit pass.
+    pub fn sync_sets(&self) -> List<KindSetEntry> {
+        return self.sync_set_registry.values();
     }
 
     /// Intern a runtime FOLLOW-continuation mask. The same canonical mask

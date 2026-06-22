@@ -34,3 +34,12 @@ test "non-greedy: `.+?` requires one inner token then stops" {
 test "non-greedy: a sequence of segments mixes both forms" {
     assert_tree(&"( a ) [ b ]", &"(start (seg ( a )) (seg [ b ]))");
 }
+
+// Regression: an unterminated `[ .+? ]` reaches EOF inside the non-scannable
+// `while` recovery loop, where `match_any` fails (sets `recovering`) without
+// advancing. Without the loop's `!p.recovering` guard this spins forever; the
+// parse must instead terminate with a diagnostic.
+test "recovery: unterminated `.+?` terminates instead of hanging" {
+    let r = ng::parse(&"[ a");
+    assert !r.ok(), "expected a diagnostic for the unterminated '['";
+}

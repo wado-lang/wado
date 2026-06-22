@@ -47,3 +47,10 @@ test "a valid parse reports no diagnostics" {
     let r = json::parse(&"{\"a\": 1}");
     assert r.ok(), "unexpected diagnostics";
 }
+
+test "no viable alternative carries the NoViableAlternative code" {
+    // `}` starts no `value` alternative, so the dispatch falls through to the
+    // no-viable fallback.
+    let r = json::parse(&"{\"a\": }");
+    assert r.diagnostics[0].code matches { NoViableAlternative }, `code {r.diagnostics[0].code.name()}`;
+}
