@@ -29,6 +29,12 @@ test "string" {
     assert `{with_newline:?}` == "\"line1\\nline2\"";
     let empty = "";
     assert `{empty:?}` == "\"\"";
+    // Control chars without a named escape render as `\u{HEX}` (not raw).
+    let with_control = `a{char::from_u32_unchecked(1)}b`;
+    assert `{with_control:?}` == "\"a\\u{1}b\"";
+    // Printable non-ASCII stays verbatim.
+    let unicode = "あ";
+    assert `{unicode:?}` == "\"あ\"";
 }
 
 test "tuple" {

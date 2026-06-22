@@ -6,6 +6,7 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
+use crate::module_source::ModuleSource;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirPattern, TypeId, TypeTable,
 };
@@ -544,14 +545,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
-            ResolvedType::Enum { name, .. } => self
-                .lookup_enum_case(name)
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => self
+                .lookup_enum_case_in(name, module_source)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
-            ResolvedType::Variant { name, .. } => self
-                .lookup_variant_case(name)
-                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
-            ResolvedType::GenericInstance { name, .. } => self
-                .lookup_variant_case(name)
+            ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => self
+                .lookup_variant_case_in(name, module_source)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             _ => false,
         }
@@ -1308,7 +1317,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 // Handle enum types (no payload, just discriminant matching)
-                if let ResolvedType::Enum { name, .. } = &resolved_type {
+                if let ResolvedType::Enum {
+                    name,
+                    module_source,
+                } = &resolved_type
+                {
                     if !bindings.is_empty() {
                         let _ = self.logger.error(TypeError::InvalidPattern {
                             message: format!("enum case `{variant_name}` does not have a payload"),
@@ -1316,7 +1329,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.lookup_enum_case(name).cloned() {
+                    if let Some(enum_info) = self.lookup_enum_case_in(name, module_source).cloned()
+                    {
                         if let Some(case_data) =
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
@@ -1354,16 +1368,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Record use->def for the variant case name in the pattern
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
-                let variant_type_name: Option<String> = match &resolved_type {
-                    ResolvedType::Variant { name, .. } => Some(name.clone()),
-                    ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
-                        Some(name.clone())
-                    }
+                let variant_type_name: Option<(String, ModuleSource)> = match &resolved_type {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => Some((name.clone(), module_source.clone())),
+                    ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } if self.contains_variant(name) => Some((name.clone(), module_source.clone())),
                     _ => None,
                 };
                 if let Some(id) = name_id
-                    && let Some(type_name) = variant_type_name.as_ref()
-                    && let Some(variant_info) = self.lookup_variant_case(type_name).cloned()
+                    && let Some((type_name, type_module)) = variant_type_name.as_ref()
+                    && let Some(variant_info) =
+                        self.lookup_variant_case_in(type_name, type_module).cloned()
                     && let Some(case_data) = variant_info
                         .cases
                         .iter()
@@ -1377,20 +1397,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { name, .. } => self.get_variant_case_payload_type(
+                    ResolvedType::Variant {
                         name,
+                        module_source,
+                    } => self.get_variant_case_payload_type(
+                        name,
+                        module_source,
                         normalized_variant_name,
                         &[],
                         *span,
                     ),
                     // Generic variant instantiation
                     ResolvedType::GenericInstance {
-                        name, type_args, ..
+                        name,
+                        module_source,
+                        type_args,
                     } => {
                         // Check if this is a variant (not a struct)
                         if self.contains_variant(name) {
                             self.get_variant_case_payload_type(
                                 name,
+                                module_source,
                                 normalized_variant_name,
                                 type_args,
                                 *span,
@@ -1622,14 +1649,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let variant_name = match &resolved {
-            ResolvedType::Variant { name, .. } => name.clone(),
-            ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
-                name.clone()
-            }
+        let (variant_name, variant_module) = match &resolved {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => (name.clone(), module_source.clone()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } if self.contains_variant(name) => (name.clone(), module_source.clone()),
             _ => return false,
         };
-        let Some(variant_info) = self.lookup_variant_case(&variant_name) else {
+        let Some(variant_info) = self.lookup_variant_case_in(&variant_name, &variant_module) else {
             return false;
         };
         let none_case_name = self
@@ -1734,17 +1766,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn get_variant_case_payload_type(
         &mut self,
         variant_name: &str,
+        variant_module: &ModuleSource,
         case_name: &str,
         type_args: &[TypeId],
         span: Span,
     ) -> TypeId {
-        // Clone payload first to avoid borrow conflict with substitute_type_params
-        let payload_opt = self.lookup_variant_case(variant_name).and_then(|info| {
-            info.cases
-                .iter()
-                .find(|case| case.name == case_name)
-                .map(|case| case.payload)
-        });
+        // Clone payload first to avoid borrow conflict with substitute_type_params.
+        let payload_opt = self
+            .lookup_variant_case_in(variant_name, variant_module)
+            .and_then(|info| {
+                info.cases
+                    .iter()
+                    .find(|case| case.name == case_name)
+                    .map(|case| case.payload)
+            });
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
@@ -2301,20 +2336,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(String, Vec<TypeId>)> =
+        let option_shape: Option<(String, ModuleSource, Vec<TypeId>)> =
             match self.tysys.type_table.borrow().get(option_type).clone() {
                 ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } if self.contains_variant(&name) => Some((name, type_args)),
-                ResolvedType::Variant { name, .. } if self.contains_variant(&name) => {
-                    Some((name, vec![]))
-                }
+                    name,
+                    module_source,
+                    type_args,
+                } if self.contains_variant(&name) => Some((name, module_source, type_args)),
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } if self.contains_variant(&name) => Some((name, module_source, vec![])),
                 _ => None,
             };
         let item_type = match option_shape {
-            Some((name, type_args)) => {
-                self.get_variant_case_payload_type(&name, &some_case_name, &type_args, span)
-            }
+            Some((name, module_source, type_args)) => self.get_variant_case_payload_type(
+                &name,
+                &module_source,
+                &some_case_name,
+                &type_args,
+                span,
+            ),
             // `.next()` returned an unexpected non-Option type. The iterator-
             // trait check above (or method dispatch downstream) has already
             // diagnosed it; degrade to `UNKNOWN` to keep resolution going.

@@ -399,21 +399,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if stdlib_set.contains(module_source) {
                     continue;
                 }
-                let (imported_type_sources, import_original_names) =
-                    Self::build_imported_type_sources(
-                        &mut interner.borrow_mut(),
-                        module,
-                        module_source,
-                        Some(entry_module_source),
-                        &invocations,
-                    );
+                let import_scope = Self::build_imported_type_sources(
+                    &mut interner.borrow_mut(),
+                    module,
+                    module_source,
+                    Some(entry_module_source),
+                    &invocations,
+                    symbols,
+                );
+                let imported_type_sources = import_scope.sources;
+                let import_original_names = import_scope.original_names;
+                let namespace_imports = import_scope.namespace_imports;
                 let empty_struct: IndexMap<String, StructFieldInfo> = IndexMap::default();
                 let empty_newtype: IndexMap<String, TypeId> = IndexMap::default();
                 let empty_enum: IndexMap<String, EnumInfo> = IndexMap::default();
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -430,7 +432,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             current_module_source: module_source,
                             imported_type_sources: &imported_type_sources,
                             import_original_names: &import_original_names,
-                            namespace_imports: &empty_ns,
+                            namespace_imports: &namespace_imports,
                             all_newtypes: &all_newtypes,
                             all_struct_fields: &all_struct_fields,
                             all_variant_cases: &all_variant_cases,
@@ -497,13 +499,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Stdlib fields are already resolved in the seeded maps.
                 continue;
             }
-            let (imported_type_sources, import_original_names) = Self::build_imported_type_sources(
+            let import_scope = Self::build_imported_type_sources(
                 &mut interner.borrow_mut(),
                 module,
                 module_source,
                 Some(entry_module_source),
                 &invocations,
+                symbols,
             );
+            let imported_type_sources = import_scope.sources;
+            let import_original_names = import_scope.original_names;
+            let namespace_imports = import_scope.namespace_imports;
 
             // Helper closure: build a fresh TypeLookup pointed at the
             // current state of the shared tables. Recreated per call site so
@@ -515,14 +521,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
             let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
             let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-            let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
-                    namespace_imports: &empty_ns,
+                    namespace_imports: &namespace_imports,
                     all_newtypes: &all_newtypes,
                     all_struct_fields: &all_struct_fields,
                     all_variant_cases: &all_variant_cases,
@@ -920,15 +925,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 set.extend(prelude_types.iter().cloned());
                 // Types brought in by this module's `use` declarations.
-                let (imports, originals) = Self::build_imported_type_sources(
+                let import_scope = Self::build_imported_type_sources(
                     &mut interner.borrow_mut(),
                     module,
                     ms,
                     Some(entry_module_source),
                     &invocations,
+                    symbols,
                 );
-                for (local_name, src) in &imports {
-                    let original = originals.get(local_name).unwrap_or(local_name);
+                for (local_name, src) in &import_scope.sources {
+                    let original = import_scope
+                        .original_names
+                        .get(local_name)
+                        .unwrap_or(local_name);
                     if local.get(src).is_some_and(|s| s.contains(original)) {
                         set.insert(local_name.clone());
                     }
@@ -1209,15 +1218,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            // Build imported type sources and module-specific flat maps for this module
-            let (mut imported_type_sources, mut import_original_names) =
-                Self::build_imported_type_sources(
-                    &mut state.interner.borrow_mut(),
-                    module,
-                    module_source,
-                    Some(&entry_module_source),
-                    &state.invocations,
-                );
+            // Full import scope; namespace *type* members are already expanded
+            // here, namespace *function* members into `imported_functions` below.
+            let import_scope = Self::build_imported_type_sources(
+                &mut state.interner.borrow_mut(),
+                module,
+                module_source,
+                Some(&entry_module_source),
+                &state.invocations,
+                symbols,
+            );
+            let imported_type_sources = import_scope.sources;
+            let import_original_names = import_scope.original_names;
+            let namespace_imports = import_scope.namespace_imports;
             // Build function_return_types for this module only
             // (functions defined in this module). The lookup borrows the
             // shared `all_*` tables; no per-module flat-map cloning.
@@ -1229,12 +1242,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let empty_flags: IndexMap<String, FlagsInfo> = IndexMap::default();
                 let empty_gnt: IndexMap<String, GenericNewtypeInfo> = IndexMap::default();
                 let empty_variant: IndexMap<String, VariantInfo> = IndexMap::default();
-                let empty_ns: IndexMap<String, ModuleSource> = IndexMap::default();
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     imported_type_sources: &imported_type_sources,
                     import_original_names: &import_original_names,
-                    namespace_imports: &empty_ns,
+                    namespace_imports: &namespace_imports,
                     all_newtypes: &state.tysys.all_newtypes,
                     all_struct_fields: &state.tysys.all_struct_fields,
                     all_variant_cases: &state.tysys.all_variant_cases,
@@ -1265,9 +1277,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
 
-            // Collect imported function names and namespace aliases from use declarations
+            // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
-            let mut namespace_imports: IndexMap<String, ModuleSource> = IndexMap::default();
             for item in &module.items {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
@@ -1289,11 +1300,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 }
                             }
                             crate::ast::UseItem::Namespace { name: ns } => {
-                                // Namespace import: register every public
-                                // symbol under its `ns$member` alias in the
-                                // per-name maps that back `use { X as Y }` —
-                                // types in `imported_type_sources`, functions
-                                // in `imported_functions`.
                                 let source = crate::name::resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
@@ -1302,26 +1308,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &state.invocations,
                                 );
                                 for sym in symbols.get_module_symbols(&source) {
-                                    let alias = crate::name::namespace_member_alias(ns, &sym.name);
-                                    match sym.kind {
-                                        crate::symbol::SymbolKind::Function(_) => {
-                                            imported_functions.insert(alias);
-                                        }
-                                        crate::symbol::SymbolKind::Struct(_)
-                                        | crate::symbol::SymbolKind::Enum(_)
-                                        | crate::symbol::SymbolKind::Flags(_)
-                                        | crate::symbol::SymbolKind::Variant(_)
-                                        | crate::symbol::SymbolKind::Newtype(_)
-                                        | crate::symbol::SymbolKind::Resource(_)
-                                        | crate::symbol::SymbolKind::BuiltinType => {
-                                            imported_type_sources
-                                                .insert(alias.clone(), source.clone());
-                                            import_original_names.insert(alias, sym.name.clone());
-                                        }
-                                        _ => {}
+                                    if matches!(sym.kind, crate::symbol::SymbolKind::Function(_)) {
+                                        imported_functions.insert(
+                                            crate::name::namespace_member_alias(ns, &sym.name),
+                                        );
                                     }
                                 }
-                                namespace_imports.insert(ns.clone(), source);
                             }
                             crate::ast::UseItem::Wildcard => {
                                 // Wildcard import: no individual function names to collect
@@ -1583,13 +1575,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         from_module: &ModuleSource,
         entry_module: Option<&ModuleSource>,
         invocations: &crate::kiln::InvocationIndex,
-    ) -> (IndexMap<String, ModuleSource>, IndexMap<String, String>) {
+        symbols: &crate::symbol::SymbolTable,
+    ) -> super::trait_env::ModuleImportScope {
         super::trait_env::module_import_scope(
             interner,
             module,
             from_module,
             entry_module,
             invocations,
+            symbols,
         )
     }
 
@@ -1604,7 +1598,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module_source: &ModuleSource,
         return_type: Option<&crate::ast::Type>,
     ) -> crate::tir::TypeId {
-        let (imports, originals) = self
+        let scope = self
             .loaded_modules
             .get(module_source)
             .map(|module| {
@@ -1614,10 +1608,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     module_source,
                     Some(&self.entry_module_source),
                     &self.invocations,
+                    self.symbols,
                 )
             })
             .unwrap_or_default();
-        self.with_module_perspective(module_source.clone(), imports, originals, |s| {
+        self.with_module_perspective(module_source.clone(), scope, |s| {
             return_type
                 .map(|t| s.resolve_type(t))
                 .unwrap_or(crate::tir::TypeTable::UNIT)

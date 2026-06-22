@@ -500,11 +500,7 @@ fn "wado-compiler/tests/fixtures/http_request_scheme.wado/handle"(request) {
     scheme = "wado-compiler/tests/fixtures/http_request_scheme.wado/__cm_binding__Request_get_scheme"(request);
     if ref.is_null(scheme) == 0 {
         s = ref.as_non_null(scheme);
-        __cond = (if s.discriminant == 0 -> bool {
-            1;
-        } else {
-            0;
-        });
+        __cond = s.discriminant == 0;
         if @unlikely(__cond == 0) {
             cold_path;
             "core:internal/panic"(__local_9 = "core:prelude/string.wado/String::with_capacity"(104); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_9, 104); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 100); "core:prelude/string.wado/String::push"(__local_9, 108); "core:prelude/string.wado/String::push"(__local_9, 101); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push"(__local_9, 97); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_request_scheme.wado"), used: 53 }); "core:prelude/string.wado/String::push"(__local_9, 58); __local_10 = "core:prelude/format.wado/Formatter::new"(__local_9); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 11 }, __local_10); "core:prelude/string.wado/String::push_str"(__local_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -901,12 +897,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b69: block {
-        l70: loop {
-            break_if b69 i >= len;
+    b68: block {
+        l69: loop {
+            break_if b68 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l70;
+            continue l69;
         };
     };
     return arr;
@@ -915,12 +911,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b71: block {
-        l72: loop {
-            break_if b71 i >= len;
+    b70: block {
+        l71: loop {
+            break_if b70 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l72;
+            continue l71;
         };
     };
 }
@@ -1013,12 +1009,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b76: block {
-        l77: loop {
-            break_if b76 t <= 0_i64;
+    b75: block {
+        l76: loop {
+            break_if b75 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l77;
+            continue l76;
         };
     };
     return n;
@@ -1032,13 +1028,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b79: block {
-            l80: loop {
-                break_if b79 temp <= 0_i64;
+        b78: block {
+            l79: loop {
+                break_if b78 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l80;
+                continue l79;
             };
         };
     }
@@ -1147,12 +1143,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b89: block {
-        l90: loop {
-            break_if b89 i >= n;
+    b88: block {
+        l89: loop {
+            break_if b88 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l90;
+            continue l89;
         };
     };
 }

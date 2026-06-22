@@ -122,9 +122,7 @@ fn "wado-compiler/tests/fixtures/wasm_name_conflict_variant.wado/run"() with Std
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 58); "core:prelude/string.wado/String::push"(__local_2, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_11(block -> i32 {
-        1;
-    }), __local_3); __local_2);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_2, 97); "core:prelude/string.wado/String::push"(__local_2, 58); "core:prelude/string.wado/String::push"(__local_2, 32); __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_11(1), __local_3); __local_2);
     b = struct.new "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok" { discriminant: 0, payload_0: 99 };
     "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 }; "core:prelude/string.wado/String::push"(__local_4, 98); "core:prelude/string.wado/String::push"(__local_4, 58); "core:prelude/string.wado/String::push"(__local_4, 32); __local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_20((if ref.test "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(b) -> i32 {
         local.tee v_19(ref.cast "./sub/wasm_name_conflict_variant_mod_b.wado//Status::Ok"(b).payload_0);
@@ -180,12 +178,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l4;
+            continue l3;
         };
     };
 }
@@ -233,12 +231,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b7: block {
-        l8: loop {
-            break_if b7 t <= 0_i64;
+    b6: block {
+        l7: loop {
+            break_if b6 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l8;
+            continue l7;
         };
     };
     return n;
@@ -252,13 +250,13 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b10: block {
-            l11: loop {
-                break_if b10 temp <= 0_i64;
+        b9: block {
+            l10: loop {
+                break_if b9 temp <= 0_i64;
                 pos = pos - 1;
                 builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l11;
+                continue l10;
             };
         };
     }
@@ -354,12 +352,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b20: block {
-        l21: loop {
-            break_if b20 i >= n;
+    b19: block {
+        l20: loop {
+            break_if b19 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l21;
+            continue l20;
         };
     };
 }

@@ -1058,17 +1058,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
                 if let ResolvedType::GenericInstance {
                     name,
+                    module_source,
                     type_args: instance_type_args,
-                    ..
                 } = resolved
                 {
-                    Some((name, instance_type_args))
+                    Some((name, module_source, instance_type_args))
                 } else {
                     None
                 }
             };
-            if let Some((name, instance_type_args)) = generic_data
-                && let Some(variant_info) = self.lookup_variant_case(&name).cloned()
+            if let Some((name, module_source, instance_type_args)) = generic_data
+                && let Some(variant_info) =
+                    self.lookup_variant_case_in(&name, &module_source).cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -1216,11 +1217,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
         if let ResolvedType::Variant {
             name,
-            module_source: _,
+            module_source,
         } = self.tysys.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
-            if let Some(variant_info) = self.lookup_variant_case(&name) {
+            if let Some(variant_info) = self.lookup_variant_case_in(&name, &module_source) {
                 // Find the case by name
                 if let Some((_case_index, case_data)) = variant_info
                     .cases
@@ -1257,15 +1258,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Handle generic variant construction: Result::<i32, String>::Ok(42)
         let generic_name = {
             let tt = self.tysys.type_table.borrow();
-            if let ResolvedType::GenericInstance { name, .. } = tt.get(target_type_id) {
-                Some(name.clone())
+            if let ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } = tt.get(target_type_id)
+            {
+                Some((name.clone(), module_source.clone()))
             } else {
                 None
             }
         };
-        if let Some(name) = generic_name {
+        if let Some((name, module_source)) = generic_name {
             // Check if the base type is a variant
-            if let Some(variant_info) = self.lookup_variant_case(&name).cloned() {
+            if let Some(variant_info) = self.lookup_variant_case_in(&name, &module_source).cloned()
+            {
                 // This is a generic variant like Result<T, E>
                 // Find the case by name
                 if let Some((_case_index, case_data)) = variant_info
@@ -2345,7 +2352,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // module B resolves against the caller's perspective (which only
         // knows about `CounterA` / `CounterB` aliases) and falls back to
         // `Unknown`, breaking arg-type coercion at the call site.
-        let (imports, originals) = self.tysys.trait_env.import_scope(impl_module);
+        let impl_scope = self.tysys.trait_env.import_scope(impl_module);
         // Inherited scope; only `type_params` is replaced.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -2412,7 +2419,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let params: Vec<ast::Type> = method.params.iter().map(|p| p.ty.clone()).collect();
-        let result = scope.with_module_perspective(impl_module.clone(), imports, originals, |s| {
+        let result = scope.with_module_perspective(impl_module.clone(), impl_scope, |s| {
             params
                 .iter()
                 .map(|t| s.resolve_type(t))
@@ -2637,8 +2644,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .unwrap_or_else(fallback);
         }
-        let (_, originals) = self.tysys.trait_env.import_scope(module);
-        originals.get(name).cloned().unwrap_or_else(fallback)
+        let scope = self.tysys.trait_env.import_scope(module);
+        scope
+            .original_names
+            .get(name)
+            .cloned()
+            .unwrap_or_else(fallback)
     }
 
     /// Whether an AST type syntactically mentions `Self`. Over-approximates

@@ -35,6 +35,7 @@ pub mod nir_value_graph;
 pub mod optimize;
 pub mod package;
 pub mod parser;
+pub mod path;
 pub mod remarks;
 pub mod semantics;
 pub mod stdlib;

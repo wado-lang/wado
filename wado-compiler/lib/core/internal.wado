@@ -7,6 +7,20 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
+use { String } from "core:prelude/string.wado";
+use { Array } from "core:prelude/array.wado";
+use { List } from "core:prelude/list.wado";
+use { Formatter } from "core:prelude/format.wado";
+use {
+    Option,
+    Result,
+    Future,
+    StreamWritable,
+    Subtask,
+    WaitEvent,
+    Waitable,
+    WaitableSet,
+} from "core:prelude/types.wado";
 
 /// Returns the smaller of two i32 values (branchless).
 pub fn i32_min(a: i32, b: i32) -> i32 {
@@ -204,6 +218,25 @@ pub fn wait_for_blocked(handle: i32) -> i32 {
     let freed = builtin::realloc(evt_ptr, 8, 4, 0);
     builtin::waitable_set_drop(ws);
     return payload;
+}
+
+/// Await a BLOCKED `future.read` / `future.write`. Joins the future handle to
+/// a fresh waitable set, waits for the transfer to complete, then unjoins the
+/// future before dropping the set (futures must be detached before the set is
+/// dropped). Returns the copy-result status the event delivered (the same
+/// `(count << 4) | status` packing `future.read` returns directly), so the
+/// caller's `status & 0xF` check distinguishes COMPLETED from DROPPED /
+/// CANCELLED on the blocked path exactly as on the non-blocked path.
+pub fn future_await_blocked(handle: i32) -> i32 {
+    let ws = builtin::waitable_set_new();
+    builtin::waitable_join(handle, ws);
+    let evt_ptr = builtin::realloc(0, 0, 4, 8);
+    let code = builtin::waitable_set_wait(ws, evt_ptr);
+    let status = builtin::i32_load(evt_ptr + 4);
+    let freed = builtin::realloc(evt_ptr, 8, 4, 0);
+    builtin::waitable_join(handle, 0);
+    builtin::waitable_set_drop(ws);
+    return status;
 }
 
 /// CM adapter for stream.read(max) on Stream<u8>.

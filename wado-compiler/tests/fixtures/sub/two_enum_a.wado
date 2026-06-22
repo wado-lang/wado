@@ -1,0 +1,15 @@
+//! One of two independent modules with a same-named `Dir` enum (see
+//! ../two_enum_conflict.wado). Case order here is the reverse of module B,
+//! so the discriminant indices differ — a wrong-module resolution of a
+//! shared case name binds the wrong index and is observable at runtime.
+
+pub enum Dir {
+    North,
+    South,
+    East,
+    West,
+}
+
+pub fn east() -> Dir {
+    return Dir::East;
+}

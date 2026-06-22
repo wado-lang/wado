@@ -108,9 +108,7 @@ fn "wado-compiler/tests/fixtures/enum_match_if_let.wado/run"() with Stdout {
     "core:cli/println"(label);
     x = 3;
     msg = (if x == 3 -> ref "core:prelude/string.wado//String" {
-        block -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and big"), used: 13 };
-        };
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and big"), used: 13 };
     } else if x == 3 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right and small"), used: 15 };
     } else {
@@ -166,12 +164,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 i >= len;
+    b9: block {
+        l10: loop {
+            break_if b9 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l11;
+            continue l10;
         };
     };
 }

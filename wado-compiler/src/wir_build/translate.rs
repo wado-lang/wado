@@ -2440,9 +2440,27 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
+<<<<<<< HEAD
                 payload_type: _,
             } => self
                 .translate_variant_payload(inner.as_expr().expect("skeleton operand"), *case_index),
+||||||| fbcdbc362
+                payload_type: _,
+            } => self.translate_variant_payload(*inner, *case_index),
+=======
+                payload_type,
+            } => {
+                // A unit-payload case (e.g. `Result<(), E>::Ok`) carries no
+                // runtime value. Extracting it must yield nothing — returning
+                // the scrutinee ref instead would leave a value on the operand
+                // stack when the extraction is used in statement position.
+                if matches!(self.type_table.get(*payload_type), ResolvedType::Unit) {
+                    WirInstr::Nop
+                } else {
+                    self.translate_variant_payload(*inner, *case_index)
+                }
+            }
+>>>>>>> origin/main
             ExprKind::VariantConstruct {
                 variant_type,
                 case_index,

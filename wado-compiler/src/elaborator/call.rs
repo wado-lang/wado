@@ -1371,11 +1371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some((ty, type_params)) = func_info
                 && let Some(return_type_ast) = ty
             {
-                // Build the callee module's import context so type names in the
-                // callee's signature resolve to the callee's types, not the
-                // caller's (which may have same-named different types).
-                let (callee_imported, callee_original_names) =
-                    self.tysys.trait_env.import_scope(callee_module);
+                let in_current_module = *callee_module == self.current_module_source;
 
                 // Set up the function's type parameters in an inherited scope so we
                 // can resolve type parameter references (like T -> TypeParam { index: 0 }).
@@ -1383,16 +1379,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&type_params, 0);
 
-                // Swap the elaborator's "current module" perspective onto the
-                // callee for the duration of `resolve_type`. Locals are cleared
-                // because they only ever describe the active resolution, not
-                // the callee's pre-existing definitions.
-                let resolved = scope.with_module_perspective(
-                    callee_module.clone(),
-                    callee_imported,
-                    callee_original_names,
-                    |s| s.resolve_type(&return_type_ast),
-                );
+                let resolved = if in_current_module {
+                    // Resolve in the live scope. Reconstructing a perspective for
+                    // the module already being walked would only replace it with
+                    // a lossier copy that drops namespace imports (issue #1415).
+                    scope.resolve_type(&return_type_ast)
+                } else {
+                    // Swap to the callee's perspective so its signature's type
+                    // names resolve to the callee's types, not same-named caller
+                    // types; the scope carries the callee's namespace imports.
+                    let callee_scope = scope.tysys.trait_env.import_scope(callee_module);
+                    scope.with_module_perspective(callee_module.clone(), callee_scope, |s| {
+                        s.resolve_type(&return_type_ast)
+                    })
+                };
                 drop(scope);
 
                 return resolved;
@@ -1431,18 +1431,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method = methods.iter().find(|m| m.name == operation)?;
         let param_asts: Vec<Type> = method.params.iter().map(|p| p.ty.clone()).collect();
         let return_ast = method.return_type.clone();
-        let (imported_type_sources, import_original_names) =
-            self.tysys.trait_env.import_scope(&module_source);
-        Some(self.with_module_perspective(
-            module_source,
-            imported_type_sources,
-            import_original_names,
-            |s| {
-                let params = param_asts.iter().map(|ty| s.resolve_type(ty)).collect();
-                let ret = return_ast.as_ref().map(|ty| s.resolve_type(ty));
-                (params, ret)
-            },
-        ))
+        let scope = self.tysys.trait_env.import_scope(&module_source);
+        Some(self.with_module_perspective(module_source, scope, |s| {
+            let params = param_asts.iter().map(|ty| s.resolve_type(ty)).collect();
+            let ret = return_ast.as_ref().map(|ty| s.resolve_type(ty));
+            (params, ret)
+        }))
     }
 
     /// Get the String struct type (from core:prelude/string.wado)
@@ -1551,14 +1545,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve types in the definition module's perspective
                 // so that type names resolve to the correct module's types
                 // (e.g., "Direction" resolves to module B's Direction, not module A's)
-                let (imported_type_sources, import_original_names) =
-                    self.tysys.trait_env.import_scope(&src);
-                return self.with_module_perspective(
-                    src,
-                    imported_type_sources,
-                    import_original_names,
-                    |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
-                );
+                let scope = self.tysys.trait_env.import_scope(&src);
+                return self.with_module_perspective(src, scope, |s| {
+                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
+                });
             }
         }
 
@@ -1577,14 +1567,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             .map(|func| func.params.clone());
             if let Some(params) = params {
-                let (imported_type_sources, import_original_names) =
-                    self.tysys.trait_env.import_scope(&fallback);
-                return self.with_module_perspective(
-                    fallback,
-                    imported_type_sources,
-                    import_original_names,
-                    |s| params.iter().map(|p| s.resolve_type(&p.ty)).collect(),
-                );
+                let scope = self.tysys.trait_env.import_scope(&fallback);
+                return self.with_module_perspective(fallback, scope, |s| {
+                    params.iter().map(|p| s.resolve_type(&p.ty)).collect()
+                });
             }
         }
 

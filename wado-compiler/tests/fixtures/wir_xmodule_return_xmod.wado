@@ -1,0 +1,17 @@
+//! Cross-module form of issue #1415: the entry calls `parse_root` in module B,
+//! which returns module C's `mini::CstNode` by value. Re-resolving B's return
+//! type from the entry's perspective used to drop B's `mini` namespace import,
+//! typing `top`'s local as `i32` instead of the GC ref the call returns
+//! ("expected i32, found (ref $type)"). The reconstructed scope now carries the
+//! callee's namespace imports.
+
+use { parse_root } from "./sub/wir_xmodule_return_eval2.wado";
+use mini from "./sub/wir_xmodule_return_parser.wado";
+
+test "cross-module by-value struct return keeps its GC-ref local" {
+    let top = parse_root(&"(1)");
+    assert top.kind == mini::RK_PROG;
+}
+
+__DATA__
+{"test": {}}

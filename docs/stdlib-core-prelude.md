@@ -2428,6 +2428,14 @@ Generic zip iterator adapter that pairs elements from two iterators.
 
 ##### `fn into_iter(&self) -> IterZip<I, J>`
 
+### `pub struct ConvertError`
+
+Error type returned by fallible conversions.
+
+#### `message: String`
+
+#### `pub fn new(message: String) -> ConvertError`
+
 ### `pub struct Formatter`
 
 Formatter that writes directly into a referenced output buffer.
@@ -3758,6 +3766,14 @@ Generic zip iterator adapter that pairs elements from two iterators.
 #### `impl IntoIterator for IterZip<I, J>`
 
 ##### `fn into_iter(&self) -> IterZip<I, J>`
+
+### `pub struct ConvertError`
+
+Error type returned by fallible conversions.
+
+#### `message: String`
+
+#### `pub fn new(message: String) -> ConvertError`
 
 ### `pub struct List<T>`
 

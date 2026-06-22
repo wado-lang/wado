@@ -310,32 +310,48 @@ pub struct LoadResult {
 
 use crate::compiler_host::LogLevel;
 
-/// Strip a leading `kiln:` URI scheme, returning the path component.
+/// Build a `kiln:` URI from a filesystem path, normalizing and percent-encoding
+/// it so the result is valid even for URI-unsafe paths (e.g. spaces);
+/// [`strip_kiln_scheme`] reverses it losslessly. The single producer — the CLI
+/// and LSP both call it, so their redirect URIs match.
 ///
-/// Used by [`ModuleLoader::get_source`] when handling
-/// `ModuleSource::Redirected` so the host receives a plain absolute
-/// path instead of a `kiln:/abs/path` URI. Returns `None` when the
-/// input does not look like a `kiln:` URI; callers fall back to
-/// passing the raw URI through to the host (in-memory hosts may use it
-/// as a key directly).
-///
-/// Parses with [`fluent_uri::UriRef`] so RFC 3986 percent-encoding and
-/// scheme validation behave correctly without depending on
-/// `std::path`. The returned path is the URI's `path()` segment as a
-/// `String`; percent-decoding happens at the host boundary via
-/// standard `read_to_string`.
-///
-/// The `kiln:` (rather than `file://`) scheme is intentional: the
-/// compiler's qualified-name format (`{module_source}//{name}`) treats
-/// `//` as the boundary, and `file://` URIs would introduce a
-/// spurious `//` that breaks every parser splitting on it. See
-/// `wado-cli::kiln_driver::path_to_kiln_uri` for the producer side.
+/// `kiln:` (not `file://`) avoids a spurious `//`, which the qualified-name
+/// format `{module_source}//{name}` treats as a boundary.
+#[must_use]
+pub fn path_to_kiln_uri(path: &str) -> String {
+    use fluent_uri::pct_enc::{
+        EString,
+        encoder::{Data, Path},
+    };
+    // Encode per segment so `/` stays a separator.
+    let encoded = crate::path::normalize(path)
+        .split('/')
+        .map(|segment| {
+            let mut e = EString::<Path>::new();
+            e.encode_str::<Data>(segment);
+            e.into_string()
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    if encoded.starts_with('/') {
+        format!("kiln:{encoded}")
+    } else {
+        // Keep the URI valid for a non-absolute input; the loader then fails to
+        // find the file — a useful diagnostic shape.
+        format!("kiln:/{encoded}")
+    }
+}
+
+/// Strip a `kiln:` scheme, returning the percent-decoded path (inverse of
+/// [`path_to_kiln_uri`]). Used by [`ModuleLoader::get_source`] for
+/// `ModuleSource::Redirected`. Returns `None` for non-`kiln:` URIs, which
+/// callers pass through unchanged (in-memory hosts key on the URI directly).
 fn strip_kiln_scheme(uri: &str) -> Option<String> {
     let parsed = fluent_uri::UriRef::parse(uri).ok()?;
     if parsed.scheme()?.as_str() != "kiln" {
         return None;
     }
-    Some(parsed.path().as_str().to_string())
+    Some(parsed.path().decode().to_string_lossy().into_owned())
 }
 
 /// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
@@ -841,6 +857,31 @@ mod tests {
         assert!(r.errors.is_empty(), "test source must lex: {:?}", r.errors);
         let mut parser = Parser::from_lex_no_trivia(r);
         parser.parse_strict().expect("test source must parse")
+    }
+
+    #[test]
+    fn kiln_uri_round_trips_uri_unsafe_paths() {
+        // Valid URI out, lossless path back (regression for #1417).
+        for path in [
+            "/home/user/My Project/gen.wado",
+            "/tmp/.wado-cache/gen.wado",
+            "/a/b+c/d#e.wado",
+            "/plain/path.wado",
+        ] {
+            let uri = path_to_kiln_uri(path);
+            assert!(uri.starts_with("kiln:"), "scheme must be kiln: in `{uri}`");
+            assert!(
+                fluent_uri::UriRef::parse(uri.as_str()).is_ok(),
+                "must be a valid URI: `{uri}`"
+            );
+            assert_eq!(strip_kiln_scheme(&uri).as_deref(), Some(path));
+        }
+    }
+
+    #[test]
+    fn strip_kiln_scheme_ignores_other_schemes() {
+        assert_eq!(strip_kiln_scheme("core:cli"), None);
+        assert_eq!(strip_kiln_scheme("./relative.wado"), None);
     }
 
     #[test]

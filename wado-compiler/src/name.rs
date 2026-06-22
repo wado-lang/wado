@@ -21,7 +21,9 @@
 //!
 //! # Module Path Canonicalization
 //!
-//! Module paths are canonicalized using URI path normalization (RFC 3986) to ensure:
+//! Module paths are filesystem representations, not URIs: they are canonicalized
+//! by lexical normalization (`crate::path::normalize`, RFC 3986 §5.2.4
+//! dot-segment semantics) — never percent-encoded — to ensure:
 //! - Same file imported via different paths resolves to same identity
 //! - Always uses `/` separator (platform-agnostic, even on Windows)
 //! - Resolves `.` and `..` segments
@@ -31,7 +33,6 @@
 //! - For standalone scripts: relative to the entry point's directory
 
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -769,81 +770,70 @@ pub fn build_core_internal_name(
     FreeFunctionName::from_strs(interner, &["core", "internal"], name)
 }
 
-/// Validate that a module path is a valid URI reference.
+/// Validate that a string can name a module.
+///
+/// A module path is a filesystem representation, not a URI, so URI-unsafe
+/// characters such as spaces are valid; only content that cannot name a file
+/// (a NUL byte) is rejected. Special prefixes (`core:` / `wasi:` /
+/// `http(s)://`) are opaque identifiers and always valid. The analyzer calls
+/// this before loading to surface a clean error message.
 ///
 /// Returns `Ok(())` if the path is valid, or `Err(message)` if invalid.
-///
-/// This should be called by the analyzer before attempting to load a module
-/// to provide better error messages.
-///
-/// # Arguments
-/// * `path` - The module path to validate
-///
-/// # Returns
-/// * `Ok(())` - The path is valid
-/// * `Err(String)` - The path is invalid, with an error message
 pub fn validate_module_path(path: &str) -> Result<(), String> {
-    // Special prefixes are always valid
-    if path.starts_with("core:")
-        || path.starts_with("wasi:")
-        || path.starts_with("https://")
-        || path.starts_with("http://")
-    {
+    if has_special_prefix(path) {
         return Ok(());
     }
 
-    // Try to parse as a URI reference
-    match UriRef::parse(path) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("invalid module path: {e}")),
+    // A bare module path is a filesystem path, not a URI: URI-unsafe
+    // characters such as spaces are valid here. Reject only content that
+    // cannot name a file.
+    if path.contains('\0') {
+        return Err("module path contains a NUL byte".to_string());
     }
+    Ok(())
 }
 
-/// Normalize a module path using URI path normalization (RFC 3986).
+/// `true` for an opaque module identifier that is not a filesystem path and
+/// must never be normalized: a scheme-qualified name (`core:` / `wasi:`) or a
+/// remote URI (`http://` / `https://`).
+fn has_special_prefix(path: &str) -> bool {
+    path.starts_with("core:")
+        || path.starts_with("wasi:")
+        || path.starts_with("https://")
+        || path.starts_with("http://")
+}
+
+/// Normalize a module path.
 ///
-/// This function:
-/// - Resolves `.` (current directory) segments
-/// - Resolves `..` (parent directory) segments
-/// - Removes duplicate slashes
-/// - Always uses `/` separator (platform-agnostic)
+/// A module path is a filesystem representation, not a URI: it is normalized
+/// lexically via [`crate::path::normalize`] (resolve `.`/`..`, collapse
+/// duplicate slashes, unify separators to `/`) and never percent-encoded, so
+/// URI-unsafe characters such as spaces survive intact. Special prefixes
+/// (`core:` / `wasi:` / `http://` / `https://`) are opaque identifiers and are
+/// returned verbatim.
 ///
-/// The input should be a relative path like `./foo/bar.wado` or `../lib/utils.wado`.
-///
-/// # Panics
-/// Panics if the path is not a valid URI reference.
+/// This function is infallible: every filesystem path normalizes.
 ///
 /// Examples:
 /// - `./geometry.wado` → `./geometry.wado`
 /// - `./sub/../geometry.wado` → `./geometry.wado`
 /// - `./sub/./nested/../file.wado` → `./sub/file.wado`
 /// - `foo//bar.wado` → `foo/bar.wado`
+/// - `/home/user/My Project/x.wado` → `/home/user/My Project/x.wado`
 pub fn normalize_module_path(path: &str) -> String {
-    try_normalize_module_path(path).unwrap_or_else(|e| panic!("invalid module path '{path}': {e}"))
+    if has_special_prefix(path) {
+        return path.to_string();
+    }
+    crate::path::normalize(path)
 }
 
-/// Fallible [`normalize_module_path`]. Returns `Err` with a human-readable
-/// reason when `path` is not a valid URI reference, so callers that accept
-/// untrusted input (e.g. a CLI `--symbol` notation) can surface a clean error
-/// instead of panicking.
+/// [`normalize_module_path`] gated by [`validate_module_path`]. Normalization
+/// itself cannot fail, but callers accepting untrusted input (e.g. a CLI
+/// `--symbol` notation) use this to reject a string that cannot name a module
+/// with a clean error instead of letting it flow downstream.
 pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
-    // Handle special module prefixes that shouldn't be normalized
-    if path.starts_with("core:")
-        || path.starts_with("wasi:")
-        || path.starts_with("https://")
-        || path.starts_with("http://")
-    {
-        return Ok(path.to_string());
-    }
-
-    // RFC 3986 normalize() only removes dot segments from absolute paths,
-    // so we use our manual implementation for relative module paths.
-    // We still use fluent-uri for validation and encoding normalization.
-    let uri_ref = UriRef::parse(path).map_err(|e| e.to_string())?;
-
-    // Apply encoding normalization (percent-encoding, etc.)
-    let normalized = uri_ref.normalize();
-    // Then apply dot segment removal for relative paths
-    Ok(remove_dot_segments(normalized.as_str()))
+    validate_module_path(path)?;
+    Ok(normalize_module_path(path))
 }
 
 /// Resolve a relative module path against a base module path.
@@ -1061,48 +1051,6 @@ fn get_parent_path(path: &str) -> &str {
     match path.rfind('/') {
         Some(pos) => &path[..pos],
         None => "",
-    }
-}
-
-/// Remove dot segments (`.` and `..`) from a path.
-///
-/// This implements RFC 3986 Section 5.2.4 for relative paths,
-/// which fluent-uri's `normalize()` doesn't handle.
-fn remove_dot_segments(path: &str) -> String {
-    // Convert backslashes to forward slashes
-    let path = path.replace('\\', "/");
-
-    // Split into segments and process
-    let mut segments: Vec<&str> = Vec::new();
-    let has_leading_dot = path.starts_with("./");
-
-    for segment in path.split('/') {
-        match segment {
-            "" | "." => {
-                // Skip empty segments and current dir markers (except preserving leading ./)
-            }
-            ".." => {
-                // Go up one level if possible
-                if !segments.is_empty() && segments.last() != Some(&"..") {
-                    segments.pop();
-                } else {
-                    segments.push("..");
-                }
-            }
-            s => segments.push(s),
-        }
-    }
-
-    // Reconstruct the path
-    let result = segments.join("/");
-
-    // Preserve leading ./ for relative paths
-    if has_leading_dot && !result.starts_with("..") {
-        format!("./{result}")
-    } else if result.is_empty() {
-        ".".to_string()
-    } else {
-        result
     }
 }
 
@@ -1556,6 +1504,21 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_absolute_base_with_space() {
+        // The Kiln harvest uses the entry's absolute filesystem path as the
+        // resolve base; a directory with a space must not panic and must keep
+        // the absolute root (regression for #1417).
+        assert_eq!(
+            resolve_module_path("/abs/My Project/main.wado", "./eval.wado"),
+            "/abs/My Project/eval.wado"
+        );
+        assert_eq!(
+            resolve_module_path("/abs/My Project/sub/main.wado", "../eval.wado"),
+            "/abs/My Project/eval.wado"
+        );
+    }
+
+    #[test]
     fn test_resolve_special_prefixes() {
         // Special prefixes should pass through unchanged
         assert_eq!(
@@ -1612,10 +1575,19 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_dot_segments() {
-        assert_eq!(remove_dot_segments("./a/b/../c.wado"), "./a/c.wado");
-        assert_eq!(remove_dot_segments("./a/./b/c.wado"), "./a/b/c.wado");
-        assert_eq!(remove_dot_segments("a//b/c.wado"), "a/b/c.wado");
+    fn test_normalize_module_path_filesystem_literal() {
+        // A module path is a filesystem string: URI-unsafe characters such as
+        // spaces are preserved, never percent-encoded, and never panic
+        // (regression for #1417).
+        assert_eq!(normalize_module_path("./a b.wado"), "./a b.wado");
+        assert_eq!(
+            normalize_module_path("/home/user/My Project/eval.wado"),
+            "/home/user/My Project/eval.wado"
+        );
+        // A literal `%` is part of the filename, not an escape sequence.
+        assert_eq!(normalize_module_path("./a%20b.wado"), "./a%20b.wado");
+        // Absolute paths keep their root through dot-segment resolution.
+        assert_eq!(normalize_module_path("/abs/a/../b.wado"), "/abs/b.wado");
     }
 
     #[test]
@@ -1626,13 +1598,14 @@ mod tests {
         assert!(validate_module_path("wasi:filesystem").is_ok());
         assert!(validate_module_path("https://example.com/lib.wado").is_ok());
         assert!(validate_module_path("http://localhost:8080/lib.wado").is_ok());
+        // A space is valid in a filesystem path (regression for #1417).
+        assert!(validate_module_path("./a b.wado").is_ok());
+        assert!(validate_module_path("/home/user/My Project/eval.wado").is_ok());
     }
 
     #[test]
     fn test_validate_module_path_invalid() {
-        // Paths with invalid URI characters should fail
-        // Note: Most printable characters are valid in URI references,
-        // so we test with control characters or invalid sequences
+        // Only content that cannot name a file is rejected (a NUL byte).
         assert!(validate_module_path("./file with\x00null.wado").is_err());
     }
 

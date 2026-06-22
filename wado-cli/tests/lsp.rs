@@ -2359,25 +2359,25 @@ fn query_symbol_runs_generator_for_target_module() {
         .stdout(predicate::str::contains("fn run"));
 }
 
-/// A `--symbol` notation whose module isn't a valid module path must fail
-/// with a clean error, not panic inside `normalize_module_path`.
+/// A module path containing a space is a valid filesystem path, not an invalid
+/// URI: the query must resolve it without panicking inside
+/// `normalize_module_path` and degrade cleanly when the file is absent
+/// (regression for #1417).
 #[test]
-fn query_symbol_rejects_malformed_module() {
+fn query_symbol_path_with_space_does_not_panic() {
     let output = wado()
         .args(["query", "hover", "--symbol", "./a b.wado#run"])
         .assert()
-        .failure()
         .get_output()
-        .stderr
         .clone();
-    let stderr = String::from_utf8(output).unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(
         !stderr.contains("panicked"),
-        "must not panic on a malformed --symbol module, got: {stderr}"
+        "must not panic on a --symbol module path with a space, got: {stderr}"
     );
     assert!(
-        stderr.contains("invalid module") || stderr.contains("invalid symbol notation"),
-        "expected a clean error, got: {stderr}"
+        !stderr.contains("invalid module"),
+        "a space is a valid filesystem path, not an invalid module, got: {stderr}"
     );
 }
 

@@ -1,0 +1,10 @@
+//! A struct `Widget` whose layout differs from the same-named `Widget` in
+//! reexport_collision_b.wado. Imported (and registered) first, so a global-scan
+//! fallback would wrongly resolve B's re-exported `Widget` to this one
+//! (see ../reexport_collision.wado).
+
+pub struct Widget { pub a: i32, pub b: i32 }
+
+pub fn mk_a() -> Widget {
+    return Widget { a: 1, b: 2 };
+}

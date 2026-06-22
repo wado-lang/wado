@@ -1,0 +1,13 @@
+//! Library for the namespace-qualified struct-field test (issue #1415): the
+//! field `Wrapper.node` is typed through the `mini` namespace import.
+
+use mini from "./wir_xmodule_return_parser.wado";
+
+pub struct Wrapper {
+    pub node: mini::CstNode,
+}
+
+pub fn wrap(input: &String) -> Wrapper {
+    let r = mini::parse(input);
+    return Wrapper { node: r.root };
+}

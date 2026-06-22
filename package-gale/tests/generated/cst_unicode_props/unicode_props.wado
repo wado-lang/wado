@@ -1085,13 +1085,13 @@ impl Lexer {
 fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { return -1; }
+    if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || '\u{c0}' <= chars[pos] <= '\u{d6}' || '\u{d8}' <= chars[pos] <= '\u{f6}' || '\u{f8}' <= chars[pos] <= '\u{ff}' || '\u{100}' <= chars[pos] <= '\u{24f}' || '\u{370}' <= chars[pos] <= '\u{3ff}' || '\u{400}' <= chars[pos] <= '\u{4ff}' || '\u{600}' <= chars[pos] <= '\u{6ff}' || '\u{900}' <= chars[pos] <= '\u{97f}' || '\u{4e00}' <= chars[pos] <= '\u{9fff}' || '\u{3040}' <= chars[pos] <= '\u{309f}' || '\u{30a0}' <= chars[pos] <= '\u{30ff}' || '\u{ac00}' <= chars[pos] <= '\u{d7af}') { break rep_0; }
+            if !('A' <= chars[pos] <= 'Z' || 'a' <= chars[pos] <= 'z' || 'À' <= chars[pos] <= 'Ö' || 'Ø' <= chars[pos] <= 'ö' || 'ø' <= chars[pos] <= 'ÿ' || 'Ā' <= chars[pos] <= 'ɏ' || 'Ͱ' <= chars[pos] <= 'Ͽ' || 'Ѐ' <= chars[pos] <= 'ӿ' || '؀' <= chars[pos] <= 'ۿ' || 'ऀ' <= chars[pos] <= 'ॿ' || '一' <= chars[pos] <= '鿿' || '぀' <= chars[pos] <= 'ゟ' || '゠' <= chars[pos] <= 'ヿ' || '가' <= chars[pos] <= '힯') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1104,13 +1104,13 @@ fn try_WORD(chars: &List<char>, start: i32) -> i32 {
 fn try_NUM(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { return -1; }
+    if !('0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९') { return -1; }
     pos += 1;
     loop {
         let rep_saved_1 = pos;
         rep_1: {
             if pos >= chars.len() { break rep_1; }
-            if !('0' <= chars[pos] <= '9' || '\u{660}' <= chars[pos] <= '\u{669}' || '\u{6f0}' <= chars[pos] <= '\u{6f9}' || '\u{966}' <= chars[pos] <= '\u{96f}') { break rep_1; }
+            if !('0' <= chars[pos] <= '9' || '٠' <= chars[pos] <= '٩' || '۰' <= chars[pos] <= '۹' || '०' <= chars[pos] <= '९') { break rep_1; }
             pos += 1;
             continue;
         }
@@ -1123,7 +1123,7 @@ fn try_NUM(chars: &List<char>, start: i32) -> i32 {
 fn try_SPACE(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !(chars[pos] == ' ' || chars[pos] == '\u{a0}' || chars[pos] == '\u{1680}' || '\u{2000}' <= chars[pos] <= '\u{200a}' || chars[pos] == '\u{202f}' || chars[pos] == '\u{205f}' || chars[pos] == '\u{3000}') { return -1; }
+    if !(chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == ' ' || ' ' <= chars[pos] <= ' ' || chars[pos] == ' ' || chars[pos] == ' ' || chars[pos] == '　') { return -1; }
     pos += 1;
     return pos;
 }
@@ -1138,7 +1138,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == ' ' || first_char == '\u{a0}' || first_char == '\u{1680}' || first_char == '\u{202f}' || first_char == '\u{205f}' || first_char == '\u{3000}' {
+        if first_char == ' ' || first_char == ' ' || first_char == ' ' || first_char == ' ' || first_char == ' ' || first_char == '　' {
             end = try_SPACE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SPACE; }
         } else if 'A' <= first_char <= 'Z' {
@@ -1147,55 +1147,55 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if 'a' <= first_char <= 'z' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{c0}' <= first_char <= '\u{d6}' {
+        } else if 'À' <= first_char <= 'Ö' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{d8}' <= first_char <= '\u{f6}' {
+        } else if 'Ø' <= first_char <= 'ö' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{f8}' <= first_char <= '\u{ff}' {
+        } else if 'ø' <= first_char <= 'ÿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{100}' <= first_char <= '\u{24f}' {
+        } else if 'Ā' <= first_char <= 'ɏ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{370}' <= first_char <= '\u{3ff}' {
+        } else if 'Ͱ' <= first_char <= 'Ͽ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{400}' <= first_char <= '\u{4ff}' {
+        } else if 'Ѐ' <= first_char <= 'ӿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{600}' <= first_char <= '\u{6ff}' {
+        } else if '؀' <= first_char <= 'ۿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{900}' <= first_char <= '\u{97f}' {
+        } else if 'ऀ' <= first_char <= 'ॿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{4e00}' <= first_char <= '\u{9fff}' {
+        } else if '一' <= first_char <= '鿿' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{3040}' <= first_char <= '\u{309f}' {
+        } else if '぀' <= first_char <= 'ゟ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{30a0}' <= first_char <= '\u{30ff}' {
+        } else if '゠' <= first_char <= 'ヿ' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
-        } else if '\u{ac00}' <= first_char <= '\u{d7af}' {
+        } else if '가' <= first_char <= '힯' {
             end = try_WORD(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_WORD; }
         } else if '0' <= first_char <= '9' {
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
-        } else if '\u{660}' <= first_char <= '\u{669}' {
+        } else if '٠' <= first_char <= '٩' {
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
-        } else if '\u{6f0}' <= first_char <= '\u{6f9}' {
+        } else if '۰' <= first_char <= '۹' {
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
-        } else if '\u{966}' <= first_char <= '\u{96f}' {
+        } else if '०' <= first_char <= '९' {
             end = try_NUM(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_NUM; }
-        } else if '\u{2000}' <= first_char <= '\u{200a}' {
+        } else if ' ' <= first_char <= ' ' {
             end = try_SPACE(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_SPACE; }
         } else {

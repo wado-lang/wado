@@ -81,10 +81,8 @@ fn "wado-compiler/tests/fixtures/enum_impl_basic.wado/run"() with Stdout {
     s = 0;
     if (if s == 0 -> bool {
         1;
-    } else if s == 1 -> bool {
-        1;
     } else {
-        0;
+        s == 1;
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("spring is warm"), used: 14 });
     }
@@ -104,10 +102,8 @@ fn "wado-compiler/tests/fixtures/enum_impl_basic.wado/run"() with Stdout {
     w = 3;
     if (if w == 0 -> bool {
         1;
-    } else if w == 1 -> bool {
-        1;
     } else {
-        0;
+        w == 1;
     }) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("winter is warm"), used: 14 });
     } else {
@@ -162,12 +158,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b11: block {
-        l12: loop {
-            break_if b11 i >= len;
+    b9: block {
+        l10: loop {
+            break_if b9 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l12;
+            continue l10;
         };
     };
 }

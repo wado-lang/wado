@@ -291,27 +291,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with the elaborator's "current module" perspective swapped to
-    /// `module_source` and the supplied import context. Locals are cleared
-    /// because they describe in-progress resolution, not the target module's
-    /// pre-existing definitions; they are restored on return.
-    ///
-    /// Replaces the legacy pattern of cloning per-module flat maps via
-    /// `build_module_map` and swapping six fields in/out.
+    /// `module_source` and the supplied import `scope` (type sources *and*
+    /// namespace imports, so `ns::Type` types resolve canonically — issue
+    /// #1415). Locals are cleared because they describe in-progress resolution,
+    /// not the target module's definitions; everything is restored on return.
     pub(super) fn with_module_perspective<R>(
         &mut self,
         module_source: ModuleSource,
-        imported_type_sources: IndexMap<String, ModuleSource>,
-        import_original_names: IndexMap<String, String>,
+        scope: trait_env::ModuleImportScope,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let saved_src = std::mem::replace(&mut self.current_module_source, module_source);
-        let saved_imp = std::mem::replace(
-            &mut self.sem.imports.imported_type_sources,
-            imported_type_sources,
-        );
+        let saved_imp =
+            std::mem::replace(&mut self.sem.imports.imported_type_sources, scope.sources);
         let saved_orig = std::mem::replace(
             &mut self.sem.imports.import_original_names,
-            import_original_names,
+            scope.original_names,
+        );
+        let saved_ns = std::mem::replace(
+            &mut self.sem.imports.namespace_imports,
+            scope.namespace_imports,
         );
         let saved_local_struct = std::mem::take(&mut self.sem.decls.local_struct_fields);
         let saved_local_newtypes = std::mem::take(&mut self.sem.decls.local_newtypes);
@@ -325,6 +324,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.current_module_source = saved_src;
         self.sem.imports.imported_type_sources = saved_imp;
         self.sem.imports.import_original_names = saved_orig;
+        self.sem.imports.namespace_imports = saved_ns;
         self.sem.decls.local_struct_fields = saved_local_struct;
         self.sem.decls.local_newtypes = saved_local_newtypes;
         self.sem.decls.local_enum_cases = saved_local_enum;
@@ -332,6 +332,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.local_generic_newtypes = saved_local_gnt;
         self.sem.decls.local_variant_cases = saved_local_variant;
         result
+    }
+
+    /// Run `body` in `module`'s perspective, but skip the swap entirely when
+    /// `module` is already the current perspective — the common case on the
+    /// method / associated-type lookup path, where the receiver's impl usually
+    /// lives in the current module. Skipping avoids the `import_scope` clone
+    /// and, unlike [`Self::with_module_perspective`], leaves the in-progress
+    /// locals in place — which a same-module lookup legitimately resolves
+    /// against.
+    pub(super) fn with_module_perspective_for<R>(
+        &mut self,
+        module: &ModuleSource,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if self.current_module_source == *module {
+            return body(self);
+        }
+        let scope = self.tysys.trait_env.import_scope(module);
+        self.with_module_perspective(module.clone(), scope, body)
     }
 
     /// Run `body` with use→def reference recording suppressed, restoring the
@@ -953,28 +972,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Look up struct field info by (name, `module_source`).
-    ///
-    /// Disambiguates same-named structs across modules by also matching the
-    /// owning `module_source`. Falls back to scanning the shared `all_*`
-    /// table when the visible projection (current module + locally created
-    /// anonymous structs) doesn't have the entry.
     pub(super) fn lookup_struct_fields_in(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.sem
-            .decls
-            .local_struct_fields
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.tysys
-                    .all_struct_fields
-                    .get(module_source)
-                    .and_then(|m| m.get(name))
-            })
+        self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    pub(super) fn lookup_variant_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&VariantInfo> {
+        self.type_lookup().variant_case_in(name, module_source)
+    }
+
+    pub(super) fn lookup_enum_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&EnumInfo> {
+        self.type_lookup().enum_case_in(name, module_source)
     }
 
     /// Build effect name → module source map from a module's import declarations.

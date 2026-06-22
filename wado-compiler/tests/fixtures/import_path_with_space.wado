@@ -1,0 +1,13 @@
+// Import a module whose path contains a space. The path is a filesystem
+// string, not a URI, so the loader must resolve it without panicking or
+// percent-encoding (regression for #1417).
+
+use { println, Stdout } from "core:cli";
+use { answer } from "./sub/helper with space.wado";
+
+export fn run() with Stdout {
+    println(`answer: {answer()}`);
+}
+
+__DATA__
+{"stdout": "answer: 42\n"}

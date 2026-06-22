@@ -982,12 +982,20 @@ pub(super) fn type_id_to_ast_type(
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
     let cm_named = |name: &str, ms: &ModuleSource| {
         let mut nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let cm_namespace = match ms {
-            ModuleSource::Wasi { .. } => true,
-            ModuleSource::Core { name } => name.starts_with("kiln"),
-            _ => false,
+        // Derive the owning WASI package from the type's own `module_source`
+        // so a name shared across packages (e.g. `ErrorCode` in `wasi:cli`,
+        // `wasi:filesystem`, `wasi:http`, `wasi:sockets`) resolves to *this*
+        // type's package — not whichever unique-by-name match the registry
+        // happens to find first. Without the hint, the three variant
+        // `ErrorCode`s are non-unique and resolution falls through to the
+        // lone `wasi:cli` enum, mis-lifting a filesystem variant as an i32.
+        let (cm_namespace, pkg_hint) = match ms {
+            ModuleSource::Wasi { interface } => (true, interface.split('/').next()),
+            ModuleSource::Core { name } if name.starts_with("kiln") => (true, None),
+            _ => (false, None),
         };
-        if cm_namespace && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, None)
+        if cm_namespace
+            && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, pkg_hint)
         {
             nt.source_interface = Some(source.to_string());
         }

@@ -1,0 +1,36 @@
+//! Regression (issue #1418): matching a nested pattern that extracts a
+//! unit-payload variant case (`Result<(), E>::Ok`) used to leave the scrutinee
+//! ref on the operand stack, ICEing the WIR pipeline with "values remaining on
+//! stack at end of block". The unit `Ok` payload carries no runtime value, so
+//! its extraction must produce nothing. This is the minimal, CM-independent
+//! form of the future-read case in `wir_future_unit_result.wado`.
+
+fn make(b: bool) -> Result<(), i32> {
+    if b {
+        return Result::Ok(());
+    }
+    return Result::Err(7);
+}
+
+fn classify(b: bool) -> i32 {
+    let opt: Option<Result<(), i32>> = Option::Some(make(b));
+    match opt {
+        Some(Ok(_)) => {
+            return 1;
+        },
+        Some(Err(code)) => {
+            return code;
+        },
+        None => {
+            return 0;
+        },
+    }
+}
+
+test "match Some(Ok(_)) over Result<(), E> with a unit payload" {
+    assert classify(true) == 1;
+    assert classify(false) == 7;
+}
+
+__DATA__
+{"test": {}}

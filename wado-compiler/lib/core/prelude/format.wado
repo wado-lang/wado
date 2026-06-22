@@ -9,6 +9,8 @@
 
 
 use { Display, DisplayAlt, Inspect, InspectAlt } from "core:prelude/traits.wado";
+use { String, StrCharIter } from "core:prelude/string.wado";
+use { Option } from "core:prelude/types.wado";
 /// Text alignment for padding.
 #[compiler_item("alignment")]
 pub enum Alignment {
@@ -319,6 +321,10 @@ impl Display for String {
 
 impl Inspect for String {
     pub fn inspect(&self, f: &mut Formatter) {
+        // The escape policy below is mirrored by `write_literal_char` in
+        // package-gale's wadopoet.wado (it emits Wado source literals). Keep
+        // the two in lockstep — same escaped set.
+        //
         // Caps to N chars and appends `...` outside the quotes when truncated
         // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
         // default cap; negatives below it mean no cap.
@@ -347,7 +353,15 @@ impl Inspect for String {
                 f.write_char('\\');
                 f.write_char('t');
             } else {
-                f.write_char(c);
+                let code = c as i32;
+                if code < 0x20 || code == 0x7f {
+                    // Control char with no named escape: `\u{HEX}`, never raw.
+                    f.write_str(&"\\u{");
+                    f.write_str(&`{code:x}`);
+                    f.write_char('}');
+                } else {
+                    f.write_char(c);
+                }
             }
             count += 1;
         }

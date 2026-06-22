@@ -718,14 +718,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (mut param_types, mut return_type, effects) = if same_module {
             resolve(self)
         } else {
-            let (imported_type_sources, import_original_names) =
-                self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(
-                def_module.clone(),
-                imported_type_sources,
-                import_original_names,
-                resolve,
-            )
+            let scope = self.tysys.trait_env.import_scope(def_module);
+            self.with_module_perspective(def_module.clone(), scope, resolve)
         };
         if !type_args.is_empty() {
             for p in &mut param_types {
@@ -989,14 +983,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (decl_params, decl_return, type_param_ids) = if same_module {
             resolve(self)
         } else {
-            let (imported_type_sources, import_original_names) =
-                self.tysys.trait_env.import_scope(def_module);
-            self.with_module_perspective(
-                def_module.clone(),
-                imported_type_sources,
-                import_original_names,
-                resolve,
-            )
+            let scope = self.tysys.trait_env.import_scope(def_module);
+            self.with_module_perspective(def_module.clone(), scope, resolve)
         };
         if type_param_ids.is_empty() {
             return FuncRefInference::NotApplicable;
@@ -2070,8 +2058,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         match &resolved {
-            ResolvedType::Enum { name, .. } => {
-                if let Some(enum_info) = self.lookup_enum_case(name) {
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => {
+                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source) {
                     let all_cases: IndexSet<&str> =
                         enum_info.cases.iter().map(|c| c.name.as_str()).collect();
                     let covered: IndexSet<&str> = {
@@ -2095,12 +2086,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
             }
-            ResolvedType::Variant { name, .. } => {
-                self.check_variant_exhaustiveness(&classified, name, span);
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => {
+                self.check_variant_exhaustiveness(&classified, name, module_source, span);
             }
-            ResolvedType::GenericInstance { name, .. } => {
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => {
                 if self.contains_variant(name) {
-                    self.check_variant_exhaustiveness(&classified, name, span);
+                    self.check_variant_exhaustiveness(&classified, name, module_source, span);
                 }
             }
             ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
@@ -2277,14 +2275,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// scrutinee is a variant type that has a `None` case.
     fn exh_null_none_case(&self, scrutinee_type: TypeId) -> Option<()> {
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let variant_name = match &resolved {
-            ResolvedType::Variant { name, .. } => Some(name.clone()),
-            ResolvedType::GenericInstance { name, .. } if self.contains_variant(name) => {
-                Some(name.clone())
-            }
+        let (variant_name, variant_module) = match &resolved {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => Some((name.clone(), module_source.clone())),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } if self.contains_variant(name) => Some((name.clone(), module_source.clone())),
             _ => None,
         }?;
-        let variant_info = self.lookup_variant_case(&variant_name)?;
+        let variant_info = self.lookup_variant_case_in(&variant_name, &variant_module)?;
         let none_case_name = self
             .tysys
             .type_table
@@ -2358,8 +2361,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
         match &resolved {
-            ResolvedType::Enum { name, .. } => {
-                if let Some(enum_info) = self.lookup_enum_case(name)
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => {
+                if let Some(enum_info) = self.lookup_enum_case_in(name, module_source)
                     && enum_info.find_case(&normalized).is_some()
                 {
                     return ExhPattern::EnumCase(normalized);
@@ -2443,9 +2449,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         classified: &[(bool, ExhPattern)],
         variant_name: &str,
+        variant_module: &ModuleSource,
         span: Span,
     ) {
-        if let Some(variant_info) = self.lookup_variant_case(variant_name) {
+        if let Some(variant_info) = self.lookup_variant_case_in(variant_name, variant_module) {
             let all_cases: IndexSet<&str> =
                 variant_info.cases.iter().map(|c| c.name.as_str()).collect();
             let covered: IndexSet<&str> = {
@@ -3189,7 +3196,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `let x: Container<i32> = Container { value: 0 }`) fill phantom
             // parameters that never appear in a field, matching the
             // behaviour of plain function calls.
-            let type_args = self.infer_struct_type_args(&struct_name, &fields, expected_type);
+            let type_args = self.infer_struct_type_args(
+                &struct_name,
+                &struct_module_source,
+                &fields,
+                expected_type,
+            );
 
             // Substitute type parameters in field value types.
             // This is necessary for empty array literals in self-referential fields
@@ -3204,7 +3216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields
             } else {
                 let struct_param_map: IndexMap<TypeId, TypeId> = self
-                    .lookup_struct_fields(&struct_name)
+                    .lookup_struct_fields_in(&struct_name, &struct_module_source)
                     .map(|info| {
                         info.type_param_type_ids
                             .iter()
@@ -3445,10 +3457,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn infer_struct_type_args(
         &self,
         struct_name: &str,
+        struct_module: &ModuleSource,
         fields: &[TirStructField],
         expected_type: Option<TypeId>,
     ) -> Vec<TypeId> {
-        let Some(struct_info) = self.lookup_struct_fields(struct_name).cloned() else {
+        let Some(struct_info) = self
+            .lookup_struct_fields_in(struct_name, struct_module)
+            .cloned()
+        else {
             return vec![];
         };
         if struct_info.type_param_type_ids.is_empty() {

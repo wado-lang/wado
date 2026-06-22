@@ -394,40 +394,13 @@ fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
     }
 }
 
-/// Compose a `file:` URI from an absolute filesystem path.
+/// Compose the `kiln:` redirect URI for an absolute filesystem path.
 ///
-/// Used to populate the [`wado_compiler::kiln::InvocationIndex`] entries
-/// the loader consults at module-resolve time.
-///
-/// Uses the `kiln:` scheme without authority (`kiln:/abs/path`) rather
-/// than `file://` because the compiler's qualified-name format
-/// (`{module_source}//{name}`) treats `//` as the separator between
-/// module source and symbol name. A `file:///abs/path` URI contains its
-/// own `//` and confuses every parser that splits on `//` — see
-/// `wir_build::types::sort_types_topologically` and the equivalent
-/// keying in `register_struct`. The `kiln:/path` form has no internal
-/// `//`, so the qualified-name boundary stays unambiguous.
-///
-/// The URI is RFC 3986–valid (single-segment scheme followed by an
-/// absolute-path reference), so `fluent_uri::UriRef::parse` accepts it
-/// and the loader's `strip_kiln_scheme` recovers the absolute path.
-/// Relative paths are not supported; the caller must canonicalize
-/// first.
+/// Populates [`wado_compiler::kiln::InvocationIndex`] entries. Thin wrapper over
+/// [`wado_compiler::loader::path_to_kiln_uri`] (the single producer shared with
+/// the LSP); the caller must canonicalize first.
 fn path_to_kiln_uri(path: &Path) -> String {
-    // `Path::display` is sufficient on Unix where every absolute path is
-    // a `/`-separated UTF-8 string. The CLI is host-only, so any
-    // platform-specific path quirk is the kiln_driver's problem to
-    // solve, not the wasm32-compatible compiler crate's.
-    let s = path.display().to_string().replace('\\', "/");
-    if s.starts_with('/') {
-        format!("kiln:{s}")
-    } else {
-        // Relative-path fallback. The leading `/` keeps the URI
-        // RFC 3986–valid even though the loader will fail to find the
-        // file at runtime — a useful diagnostic shape for callers that
-        // forgot to canonicalize.
-        format!("kiln:/{s}")
-    }
+    wado_compiler::loader::path_to_kiln_uri(&path.display().to_string())
 }
 
 /// Outcome of comparing a [`Metadata`] record to the current state of
