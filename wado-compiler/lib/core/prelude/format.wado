@@ -321,6 +321,10 @@ impl Display for String {
 
 impl Inspect for String {
     pub fn inspect(&self, f: &mut Formatter) {
+        // The escape policy below is mirrored by `write_literal_char` in
+        // package-gale's wadopoet.wado (it emits Wado source literals). Keep
+        // the two in lockstep — same escaped set.
+        //
         // Caps to N chars and appends `...` outside the quotes when truncated
         // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
         // default cap; negatives below it mean no cap.
