@@ -1332,6 +1332,7 @@ struct Parser {
     pending: Option<ParseError>,
     recovering: bool,
     pending_code: DiagnosticCode,
+    speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1340,7 +1341,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1432,6 +1433,11 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
         }
         if self.peek_at(1) == kind {
             self.report_extra(self.tokens.span_at(self.pos));

@@ -1270,11 +1270,35 @@ pub global RK_A: NodeKind = 1;
 
 global RULE_NAMES: List<String> = ["s", "a"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
+    recovering: bool,
+    pending_code: DiagnosticCode,
+    speculating: bool,
+    max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1282,7 +1306,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1290,11 +1314,49 @@ impl Parser {
         return ParseError::at(message, span, expected, lc.0, lc.1);
     }
 
-    fn record_deeper(&mut self, e: ParseError) {
+    fn fail(&mut self, message: String, span: Span, expected: List<String>, code: DiagnosticCode) {
+        let e = self.error(message, span, expected);
         let take = if let Some(cur) = &self.pending { e.span.start > cur.span.start } else { true };
         if take {
             self.pending = Option::Some(e);
+            self.pending_code = code;
         }
+        self.recovering = true;
+    }
+
+    fn push_rule_stack(&mut self, name: String) {
+        if let Some(e) = &mut self.pending {
+            e.rule_stack.push(name);
+        }
+    }
+
+    fn pending_message(&self) -> String {
+        if let Some(e) = &self.pending { return e.message; }
+        return String::from("");
+    }
+
+    fn in_set(&self, k: i32, set: List<i32>) -> bool {
+        for let x of set { if x == k { return true; } }
+        return false;
+    }
+
+    fn report_extra(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
+    }
+
+    fn report_missing(&mut self, kind: i32, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        let name = token_kind_name(kind);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
+    fn report_unexpected(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1326,46 +1388,95 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 self.b.token(self.pos);
-                return Result::Ok(self.pos);
+                return self.pos;
             }
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
+        }
+        if self.peek_at(1) == kind {
+            self.report_extra(self.tokens.span_at(self.pos));
+            let _sk = self.advance();
+            self.tokens.mark_skipped(_sk);
+            self.b.skip(_sk);
+            if kind == TK_EOF {
+                self.b.token(self.pos);
+                return self.pos;
+            }
+            let _i = self.advance();
+            self.b.token(_i);
+            return _i;
+        }
+        if self.in_set(self.kinds[self.pos], sync) {
+            self.report_missing(kind, self.tokens.span_at(self.pos));
+            let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn);
+            return _syn;
+        }
+        if !sync.is_empty() {
+            self.report_unexpected(self.tokens.span_at(self.pos));
+            if self.kinds[self.pos] != TK_EOF {
+                self.b.start_error(self.tokens.span_at(self.pos).start);
+                loop {
+                    let _k = self.kinds[self.pos];
+                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    let _sk = self.advance();
+                    self.tokens.mark_skipped(_sk);
+                    self.b.skip(_sk);
+                }
+                self.b.finish_node(self.last_end());
+            }
+            if self.kinds[self.pos] == kind {
+                if kind == TK_EOF {
+                    self.b.token(self.pos);
+                    return self.pos;
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+            let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn2);
+            return _syn2;
         }
         let name = token_kind_name(kind);
-        return Result::Err(self.error(
+        self.fail(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn fail(&self, name: String) -> Result<i32, ParseError> {
-        return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            [name],
-        ));
-    }
-
-    fn match_any(&mut self) -> Result<i32, ParseError> {
+    fn match_any(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
-        return Result::Err(self.error(
+        self.fail(
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -1378,34 +1489,39 @@ impl Parser {
             if !blocked {
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
                     self.b.token(self.pos);
-                    return Result::Ok(self.pos);
+                    return self.pos;
                 }
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
-        ));
+            DiagnosticCode::UnexpectedToken,
+        );
+        return self.pos;
     }
 }
 
@@ -1429,7 +1545,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return -1;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut _plus_first = true;
     loop {
@@ -1448,7 +1564,12 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 if p.peek_kind() == TK_ID {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
-                    if let Err(_rec_e) = _parse_a(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
+                    _parse_a(p, &EMPTY_FOLLOW);
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
                     p.pos = _rec_pos;
                     p.b.truncate(_rec_cp);
                 }
@@ -1456,60 +1577,61 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
         }
         _plus_first = false;
-        let a = _parse_a(p, &EMPTY_FOLLOW)?;
+        let a = _parse_a(p, &EMPTY_FOLLOW);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    let r = _parse_s__inner(p, follow);
+    _parse_s__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("s");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("s");
     }
-    return Result::Ok(());
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let _ = p.expect(kind)?;
-        return Result::Ok(());
+        let _ = p.expect(kind, []);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected a",
         p.peek_span(),
         ["TK_ID"],
-    ));
+        DiagnosticCode::NoViableAlternative,
+    );
+    return;
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    let r = _parse_a__inner(p, follow);
+    _parse_a__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("a");
     }
-    return Result::Ok(());
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
-    let _ = max_errors;
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
-    let _r = entry(&mut p);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
+    p.max_errors = max_errors;
+    entry(&mut p);
+    if p.recovering && p.diagnostics.len() < max_errors {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(p.pending_code, e.message, e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
     }
     return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }

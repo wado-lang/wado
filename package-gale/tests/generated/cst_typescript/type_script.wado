@@ -5516,6 +5516,7 @@ struct Parser {
     pending: Option<ParseError>,
     recovering: bool,
     pending_code: DiagnosticCode,
+    speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -5524,7 +5525,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -5616,6 +5617,11 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
         }
         if self.peek_at(1) == kind {
             self.report_extra(self.tokens.span_at(self.pos));
@@ -15426,9 +15432,15 @@ fn _parse_decorator_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_LIT_AT {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_decorator(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -16960,9 +16972,15 @@ fn _parse_statement_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if rep_scan_pos < 0 {
                 if _kind_set_18(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_statement(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -18541,9 +18559,15 @@ fn _parse_case_clauses__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_Case {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_case_clause(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -18841,9 +18865,15 @@ fn _parse_class_tail__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if rep_scan_pos < 0 {
             if _kind_set_18(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_class_element(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -19875,9 +19905,15 @@ fn _parse_source_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             if rep_scan_pos < 0 {
                 if _kind_set_18(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_source_element(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -22702,9 +22738,15 @@ fn _parse_template_string_literal__inner(p: &mut Parser, follow: &List<List<i32>
         if rep_scan_pos < 0 {
             if _kind_set_37(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_template_string_atom(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }

@@ -6814,6 +6814,7 @@ struct Parser {
     pending: Option<ParseError>,
     recovering: bool,
     pending_code: DiagnosticCode,
+    speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -6822,7 +6823,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -6914,6 +6915,11 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
         }
         if self.peek_at(1) == kind {
             self.report_extra(self.tokens.span_at(self.pos));
@@ -14536,9 +14542,15 @@ fn _parse_crate__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -14557,9 +14569,15 @@ fn _parse_crate__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         if rep_scan_pos_2 < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_item(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -14617,9 +14635,15 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_token_tree(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -14643,9 +14667,15 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_token_tree(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -14669,9 +14699,15 @@ fn _parse_delim_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_token_tree(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -14720,9 +14756,15 @@ fn _parse_token_tree__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 if rep_scan_pos < 0 {
                     if _kind_set_2(p.peek_kind()) {
                         let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        let _rec_sav = p.recovering;
+                        let _rec_spec = p.speculating;
+                        p.speculating = true;
                         _parse_token_tree_token(p, &EMPTY_FOLLOW);
-                        if p.recovering || p.pos == _rec_pos { break; }
-                        continue;
+                        p.speculating = _rec_spec;
+                        p.recovering = _rec_sav;
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
                     }
                     break;
                 }
@@ -14864,9 +14906,15 @@ fn _parse_macro_invocation_semi__inner_alt_0(p: &mut Parser, follow: &List<List<
         if rep_scan_pos < 0 {
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_token_tree(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -14916,9 +14964,15 @@ fn _parse_macro_invocation_semi__inner_alt_1(p: &mut Parser, follow: &List<List<
         if rep_scan_pos < 0 {
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_token_tree(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -14968,9 +15022,15 @@ fn _parse_macro_invocation_semi__inner_alt_2(p: &mut Parser, follow: &List<List<
         if rep_scan_pos < 0 {
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_token_tree(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -15197,9 +15257,15 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_macro_match(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -15223,9 +15289,15 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_macro_match(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -15249,9 +15321,15 @@ fn _parse_macro_matcher__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_macro_match(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -15299,9 +15377,15 @@ fn _parse_macro_match__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &E
             if rep_scan_pos < 0 {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_macro_match(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -15351,9 +15435,15 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 if rep_scan_pos < 0 {
                     if _kind_set_5(p.peek_kind()) {
                         let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        let _rec_sav = p.recovering;
+                        let _rec_spec = p.speculating;
+                        p.speculating = true;
                         _parse_macro_match_token(p, &EMPTY_FOLLOW);
-                        if p.recovering || p.pos == _rec_pos { break; }
-                        continue;
+                        p.speculating = _rec_spec;
+                        p.recovering = _rec_sav;
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
                     }
                     break;
                 }
@@ -15645,9 +15735,15 @@ fn _parse_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -15873,9 +15969,15 @@ fn _parse_module__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_POUND {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -15894,9 +15996,15 @@ fn _parse_module__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             if rep_scan_pos_2 < 0 {
                 if _kind_set_0(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_item(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -16533,9 +16641,15 @@ fn _parse_self_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -16637,9 +16751,15 @@ fn _parse_function_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -16946,9 +17066,15 @@ fn _parse_struct_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17032,9 +17158,15 @@ fn _parse_tuple_field__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17145,9 +17277,15 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17386,9 +17524,15 @@ fn _parse_trait___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17407,9 +17551,15 @@ fn _parse_trait___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         if rep_scan_pos_2 < 0 {
             if _kind_set_36(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_associated_item(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17526,9 +17676,15 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17547,9 +17703,15 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos_2 < 0 {
             if _kind_set_36(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_associated_item(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17602,9 +17764,15 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17623,9 +17791,15 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         if rep_scan_pos_2 < 0 {
             if _kind_set_36(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_associated_item(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17669,9 +17843,15 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17690,9 +17870,15 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if rep_scan_pos_2 < 0 {
             if _kind_set_37(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_external_item(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17728,9 +17914,15 @@ fn _parse_external_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -17853,9 +18045,15 @@ fn _parse_generic_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -18161,9 +18359,15 @@ fn _parse_associated_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -18490,9 +18694,15 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -18641,9 +18851,15 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_POUND {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -18743,9 +18959,15 @@ fn _parse_expression__inner_alt_32(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -18790,9 +19012,15 @@ fn _parse_expression__inner_alt_34(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -19037,9 +19265,15 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMP
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_POUND {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -19558,9 +19792,15 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: &List<List<i32>> 
                 if rep_scan_pos < 0 {
                     if p.peek_kind() == TK_POUND {
                         let _rec_pos = p.pos;
+                        let _rec_cp = p.b.checkpoint();
+                        let _rec_sav = p.recovering;
+                        let _rec_spec = p.speculating;
+                        p.speculating = true;
                         _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                        if p.recovering || p.pos == _rec_pos { break; }
-                        continue;
+                        p.speculating = _rec_spec;
+                        p.recovering = _rec_sav;
+                        p.pos = _rec_pos;
+                        p.b.truncate(_rec_cp);
                     }
                     break;
                 }
@@ -19694,9 +19934,15 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -19751,9 +19997,15 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
             if rep_scan_pos < 0 {
                 if _kind_set_51(p.peek_kind()) {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_statement(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
@@ -20172,9 +20424,15 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: &List<List<i32>> = &
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -20303,9 +20561,15 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -20407,9 +20671,15 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -20997,9 +21267,15 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -21271,9 +21547,15 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_inner_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -21445,9 +21727,15 @@ fn _parse_match_arm__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -22406,9 +22694,15 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: &List<List<i32>> =
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -22478,9 +22772,15 @@ fn _parse_struct_pattern_et_cetera__inner(p: &mut Parser, follow: &List<List<i32
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -23687,9 +23987,15 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -23785,9 +24091,15 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
         if rep_scan_pos_2 < 0 {
             if p.peek_kind() == TK_POUND {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_outer_attribute(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }

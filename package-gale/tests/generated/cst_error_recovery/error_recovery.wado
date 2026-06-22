@@ -1234,10 +1234,12 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_PROG: NodeKind = 0;
-pub global RK_ITEM: NodeKind = 1;
-pub global RK_BLOCK: NodeKind = 2;
+pub global RK_SINGLE: NodeKind = 1;
+pub global RK_DOUBLE: NodeKind = 2;
+pub global RK_ITEM: NodeKind = 3;
+pub global RK_BLOCK: NodeKind = 4;
 
-global RULE_NAMES: List<String> = ["prog", "item", "block"];
+global RULE_NAMES: List<String> = ["prog", "single", "double", "item", "block"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1266,6 +1268,7 @@ struct Parser {
     pending: Option<ParseError>,
     recovering: bool,
     pending_code: DiagnosticCode,
+    speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -1274,7 +1277,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1366,6 +1369,11 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
         }
         if self.peek_at(1) == kind {
             self.report_extra(self.tokens.span_at(self.pos));
@@ -1501,6 +1509,26 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     return pos;
 }
 
+fn scan_single(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_item(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn scan_double(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = pos;
+    pos = scan_item(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    pos = scan_item(tokens, pos, 0);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn scan_item(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
@@ -1567,9 +1595,15 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_item(p);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -1587,6 +1621,43 @@ fn _parse_prog(p: &mut Parser) -> () {
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("prog");
+    }
+}
+
+fn _parse_single__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let item = _parse_item(p);
+    let eof = p.expect(TK_EOF, []);
+    return;
+}
+
+fn _parse_single(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_SINGLE, _start);
+    _parse_single__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("single");
+    }
+}
+
+fn _parse_double__inner(p: &mut Parser) -> () {
+    let start = p.peek_start();
+    let item = _parse_item(p);
+    let item_2 = _parse_item(p);
+    let eof = p.expect(TK_EOF, []);
+    return;
+}
+
+fn _parse_double(p: &mut Parser) -> () {
+    if p.recovering { return; }
+    let _start = p.peek_start();
+    p.b.start_node(RK_DOUBLE, _start);
+    _parse_double__inner(p);
+    p.b.finish_node(p.last_end());
+    if p.recovering {
+        p.push_rule_stack("double");
     }
 }
 
@@ -1641,9 +1712,15 @@ fn _parse_block__inner(p: &mut Parser) -> () {
         if rep_scan_pos < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_item(p);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -1686,6 +1763,14 @@ pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
 
 pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_prog(p));
+}
+
+pub fn parse_single(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_single(p));
+}
+
+pub fn parse_double(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_double(p));
 }
 
 pub fn parse_item(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {

@@ -2494,6 +2494,7 @@ struct Parser {
     pending: Option<ParseError>,
     recovering: bool,
     pending_code: DiagnosticCode,
+    speculating: bool,
     max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -2502,7 +2503,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -2594,6 +2595,11 @@ impl Parser {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
+        }
+        if self.speculating {
+            let name = token_kind_name(kind);
+            self.fail(`expected {name}, got "{self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);
+            return self.pos;
         }
         if self.peek_at(1) == kind {
             self.report_extra(self.tokens.span_at(self.pos));
@@ -3048,9 +3054,15 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3073,9 +3085,15 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos_2 < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3098,9 +3116,15 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos_3 < 0 {
             if _kind_set_0(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3120,9 +3144,15 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos_4 < 0 {
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_html_elements(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3184,9 +3214,15 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos < 0 {
             if _kind_set_2(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_html_misc(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3207,9 +3243,15 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         if rep_scan_pos_2 < 0 {
             if _kind_set_2(p.peek_kind()) {
                 let _rec_pos = p.pos;
+                let _rec_cp = p.b.checkpoint();
+                let _rec_sav = p.recovering;
+                let _rec_spec = p.speculating;
+                p.speculating = true;
                 _parse_html_misc(p, &EMPTY_FOLLOW);
-                if p.recovering || p.pos == _rec_pos { break; }
-                continue;
+                p.speculating = _rec_spec;
+                p.recovering = _rec_sav;
+                p.pos = _rec_pos;
+                p.b.truncate(_rec_cp);
             }
             break;
         }
@@ -3248,9 +3290,15 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             if rep_scan_pos < 0 {
                 if p.peek_kind() == TK_TAG_NAME {
                     let _rec_pos = p.pos;
+                    let _rec_cp = p.b.checkpoint();
+                    let _rec_sav = p.recovering;
+                    let _rec_spec = p.speculating;
+                    p.speculating = true;
                     _parse_html_attribute(p, &EMPTY_FOLLOW);
-                    if p.recovering || p.pos == _rec_pos { break; }
-                    continue;
+                    p.speculating = _rec_spec;
+                    p.recovering = _rec_sav;
+                    p.pos = _rec_pos;
+                    p.b.truncate(_rec_cp);
                 }
                 break;
             }
