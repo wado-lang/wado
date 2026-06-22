@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782167088613,
+  "lastUpdate": 1782171080522,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34881,6 +34881,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 308446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc9dabfa700a65292c685845e177b41d1a3e9390",
+          "message": "Merge pull request #1431 from wado-lang/claude/resilient-parser-refinement-ohfkzc\n\nfeat(gale): error-resilient (infallible) generated parsers",
+          "timestamp": "2026-06-23T08:22:53+09:00",
+          "tree_id": "0668858872bf453cb39f239cd94a0250670fbbba",
+          "url": "https://github.com/wado-lang/wado/commit/bc9dabfa700a65292c685845e177b41d1a3e9390"
+        },
+        "date": 1782171080029,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 283694,
             "unit": "bytes"
           }
         ]
