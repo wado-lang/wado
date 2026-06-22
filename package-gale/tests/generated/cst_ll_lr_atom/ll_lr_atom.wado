@@ -1259,6 +1259,7 @@ struct Parser {
     kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
+    recovering: bool,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1266,7 +1267,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1279,6 +1280,23 @@ impl Parser {
         if take {
             self.pending = Option::Some(e);
         }
+    }
+
+    fn fail(&mut self, message: String, span: Span, expected: List<String>) {
+        let e = self.error(message, span, expected);
+        self.record_deeper(e);
+        self.recovering = true;
+    }
+
+    fn push_rule_stack(&mut self, name: String) {
+        if let Some(e) = &mut self.pending {
+            e.rule_stack.push(name);
+        }
+    }
+
+    fn pending_message(&self) -> String {
+        if let Some(e) = &self.pending { return e.message; }
+        return String::from("");
     }
 
     fn peek_start(&self) -> i32 {
@@ -1310,46 +1328,43 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+    fn expect(&mut self, kind: i32) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 self.b.token(self.pos);
-                return Result::Ok(self.pos);
+                return self.pos;
             }
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
         let name = token_kind_name(kind);
-        return Result::Err(self.error(
+        self.fail(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
-        ));
+        );
+        return self.pos;
     }
 
-    fn fail(&self, name: String) -> Result<i32, ParseError> {
-        return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            [name],
-        ));
-    }
-
-    fn match_any(&mut self) -> Result<i32, ParseError> {
+    fn match_any(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
-        return Result::Err(self.error(
+        self.fail(
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
-        ));
+        );
+        return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -1362,34 +1377,37 @@ impl Parser {
             if !blocked {
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
-        ));
+        );
+        return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
                     self.b.token(self.pos);
-                    return Result::Ok(self.pos);
+                    return self.pos;
                 }
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
-        ));
+        );
+        return self.pos;
     }
 }
 
@@ -1471,7 +1489,7 @@ fn scan_b(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let grp_kind = p.peek_kind();
     if grp_kind == TK_X {
@@ -1489,50 +1507,50 @@ fn _parse_r__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
             }
         }
         if gd_winner == 0 {
-            let a = _parse_a(p, &FOLLOW_MASK_0)?;
-            let b = _parse_b(p, follow)?;
+            let a = _parse_a(p, &FOLLOW_MASK_0);
+            let b = _parse_b(p, follow);
         } else {
-            let a = _parse_a(p, follow)?;
+            let a = _parse_a(p, follow);
         }
     }
-    let eof = p.expect(TK_EOF)?;
-    return Result::Ok(());
+    let eof = p.expect(TK_EOF);
+    return;
 }
 
-fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_r(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_R, _start);
-    let r = _parse_r__inner(p, follow);
+    _parse_r__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("r");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("r");
     }
-    return Result::Ok(());
 }
 
-fn _parse_a__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_a__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_X {
-        let x = p.expect(TK_X)?;
+        let x = p.expect(TK_X);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Y) {
-            let y = p.expect(TK_Y)?;
+            let y = p.expect(TK_Y);
         }
-        return Result::Ok(());
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected a",
         p.peek_span(),
         ["TK_X"],
-    ));
+    );
+    return;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<(), ParseError> {
+fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner_atom(p, follow)?;
+    _parse_a__inner_atom(p, follow);
     p.b.finish_node(p.last_end());
     loop {
         let _sk = p.peek_kind();
@@ -1542,8 +1560,8 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_A, _start);
-                let plus = p.expect(TK_LIT_PLUS)?;
-                let a_2 = _parse_a(p, follow, 2)?;
+                let plus = p.expect(TK_LIT_PLUS);
+                let a_2 = _parse_a(p, follow, 2);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1552,47 +1570,46 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
             break;
         }
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> Result<(), ParseError> {
-    let r = _parse_a__inner(p, follow, min_prec);
-    if let Err(mut e) = r {
-        e.rule_stack.push("a");
-        return Result::Err(e);
+fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+    if p.recovering { return; }
+    _parse_a__inner(p, follow, min_prec);
+    if p.recovering {
+        p.push_rule_stack("a");
     }
-    return Result::Ok(());
 }
 
-fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_b__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let y = p.expect(TK_Y)?;
-    return Result::Ok(());
+    let y = p.expect(TK_Y);
+    return;
 }
 
-fn _parse_b(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_b(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_B, _start);
-    let r = _parse_b__inner(p, follow);
+    _parse_b__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("b");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("b");
     }
-    return Result::Ok(());
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     let _ = max_errors;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
-    let _r = entry(&mut p);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
+    entry(&mut p);
+    if p.recovering {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
     }
     return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }

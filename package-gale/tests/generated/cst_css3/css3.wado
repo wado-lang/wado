@@ -28357,6 +28357,7 @@ struct Parser {
     kinds: Array<i32>,
     pos: i32,
     pending: Option<ParseError>,
+    recovering: bool,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -28364,7 +28365,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -28377,6 +28378,23 @@ impl Parser {
         if take {
             self.pending = Option::Some(e);
         }
+    }
+
+    fn fail(&mut self, message: String, span: Span, expected: List<String>) {
+        let e = self.error(message, span, expected);
+        self.record_deeper(e);
+        self.recovering = true;
+    }
+
+    fn push_rule_stack(&mut self, name: String) {
+        if let Some(e) = &mut self.pending {
+            e.rule_stack.push(name);
+        }
+    }
+
+    fn pending_message(&self) -> String {
+        if let Some(e) = &self.pending { return e.message; }
+        return String::from("");
     }
 
     fn peek_start(&self) -> i32 {
@@ -28408,46 +28426,43 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32) -> Result<i32, ParseError> {
+    fn expect(&mut self, kind: i32) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
                 self.b.token(self.pos);
-                return Result::Ok(self.pos);
+                return self.pos;
             }
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
         let name = token_kind_name(kind);
-        return Result::Err(self.error(
+        self.fail(
             `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             [name],
-        ));
+        );
+        return self.pos;
     }
 
-    fn fail(&self, name: String) -> Result<i32, ParseError> {
-        return Result::Err(self.error(
-            `expected {name}, got "{self.tokens.token_text(self.pos)}"`,
-            self.tokens.span_at(self.pos),
-            [name],
-        ));
-    }
-
-    fn match_any(&mut self) -> Result<i32, ParseError> {
+    fn match_any(&mut self) -> i32 {
+        if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
             self.b.token(_i);
-            return Result::Ok(_i);
+            return _i;
         }
-        return Result::Err(self.error(
+        self.fail(
             `expected any token, got "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["any token"],
-        ));
+        );
+        return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> Result<i32, ParseError> {
+    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
             let mut blocked = false;
@@ -28460,34 +28475,37 @@ impl Parser {
             if !blocked {
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["set complement"],
-        ));
+        );
+        return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> Result<i32, ParseError> {
+    fn match_set(&mut self, included: List<i32>) -> i32 {
+        if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
             if x == k {
                 if k == TK_EOF {
                     self.b.token(self.pos);
-                    return Result::Ok(self.pos);
+                    return self.pos;
                 }
                 let _i = self.advance();
                 self.b.token(_i);
-                return Result::Ok(_i);
+                return _i;
             }
         }
-        return Result::Err(self.error(
+        self.fail(
             `unexpected token "{self.tokens.token_text(self.pos)}"`,
             self.tokens.span_at(self.pos),
             ["token set"],
-        ));
+        );
+        return self.pos;
     }
 }
 
@@ -32155,9 +32173,9 @@ fn scan_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLL
     return pos;
 }
 
-fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ws = _parse_ws(p, &FOLLOW_MASK_0)?;
+    let ws = _parse_ws(p, &FOLLOW_MASK_0);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -32208,7 +32226,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let charset = _parse_charset(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
+        let charset = _parse_charset(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -32247,7 +32265,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32300,7 +32318,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let imports = _parse_imports(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
+        let imports = _parse_imports(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -32339,7 +32357,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32392,7 +32410,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             rep_scan_pos_3 = pos;
         }
         if rep_scan_pos_3 < 0 { break; }
-        let namespace_ = _parse_namespace_(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
+        let namespace_ = _parse_namespace_(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -32431,7 +32449,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32484,7 +32502,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             rep_scan_pos_4 = pos;
         }
         if rep_scan_pos_4 < 0 { break; }
-        let nested_statement = _parse_nested_statement(p, &follow_prepend(&FOLLOW_MASK_1, follow))?;
+        let nested_statement = _parse_nested_statement(p, &follow_prepend(&FOLLOW_MASK_1, follow));
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -32523,35 +32541,34 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc])?;
+            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
-    let eof = p.expect(TK_EOF)?;
-    return Result::Ok(());
+    let eof = p.expect(TK_EOF);
+    return;
 }
 
-fn _parse_stylesheet(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_stylesheet(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_STYLESHEET, _start);
-    let r = _parse_stylesheet__inner(p, follow);
+    _parse_stylesheet__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("stylesheet");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("stylesheet");
     }
-    return Result::Ok(());
 }
 
-fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_charset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let charset = p.expect(TK_Charset)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
-    let string_ = p.expect(TK_String_)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
-    let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let charset = p.expect(TK_Charset);
+    let ws = _parse_ws(p, &FOLLOW_MASK_2);
+    let string_ = p.expect(TK_String_);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
+    let semicolon = p.expect(TK_LIT_SEMI);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32571,14 +32588,14 @@ fn _parse_charset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_charset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let charset = p.expect(TK_Charset)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
-    let string_ = p.expect(TK_String_)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let charset = p.expect(TK_Charset);
+    let ws = _parse_ws(p, &FOLLOW_MASK_2);
+    let string_ = p.expect(TK_String_);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_charset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32594,7 +32611,7 @@ fn _parse_charset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_Charset {
         let _sd_tokens = &p.kinds;
@@ -32619,41 +32636,41 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_charset__inner_alt_1(p, follow);
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected charset",
         p.peek_span(),
         ["TK_Charset"],
-    ));
+    );
+    return;
 }
 
-fn _parse_charset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_charset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CHARSET, _start);
-    let r = _parse_charset__inner(p, follow);
+    _parse_charset__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("charset");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("charset");
     }
-    return Result::Ok(());
 }
 
-fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let import_ = p.expect(TK_Import)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
+    let import_ = p.expect(TK_Import);
+    let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_5)?;
-    let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3)?;
-    let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_5);
+    let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_3);
+    let semicolon = p.expect(TK_LIT_SEMI);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32692,21 +32709,21 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let import_ = p.expect(TK_Import)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
+    let import_ = p.expect(TK_Import);
+    let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
-    let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
+    let semicolon = p.expect(TK_LIT_SEMI);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32743,20 +32760,20 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(2);
-    let import_ = p.expect(TK_Import)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
+    let import_ = p.expect(TK_Import);
+    let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, follow)?;
-    let media_query_list = _parse_media_query_list(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, follow);
+    let media_query_list = _parse_media_query_list(p, follow);
+    return;
 }
 
 fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32791,19 +32808,19 @@ fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(3);
-    let import_ = p.expect(TK_Import)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_4)?;
+    let import_ = p.expect(TK_Import);
+    let ws = _parse_ws(p, &FOLLOW_MASK_4);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_imports__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32836,7 +32853,7 @@ fn _parse_imports__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_Import {
         let _sd_tokens = &p.kinds;
@@ -32877,30 +32894,30 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_imports__inner_alt_3(p, follow);
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected imports",
         p.peek_span(),
         ["TK_Import"],
-    ));
+    );
+    return;
 }
 
-fn _parse_imports(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_imports(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_IMPORTS, _start);
-    let r = _parse_imports__inner(p, follow);
+    _parse_imports__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("imports");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("imports");
     }
-    return Result::Ok(());
 }
 
-fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let namespace = p.expect(TK_Namespace)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_6)?;
+    let namespace = p.expect(TK_Namespace);
+    let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -32912,19 +32929,19 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EM
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let namespace_prefix = _parse_namespace_prefix(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
+        let namespace_prefix = _parse_namespace_prefix(p, follow);
+        let ws = _parse_ws(p, follow);
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3)?;
-    let semicolon = p.expect(TK_LIT_SEMI)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_3);
+    let semicolon = p.expect(TK_LIT_SEMI);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -32975,11 +32992,11 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<
     return pos;
 }
 
-fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let namespace = p.expect(TK_Namespace)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_6)?;
+    let namespace = p.expect(TK_Namespace);
+    let ws = _parse_ws(p, &FOLLOW_MASK_6);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -32991,17 +33008,17 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EM
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let namespace_prefix = _parse_namespace_prefix(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
+        let namespace_prefix = _parse_namespace_prefix(p, follow);
+        let ws = _parse_ws(p, follow);
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
+        let string_ = p.expect(TK_String_);
     } else if _kind_set_2(grp_kind) {
-        let url = _parse_url(p, follow)?;
+        let url = _parse_url(p, follow);
     }
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_namespace___inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -33048,7 +33065,7 @@ fn _parse_namespace___inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<
     return pos;
 }
 
-fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_Namespace {
         let _sd_tokens = &p.kinds;
@@ -33073,66 +33090,64 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         return _parse_namespace___inner_alt_1(p, follow);
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected namespace_",
         p.peek_span(),
         ["TK_Namespace"],
-    ));
+    );
+    return;
 }
 
-fn _parse_namespace_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAMESPACE_, _start);
-    let r = _parse_namespace___inner(p, follow);
+    _parse_namespace___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("namespace_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("namespace_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = _parse_ident(p, follow)?;
-    return Result::Ok(());
+    let ident = _parse_ident(p, follow);
+    return;
 }
 
-fn _parse_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAMESPACEPREFIX, _start);
-    let r = _parse_namespace_prefix__inner(p, follow);
+    _parse_namespace_prefix__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("namespacePrefix");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("namespacePrefix");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let media = p.expect(TK_Media)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_5)?;
-    let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_7)?;
-    let group_rule_body = _parse_group_rule_body(p, follow)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let media = p.expect(TK_Media);
+    let ws = _parse_ws(p, &FOLLOW_MASK_5);
+    let media_query_list = _parse_media_query_list(p, &FOLLOW_MASK_7);
+    let group_rule_body = _parse_group_rule_body(p, follow);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_media(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIA, _start);
-    let r = _parse_media__inner(p, follow);
+    _parse_media__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("media");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("media");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -33160,7 +33175,7 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let media_query = _parse_media_query(p, follow)?;
+        let media_query = _parse_media_query(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33183,28 +33198,27 @@ fn _parse_media_query_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_Comma)?;
-            let ws = _parse_ws(p, &FOLLOW_MASK_5)?;
-            let media_query = _parse_media_query(p, follow)?;
+            let comma = p.expect(TK_Comma);
+            let ws = _parse_ws(p, &FOLLOW_MASK_5);
+            let media_query = _parse_media_query(p, follow);
         }
     }
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_media_query_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_query_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIAQUERYLIST, _start);
-    let r = _parse_media_query_list__inner(p, follow);
+    _parse_media_query_list__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("mediaQueryList");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("mediaQueryList");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
@@ -33231,11 +33245,11 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not])?;
+            let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not]);
         }
-        let ws = _parse_ws(p, &FOLLOW_MASK_8)?;
-        let media_type = _parse_media_type(p, follow)?;
-        let ws_2 = _parse_ws(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_8);
+        let media_type = _parse_media_type(p, follow);
+        let ws_2 = _parse_ws(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33258,14 +33272,14 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And)?;
-            let ws = _parse_ws(p, &FOLLOW_MASK_9)?;
-            let media_expression = _parse_media_expression(p, follow)?;
+            let and = p.expect(TK_And);
+            let ws = _parse_ws(p, &FOLLOW_MASK_9);
+            let media_expression = _parse_media_expression(p, follow);
         }
-        return Result::Ok(());
+        return;
     }
     if kind == TK_LIT_LPAREN {
-        let media_expression = _parse_media_expression(p, follow)?;
+        let media_expression = _parse_media_expression(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -33288,106 +33302,103 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let and = p.expect(TK_And)?;
-            let ws = _parse_ws(p, &FOLLOW_MASK_9)?;
-            let media_expression = _parse_media_expression(p, follow)?;
+            let and = p.expect(TK_And);
+            let ws = _parse_ws(p, &FOLLOW_MASK_9);
+            let media_expression = _parse_media_expression(p, follow);
         }
-        return Result::Ok(());
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected mediaQuery",
         p.peek_span(),
         ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_LIT_LPAREN"],
-    ));
+    );
+    return;
 }
 
-fn _parse_media_query(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_query(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIAQUERY, _start);
-    let r = _parse_media_query__inner(p, follow);
+    _parse_media_query__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("mediaQuery");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("mediaQuery");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = _parse_ident(p, follow)?;
-    return Result::Ok(());
+    let ident = _parse_ident(p, follow);
+    return;
 }
 
-fn _parse_media_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIATYPE, _start);
-    let r = _parse_media_type__inner(p, follow);
+    _parse_media_type__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("mediaType");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("mediaType");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_8)?;
-    let media_feature = _parse_media_feature(p, &FOLLOW_MASK_10)?;
+    let lparen = p.expect(TK_LIT_LPAREN);
+    let ws = _parse_ws(p, &FOLLOW_MASK_8);
+    let media_feature = _parse_media_feature(p, &FOLLOW_MASK_10);
     if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
-        let expr = _parse_expr(p, follow)?;
+        let colon = p.expect(TK_LIT_COLON);
+        let ws = _parse_ws(p, &FOLLOW_MASK_11);
+        let expr = _parse_expr(p, follow);
     }
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rparen = p.expect(TK_LIT_RPAREN);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_media_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIAEXPRESSION, _start);
-    let r = _parse_media_expression__inner(p, follow);
+    _parse_media_expression__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("mediaExpression");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("mediaExpression");
     }
-    return Result::Ok(());
 }
 
-fn _parse_media_feature__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_feature__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = _parse_ident(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let ident = _parse_ident(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_media_feature(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_media_feature(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MEDIAFEATURE, _start);
-    let r = _parse_media_feature__inner(p, follow);
+    _parse_media_feature__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("mediaFeature");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("mediaFeature");
     }
-    return Result::Ok(());
 }
 
-fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let page = p.expect(TK_Page)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_12)?;
+    let page = p.expect(TK_Page);
+    let ws = _parse_ws(p, &FOLLOW_MASK_12);
     if p.peek_kind() == TK_LIT_COLON {
-        let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW)?;
+        let pseudo_page = _parse_pseudo_page(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
-        let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
+        let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
     }
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -33413,52 +33424,50 @@ fn _parse_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
-            let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
+            let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PAGE, _start);
-    let r = _parse_page__inner(p, follow);
+    _parse_page__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("page");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("page");
     }
-    return Result::Ok(());
 }
 
-fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_pseudo_page__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ident = _parse_ident(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let colon = p.expect(TK_LIT_COLON);
+    let ident = _parse_ident(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_pseudo_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_pseudo_page(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PSEUDOPAGE, _start);
-    let r = _parse_pseudo_page__inner(p, follow);
+    _parse_pseudo_page__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("pseudoPage");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("pseudoPage");
     }
-    return Result::Ok(());
 }
 
-fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let selector = _parse_selector(p, follow)?;
+    let selector = _parse_selector(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -33481,29 +33490,28 @@ fn _parse_selector_group__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_14)?;
-        let selector = _parse_selector(p, follow)?;
+        let comma = p.expect(TK_Comma);
+        let ws = _parse_ws(p, &FOLLOW_MASK_14);
+        let selector = _parse_selector(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_selector_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_selector_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SELECTORGROUP, _start);
-    let r = _parse_selector_group__inner(p, follow);
+    _parse_selector_group__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("selectorGroup");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("selectorGroup");
     }
-    return Result::Ok(());
 }
 
-fn _parse_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let simple_selector_sequence = _parse_simple_selector_sequence(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
+    let simple_selector_sequence = _parse_simple_selector_sequence(p, follow);
+    let ws = _parse_ws(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -33526,68 +33534,67 @@ fn _parse_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let combinator = _parse_combinator(p, &FOLLOW_MASK_14)?;
-        let simple_selector_sequence = _parse_simple_selector_sequence(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
+        let combinator = _parse_combinator(p, &FOLLOW_MASK_14);
+        let simple_selector_sequence = _parse_simple_selector_sequence(p, follow);
+        let ws = _parse_ws(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SELECTOR, _start);
-    let r = _parse_selector__inner(p, follow);
+    _parse_selector__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("selector");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("selector");
     }
-    return Result::Ok(());
 }
 
-fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Plus {
-        let plus = p.expect(TK_Plus)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let plus = p.expect(TK_Plus);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Greater {
-        let greater = p.expect(TK_Greater)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let greater = p.expect(TK_Greater);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Tilde {
-        let tilde = p.expect(TK_Tilde)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let tilde = p.expect(TK_Tilde);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Space {
-        let space = p.expect(TK_Space)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let space = p.expect(TK_Space);
+        let ws = _parse_ws(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected combinator",
         p.peek_span(),
         ["TK_Plus", "TK_Greater", "TK_Tilde", "TK_Space"],
-    ));
+    );
+    return;
 }
 
-fn _parse_combinator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_combinator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COMBINATOR, _start);
-    let r = _parse_combinator__inner(p, follow);
+    _parse_combinator__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("combinator");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("combinator");
     }
-    return Result::Ok(());
 }
 
-fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_10(kind) {
@@ -33605,9 +33612,9 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
                 }
             }
             if gd_winner == 0 {
-                let type_selector = _parse_type_selector(p, &EMPTY_FOLLOW)?;
+                let type_selector = _parse_type_selector(p, &EMPTY_FOLLOW);
             } else {
-                let universal = _parse_universal(p, &EMPTY_FOLLOW)?;
+                let universal = _parse_universal(p, &EMPTY_FOLLOW);
             }
         }
         loop {
@@ -33658,18 +33665,18 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             if rep_scan_pos < 0 { break; }
             if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash)?;
+                let hash = p.expect(TK_Hash);
             } else if p.peek_kind() == TK_LIT_DOT {
-                let class_name = _parse_class_name(p, follow)?;
+                let class_name = _parse_class_name(p, follow);
             } else if p.peek_kind() == TK_LIT_LBRACKET {
-                let attrib = _parse_attrib(p, follow)?;
+                let attrib = _parse_attrib(p, follow);
             } else if p.peek_kind() == TK_LIT_COLON {
-                let pseudo = _parse_pseudo(p, follow)?;
+                let pseudo = _parse_pseudo(p, follow);
             } else {
-                let negation = _parse_negation(p, follow)?;
+                let negation = _parse_negation(p, follow);
             }
         }
-        return Result::Ok(());
+        return;
     }
     if _kind_set_11(kind) {
         let mut _plus_first = true;
@@ -33724,60 +33731,59 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
             }
             _plus_first = false;
             if p.peek_kind() == TK_Hash {
-                let hash = p.expect(TK_Hash)?;
+                let hash = p.expect(TK_Hash);
             } else if p.peek_kind() == TK_LIT_DOT {
-                let class_name = _parse_class_name(p, follow)?;
+                let class_name = _parse_class_name(p, follow);
             } else if p.peek_kind() == TK_LIT_LBRACKET {
-                let attrib = _parse_attrib(p, follow)?;
+                let attrib = _parse_attrib(p, follow);
             } else if p.peek_kind() == TK_LIT_COLON {
-                let pseudo = _parse_pseudo(p, follow)?;
+                let pseudo = _parse_pseudo(p, follow);
             } else {
-                let negation = _parse_negation(p, follow)?;
+                let negation = _parse_negation(p, follow);
             }
         }
-        return Result::Ok(());
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected simpleSelectorSequence",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot"],
-    ));
+    );
+    return;
 }
 
-fn _parse_simple_selector_sequence(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_simple_selector_sequence(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SIMPLESELECTORSEQUENCE, _start);
-    let r = _parse_simple_selector_sequence__inner(p, follow);
+    _parse_simple_selector_sequence__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("simpleSelectorSequence");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("simpleSelectorSequence");
     }
-    return Result::Ok(());
 }
 
-fn _parse_type_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_type_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if _kind_set_12(p.peek_kind()) {
-        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
     }
-    let element_name = _parse_element_name(p, follow)?;
-    return Result::Ok(());
+    let element_name = _parse_element_name(p, follow);
+    return;
 }
 
-fn _parse_type_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_type_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TYPESELECTOR, _start);
-    let r = _parse_type_selector__inner(p, follow);
+    _parse_type_selector__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("typeSelector");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("typeSelector");
     }
-    return Result::Ok(());
 }
 
-fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -33803,94 +33809,90 @@ fn _parse_type_namespace_prefix__inner(p: &mut Parser, follow: &List<List<i32>> 
     }
     if opt_scan_pos >= 0 {
         if _kind_set_4(p.peek_kind()) {
-            let ident = _parse_ident(p, follow)?;
+            let ident = _parse_ident(p, follow);
         } else {
-            let star = p.expect(TK_LIT_STAR)?;
+            let star = p.expect(TK_LIT_STAR);
         }
     }
-    let pipe = p.expect(TK_LIT_PIPE)?;
-    return Result::Ok(());
+    let pipe = p.expect(TK_LIT_PIPE);
+    return;
 }
 
-fn _parse_type_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_type_namespace_prefix(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TYPENAMESPACEPREFIX, _start);
-    let r = _parse_type_namespace_prefix__inner(p, follow);
+    _parse_type_namespace_prefix__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("typeNamespacePrefix");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("typeNamespacePrefix");
     }
-    return Result::Ok(());
 }
 
-fn _parse_element_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_element_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = _parse_ident(p, follow)?;
-    return Result::Ok(());
+    let ident = _parse_ident(p, follow);
+    return;
 }
 
-fn _parse_element_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_element_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ELEMENTNAME, _start);
-    let r = _parse_element_name__inner(p, follow);
+    _parse_element_name__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("elementName");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("elementName");
     }
-    return Result::Ok(());
 }
 
-fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_universal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     if _kind_set_14(p.peek_kind()) {
-        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
     }
-    let star = p.expect(TK_LIT_STAR)?;
-    return Result::Ok(());
+    let star = p.expect(TK_LIT_STAR);
+    return;
 }
 
-fn _parse_universal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_universal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_UNIVERSAL, _start);
-    let r = _parse_universal__inner(p, follow);
+    _parse_universal__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("universal");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("universal");
     }
-    return Result::Ok(());
 }
 
-fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_class_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dot = p.expect(TK_LIT_DOT)?;
-    let ident = _parse_ident(p, follow)?;
-    return Result::Ok(());
+    let dot = p.expect(TK_LIT_DOT);
+    let ident = _parse_ident(p, follow);
+    return;
 }
 
-fn _parse_class_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_class_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CLASSNAME, _start);
-    let r = _parse_class_name__inner(p, follow);
+    _parse_class_name__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("className");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("className");
     }
-    return Result::Ok(());
 }
 
-fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbracket = p.expect(TK_LIT_LBRACKET)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_15)?;
+    let lbracket = p.expect(TK_LIT_LBRACKET);
+    let ws = _parse_ws(p, &FOLLOW_MASK_15);
     if _kind_set_12(p.peek_kind()) {
-        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW)?;
+        let type_namespace_prefix = _parse_type_namespace_prefix(p, &EMPTY_FOLLOW);
     }
-    let ident = _parse_ident(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_17)?;
+    let ident = _parse_ident(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_17);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -33961,81 +33963,78 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.match_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch])?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_18)?;
+        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.match_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch]);
+        let ws = _parse_ws(p, &FOLLOW_MASK_18);
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
-            let ident = _parse_ident(p, follow)?;
+            let ident = _parse_ident(p, follow);
         } else if grp_kind == TK_String_ {
-            let string_ = p.expect(TK_String_)?;
+            let string_ = p.expect(TK_String_);
         }
-        let ws_2 = _parse_ws(p, follow)?;
+        let ws_2 = _parse_ws(p, follow);
     }
-    let rbracket = p.expect(TK_LIT_RBRACKET)?;
-    return Result::Ok(());
+    let rbracket = p.expect(TK_LIT_RBRACKET);
+    return;
 }
 
-fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_attrib(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ATTRIB, _start);
-    let r = _parse_attrib__inner(p, follow);
+    _parse_attrib__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("attrib");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("attrib");
     }
-    return Result::Ok(());
 }
 
-fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let colon = p.expect(TK_LIT_COLON)?;
+    let colon = p.expect(TK_LIT_COLON);
     if p.peek_kind() == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON)?;
+        let colon = p.expect(TK_LIT_COLON);
     }
     let grp_kind = p.peek_kind();
     if _kind_set_4(grp_kind) {
-        let ident = _parse_ident(p, &EMPTY_FOLLOW)?;
+        let ident = _parse_ident(p, &EMPTY_FOLLOW);
     } else if grp_kind == TK_Function_ {
-        let functional_pseudo = _parse_functional_pseudo(p, &EMPTY_FOLLOW)?;
+        let functional_pseudo = _parse_functional_pseudo(p, &EMPTY_FOLLOW);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PSEUDO, _start);
-    let r = _parse_pseudo__inner(p, follow);
+    _parse_pseudo__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("pseudo");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("pseudo");
     }
-    return Result::Ok(());
 }
 
-fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_functional_pseudo__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function_ = p.expect(TK_Function_)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_19)?;
-    let expression = _parse_expression(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let function_ = p.expect(TK_Function_);
+    let ws = _parse_ws(p, &FOLLOW_MASK_19);
+    let expression = _parse_expression(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    return;
 }
 
-fn _parse_functional_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_functional_pseudo(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FUNCTIONALPSEUDO, _start);
-    let r = _parse_functional_pseudo__inner(p, follow);
+    _parse_functional_pseudo__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("functionalPseudo");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("functionalPseudo");
     }
-    return Result::Ok(());
 }
 
-fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut _plus_first = true;
     loop {
@@ -34110,72 +34109,70 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Plus {
-            let plus = p.expect(TK_Plus)?;
+            let plus = p.expect(TK_Plus);
         } else if grp_kind == TK_Minus {
-            let minus = p.expect(TK_Minus)?;
+            let minus = p.expect(TK_Minus);
         } else if grp_kind == TK_Dimension {
-            let dimension = p.expect(TK_Dimension)?;
+            let dimension = p.expect(TK_Dimension);
         } else if grp_kind == TK_UnknownDimension {
-            let unknowndimension = p.expect(TK_UnknownDimension)?;
+            let unknowndimension = p.expect(TK_UnknownDimension);
         } else if grp_kind == TK_Number {
-            let number = p.expect(TK_Number)?;
+            let number = p.expect(TK_Number);
         } else if grp_kind == TK_String_ {
-            let string_ = p.expect(TK_String_)?;
+            let string_ = p.expect(TK_String_);
         } else if _kind_set_4(grp_kind) {
-            let ident = _parse_ident(p, follow)?;
+            let ident = _parse_ident(p, follow);
         }
-        let ws = _parse_ws(p, follow)?;
+        let ws = _parse_ws(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    let r = _parse_expression__inner(p, follow);
+    _parse_expression__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("expression");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("expression");
     }
-    return Result::Ok(());
 }
 
-fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let pseudonot = p.expect(TK_PseudoNot)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_21)?;
-    let negation_arg = _parse_negation_arg(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let pseudonot = p.expect(TK_PseudoNot);
+    let ws = _parse_ws(p, &FOLLOW_MASK_21);
+    let negation_arg = _parse_negation_arg(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    return;
 }
 
-fn _parse_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NEGATION, _start);
-    let r = _parse_negation__inner(p, follow);
+    _parse_negation__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("negation");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("negation");
     }
-    return Result::Ok(());
 }
 
-fn _parse_negation_arg__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation_arg__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let type_selector = _parse_type_selector(p, follow)?;
-    return Result::Ok(());
+    let type_selector = _parse_type_selector(p, follow);
+    return;
 }
 
-fn _parse_negation_arg__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation_arg__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let universal = _parse_universal(p, follow)?;
-    return Result::Ok(());
+    let universal = _parse_universal(p, follow);
+    return;
 }
 
-fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_10(kind) {
@@ -34236,133 +34233,133 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash)?;
-        return Result::Ok(());
+        let hash = p.expect(TK_Hash);
+        return;
     }
     if kind == TK_LIT_DOT {
-        let class_name = _parse_class_name(p, follow)?;
-        return Result::Ok(());
+        let class_name = _parse_class_name(p, follow);
+        return;
     }
     if kind == TK_LIT_LBRACKET {
-        let attrib = _parse_attrib(p, follow)?;
-        return Result::Ok(());
+        let attrib = _parse_attrib(p, follow);
+        return;
     }
     if kind == TK_LIT_COLON {
-        let pseudo = _parse_pseudo(p, follow)?;
-        return Result::Ok(());
+        let pseudo = _parse_pseudo(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected negationArg",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON"],
-    ));
+    );
+    return;
 }
 
-fn _parse_negation_arg(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_negation_arg(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NEGATIONARG, _start);
-    let r = _parse_negation_arg__inner(p, follow);
+    _parse_negation_arg__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("negationArg");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("negationArg");
     }
-    return Result::Ok(());
 }
 
-fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_SLASH {
         p.b.set_alt(0);
-        let slash = p.expect(TK_LIT_SLASH)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let slash = p.expect(TK_LIT_SLASH);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Comma {
         p.b.set_alt(1);
-        let comma = p.expect(TK_Comma)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let comma = p.expect(TK_Comma);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Space {
         p.b.set_alt(2);
-        let space = p.expect(TK_Space)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let space = p.expect(TK_Space);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_EQ {
         p.b.set_alt(3);
-        let eq = p.expect(TK_LIT_EQ)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let eq = p.expect(TK_LIT_EQ);
+        let ws = _parse_ws(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected operator_",
         p.peek_span(),
         ["TK_LIT_SLASH", "TK_Comma", "TK_Space", "TK_LIT_EQ"],
-    ));
+    );
+    return;
 }
 
-fn _parse_operator_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_operator_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_OPERATOR_, _start);
-    let r = _parse_operator___inner(p, follow);
+    _parse_operator___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("operator_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("operator_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.b.set_alt(0);
-        let ident = _parse_ident(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let ident = _parse_ident(p, follow);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Variable {
         p.b.set_alt(1);
-        let variable = p.expect(TK_Variable)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let variable = p.expect(TK_Variable);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_STAR {
         p.b.set_alt(2);
-        let star = p.expect(TK_LIT_STAR)?;
-        let ident = _parse_ident(p, follow)?;
-        return Result::Ok(());
+        let star = p.expect(TK_LIT_STAR);
+        let ident = _parse_ident(p, follow);
+        return;
     }
     if kind == TK_LIT_U5f {
         p.b.set_alt(3);
-        let lit_u5f = p.expect(TK_LIT_U5f)?;
-        let ident = _parse_ident(p, follow)?;
-        return Result::Ok(());
+        let lit_u5f = p.expect(TK_LIT_U5f);
+        let ident = _parse_ident(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected property_",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-    ));
+    );
+    return;
 }
 
-fn _parse_property_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_property_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PROPERTY_, _start);
-    let r = _parse_property___inner(p, follow);
+    _parse_property___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("property_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("property_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
     loop {
@@ -34379,22 +34376,24 @@ fn _parse_ruleset__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             if _kind_set_20(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                if let Err(_rec_e) = _parse_any_(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                let _rec_sav = p.recovering;
+                _parse_any_(p, &EMPTY_FOLLOW);
+                p.recovering = _rec_sav;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }
             break;
         }
-        let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+        let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
-        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
+        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -34421,18 +34420,18 @@ fn _parse_ruleset__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ruleset__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let selector_group = _parse_selector_group(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let selector_group = _parse_selector_group(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
-        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
+        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
 fn _parse_ruleset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -34455,7 +34454,7 @@ fn _parse_ruleset__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     return pos;
 }
 
-fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
         if _kind_set_34(p.peek_kind()) {
@@ -34486,26 +34485,26 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             return _parse_ruleset__inner_alt_1(p, follow);
         }
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected ruleset",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE"],
-    ));
+    );
+    return;
 }
 
-fn _parse_ruleset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ruleset(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_RULESET, _start);
-    let r = _parse_ruleset__inner(p, follow);
+    _parse_ruleset__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("ruleset");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("ruleset");
     }
-    return Result::Ok(());
 }
 
-fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -34526,11 +34525,11 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
     }
-    let declaration = _parse_declaration(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
+    let declaration = _parse_declaration(p, follow);
+    let ws = _parse_ws(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
@@ -34556,38 +34555,37 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
-            let declaration = _parse_declaration(p, &EMPTY_FOLLOW)?;
+            let declaration = _parse_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_declaration_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_DECLARATIONLIST, _start);
-    let r = _parse_declaration_list__inner(p, follow);
+    _parse_declaration_list__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("declarationList");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("declarationList");
     }
-    return Result::Ok(());
 }
 
-fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
-    let expr = _parse_expr(p, follow)?;
+    let property_ = _parse_property_(p, &FOLLOW_MASK_22);
+    let colon = p.expect(TK_LIT_COLON);
+    let ws = _parse_ws(p, &FOLLOW_MASK_11);
+    let expr = _parse_expr(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Important) {
-        let prio = _parse_prio(p, &EMPTY_FOLLOW)?;
+        let prio = _parse_prio(p, &EMPTY_FOLLOW);
     }
-    return Result::Ok(());
+    return;
 }
 
 fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -34608,14 +34606,14 @@ fn _parse_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_23)?;
-    let value = _parse_value(p, follow)?;
-    return Result::Ok(());
+    let property_ = _parse_property_(p, &FOLLOW_MASK_22);
+    let colon = p.expect(TK_LIT_COLON);
+    let ws = _parse_ws(p, &FOLLOW_MASK_23);
+    let value = _parse_value(p, follow);
+    return;
 }
 
 fn _parse_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -34631,7 +34629,7 @@ fn _parse_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         if _kind_set_8(p.peek_kind()) {
@@ -34658,45 +34656,44 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             return _parse_declaration__inner_alt_1(p, follow);
         }
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected declaration",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-    ));
+    );
+    return;
 }
 
-fn _parse_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_DECLARATION, _start);
-    let r = _parse_declaration__inner(p, follow);
+    _parse_declaration__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("declaration");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("declaration");
     }
-    return Result::Ok(());
 }
 
-fn _parse_prio__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_prio__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let important = p.expect(TK_Important)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let important = p.expect(TK_Important);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_prio(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_prio(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PRIO, _start);
-    let r = _parse_prio__inner(p, follow);
+    _parse_prio__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("prio");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("prio");
     }
-    return Result::Ok(());
 }
 
-fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut _plus_first = true;
     loop {
@@ -34740,32 +34737,31 @@ fn _parse_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
         _plus_first = false;
         if _kind_set_20(p.peek_kind()) {
-            let any_ = _parse_any_(p, follow)?;
+            let any_ = _parse_any_(p, follow);
         } else if p.peek_kind() == TK_LIT_LBRACE {
-            let block = _parse_block(p, follow)?;
+            let block = _parse_block(p, follow);
         } else {
-            let atkeyword = p.expect(TK_AtKeyword)?;
-            let ws = _parse_ws(p, follow)?;
+            let atkeyword = p.expect(TK_AtKeyword);
+            let ws = _parse_ws(p, follow);
         }
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VALUE, _start);
-    let r = _parse_value__inner(p, follow);
+    _parse_value__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("value");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("value");
     }
-    return Result::Ok(());
 }
 
-fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let term = _parse_term(p, follow)?;
+    let term = _parse_term(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -34790,58 +34786,57 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         if rep_scan_pos < 0 { break; }
         if _kind_set_22(p.peek_kind()) {
-            let operator_ = _parse_operator_(p, &EMPTY_FOLLOW)?;
+            let operator_ = _parse_operator_(p, &EMPTY_FOLLOW);
         }
-        let term = _parse_term(p, follow)?;
+        let term = _parse_term(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    let r = _parse_expr__inner(p, follow);
+    _parse_expr__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("expr");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("expr");
     }
-    return Result::Ok(());
 }
 
-fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let number = _parse_number(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let number = _parse_number(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let percentage = _parse_percentage(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let percentage = _parse_percentage(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(2);
-    let dimension = _parse_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let dimension = _parse_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term__inner_alt_11(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(11);
-    let unknown_dimension = _parse_unknown_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let unknown_dimension = _parse_unknown_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_38(kind) {
@@ -34877,136 +34872,133 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     }
     if kind == TK_String_ {
         p.b.set_alt(3);
-        let string_ = p.expect(TK_String_)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let string_ = p.expect(TK_String_);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_UnicodeRange {
         p.b.set_alt(4);
-        let unicoderange = p.expect(TK_UnicodeRange)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let unicoderange = p.expect(TK_UnicodeRange);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if _kind_set_4(kind) {
         p.b.set_alt(5);
-        let ident = _parse_ident(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let ident = _parse_ident(p, follow);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Var {
         p.b.set_alt(6);
-        let var_ = _parse_var_(p, follow)?;
-        return Result::Ok(());
+        let var_ = _parse_var_(p, follow);
+        return;
     }
     if _kind_set_2(kind) {
         p.b.set_alt(7);
-        let url = _parse_url(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let url = _parse_url(p, follow);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Hash {
         p.b.set_alt(8);
-        let hexcolor = _parse_hexcolor(p, follow)?;
-        return Result::Ok(());
+        let hexcolor = _parse_hexcolor(p, follow);
+        return;
     }
     if kind == TK_Calc {
         p.b.set_alt(9);
-        let calc = _parse_calc(p, follow)?;
-        return Result::Ok(());
+        let calc = _parse_calc(p, follow);
+        return;
     }
     if kind == TK_Function_ {
         p.b.set_alt(10);
-        let function_ = _parse_function_(p, follow)?;
-        return Result::Ok(());
+        let function_ = _parse_function_(p, follow);
+        return;
     }
     if kind == TK_DxImageTransform {
         p.b.set_alt(12);
-        let dx_image_transform = _parse_dx_image_transform(p, follow)?;
-        return Result::Ok(());
+        let dx_image_transform = _parse_dx_image_transform(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected term",
         p.peek_span(),
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_String_", "TK_UnicodeRange", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Var", "TK_Url_", "TK_Url", "TK_Hash", "TK_Calc", "TK_Function_", "TK_UnknownDimension", "TK_DxImageTransform"],
-    ));
+    );
+    return;
 }
 
-fn _parse_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_term(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TERM, _start);
-    let r = _parse_term__inner(p, follow);
+    _parse_term__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("term");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("term");
     }
-    return Result::Ok(());
 }
 
-fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_function___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function_ = p.expect(TK_Function_)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
-    let expr = _parse_expr(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let function_ = p.expect(TK_Function_);
+    let ws = _parse_ws(p, &FOLLOW_MASK_11);
+    let expr = _parse_expr(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_function_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_function_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FUNCTION_, _start);
-    let r = _parse_function___inner(p, follow);
+    _parse_function___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("function_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("function_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_dx_image_transform__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dximagetransform = p.expect(TK_DxImageTransform)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
-    let expr = _parse_expr(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let dximagetransform = p.expect(TK_DxImageTransform);
+    let ws = _parse_ws(p, &FOLLOW_MASK_11);
+    let expr = _parse_expr(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_dx_image_transform(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_dx_image_transform(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_DXIMAGETRANSFORM, _start);
-    let r = _parse_dx_image_transform__inner(p, follow);
+    _parse_dx_image_transform__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("dxImageTransform");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("dxImageTransform");
     }
-    return Result::Ok(());
 }
 
-fn _parse_hexcolor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_hexcolor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let hash = p.expect(TK_Hash)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let hash = p.expect(TK_Hash);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_hexcolor(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_hexcolor(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HEXCOLOR, _start);
-    let r = _parse_hexcolor__inner(p, follow);
+    _parse_hexcolor__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("hexcolor");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("hexcolor");
     }
-    return Result::Ok(());
 }
 
-fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -35031,25 +35023,24 @@ fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let number = p.expect(TK_Number)?;
-    return Result::Ok(());
+    let number = p.expect(TK_Number);
+    return;
 }
 
-fn _parse_number(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_number(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NUMBER, _start);
-    let r = _parse_number__inner(p, follow);
+    _parse_number__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("number");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("number");
     }
-    return Result::Ok(());
 }
 
-fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -35074,25 +35065,24 @@ fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let percentage = p.expect(TK_Percentage)?;
-    return Result::Ok(());
+    let percentage = p.expect(TK_Percentage);
+    return;
 }
 
-fn _parse_percentage(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_percentage(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PERCENTAGE, _start);
-    let r = _parse_percentage__inner(p, follow);
+    _parse_percentage__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("percentage");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("percentage");
     }
-    return Result::Ok(());
 }
 
-fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -35117,25 +35107,24 @@ fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let dimension = p.expect(TK_Dimension)?;
-    return Result::Ok(());
+    let dimension = p.expect(TK_Dimension);
+    return;
 }
 
-fn _parse_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_DIMENSION, _start);
-    let r = _parse_dimension__inner(p, follow);
+    _parse_dimension__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("dimension");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("dimension");
     }
-    return Result::Ok(());
 }
 
-fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -35160,59 +35149,58 @@ fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
     }
-    let unknowndimension = p.expect(TK_UnknownDimension)?;
-    return Result::Ok(());
+    let unknowndimension = p.expect(TK_UnknownDimension);
+    return;
 }
 
-fn _parse_unknown_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_unknown_dimension(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_UNKNOWNDIMENSION, _start);
-    let r = _parse_unknown_dimension__inner(p, follow);
+    _parse_unknown_dimension__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("unknownDimension");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("unknownDimension");
     }
-    return Result::Ok(());
 }
 
-fn _parse_any___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any___inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let number = _parse_number(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let number = _parse_number(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_any___inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any___inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let percentage = _parse_percentage(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let percentage = _parse_percentage(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_any___inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any___inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dimension = _parse_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let dimension = _parse_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_any___inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any___inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let unknown_dimension = _parse_unknown_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let unknown_dimension = _parse_unknown_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
-        let ident = _parse_ident(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let ident = _parse_ident(p, follow);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if _kind_set_38(kind) {
         if p.peek_kind() == TK_Plus {
@@ -35246,43 +35234,43 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
     }
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let string_ = p.expect(TK_String_);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if _kind_set_2(kind) {
-        let url = _parse_url(p, follow)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let url = _parse_url(p, follow);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Hash {
-        let hash = p.expect(TK_Hash)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let hash = p.expect(TK_Hash);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_UnicodeRange {
-        let unicoderange = p.expect(TK_UnicodeRange)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let unicoderange = p.expect(TK_UnicodeRange);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Includes {
-        let includes = p.expect(TK_Includes)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let includes = p.expect(TK_Includes);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_DashMatch {
-        let dashmatch = p.expect(TK_DashMatch)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let dashmatch = p.expect(TK_DashMatch);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_COLON {
-        let colon = p.expect(TK_LIT_COLON)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let colon = p.expect(TK_LIT_COLON);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Function_ {
-        let function_ = p.expect(TK_Function_)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_24)?;
+        let function_ = p.expect(TK_Function_);
+        let ws = _parse_ws(p, &FOLLOW_MASK_24);
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -35312,18 +35300,18 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             }
             if rep_scan_pos < 0 { break; }
             if _kind_set_20(p.peek_kind()) {
-                let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+                let any_ = _parse_any_(p, &EMPTY_FOLLOW);
             } else {
-                let unused = _parse_unused(p, &EMPTY_FOLLOW)?;
+                let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let rparen = p.expect(TK_LIT_RPAREN);
+        let ws_2 = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_24)?;
+        let lparen = p.expect(TK_LIT_LPAREN);
+        let ws = _parse_ws(p, &FOLLOW_MASK_24);
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -35353,18 +35341,18 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             }
             if rep_scan_pos < 0 { break; }
             if _kind_set_20(p.peek_kind()) {
-                let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+                let any_ = _parse_any_(p, &EMPTY_FOLLOW);
             } else {
-                let unused = _parse_unused(p, &EMPTY_FOLLOW)?;
+                let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let rparen = p.expect(TK_LIT_RPAREN);
+        let ws_2 = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_25)?;
+        let lbracket = p.expect(TK_LIT_LBRACKET);
+        let ws = _parse_ws(p, &FOLLOW_MASK_25);
         loop {
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -35394,39 +35382,39 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             }
             if rep_scan_pos < 0 { break; }
             if _kind_set_20(p.peek_kind()) {
-                let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+                let any_ = _parse_any_(p, &EMPTY_FOLLOW);
             } else {
-                let unused = _parse_unused(p, &EMPTY_FOLLOW)?;
+                let unused = _parse_unused(p, &EMPTY_FOLLOW);
             }
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET)?;
-        let ws_2 = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let rbracket = p.expect(TK_LIT_RBRACKET);
+        let ws_2 = _parse_ws(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected any_",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_LIT_COLON", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACKET"],
-    ));
+    );
+    return;
 }
 
-fn _parse_any_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_any_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ANY_, _start);
-    let r = _parse_any___inner(p, follow);
+    _parse_any___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("any_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("any_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let atkeyword = p.expect(TK_AtKeyword)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_26)?;
+    let atkeyword = p.expect(TK_AtKeyword);
+    let ws = _parse_ws(p, &FOLLOW_MASK_26);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -35441,86 +35429,87 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             if _kind_set_20(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                if let Err(_rec_e) = _parse_any_(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                let _rec_sav = p.recovering;
+                _parse_any_(p, &EMPTY_FOLLOW);
+                p.recovering = _rec_sav;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }
             break;
         }
-        let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+        let any_ = _parse_any_(p, &EMPTY_FOLLOW);
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_LBRACE {
-        let block = _parse_block(p, follow)?;
+        let block = _parse_block(p, follow);
     } else if grp_kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_at_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_at_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ATRULE, _start);
-    let r = _parse_at_rule__inner(p, follow);
+    _parse_at_rule__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("atRule");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("atRule");
     }
-    return Result::Ok(());
 }
 
-fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        let block = _parse_block(p, follow)?;
-        return Result::Ok(());
+        let block = _parse_block(p, follow);
+        return;
     }
     if kind == TK_AtKeyword {
-        let atkeyword = p.expect(TK_AtKeyword)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let atkeyword = p.expect(TK_AtKeyword);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_LIT_SEMI {
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Cdo {
-        let cdo = p.expect(TK_Cdo)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let cdo = p.expect(TK_Cdo);
+        let ws = _parse_ws(p, follow);
+        return;
     }
     if kind == TK_Cdc {
-        let cdc = p.expect(TK_Cdc)?;
-        let ws = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let cdc = p.expect(TK_Cdc);
+        let ws = _parse_ws(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected unused",
         p.peek_span(),
         ["TK_LIT_LBRACE", "TK_AtKeyword", "TK_LIT_SEMI", "TK_Cdo", "TK_Cdc"],
-    ));
+    );
+    return;
 }
 
-fn _parse_unused(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_unused(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_UNUSED, _start);
-    let r = _parse_unused__inner(p, follow);
+    _parse_unused__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("unused");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("unused");
     }
-    return Result::Ok(());
 }
 
-fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_27)?;
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws = _parse_ws(p, &FOLLOW_MASK_27);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -35629,105 +35618,104 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 }
             }
             if gd_winner == 0 {
-                let atkeyword = p.expect(TK_AtKeyword)?;
-                let ws = _parse_ws(p, follow)?;
+                let atkeyword = p.expect(TK_AtKeyword);
+                let ws = _parse_ws(p, follow);
             } else if gd_winner == 1 {
-                let semicolon = p.expect(TK_LIT_SEMI)?;
-                let ws = _parse_ws(p, follow)?;
+                let semicolon = p.expect(TK_LIT_SEMI);
+                let ws = _parse_ws(p, follow);
             } else if gd_winner == 2 {
-                let declaration_list = _parse_declaration_list(p, follow)?;
+                let declaration_list = _parse_declaration_list(p, follow);
             } else if gd_winner == 3 {
-                let nested_statement = _parse_nested_statement(p, follow)?;
+                let nested_statement = _parse_nested_statement(p, follow);
             } else if gd_winner == 4 {
-                let any_ = _parse_any_(p, follow)?;
+                let any_ = _parse_any_(p, follow);
             } else {
-                let block = _parse_block(p, follow)?;
+                let block = _parse_block(p, follow);
             }
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_BLOCK, _start);
-    let r = _parse_block__inner(p, follow);
+    _parse_block__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("block");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("block");
     }
-    return Result::Ok(());
 }
 
-fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
-        let ruleset = _parse_ruleset(p, follow)?;
-        return Result::Ok(());
+        let ruleset = _parse_ruleset(p, follow);
+        return;
     }
     if kind == TK_Media {
-        let media = _parse_media(p, follow)?;
-        return Result::Ok(());
+        let media = _parse_media(p, follow);
+        return;
     }
     if kind == TK_Page {
-        let page = _parse_page(p, follow)?;
-        return Result::Ok(());
+        let page = _parse_page(p, follow);
+        return;
     }
     if kind == TK_FontFace {
-        let font_face_rule = _parse_font_face_rule(p, follow)?;
-        return Result::Ok(());
+        let font_face_rule = _parse_font_face_rule(p, follow);
+        return;
     }
     if kind == TK_Keyframes {
-        let keyframes_rule = _parse_keyframes_rule(p, follow)?;
-        return Result::Ok(());
+        let keyframes_rule = _parse_keyframes_rule(p, follow);
+        return;
     }
     if kind == TK_Supports {
-        let supports_rule = _parse_supports_rule(p, follow)?;
-        return Result::Ok(());
+        let supports_rule = _parse_supports_rule(p, follow);
+        return;
     }
     if kind == TK_Viewport {
-        let viewport = _parse_viewport(p, follow)?;
-        return Result::Ok(());
+        let viewport = _parse_viewport(p, follow);
+        return;
     }
     if kind == TK_CounterStyle {
-        let counter_style = _parse_counter_style(p, follow)?;
-        return Result::Ok(());
+        let counter_style = _parse_counter_style(p, follow);
+        return;
     }
     if kind == TK_FontFeatureValues {
-        let font_feature_values_rule = _parse_font_feature_values_rule(p, follow)?;
-        return Result::Ok(());
+        let font_feature_values_rule = _parse_font_feature_values_rule(p, follow);
+        return;
     }
     if kind == TK_AtKeyword {
-        let at_rule = _parse_at_rule(p, follow)?;
-        return Result::Ok(());
+        let at_rule = _parse_at_rule(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected nestedStatement",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
-    ));
+    );
+    return;
 }
 
-fn _parse_nested_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_nested_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NESTEDSTATEMENT, _start);
-    let r = _parse_nested_statement__inner(p, follow);
+    _parse_nested_statement__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("nestedStatement");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("nestedStatement");
     }
-    return Result::Ok(());
 }
 
-fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_28)?;
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws = _parse_ws(p, &FOLLOW_MASK_28);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -35742,57 +35730,57 @@ fn _parse_group_rule_body__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             if _kind_set_1(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                if let Err(_rec_e) = _parse_nested_statement(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                let _rec_sav = p.recovering;
+                _parse_nested_statement(p, &EMPTY_FOLLOW);
+                p.recovering = _rec_sav;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }
             break;
         }
-        let nested_statement = _parse_nested_statement(p, &EMPTY_FOLLOW)?;
+        let nested_statement = _parse_nested_statement(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_group_rule_body(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_group_rule_body(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_GROUPRULEBODY, _start);
-    let r = _parse_group_rule_body__inner(p, follow);
+    _parse_group_rule_body__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("groupRuleBody");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("groupRuleBody");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports = p.expect(TK_Supports)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_29)?;
-    let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let group_rule_body = _parse_group_rule_body(p, follow)?;
-    return Result::Ok(());
+    let supports = p.expect(TK_Supports);
+    let ws = _parse_ws(p, &FOLLOW_MASK_29);
+    let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
+    let group_rule_body = _parse_group_rule_body(p, follow);
+    return;
 }
 
-fn _parse_supports_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSRULE, _start);
-    let r = _parse_supports_rule__inner(p, follow);
+    _parse_supports_rule__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsRule");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsRule");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_condition__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_conjunction = _parse_supports_conjunction(p, follow)?;
-    return Result::Ok(());
+    let supports_conjunction = _parse_supports_conjunction(p, follow);
+    return;
 }
 
 fn _parse_supports_condition__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35802,10 +35790,10 @@ fn _parse_supports_condition__inner_scan_1(tokens: &Array<i32>, pos: i32, follow
     return pos;
 }
 
-fn _parse_supports_condition__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_disjunction = _parse_supports_disjunction(p, follow)?;
-    return Result::Ok(());
+    let supports_disjunction = _parse_supports_disjunction(p, follow);
+    return;
 }
 
 fn _parse_supports_condition__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35815,10 +35803,10 @@ fn _parse_supports_condition__inner_scan_2(tokens: &Array<i32>, pos: i32, follow
     return pos;
 }
 
-fn _parse_supports_condition__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
-    return Result::Ok(());
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
+    return;
 }
 
 fn _parse_supports_condition__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35828,12 +35816,12 @@ fn _parse_supports_condition__inner_scan_3(tokens: &Array<i32>, pos: i32, follow
     return pos;
 }
 
-fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Not {
-        let supports_negation = _parse_supports_negation(p, follow)?;
-        return Result::Ok(());
+        let supports_negation = _parse_supports_negation(p, follow);
+        return;
     }
     if _kind_set_37(kind) {
         if _kind_set_37(p.peek_kind()) {
@@ -35868,33 +35856,33 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
             return _parse_supports_condition__inner_alt_3(p, follow);
         }
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected supportsCondition",
         p.peek_span(),
         ["TK_Not", "TK_LIT_LPAREN", "TK_Function_"],
-    ));
+    );
+    return;
 }
 
-fn _parse_supports_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSCONDITION, _start);
-    let r = _parse_supports_condition__inner(p, follow);
+    _parse_supports_condition__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsCondition");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsCondition");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_29)?;
-    let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let lparen = p.expect(TK_LIT_LPAREN);
+    let ws = _parse_ws(p, &FOLLOW_MASK_29);
+    let supports_condition = _parse_supports_condition(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    return;
 }
 
 fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35912,10 +35900,10 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i
     return pos;
 }
 
-fn _parse_supports_condition_in_parens__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition_in_parens__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_declaration_condition = _parse_supports_declaration_condition(p, follow)?;
-    return Result::Ok(());
+    let supports_declaration_condition = _parse_supports_declaration_condition(p, follow);
+    return;
 }
 
 fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35925,10 +35913,10 @@ fn _parse_supports_condition_in_parens__inner_scan_1(tokens: &Array<i32>, pos: i
     return pos;
 }
 
-fn _parse_supports_condition_in_parens__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition_in_parens__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let general_enclosed = _parse_general_enclosed(p, follow)?;
-    return Result::Ok(());
+    let general_enclosed = _parse_general_enclosed(p, follow);
+    return;
 }
 
 fn _parse_supports_condition_in_parens__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -35938,7 +35926,7 @@ fn _parse_supports_condition_in_parens__inner_scan_2(tokens: &Array<i32>, pos: i
     return pos;
 }
 
-fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_37(kind) {
         if p.peek_kind() == TK_LIT_LPAREN {
@@ -35975,50 +35963,49 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
             return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
         }
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected supportsConditionInParens",
         p.peek_span(),
         ["TK_LIT_LPAREN", "TK_Function_"],
-    ));
+    );
+    return;
 }
 
-fn _parse_supports_condition_in_parens(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_condition_in_parens(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSCONDITIONINPARENS, _start);
-    let r = _parse_supports_condition_in_parens__inner(p, follow);
+    _parse_supports_condition_in_parens__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsConditionInParens");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsConditionInParens");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_negation__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let not = p.expect(TK_Not)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_30)?;
-    let space = p.expect(TK_Space)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_31)?;
-    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
-    return Result::Ok(());
+    let not = p.expect(TK_Not);
+    let ws = _parse_ws(p, &FOLLOW_MASK_30);
+    let space = p.expect(TK_Space);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_31);
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
+    return;
 }
 
-fn _parse_supports_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_negation(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSNEGATION, _start);
-    let r = _parse_supports_negation__inner(p, follow);
+    _parse_supports_negation__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsNegation");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsNegation");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_16)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_16);
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -36055,33 +36042,32 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = _parse_ws(p, &FOLLOW_MASK_30)?;
-        let space = p.expect(TK_Space)?;
-        let ws_2 = _parse_ws(p, &FOLLOW_MASK_32)?;
-        let and = p.expect(TK_And)?;
-        let ws_3 = _parse_ws(p, &FOLLOW_MASK_30)?;
-        let space_2 = p.expect(TK_Space)?;
-        let ws_4 = _parse_ws(p, &FOLLOW_MASK_31)?;
-        let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_30);
+        let space = p.expect(TK_Space);
+        let ws_2 = _parse_ws(p, &FOLLOW_MASK_32);
+        let and = p.expect(TK_And);
+        let ws_3 = _parse_ws(p, &FOLLOW_MASK_30);
+        let space_2 = p.expect(TK_Space);
+        let ws_4 = _parse_ws(p, &FOLLOW_MASK_31);
+        let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_supports_conjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_conjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSCONJUNCTION, _start);
-    let r = _parse_supports_conjunction__inner(p, follow);
+    _parse_supports_conjunction__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsConjunction");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsConjunction");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_16)?;
+    let supports_condition_in_parens = _parse_supports_condition_in_parens(p, &FOLLOW_MASK_16);
     let mut _plus_first = true;
     loop {
         if !_plus_first {
@@ -36118,54 +36104,52 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: &List<List<i32>> =
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let ws = _parse_ws(p, &FOLLOW_MASK_30)?;
-        let space = p.expect(TK_Space)?;
-        let ws_2 = _parse_ws(p, &FOLLOW_MASK_33)?;
-        let or = p.expect(TK_Or)?;
-        let ws_3 = _parse_ws(p, &FOLLOW_MASK_30)?;
-        let space_2 = p.expect(TK_Space)?;
-        let ws_4 = _parse_ws(p, &FOLLOW_MASK_31)?;
-        let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_30);
+        let space = p.expect(TK_Space);
+        let ws_2 = _parse_ws(p, &FOLLOW_MASK_33);
+        let or = p.expect(TK_Or);
+        let ws_3 = _parse_ws(p, &FOLLOW_MASK_30);
+        let space_2 = p.expect(TK_Space);
+        let ws_4 = _parse_ws(p, &FOLLOW_MASK_31);
+        let supports_condition_in_parens = _parse_supports_condition_in_parens(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_supports_disjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_disjunction(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSDISJUNCTION, _start);
-    let r = _parse_supports_disjunction__inner(p, follow);
+    _parse_supports_disjunction__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsDisjunction");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsDisjunction");
     }
-    return Result::Ok(());
 }
 
-fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_34)?;
-    let declaration = _parse_declaration(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let lparen = p.expect(TK_LIT_LPAREN);
+    let ws = _parse_ws(p, &FOLLOW_MASK_34);
+    let declaration = _parse_declaration(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    return;
 }
 
-fn _parse_supports_declaration_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_supports_declaration_condition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUPPORTSDECLARATIONCONDITION, _start);
-    let r = _parse_supports_declaration_condition__inner(p, follow);
+    _parse_supports_declaration_condition__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("supportsDeclarationCondition");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("supportsDeclarationCondition");
     }
-    return Result::Ok(());
 }
 
-fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function__or_lparen = p.match_set([TK_Function_, TK_LIT_LPAREN])?;
+    let function__or_lparen = p.match_set([TK_Function_, TK_LIT_LPAREN]);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -36195,109 +36179,106 @@ fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         if rep_scan_pos < 0 { break; }
         if _kind_set_20(p.peek_kind()) {
-            let any_ = _parse_any_(p, &EMPTY_FOLLOW)?;
+            let any_ = _parse_any_(p, &EMPTY_FOLLOW);
         } else {
-            let unused = _parse_unused(p, &EMPTY_FOLLOW)?;
+            let unused = _parse_unused(p, &EMPTY_FOLLOW);
         }
     }
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    return Result::Ok(());
+    let rparen = p.expect(TK_LIT_RPAREN);
+    return;
 }
 
-fn _parse_general_enclosed(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_general_enclosed(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_GENERALENCLOSED, _start);
-    let r = _parse_general_enclosed__inner(p, follow);
+    _parse_general_enclosed__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("generalEnclosed");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("generalEnclosed");
     }
-    return Result::Ok(());
 }
 
-fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_Url_ {
-        let url_ = p.expect(TK_Url_)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_2)?;
-        let string_ = p.expect(TK_String_)?;
-        let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        return Result::Ok(());
+        let url_ = p.expect(TK_Url_);
+        let ws = _parse_ws(p, &FOLLOW_MASK_2);
+        let string_ = p.expect(TK_String_);
+        let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
+        let rparen = p.expect(TK_LIT_RPAREN);
+        return;
     }
     if kind == TK_Url {
-        let url = p.expect(TK_Url)?;
-        return Result::Ok(());
+        let url = p.expect(TK_Url);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected url",
         p.peek_span(),
         ["TK_Url_", "TK_Url"],
-    ));
+    );
+    return;
 }
 
-fn _parse_url(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_url(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_URL, _start);
-    let r = _parse_url__inner(p, follow);
+    _parse_url__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("url");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("url");
     }
-    return Result::Ok(());
 }
 
-fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_var___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let var = p.expect(TK_Var)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_35)?;
-    let variable = p.expect(TK_Variable)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let var = p.expect(TK_Var);
+    let ws = _parse_ws(p, &FOLLOW_MASK_35);
+    let variable = p.expect(TK_Variable);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_var_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_var_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VAR_, _start);
-    let r = _parse_var___inner(p, follow);
+    _parse_var___inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("var_");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("var_");
     }
-    return Result::Ok(());
 }
 
-fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let calc = p.expect(TK_Calc)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_36)?;
-    let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20)?;
-    let rparen = p.expect(TK_LIT_RPAREN)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let calc = p.expect(TK_Calc);
+    let ws = _parse_ws(p, &FOLLOW_MASK_36);
+    let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
+    let rparen = p.expect(TK_LIT_RPAREN);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_calc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CALC, _start);
-    let r = _parse_calc__inner(p, follow);
+    _parse_calc__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("calc");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("calc");
     }
-    return Result::Ok(());
 }
 
-fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let calc_product = _parse_calc_product(p, follow)?;
+    let calc_product = _parse_calc_product(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -36342,32 +36323,31 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let space = p.expect(TK_Space)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_37)?;
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus])?;
-        let ws_2 = _parse_ws(p, &FOLLOW_MASK_30)?;
-        let space_2 = p.expect(TK_Space)?;
-        let ws_3 = _parse_ws(p, &FOLLOW_MASK_36)?;
-        let calc_product = _parse_calc_product(p, follow)?;
+        let space = p.expect(TK_Space);
+        let ws = _parse_ws(p, &FOLLOW_MASK_37);
+        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let ws_2 = _parse_ws(p, &FOLLOW_MASK_30);
+        let space_2 = p.expect(TK_Space);
+        let ws_3 = _parse_ws(p, &FOLLOW_MASK_36);
+        let calc_product = _parse_calc_product(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_calc_sum(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_sum(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CALCSUM, _start);
-    let r = _parse_calc_sum__inner(p, follow);
+    _parse_calc_sum__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("calcSum");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("calcSum");
     }
-    return Result::Ok(());
 }
 
-fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let calc_value = _parse_calc_value(p, follow)?;
+    let calc_value = _parse_calc_value(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -36408,60 +36388,59 @@ fn _parse_calc_product__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         if rep_scan_pos < 0 { break; }
         if p.peek_kind() == TK_LIT_STAR {
-            let star = p.expect(TK_LIT_STAR)?;
-            let ws = _parse_ws(p, &FOLLOW_MASK_36)?;
-            let calc_value = _parse_calc_value(p, follow)?;
+            let star = p.expect(TK_LIT_STAR);
+            let ws = _parse_ws(p, &FOLLOW_MASK_36);
+            let calc_value = _parse_calc_value(p, follow);
         } else {
-            let slash = p.expect(TK_LIT_SLASH)?;
-            let ws = _parse_ws(p, &FOLLOW_MASK_38)?;
-            let number = _parse_number(p, follow)?;
-            let ws_2 = _parse_ws(p, follow)?;
+            let slash = p.expect(TK_LIT_SLASH);
+            let ws = _parse_ws(p, &FOLLOW_MASK_38);
+            let number = _parse_number(p, follow);
+            let ws_2 = _parse_ws(p, follow);
         }
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_calc_product(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_product(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CALCPRODUCT, _start);
-    let r = _parse_calc_product__inner(p, follow);
+    _parse_calc_product__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("calcProduct");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("calcProduct");
     }
-    return Result::Ok(());
 }
 
-fn _parse_calc_value__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let number = _parse_number(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let number = _parse_number(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_calc_value__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let dimension = _parse_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let dimension = _parse_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_calc_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let unknown_dimension = _parse_unknown_dimension(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let unknown_dimension = _parse_unknown_dimension(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let percentage = _parse_percentage(p, follow)?;
-    let ws = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let percentage = _parse_percentage(p, follow);
+    let ws = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_38(kind) {
@@ -36496,40 +36475,40 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_36)?;
-        let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20)?;
-        let rparen = p.expect(TK_LIT_RPAREN)?;
-        let ws_2 = _parse_ws(p, follow)?;
-        return Result::Ok(());
+        let lparen = p.expect(TK_LIT_LPAREN);
+        let ws = _parse_ws(p, &FOLLOW_MASK_36);
+        let calc_sum = _parse_calc_sum(p, &FOLLOW_MASK_20);
+        let rparen = p.expect(TK_LIT_RPAREN);
+        let ws_2 = _parse_ws(p, follow);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected calcValue",
         p.peek_span(),
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_LIT_LPAREN"],
-    ));
+    );
+    return;
 }
 
-fn _parse_calc_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_calc_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_CALCVALUE, _start);
-    let r = _parse_calc_value__inner(p, follow);
+    _parse_calc_value__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("calcValue");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("calcValue");
     }
-    return Result::Ok(());
 }
 
-fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let fontface = p.expect(TK_FontFace)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let fontface = p.expect(TK_FontFace);
+    let ws = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_8(p.peek_kind()) {
-        let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW)?;
+        let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
     }
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -36555,37 +36534,36 @@ fn _parse_font_face_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws = _parse_ws(p, follow)?;
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
-            let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW)?;
+            let font_face_declaration = _parse_font_face_declaration(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_font_face_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FONTFACERULE, _start);
-    let r = _parse_font_face_rule__inner(p, follow);
+    _parse_font_face_rule__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("fontFaceRule");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("fontFaceRule");
     }
-    return Result::Ok(());
 }
 
-fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(0);
-    let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_11)?;
-    let expr = _parse_expr(p, follow)?;
-    return Result::Ok(());
+    let property_ = _parse_property_(p, &FOLLOW_MASK_22);
+    let colon = p.expect(TK_LIT_COLON);
+    let ws = _parse_ws(p, &FOLLOW_MASK_11);
+    let expr = _parse_expr(p, follow);
+    return;
 }
 
 fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -36601,14 +36579,14 @@ fn _parse_font_face_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
     return pos;
 }
 
-fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     p.b.set_alt(1);
-    let property_ = _parse_property_(p, &FOLLOW_MASK_22)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_23)?;
-    let value = _parse_value(p, follow)?;
-    return Result::Ok(());
+    let property_ = _parse_property_(p, &FOLLOW_MASK_22);
+    let colon = p.expect(TK_LIT_COLON);
+    let ws = _parse_ws(p, &FOLLOW_MASK_23);
+    let value = _parse_value(p, follow);
+    return;
 }
 
 fn _parse_font_face_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
@@ -36624,7 +36602,7 @@ fn _parse_font_face_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, fol
     return pos;
 }
 
-fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
         if _kind_set_8(p.peek_kind()) {
@@ -36651,35 +36629,35 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
             return _parse_font_face_declaration__inner_alt_1(p, follow);
         }
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected fontFaceDeclaration",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-    ));
+    );
+    return;
 }
 
-fn _parse_font_face_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_face_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FONTFACEDECLARATION, _start);
-    let r = _parse_font_face_declaration__inner(p, follow);
+    _parse_font_face_declaration__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("fontFaceDeclaration");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("fontFaceDeclaration");
     }
-    return Result::Ok(());
 }
 
-fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let keyframes = p.expect(TK_Keyframes)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_30)?;
-    let space = p.expect(TK_Space)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_8)?;
-    let ident = _parse_ident(p, &FOLLOW_MASK_16)?;
-    let ws_3 = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_4 = _parse_ws(p, &FOLLOW_MASK_39)?;
+    let keyframes = p.expect(TK_Keyframes);
+    let ws = _parse_ws(p, &FOLLOW_MASK_30);
+    let space = p.expect(TK_Space);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_8);
+    let ident = _parse_ident(p, &FOLLOW_MASK_16);
+    let ws_3 = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_4 = _parse_ws(p, &FOLLOW_MASK_39);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -36694,60 +36672,60 @@ fn _parse_keyframes_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             if _kind_set_32(p.peek_kind()) {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                if let Err(_rec_e) = _parse_keyframe_block(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                let _rec_sav = p.recovering;
+                _parse_keyframe_block(p, &EMPTY_FOLLOW);
+                p.recovering = _rec_sav;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }
             break;
         }
-        let keyframe_block = _parse_keyframe_block(p, &EMPTY_FOLLOW)?;
+        let keyframe_block = _parse_keyframe_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_5 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_5 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_keyframes_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframes_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_KEYFRAMESRULE, _start);
-    let r = _parse_keyframes_rule__inner(p, follow);
+    _parse_keyframes_rule__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("keyframesRule");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("keyframesRule");
     }
-    return Result::Ok(());
 }
 
-fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframe_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let keyframe_selector = _parse_keyframe_selector(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let keyframe_selector = _parse_keyframe_selector(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
-        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
+        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_2 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_2 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_keyframe_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframe_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_KEYFRAMEBLOCK, _start);
-    let r = _parse_keyframe_block__inner(p, follow);
+    _parse_keyframe_block__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("keyframeBlock");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("keyframeBlock");
     }
-    return Result::Ok(());
 }
 
-fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage])?;
-    let ws = _parse_ws(p, follow)?;
+    let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage]);
+    let ws = _parse_ws(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -36792,88 +36770,85 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_Comma)?;
-        let ws = _parse_ws(p, &FOLLOW_MASK_40)?;
-        let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage])?;
-        let ws_2 = _parse_ws(p, follow)?;
+        let comma = p.expect(TK_Comma);
+        let ws = _parse_ws(p, &FOLLOW_MASK_40);
+        let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage]);
+        let ws_2 = _parse_ws(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_keyframe_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_keyframe_selector(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_KEYFRAMESELECTOR, _start);
-    let r = _parse_keyframe_selector__inner(p, follow);
+    _parse_keyframe_selector__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("keyframeSelector");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("keyframeSelector");
     }
-    return Result::Ok(());
 }
 
-fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_viewport__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let viewport = p.expect(TK_Viewport)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let viewport = p.expect(TK_Viewport);
+    let ws = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
-        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
+        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_viewport(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_viewport(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VIEWPORT, _start);
-    let r = _parse_viewport__inner(p, follow);
+    _parse_viewport__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("viewport");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("viewport");
     }
-    return Result::Ok(());
 }
 
-fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_counter_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let counterstyle = p.expect(TK_CounterStyle)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_8)?;
-    let ident = _parse_ident(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_3 = _parse_ws(p, &FOLLOW_MASK_13)?;
+    let counterstyle = p.expect(TK_CounterStyle);
+    let ws = _parse_ws(p, &FOLLOW_MASK_8);
+    let ident = _parse_ident(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_3 = _parse_ws(p, &FOLLOW_MASK_13);
     if _kind_set_19(p.peek_kind()) {
-        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW)?;
+        let declaration_list = _parse_declaration_list(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_4 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_4 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_counter_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_counter_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COUNTERSTYLE, _start);
-    let r = _parse_counter_style__inner(p, follow);
+    _parse_counter_style__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("counterStyle");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("counterStyle");
     }
-    return Result::Ok(());
 }
 
-fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let fontfeaturevalues = p.expect(TK_FontFeatureValues)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_18)?;
-    let font_family_name_list = _parse_font_family_name_list(p, &FOLLOW_MASK_16)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_3 = _parse_ws(p, &FOLLOW_MASK_41)?;
+    let fontfeaturevalues = p.expect(TK_FontFeatureValues);
+    let ws = _parse_ws(p, &FOLLOW_MASK_18);
+    let font_family_name_list = _parse_font_family_name_list(p, &FOLLOW_MASK_16);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_3 = _parse_ws(p, &FOLLOW_MASK_41);
     loop {
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -36888,34 +36863,35 @@ fn _parse_font_feature_values_rule__inner(p: &mut Parser, follow: &List<List<i32
             if p.peek_kind() == TK_AtKeyword {
                 let _rec_pos = p.pos;
                 let _rec_cp = p.b.checkpoint();
-                if let Err(_rec_e) = _parse_feature_value_block(p, &EMPTY_FOLLOW) { p.record_deeper(_rec_e); }
+                let _rec_sav = p.recovering;
+                _parse_feature_value_block(p, &EMPTY_FOLLOW);
+                p.recovering = _rec_sav;
                 p.pos = _rec_pos;
                 p.b.truncate(_rec_cp);
             }
             break;
         }
-        let feature_value_block = _parse_feature_value_block(p, &EMPTY_FOLLOW)?;
+        let feature_value_block = _parse_feature_value_block(p, &EMPTY_FOLLOW);
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_4 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_4 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_font_feature_values_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_feature_values_rule(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FONTFEATUREVALUESRULE, _start);
-    let r = _parse_font_feature_values_rule__inner(p, follow);
+    _parse_font_feature_values_rule__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("fontFeatureValuesRule");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("fontFeatureValuesRule");
     }
-    return Result::Ok(());
 }
 
-fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let font_family_name = _parse_font_family_name(p, follow)?;
+    let font_family_name = _parse_font_family_name(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -36940,35 +36916,34 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: &List<List<i32>> 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = _parse_ws(p, &FOLLOW_MASK_42)?;
-        let comma = p.expect(TK_Comma)?;
-        let ws_2 = _parse_ws(p, &FOLLOW_MASK_18)?;
-        let font_family_name = _parse_font_family_name(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_42);
+        let comma = p.expect(TK_Comma);
+        let ws_2 = _parse_ws(p, &FOLLOW_MASK_18);
+        let font_family_name = _parse_font_family_name(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_font_family_name_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_family_name_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FONTFAMILYNAMELIST, _start);
-    let r = _parse_font_family_name_list__inner(p, follow);
+    _parse_font_family_name_list__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("fontFamilyNameList");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("fontFamilyNameList");
     }
-    return Result::Ok(());
 }
 
-fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_String_ {
-        let string_ = p.expect(TK_String_)?;
-        return Result::Ok(());
+        let string_ = p.expect(TK_String_);
+        return;
     }
     if _kind_set_4(kind) {
-        let ident = _parse_ident(p, follow)?;
+        let ident = _parse_ident(p, follow);
         loop {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -36989,38 +36964,38 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let ws = _parse_ws(p, &FOLLOW_MASK_8)?;
-            let ident = _parse_ident(p, follow)?;
+            let ws = _parse_ws(p, &FOLLOW_MASK_8);
+            let ident = _parse_ident(p, follow);
         }
-        return Result::Ok(());
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected fontFamilyName",
         p.peek_span(),
         ["TK_String_", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
-    ));
+    );
+    return;
 }
 
-fn _parse_font_family_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_font_family_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FONTFAMILYNAME, _start);
-    let r = _parse_font_family_name__inner(p, follow);
+    _parse_font_family_name__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("fontFamilyName");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("fontFamilyName");
     }
-    return Result::Ok(());
 }
 
-fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let feature_type = _parse_feature_type(p, &FOLLOW_MASK_16)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_7)?;
-    let lbrace = p.expect(TK_LIT_LBRACE)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_43)?;
+    let feature_type = _parse_feature_type(p, &FOLLOW_MASK_16);
+    let ws = _parse_ws(p, &FOLLOW_MASK_7);
+    let lbrace = p.expect(TK_LIT_LBRACE);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_43);
     if _kind_set_4(p.peek_kind()) {
-        let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW)?;
+        let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
     }
     loop {
         let mut rep_scan_pos: i32 = -1;
@@ -37048,55 +37023,53 @@ fn _parse_feature_value_block__inner(p: &mut Parser, follow: &List<List<i32>> = 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = _parse_ws(p, &FOLLOW_MASK_3)?;
-        let semicolon = p.expect(TK_LIT_SEMI)?;
-        let ws_2 = _parse_ws(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_3);
+        let semicolon = p.expect(TK_LIT_SEMI);
+        let ws_2 = _parse_ws(p, follow);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
-            let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW)?;
+            let feature_value_definition = _parse_feature_value_definition(p, &EMPTY_FOLLOW);
         }
     }
-    let rbrace = p.expect(TK_LIT_RBRACE)?;
-    let ws_3 = _parse_ws(p, follow)?;
-    return Result::Ok(());
+    let rbrace = p.expect(TK_LIT_RBRACE);
+    let ws_3 = _parse_ws(p, follow);
+    return;
 }
 
-fn _parse_feature_value_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_value_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FEATUREVALUEBLOCK, _start);
-    let r = _parse_feature_value_block__inner(p, follow);
+    _parse_feature_value_block__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("featureValueBlock");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("featureValueBlock");
     }
-    return Result::Ok(());
 }
 
-fn _parse_feature_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let atkeyword = p.expect(TK_AtKeyword)?;
-    return Result::Ok(());
+    let atkeyword = p.expect(TK_AtKeyword);
+    return;
 }
 
-fn _parse_feature_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_type(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FEATURETYPE, _start);
-    let r = _parse_feature_type__inner(p, follow);
+    _parse_feature_type__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("featureType");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("featureType");
     }
-    return Result::Ok(());
 }
 
-fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = _parse_ident(p, &FOLLOW_MASK_16)?;
-    let ws = _parse_ws(p, &FOLLOW_MASK_22)?;
-    let colon = p.expect(TK_LIT_COLON)?;
-    let ws_2 = _parse_ws(p, &FOLLOW_MASK_38)?;
-    let number = _parse_number(p, follow)?;
+    let ident = _parse_ident(p, &FOLLOW_MASK_16);
+    let ws = _parse_ws(p, &FOLLOW_MASK_22);
+    let colon = p.expect(TK_LIT_COLON);
+    let ws_2 = _parse_ws(p, &FOLLOW_MASK_38);
+    let number = _parse_number(p, follow);
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -37117,51 +37090,50 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: &List<List<i32
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let ws = _parse_ws(p, &FOLLOW_MASK_38)?;
-        let number = _parse_number(p, follow)?;
+        let ws = _parse_ws(p, &FOLLOW_MASK_38);
+        let number = _parse_number(p, follow);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_feature_value_definition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_feature_value_definition(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FEATUREVALUEDEFINITION, _start);
-    let r = _parse_feature_value_definition__inner(p, follow);
+    _parse_feature_value_definition__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("featureValueDefinition");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("featureValueDefinition");
     }
-    return Result::Ok(());
 }
 
-fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
-        let _ = p.expect(kind)?;
-        return Result::Ok(());
+        let _ = p.expect(kind);
+        return;
     }
-    return Result::Err(p.error(
+    p.fail(
         "expected ident",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
-    ));
+    );
+    return;
 }
 
-fn _parse_ident(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ident(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_IDENT, _start);
-    let r = _parse_ident__inner(p, follow);
+    _parse_ident__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("ident");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("ident");
     }
-    return Result::Ok(());
 }
 
-fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     loop {
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -37189,34 +37161,34 @@ fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.match_set([TK_Comment, TK_Space])?;
+        let comment_or_space = p.match_set([TK_Comment, TK_Space]);
     }
-    return Result::Ok(());
+    return;
 }
 
-fn _parse_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Result<(), ParseError> {
+fn _parse_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+    if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_WS, _start);
-    let r = _parse_ws__inner(p, follow);
+    _parse_ws__inner(p, follow);
     p.b.finish_node(p.last_end());
-    if let Err(mut e) = r {
-        e.rule_stack.push("ws");
-        return Result::Err(e);
+    if p.recovering {
+        p.push_rule_stack("ws");
     }
-    return Result::Ok(());
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser) -> Result<(), ParseError>) -> ParseResult {
+fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     let _ = max_errors;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
-    let _r = entry(&mut p);
-    if let Err(e) = _r {
-        let e = if let Some(_d) = &p.pending { if _d.span.start >= e.span.start { *_d } else { e } } else { e };
-        let lc = line_col(p.tokens.chars, e.span.start);
-        let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
-        d.rule_stack = e.rule_stack;
-        p.diagnostics.push(d);
+    entry(&mut p);
+    if p.recovering {
+        if let Some(e) = &p.pending {
+            let lc = line_col(p.tokens.chars, e.span.start);
+            let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
+            d.rule_stack = e.rule_stack;
+            p.diagnostics.push(d);
+        }
     }
     return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
