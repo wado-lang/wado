@@ -326,6 +326,10 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[serde(default)]` is removed: a struct field default value is the
+    /// single mechanism for an optional field. Guides to `field: T = <value>`.
+    SerdeDefaultAttr { field: String, span: Span },
+
     /// `resume` expression appeared outside an effect handler method body.
     /// `resume value` is only valid inside the body of a method belonging
     /// to an `impl Effect for Type` block (see WEP 2026-04-11).
@@ -704,6 +708,13 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
+                ),
+                *span,
+            ),
+            TypeError::SerdeDefaultAttr { field, span } => (
+                Code::UnsupportedFeature,
+                format!(
+                    "`#[serde(default)]` is not supported; give field '{field}' a default value instead, e.g. `{field}: T = <value>` (a field with a default value is optional on deserialize)"
                 ),
                 *span,
             ),

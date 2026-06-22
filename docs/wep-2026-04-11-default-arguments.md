@@ -329,14 +329,19 @@ A struct with any required field (no default) does not auto-derive `Default`.
 
 #### Interaction with Serde
 
-The `#[serde(default)]` attribute on a struct field currently uses `Default` trait for the field's type. With struct field defaults, `#[serde(default)]` uses the field's declared default value instead:
+A field default makes the field optional on deserialize, falling back to that
+default when absent. This extends the "has default → optional" rule from
+construction to deserialization, and is the single mechanism for an optional
+field (`#[serde(default)]` is removed):
 
 ```wado
 struct Config {
-    #[serde(default)]
-    port: i32 = 8080,  // serde uses 8080 when field is missing from JSON
+    port: i32 = 8080,  // serde uses 8080 when the field is missing from JSON
 }
 ```
+
+See the serde WEP's
+[Default Values for Missing Fields](./wep-2026-02-28-serde.md#default-values-for-missing-fields).
 
 ### WebIDL Mapping Improvement
 
@@ -450,7 +455,7 @@ let resp = Fetch::fetch(url, init).read();
 | Closures         | Defaults rejected — parsed but error in elaborator  |
 | `export fn` (CM) | Defaults rejected — arity must match WIT signature  |
 | Default trait    | Auto-derived for all-defaulted structs              |
-| Serde            | `#[serde(default)]` uses field default value        |
+| Serde            | Declared field default → optional on deserialize    |
 | Generics         | Default expressions are monomorphized per call site |
 
 ### Not in Scope

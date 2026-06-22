@@ -71,16 +71,13 @@ struct StatusEntities {
 impl Deserialize for StatusEntities;
 
 struct UserEntities {
-    #[serde(default)]
-    description: UserEntityUrls,
-    #[serde(default)]
-    url: UserEntityUrls,
+    description: UserEntityUrls = UserEntityUrls {},
+    url: UserEntityUrls = UserEntityUrls {},
 }
 impl Deserialize for UserEntities;
 
 struct UserEntityUrls {
-    #[serde(default)]
-    urls: List<Url>,
+    urls: List<Url> = [],
 }
 impl Deserialize for UserEntityUrls;
 
@@ -91,8 +88,7 @@ struct User {
     name: String,
     #[serde(rename = "screen_name")]
     screen_name: String,
-    #[serde(default)]
-    description: Option<String>,
+    description: Option<String> = null,
     #[serde(rename = "followers_count")]
     followers_count: i32,
     #[serde(rename = "friends_count")]
@@ -103,8 +99,7 @@ struct User {
     created_at: String,
     #[serde(rename = "profile_image_url_https")]
     profile_image_url_https: String,
-    #[serde(default)]
-    verified: bool,
+    verified: bool = false,
     lang: String,
 }
 impl Deserialize for User;
