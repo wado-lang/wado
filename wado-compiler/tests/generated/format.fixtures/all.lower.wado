@@ -148,6 +148,10 @@ pub struct ConvertError {
     pub message: String,
 }
 
+pub struct LenientParseError {
+    reason: String,
+}
+
 pub struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
     __cm_packed: i32,
     __cm_outptr: i32,
@@ -5442,7 +5446,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 132 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 136 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: self.high != 0\n");
                 __r.String::push_str(&"self.high: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5494,7 +5498,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 168 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 172 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: a >> mant_bits - 1 as u64 == 1\n");
                 __r.String::push_str(&"a: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5613,7 +5617,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T109"(*self);
+    let mut temp: u128 = "$value_copy$T110"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5626,7 +5630,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    let mut temp: u128 = "$value_copy$T109"(*self);
+    let mut temp: u128 = "$value_copy$T110"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5652,7 +5656,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 339 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 343 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: pos == offset\n");
                 __r.String::push_str(&"pos: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5733,7 +5737,7 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
                     __r.String::push_str(&"core:prelude/int128.wado");
                     __r.String::push_str(&":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 392 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 396 }."i32^Display::fmt"(&mut __f);
                     __r.String::push_str(&"\ncondition: pos == offset\n");
                     __r.String::push_str(&"pos: ");
                     __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5756,6 +5760,21 @@ fn "u128^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u1
 
 pub fn "u128^FromStr::from_str"(s: &String) -> Result<u128, ParseIntError> {
     return "core::prelude/int128.wado::u128^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "u128^LenientFromStr::from_str_lenient"(s: &String) -> Result<u128, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<u128, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/int128.wado::u128::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<u128, LenientParseError>::Ok(v),
+        Err(e) => Result<u128, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn "u128^Display::fmt"(self: &u128, f: &mut Formatter) {
@@ -5924,7 +5943,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T186"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T191"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -6049,6 +6068,21 @@ fn "i128^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i1
 
 pub fn "i128^FromStr::from_str"(s: &String) -> Result<i128, ParseIntError> {
     return "core::prelude/int128.wado::i128^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "i128^LenientFromStr::from_str_lenient"(s: &String) -> Result<i128, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<i128, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/int128.wado::i128::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<i128, LenientParseError>::Ok(v),
+        Err(e) => Result<i128, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn "i128^Display::fmt"(self: &i128, f: &mut Formatter) {
@@ -6610,6 +6644,117 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseError> {
+    let len: i32 = s.String::len();
+    if (len == 0) {
+        return Result<[String, u32], LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("empty integer string"));
+    }
+    let first: u8 = s.String::get_byte_unchecked(0);
+    let is_negative: bool = (first == '-' as u8);
+    let has_sign: bool = (is_negative || (first == '+' as u8));
+    let mut i: i32 = if has_sign {
+        1;
+    } else {
+        0;
+    };
+    if (i >= len) {
+        return Result<[String, u32], LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("integer string has a sign but no digits"));
+    }
+    let mut radix: u32 = 10;
+    if ((s.String::get_byte_unchecked(i) == '0' as u8) && ((i + 2) <= len)) {
+        let marker: u8 = s.String::get_byte_unchecked((i + 1));
+        if ((marker == 'x' as u8) || (marker == 'X' as u8)) {
+            radix = 16;
+            i = (i + 2);
+        } else {
+            if ((marker == 'o' as u8) || (marker == 'O' as u8)) {
+                radix = 8;
+                i = (i + 2);
+            } else {
+                if ((marker == 'b' as u8) || (marker == 'B' as u8)) {
+                    radix = 2;
+                    i = (i + 2);
+                }
+            }
+        }
+    }
+    let mut cleaned: String = "core::prelude/string.wado::String::with_capacity"(len);
+    if is_negative {
+        cleaned.String::push('-');
+    }
+    let mut digit_count: i32 = 0;
+    let mut j: i32 = i;
+    loop {
+        if !(j < len) {
+            break;
+        }
+        __for_0_body: {
+            let b: u8 = s.String::get_byte_unchecked(j);
+            if (b == '_' as u8) {
+                break __for_0_body;
+            }
+            cleaned.String::push("core::prelude/primitive.wado::char::from_u32_unchecked"(b as u32));
+            digit_count = (digit_count + 1);
+        }
+        j = (j + 1);
+    }
+    if (digit_count == 0) {
+        return Result<[String, u32], LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("integer string has no digits"));
+    }
+    return Result<[String, u32], LenientParseError>::Ok([cleaned, radix]);
+}
+
+pub fn lenient_int_error(e: ParseIntError) -> LenientParseError {
+    let reason: String = "$value_copy$T37"(match e.ParseIntError::kind() {
+        Empty => "empty integer string",
+        InvalidDigit => "invalid digit in integer string",
+        PosOverflow => "integer string overflows the target type",
+        NegOverflow => "integer string underflows the target type",
+    });
+    return "core::prelude/traits.wado::LenientParseError::new"(reason);
+}
+
+pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
+    let reason: String = "$value_copy$T37"(match e.ParseFloatError::kind() {
+        Empty => "empty float string",
+        Invalid => "invalid float string",
+    });
+    return "core::prelude/traits.wado::LenientParseError::new"(reason);
+}
+
+pub fn lenient_float_preprocess(s: &String) -> String {
+    let len: i32 = s.String::len();
+    let head: i32 = if ((len > 0) && ((s.String::get_byte_unchecked(0) == '+' as u8) || (s.String::get_byte_unchecked(0) == '-' as u8))) {
+        1;
+    } else {
+        0;
+    };
+    if (head >= len) {
+        return *s;
+    }
+    let first: u8 = s.String::get_byte_unchecked(head);
+    let is_numeric: bool = (((first >= '0' as u8) && (first <= '9' as u8)) || (first == '.' as u8));
+    if !is_numeric {
+        return *s;
+    }
+    let mut cleaned: String = "core::prelude/string.wado::String::with_capacity"(len);
+    let mut j: i32 = 0;
+    loop {
+        if !(j < len) {
+            break;
+        }
+        __for_0_body: {
+            let b: u8 = s.String::get_byte_unchecked(j);
+            if (b == '_' as u8) {
+                break __for_0_body;
+            }
+            cleaned.String::push("core::prelude/primitive.wado::char::from_u32_unchecked"(b as u32));
+        }
+        j = (j + 1);
+    }
+    return cleaned;
+}
+
 pub fn ParseIntError::new(kind: IntErrorKind) -> ParseIntError {
     return ParseIntError { kind: kind };
 }
@@ -6754,7 +6899,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T186"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T191"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -7646,6 +7791,16 @@ pub fn bool::to_string(self: Box<bool>) -> String {
     return buf;
 }
 
+fn "bool^LenientFromStr::from_str_lenient"(s: &String) -> Result<bool, LenientParseError> {
+    if (s.String::eq_ignore_ascii_case("true") || *s."String^Eq::eq"(&"1")) {
+        return Result<bool, LenientParseError>::Ok(true);
+    }
+    if (s.String::eq_ignore_ascii_case("false") || *s."String^Eq::eq"(&"0")) {
+        return Result<bool, LenientParseError>::Ok(false);
+    }
+    return Result<bool, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("invalid boolean string"));
+}
+
 pub fn char::from_u32(value: u32) -> Option<char> {
     if (value > 0x10FFFF) {
         return null;
@@ -7803,6 +7958,23 @@ pub fn char::encode_utf8(self: Box<char>) -> List<u8> {
     return buf;
 }
 
+fn "char^LenientFromStr::from_str_lenient"(s: &String) -> Result<char, LenientParseError> {
+    let mut iter: StrCharIter = s.String::chars();
+    let first: char = match iter."StrCharIter^Iterator::next"() {
+        Some(c) => c,
+        None => {
+            return Result<char, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("expected exactly one character, got none"));
+        },
+    };
+    if match iter."StrCharIter^Iterator::next"() {
+        Some(_) => true,
+        _ => false,
+    } {
+        return Result<char, LenientParseError>::Err("core::prelude/traits.wado::LenientParseError::new"("expected exactly one character, got more"));
+    }
+    return Result<char, LenientParseError>::Ok(first);
+}
+
 pub fn i8::max(a: i8, b: i8) -> i8 {
     return "core::builtin::core/builtin/select<i8>"((a > b), a, b);
 }
@@ -7842,6 +8014,21 @@ fn "i8^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i8, 
 
 pub fn "i8^FromStr::from_str"(s: &String) -> Result<i8, ParseIntError> {
     return "core::prelude/primitive.wado::i8^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "i8^LenientFromStr::from_str_lenient"(s: &String) -> Result<i8, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<i8, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::i8::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<i8, LenientParseError>::Ok(v),
+        Err(e) => Result<i8, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn u8::max(a: u8, b: u8) -> u8 {
@@ -7885,6 +8072,21 @@ pub fn "u8^FromStr::from_str"(s: &String) -> Result<u8, ParseIntError> {
     return "core::prelude/primitive.wado::u8^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
+fn "u8^LenientFromStr::from_str_lenient"(s: &String) -> Result<u8, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<u8, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::u8::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<u8, LenientParseError>::Ok(v),
+        Err(e) => Result<u8, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
+}
+
 pub fn i16::max(a: i16, b: i16) -> i16 {
     return "core::builtin::core/builtin/select<i16>"((a > b), a, b);
 }
@@ -7926,6 +8128,21 @@ pub fn "i16^FromStr::from_str"(s: &String) -> Result<i16, ParseIntError> {
     return "core::prelude/primitive.wado::i16^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
+fn "i16^LenientFromStr::from_str_lenient"(s: &String) -> Result<i16, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<i16, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::i16::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<i16, LenientParseError>::Ok(v),
+        Err(e) => Result<i16, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
+}
+
 pub fn u16::max(a: u16, b: u16) -> u16 {
     return "core::builtin::core/builtin/select<u16>"((a > b), a, b);
 }
@@ -7965,6 +8182,21 @@ fn "u16^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u16
 
 pub fn "u16^FromStr::from_str"(s: &String) -> Result<u16, ParseIntError> {
     return "core::prelude/primitive.wado::u16^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "u16^LenientFromStr::from_str_lenient"(s: &String) -> Result<u16, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<u16, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::u16::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<u16, LenientParseError>::Ok(v),
+        Err(e) => Result<u16, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn i32::max(a: i32, b: i32) -> i32 {
@@ -8032,6 +8264,21 @@ pub fn "i32^FromStr::from_str"(s: &String) -> Result<i32, ParseIntError> {
     return "core::prelude/primitive.wado::i32^FromStr::from_str_range"(s, 0, s.String::len());
 }
 
+fn "i32^LenientFromStr::from_str_lenient"(s: &String) -> Result<i32, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<i32, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::i32::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<i32, LenientParseError>::Ok(v),
+        Err(e) => Result<i32, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
+}
+
 pub fn u32::max(a: u32, b: u32) -> u32 {
     return "core::builtin::core/builtin/select<u32>"((a > b), a, b);
 }
@@ -8083,6 +8330,21 @@ fn "u32^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u32
 
 pub fn "u32^FromStr::from_str"(s: &String) -> Result<u32, ParseIntError> {
     return "core::prelude/primitive.wado::u32^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "u32^LenientFromStr::from_str_lenient"(s: &String) -> Result<u32, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<u32, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::u32::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<u32, LenientParseError>::Ok(v),
+        Err(e) => Result<u32, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn i64::max(a: i64, b: i64) -> i64 {
@@ -8153,6 +8415,21 @@ fn "i64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<i64
 
 pub fn "i64^FromStr::from_str"(s: &String) -> Result<i64, ParseIntError> {
     return "core::prelude/primitive.wado::i64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "i64^LenientFromStr::from_str_lenient"(s: &String) -> Result<i64, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<i64, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::i64::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<i64, LenientParseError>::Ok(v),
+        Err(e) => Result<i64, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 pub fn u64::max(a: u64, b: u64) -> u64 {
@@ -8265,6 +8542,21 @@ fn "u64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<u64
 
 pub fn "u64^FromStr::from_str"(s: &String) -> Result<u64, ParseIntError> {
     return "core::prelude/primitive.wado::u64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "u64^LenientFromStr::from_str_lenient"(s: &String) -> Result<u64, LenientParseError> {
+    let __pattern_temp_0: [String, u32] = "$value_copy$T189"(match "core::prelude/intparse.wado::lenient_int_preprocess"(s) {
+        Ok(p) => p,
+        Err(e) => {
+            return Result<u64, LenientParseError>::Err(e);
+        },
+    });
+    let cleaned: String = __pattern_temp_0.0;
+    let radix: u32 = __pattern_temp_0.1;
+    return match "core::prelude/primitive.wado::u64::from_str_radix"(&cleaned, radix) {
+        Ok(v) => Result<u64, LenientParseError>::Ok(v),
+        Err(e) => Result<u64, LenientParseError>::Err("core::prelude/intparse.wado::lenient_int_error"(e)),
+    };
 }
 
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
@@ -8546,6 +8838,14 @@ fn "f32^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<f32
 
 pub fn "f32^FromStr::from_str"(s: &String) -> Result<f32, ParseFloatError> {
     return "core::prelude/primitive.wado::f32^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "f32^LenientFromStr::from_str_lenient"(s: &String) -> Result<f32, LenientParseError> {
+    let cleaned: String = "core::prelude/intparse.wado::lenient_float_preprocess"(s);
+    return match "core::prelude/primitive.wado::f32^FromStr::from_str"(&cleaned) {
+        Ok(v) => Result<f32, LenientParseError>::Ok(v),
+        Err(e) => Result<f32, LenientParseError>::Err("core::prelude/intparse.wado::lenient_float_error"(e)),
+    };
 }
 
 fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
@@ -8886,6 +9186,14 @@ fn "f64^FromStr::from_str_range"(s: &String, start: i32, end: i32) -> Result<f64
 
 pub fn "f64^FromStr::from_str"(s: &String) -> Result<f64, ParseFloatError> {
     return "core::prelude/primitive.wado::f64^FromStr::from_str_range"(s, 0, s.String::len());
+}
+
+fn "f64^LenientFromStr::from_str_lenient"(s: &String) -> Result<f64, LenientParseError> {
+    let cleaned: String = "core::prelude/intparse.wado::lenient_float_preprocess"(s);
+    return match "core::prelude/primitive.wado::f64^FromStr::from_str"(&cleaned) {
+        Ok(v) => Result<f64, LenientParseError>::Ok(v),
+        Err(e) => Result<f64, LenientParseError>::Err("core::prelude/intparse.wado::lenient_float_error"(e)),
+    };
 }
 
 pub fn "()^Display::fmt"(self: &(), f: &mut Formatter) {
@@ -10961,6 +11269,10 @@ fn "String^Eq::eq_bytes"(a: &Array<u8>, b: &Array<u8>, len: i32) -> bool {
     return true;
 }
 
+fn "String^LenientFromStr::from_str_lenient"(s: &String) -> Result<String, LenientParseError> {
+    return Result<String, LenientParseError>::Ok(*s);
+}
+
 pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
     let len_a: i32 = self.String::len();
     let len_b: i32 = other.String::len();
@@ -11522,7 +11834,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 583 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 593 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -11547,7 +11859,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 584 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 594 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -11828,7 +12140,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 825 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 835 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -11886,7 +12198,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 826 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 836 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -12096,7 +12408,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 962 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 972 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -12155,7 +12467,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1003 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1013 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -12202,7 +12514,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1031 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1041 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -12243,7 +12555,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1032 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1042 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -13416,7 +13728,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T322"(item));
+                f("$value_copy$T340"(item));
             },
             _ => {
                 break;
@@ -13430,7 +13742,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T322"(item)) {
+                if pred("$value_copy$T340"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -13447,7 +13759,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T322"(item)) {
+                if pred("$value_copy$T340"(item)) {
                     return true;
                 }
             },
@@ -13464,7 +13776,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T322"(item)) {
+                if !pred("$value_copy$T340"(item)) {
                     return false;
                 }
             },
@@ -13517,7 +13829,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T322"(item)) {
+                if pred("$value_copy$T340"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -13534,12 +13846,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T322"(first);
+            let mut acc: [i32, char] = "$value_copy$T340"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T322"(acc), "$value_copy$T322"(item));
+                        acc = f("$value_copy$T340"(acc), "$value_copy$T340"(item));
                     },
                     _ => {
                         break;
@@ -19282,8 +19594,8 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
     __for_of_5: {
         let mut __iter_5: StrCharIter = *self.String::chars()."core:prelude/string.wado/StrCharIter^IntoIterator::into_iter"();
         loop {
-            let __match_7: Option<char> = __iter_5."StrCharIter^Iterator::next"();
-            match __match_7 {
+            let __match_10: Option<char> = __iter_5."StrCharIter^Iterator::next"();
+            match __match_10 {
                 Some(c) => {
                     if ((limit >= 0) && (count >= limit)) {
                         truncated = true;
@@ -19309,7 +19621,19 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                                         f.Formatter::write_char('\\');
                                         f.Formatter::write_char('t');
                                     } else {
-                                        f.Formatter::write_char(c);
+                                        let code: i32 = c as i32;
+                                        if ((code < 0x20) || (code == 0x7f)) {
+                                            f.Formatter::write_str(&"\\u{");
+                                            f.Formatter::write_str(&__tmpl: {
+                                                let mut __r: String = "core::prelude/string.wado::String::with_capacity"(16);
+                                                let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
+                                                Box<i32> { value: code }."i32^LowerHex::fmt"(&mut __f);
+                                                break __tmpl: __r;
+                                            });
+                                            f.Formatter::write_char('}');
+                                        } else {
+                                            f.Formatter::write_char(c);
+                                        }
                                     }
                                 }
                             }
@@ -19671,6 +19995,14 @@ pub fn ConvertError::new(message: String) -> ConvertError {
     return ConvertError { message: message };
 }
 
+pub fn LenientParseError::new(reason: String) -> LenientParseError {
+    return LenientParseError { reason: reason };
+}
+
+pub fn LenientParseError::reason(self: &LenientParseError) -> String {
+    return self.reason;
+}
+
 pub fn "Ordering^Eq::eq"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> bool {
     return (self.value == other.value);
 }
@@ -19699,6 +20031,18 @@ pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ord
     return Ordering::Equal;
 }
 
+pub fn "LenientParseError^Eq::eq"(self: &LenientParseError, other: &LenientParseError) -> bool {
+    return self.reason."String^Eq::eq"(&other.reason);
+}
+
+pub fn "LenientParseError^Ord::cmp"(self: &LenientParseError, other: &LenientParseError) -> Ordering {
+    let c: Ordering = self.reason."String^Ord::cmp"(&other.reason);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
 pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     if (self.value == 0) {
         f.Formatter::write_str(&"Ordering::Less");
@@ -19717,6 +20061,13 @@ pub fn "ConvertError^Inspect::inspect"(self: &ConvertError, f: &mut Formatter) {
     f.Formatter::write_str(&"ConvertError { ");
     f.Formatter::write_str(&"message: ");
     self.message."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&" }");
+}
+
+pub fn "LenientParseError^Inspect::inspect"(self: &LenientParseError, f: &mut Formatter) {
+    f.Formatter::write_str(&"LenientParseError { ");
+    f.Formatter::write_str(&"reason: ");
+    self.reason."String^Inspect::inspect"(f);
     f.Formatter::write_str(&" }");
 }
 
@@ -19779,6 +20130,15 @@ pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Forma
     f.Formatter::close_brace("}");
 }
 
+pub fn "LenientParseError^InspectAlt::inspect_alt"(self: &LenientParseError, f: &mut Formatter) {
+    f.Formatter::open_brace("LenientParseError {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"reason: ");
+    self.reason."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::close_brace("}");
+}
+
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
 }
@@ -19831,6 +20191,10 @@ pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: 
 
 pub fn "ConvertError^Display::fmt"(self: &ConvertError, f: &mut Formatter) {
     self."ConvertError^Inspect::inspect"(f);
+}
+
+pub fn "LenientParseError^Display::fmt"(self: &LenientParseError, f: &mut Formatter) {
+    self."LenientParseError^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -19919,6 +20283,10 @@ pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Orderin
 
 pub fn "ConvertError^DisplayAlt::fmt_alt"(self: &ConvertError, f: &mut Formatter) {
     self."ConvertError^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "LenientParseError^DisplayAlt::fmt_alt"(self: &LenientParseError, f: &mut Formatter) {
+    self."LenientParseError^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -20656,7 +21024,7 @@ fn "$value_copy$T28"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T322"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T340"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
@@ -20664,11 +21032,15 @@ fn "$value_copy$T37"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T186"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T191"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T109"(v: u128) -> u128 {
+fn "$value_copy$T189"(v: [String, u32]) -> [String, u32] {
+    return Tuple<core:prelude/string.wado/String,u32> { 0: "$value_copy$T37"(v.0), 1: v.1 };
+}
+
+fn "$value_copy$T110"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 

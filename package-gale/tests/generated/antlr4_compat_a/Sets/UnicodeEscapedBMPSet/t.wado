@@ -1106,21 +1106,21 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
             if !alts_ok_2 {
                 alts_2_1: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || chars[pos] != '\u{e4}' { break alts_2_1; }
+                    if pos >= chars.len() || chars[pos] != 'ä' { break alts_2_1; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
                 if !alts_ok_2 {
                     alts_2_2: {
                         pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != '\u{4e9c}' { break alts_2_2; }
+                        if pos >= chars.len() || chars[pos] != '亜' { break alts_2_2; }
                         pos += 1;
                         alts_ok_2 = true;
                     }
                     if !alts_ok_2 {
                         alts_2_3: {
                             pos = alts_saved_2;
-                            if pos >= chars.len() || chars[pos] != '\u{3042}' { break alts_2_3; }
+                            if pos >= chars.len() || chars[pos] != 'あ' { break alts_2_3; }
                             pos += 1;
                             alts_ok_2 = true;
                         }
@@ -1163,7 +1163,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char == 'a' || first_char == 'c' || first_char == '\u{e4}' || first_char == '\u{3042}' || first_char == '\u{4e9c}' {
+        if first_char == 'a' || first_char == 'c' || first_char == 'ä' || first_char == 'あ' || first_char == '亜' {
             end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         }

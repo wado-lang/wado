@@ -869,6 +869,22 @@ pub trait FromStr {
     fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
     fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
 }
+
+// Forgiving sibling of FromStr for human-supplied strings: accepts casing,
+// radix prefixes (0x/0o/0b), `_` digit separators, and alternate bool words
+// (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
+pub trait LenientFromStr {
+    type Err;  // built-in impls all use LenientParseError
+    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+}
+```
+
+```wado
+i32::from_str_lenient(&"0x2A")    // Ok(42)
+i32::from_str_lenient(&"1_000")   // Ok(1000)
+bool::from_str_lenient(&"TRUE")   // Ok(true)
+f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
+i32::from_str_lenient(&" 1 ")     // Err — no trimming
 ```
 
 ### Trait Bounds

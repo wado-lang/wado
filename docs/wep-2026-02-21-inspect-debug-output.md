@@ -58,6 +58,8 @@ Inspect output follows Wado literal syntax where possible:
 | Closure (default)          | Signature only                         | `\|x: i32\| -> i32`           |
 | Closure (`#` alternate)    | TIR unparsed source                    | `\|x: i32\| x + 1`            |
 
+`String` escaping covers `"`, `\`, and `\n` / `\r` / `\t`; any other control char (`< 0x20` or `0x7f`) is rendered as `\u{HEX}`. Printable non-ASCII is emitted verbatim.
+
 #### Detailed Format Rules
 
 **Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`, but append `..` to indicate their presence. If all fields are hidden, output `Name { .. }`. Recursively inspect each visible field value.
