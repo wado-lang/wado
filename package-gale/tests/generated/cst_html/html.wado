@@ -2479,11 +2479,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -3313,7 +3310,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
-            let tag_close = p.expect(TK_TAG_CLOSE, &EMPTY_SYNC);
+            let tag_close = p.expect(TK_TAG_CLOSE, &SYNC_2);
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 let tokens = &p.kinds;
@@ -3332,9 +3329,9 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
             if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
                 let html_content = _parse_html_content(p, &FOLLOW_MASK_1);
-                let tag_open = p.expect(TK_TAG_OPEN, &EMPTY_SYNC);
-                let tag_slash = p.expect(TK_TAG_SLASH, &EMPTY_SYNC);
-                let tag_name = p.expect(TK_TAG_NAME, &EMPTY_SYNC);
+                let tag_open = p.expect(TK_TAG_OPEN, &SYNC_3);
+                let tag_slash = p.expect(TK_TAG_SLASH, &SYNC_0);
+                let tag_name = p.expect(TK_TAG_NAME, &SYNC_4);
                 let tag_close = p.expect(TK_TAG_CLOSE, &EMPTY_SYNC);
             }
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
@@ -3454,9 +3451,9 @@ fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let tag_name = p.expect(TK_TAG_NAME, &SYNC_2);
+    let tag_name = p.expect(TK_TAG_NAME, &SYNC_5);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
-        let tag_equals = p.expect(TK_TAG_EQUALS, &EMPTY_SYNC);
+        let tag_equals = p.expect(TK_TAG_EQUALS, &SYNC_6);
         let attvalue_value = p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC);
     }
     return;
@@ -3560,7 +3557,7 @@ fn _parse_html_comment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_script__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let script_open = p.expect(TK_SCRIPT_OPEN, &SYNC_3);
+    let script_open = p.expect(TK_SCRIPT_OPEN, &SYNC_7);
     let script_body_or_script_short_body = p.match_set([TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY]);
     return;
 }
@@ -3578,7 +3575,7 @@ fn _parse_script(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let style_open = p.expect(TK_STYLE_OPEN, &SYNC_4);
+    let style_open = p.expect(TK_STYLE_OPEN, &SYNC_8);
     let style_body_or_style_short_body = p.match_set([TK_STYLE_BODY, TK_STYLE_SHORT_BODY]);
     return;
 }
@@ -3724,9 +3721,13 @@ fn _kind_set_8(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_TAG_NAME];
 global SYNC_1: List<i32> = [TK_TAG_CLOSE, TK_TAG_NAME, TK_TAG_SLASH_CLOSE];
-global SYNC_2: List<i32> = [TK_TAG_EQUALS];
-global SYNC_3: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
-global SYNC_4: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
+global SYNC_2: List<i32> = [TK_CDATA, TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_HTML_TEXT, TK_SCRIPTLET, TK_SCRIPT_OPEN, TK_SEA_WS, TK_STYLE_OPEN, TK_TAG_OPEN];
+global SYNC_3: List<i32> = [TK_TAG_SLASH];
+global SYNC_4: List<i32> = [TK_TAG_CLOSE];
+global SYNC_5: List<i32> = [TK_TAG_EQUALS];
+global SYNC_6: List<i32> = [TK_ATTVALUE_VALUE];
+global SYNC_7: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
+global SYNC_8: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_TAG_OPEN], [TK_TAG_SLASH], [TK_TAG_NAME], [TK_TAG_CLOSE]];

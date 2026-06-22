@@ -1293,11 +1293,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1653,7 +1650,7 @@ fn _parse_if_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     let id = p.expect(TK_ID, &SYNC_1);
     let stmt = _parse_stmt(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
-        let lit_else = p.expect(TK_LIT_ELSE, &EMPTY_SYNC);
+        let lit_else = p.expect(TK_LIT_ELSE, &SYNC_1);
         let stmt = _parse_stmt(p, follow);
     }
     return;

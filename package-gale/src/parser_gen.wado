@@ -153,9 +153,10 @@ pub fn gen_parser(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGramma
 }
 
 /// Public `parse` entry under the emitter: tokenize, run the start
-/// rule (which drives the builder), and return a `ParseResult`. A propagated
-/// `Err` is the single fail-soft diagnostic; the partial tree (open nodes
-/// folded by each wrapper's `finish_node`) is still returned.
+/// rule (which drives the builder), and return a `ParseResult`. The parser is
+/// infallible; a failure leaves `p.recovering` set and the deepest error in
+/// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
+/// by each wrapper's `finish_node`) is still returned.
 fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar) {
     if lowered.parser_rules.len() == 0 {
         return;
@@ -243,6 +244,26 @@ fn emit_consume_return(w: &mut CodeWriter) {
     w.line(&"let _i = self.advance();");
     w.line(&"self.b.token(_i);");
     w.line(&"return _i;");
+}
+
+/// Consume the matched `kind` and return its index: EOF matches in place (the
+/// stream holds one EOF; advancing past it reads out of bounds, ANTLR4's
+/// `matchedEOF`), everything else advances. Used by `expect`'s match / delete /
+/// resync branches, which all consume `kind` the same way.
+fn emit_consume_kind_return(w: &mut CodeWriter) {
+    w.begin(&"if kind == TK_EOF");
+    w.line(&"self.b.token(self.pos);");
+    w.line(&"return self.pos;");
+    w.end();
+    emit_consume_return(w);
+}
+
+/// Shared prologue for the `report_*` diagnostic methods: drop the diagnostic
+/// (and fold the parse) once `max_errors` is reached, otherwise resolve the
+/// `line:col` for `span.start`.
+fn emit_diag_prologue(w: &mut CodeWriter) {
+    w.line(&"if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
+    w.line(&"let lc = line_col(self.tokens.chars, span.start);");
 }
 
 fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
@@ -407,8 +428,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     rex.set_receiver(&"&mut self");
     rex.add_param(&"span", &"Span");
     rex.emit_begin(w);
-    w.line(&"if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
-    w.line(&"let lc = line_col(self.tokens.chars, span.start);");
+    emit_diag_prologue(w);
     w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));");
     w.end();
     w.blank();
@@ -418,8 +438,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     rmi.add_param(&"kind", &"i32");
     rmi.add_param(&"span", &"Span");
     rmi.emit_begin(w);
-    w.line(&"if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
-    w.line(&"let lc = line_col(self.tokens.chars, span.start);");
+    emit_diag_prologue(w);
     w.line(&"let name = token_kind_name(kind);");
     w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));");
     w.end();
@@ -430,8 +449,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     run.set_receiver(&"&mut self");
     run.add_param(&"span", &"Span");
     run.emit_begin(w);
-    w.line(&"if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
-    w.line(&"let lc = line_col(self.tokens.chars, span.start);");
+    emit_diag_prologue(w);
     w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));");
     w.end();
     w.blank();
@@ -513,11 +531,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f7.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
     w.begin(&"if self.kinds[self.pos] == kind");
-    w.begin(&"if kind == TK_EOF");
-    w.line(&"self.b.token(self.pos);");
-    w.line(&"return self.pos;");
-    w.end();
-    emit_consume_return(w);
+    emit_consume_kind_return(w);
     w.end();
     // In a speculative parse, do not apply recovery edits — fail so the caller
     // backtracks (committing an edit here could steal tokens that belong to the
@@ -534,11 +548,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"let _sk = self.advance();");
     w.line(&"self.tokens.mark_skipped(_sk);");
     w.line(&"self.b.skip(_sk);");
-    w.begin(&"if kind == TK_EOF");
-    w.line(&"self.b.token(self.pos);");
-    w.line(&"return self.pos;");
-    w.end();
-    emit_consume_return(w);
+    emit_consume_kind_return(w);
     w.end();
     // single-token insertion: the current token continues the rule, so the
     // expected one is missing.
@@ -567,11 +577,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     // resynced exactly onto the expected token: consume it.
     w.begin(&"if self.kinds[self.pos] == kind");
-    w.begin(&"if kind == TK_EOF");
-    w.line(&"self.b.token(self.pos);");
-    w.line(&"return self.pos;");
-    w.end();
-    emit_consume_return(w);
+    emit_consume_kind_return(w);
     w.end();
     // resynced onto a follow token / EOF: the expected one is still missing.
     w.line(&"let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
@@ -2761,7 +2767,12 @@ fn gen_elements_with_non_greedy(
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
-            gen_op_leaf(w, op, ctx, name_counts);
+            // Same FIRST-of-rest sync as `gen_alt_elements`, so a missing leaf
+            // inside a group / single-alt body is inserted in place rather than
+            // only deleted-or-unwound (recovery quality is uniform with the
+            // top-level sequence).
+            let sync = ctx.first_of_elements_from(elements, i + 1);
+            gen_op_leaf(w, op, ctx, name_counts, &sync);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -2932,8 +2943,8 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
 // Under the emitter the alt body is emitted from the lowered ops (no
 // surface elements, no typed fields): leaves go through `gen_op_leaf` (the
 // Parser appends), groups / repeats dispatch on their GIR shape and recurse.
-// Mirrors `cst_gen`'s emitter but against the builder-appending Parser, so the
-// `?`-folding fail-soft and the typed leaf API are uniform with prediction.
+// Mirrors `cst_gen`'s emitter but against the builder-appending Parser, whose
+// match methods recover in place (infallible) instead of returning `Result`.
 
 fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     for let op of ops {

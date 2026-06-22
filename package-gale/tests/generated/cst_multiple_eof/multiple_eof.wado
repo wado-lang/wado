@@ -1153,11 +1153,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1446,13 +1443,13 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
             }
         }
         if gd_winner == 0 {
-            let lit_x = p.expect(TK_LIT_X, &EMPTY_SYNC);
+            let lit_x = p.expect(TK_LIT_X, &SYNC_0);
             let lit_y = p.expect(TK_LIT_Y, &EMPTY_SYNC);
         } else {
             let lit_x = p.expect(TK_LIT_X, &EMPTY_SYNC);
         }
     }
-    let eof = p.expect(TK_EOF, &SYNC_0);
+    let eof = p.expect(TK_EOF, &SYNC_1);
     let eof_2 = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1520,5 +1517,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_EOF];
+global SYNC_0: List<i32> = [TK_LIT_Y];
+global SYNC_1: List<i32> = [TK_EOF];
 

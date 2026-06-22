@@ -80,11 +80,9 @@ pub fn gen_node_kinds(w: &mut CodeWriter, rules: &List<Rule>) {
     w.blank();
     w.begin(&"impl Inspect for NodeKind");
     w.begin(&"fn inspect(&self, f: &mut Formatter)");
-    w.begin(&"if *self == K_ERROR");
-    w.line(&"f.write_str(&`<error>({*self as i32})`);");
-    w.else_begin(&"else");
-    w.line(&"f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);");
-    w.end();
+    // Reuse Display for the name, then append the numeric id.
+    w.line(&"self.fmt(f);");
+    w.line(&"f.write_str(&`({*self as i32})`);");
     w.end();
     w.end();
     w.blank();

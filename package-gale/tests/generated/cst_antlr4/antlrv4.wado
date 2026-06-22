@@ -4327,11 +4327,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -6613,7 +6610,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let dot = p.expect(TK_DOT, &EMPTY_SYNC);
+            let dot = p.expect(TK_DOT, &SYNC_3);
             let identifier = _parse_identifier(p, follow);
         }
         return;
@@ -6674,7 +6671,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_3);
         let delegate_grammar = _parse_delegate_grammar(p, follow);
     }
     let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
@@ -6837,7 +6834,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_3);
         let identifier = _parse_identifier(p, follow);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
@@ -7326,7 +7323,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_3);
         let qualified_identifier = _parse_qualified_identifier(p, follow);
     }
     return;
@@ -7497,7 +7494,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &EMPTY_SYNC);
+        let or = p.expect(TK_OR, &SYNC_8);
         let labeled_alt = _parse_labeled_alt(p, follow);
     }
     return;
@@ -7518,7 +7515,7 @@ fn _parse_labeled_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let start = p.peek_start();
     let alternative = _parse_alternative(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_POUND) {
-        let pound = p.expect(TK_POUND, &EMPTY_SYNC);
+        let pound = p.expect(TK_POUND, &SYNC_3);
         let identifier = _parse_identifier(p, follow);
     }
     return;
@@ -7602,7 +7599,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &EMPTY_SYNC);
+        let or = p.expect(TK_OR, &SYNC_13);
         let lexer_alt = _parse_lexer_alt(p, follow);
     }
     return;
@@ -7802,7 +7799,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_14);
         let lexer_command = _parse_lexer_command(p, follow);
     }
     return;
@@ -7987,7 +7984,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &EMPTY_SYNC);
+        let or = p.expect(TK_OR, &SYNC_8);
         let alternative = _parse_alternative(p, follow);
     }
     return;
@@ -8215,7 +8212,7 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_3);
         let predicate_option = _parse_predicate_option(p, follow);
     }
     let gt = p.expect(TK_GT, &EMPTY_SYNC);
@@ -8634,7 +8631,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let or = p.expect(TK_OR, &EMPTY_SYNC);
+        let or = p.expect(TK_OR, &SYNC_19);
         let set_element = _parse_set_element(p, follow);
     }
     let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
@@ -8920,7 +8917,7 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_3);
         let element_option = _parse_element_option(p, follow);
     }
     let gt = p.expect(TK_GT, &EMPTY_SYNC);
@@ -9098,7 +9095,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let dot = p.expect(TK_DOT, &EMPTY_SYNC);
+        let dot = p.expect(TK_DOT, &SYNC_3);
         let identifier = _parse_identifier(p, follow);
     }
     return;

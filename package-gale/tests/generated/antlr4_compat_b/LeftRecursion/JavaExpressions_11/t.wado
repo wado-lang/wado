@@ -1929,11 +1929,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -3082,7 +3079,7 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
         let e = _parse_e(p, follow);
     }
     return;
@@ -3101,9 +3098,9 @@ fn _parse_expression_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_e__inner_alt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
     let typespec = _parse_typespec(p, &FOLLOW_MASK_1);
-    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_1);
+    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_0);
     let e = _parse_e(p, follow, 16);
     return;
 }
@@ -3123,7 +3120,7 @@ fn _parse_e__inner_scan_12(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
 
 fn _parse_e__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
     let e = _parse_e(p, &FOLLOW_MASK_1);
     let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
@@ -3238,11 +3235,11 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
     }
     if kind == TK_LIT_NEW {
-        let lit_new = p.expect(TK_LIT_NEW, &SYNC_0);
+        let lit_new = p.expect(TK_LIT_NEW, &SYNC_1);
         let typespec = _parse_typespec(p, &FOLLOW_MASK_3);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
-            let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+            let lparen = p.expect(TK_LIT_LPAREN, &SYNC_3);
             if _kind_set_0(p.peek_kind()) {
                 let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW);
             }
@@ -3275,7 +3272,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                     if rep_scan_pos < 0 { break; }
                 }
                 _plus_first = false;
-                let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_0);
                 let e = _parse_e(p, &FOLLOW_MASK_4);
                 let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
             }
@@ -3587,8 +3584,8 @@ fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: 
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let id = p.expect(TK_ID, &SYNC_3);
-    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_4);
+    let id = p.expect(TK_ID, &SYNC_4);
+    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_5);
     let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
@@ -3619,8 +3616,8 @@ fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Li
 
 fn _parse_typespec__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lit_int = p.expect(TK_LIT_INT, &SYNC_3);
-    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_4);
+    let lit_int = p.expect(TK_LIT_INT, &SYNC_4);
+    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_5);
     let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
@@ -3829,11 +3826,12 @@ fn _kind_set_11(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_ID, TK_LIT_INT];
-global SYNC_1: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE];
+global SYNC_0: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE];
+global SYNC_1: List<i32> = [TK_ID, TK_LIT_INT];
 global SYNC_2: List<i32> = [TK_LIT_CLASS];
-global SYNC_3: List<i32> = [TK_LIT_LBRACKET];
-global SYNC_4: List<i32> = [TK_LIT_RBRACKET];
+global SYNC_3: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_RPAREN, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE];
+global SYNC_4: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_5: List<i32> = [TK_LIT_RBRACKET];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_RPAREN]];

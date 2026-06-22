@@ -1299,11 +1299,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1744,7 +1741,7 @@ fn _parse_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+            let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
             let arm = _parse_arm(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
@@ -1816,7 +1813,7 @@ fn _parse_wrapped(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
+    let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_1);
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
         let tokens = &p.kinds;
@@ -1868,7 +1865,7 @@ fn _parse_braced__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+            let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
             let arm = _parse_arm(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
@@ -1979,7 +1976,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_IDENT, TK_LIT_RBRACE];
+global SYNC_0: List<i32> = [TK_IDENT];
+global SYNC_1: List<i32> = [TK_IDENT, TK_LIT_RBRACE];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 

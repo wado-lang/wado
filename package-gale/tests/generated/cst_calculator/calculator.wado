@@ -1814,11 +1814,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -2477,7 +2474,7 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let pow = p.expect(TK_POW, &EMPTY_SYNC);
+        let pow = p.expect(TK_POW, &SYNC_0);
         let signed_atom = _parse_signed_atom(p, follow);
     }
     return;
@@ -2662,7 +2659,7 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
+        let comma = p.expect(TK_COMMA, &SYNC_0);
         let expression = _parse_expression(p, follow);
     }
     let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);

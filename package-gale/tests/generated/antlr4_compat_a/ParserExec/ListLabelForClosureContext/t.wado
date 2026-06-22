@@ -1269,11 +1269,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1613,7 +1610,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let expression = _parse_expression(p, &FOLLOW_MASK_0);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_THEN {
-        let lit_then = p.expect(TK_LIT_THEN, &EMPTY_SYNC);
+        let lit_then = p.expect(TK_LIT_THEN, &SYNC_1);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1673,7 +1670,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if p.peek_kind() == TK_LIT_A {
             let else_statement = _parse_else_statement(p, &EMPTY_FOLLOW);
         }
-        let lit_end = p.expect(TK_LIT_END, &EMPTY_SYNC);
+        let lit_end = p.expect(TK_LIT_END, &SYNC_2);
         let lit_if = p.expect(TK_LIT_IF, &EMPTY_SYNC);
     } else if grp_kind == TK_LIT_A {
         let executable_statement = _parse_executable_statement(p, follow);
@@ -1694,7 +1691,7 @@ fn _parse_if_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_else_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lit_else = p.expect(TK_LIT_ELSE, &SYNC_1);
+    let lit_else = p.expect(TK_LIT_ELSE, &SYNC_2);
     let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
     let expression = _parse_expression(p, &FOLLOW_MASK_1);
     let lit_then = p.expect(TK_LIT_THEN, &SYNC_0);
@@ -1865,7 +1862,8 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_A];
-global SYNC_1: List<i32> = [TK_LIT_IF];
+global SYNC_1: List<i32> = [TK_LIT_A, TK_LIT_ELSE, TK_LIT_END];
+global SYNC_2: List<i32> = [TK_LIT_IF];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_A, TK_LIT_THEN]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_THEN]];

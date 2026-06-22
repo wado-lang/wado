@@ -1311,11 +1311,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1592,7 +1589,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_stat__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     if p.peek_kind() == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
         if p.peek_kind() == TK_ID {
             let expr = _parse_expr(p);
         }
@@ -1615,8 +1612,8 @@ fn _parse_stat(p: &mut Parser) -> () {
 
 fn _parse_expr__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let id = p.expect(TK_ID, &SYNC_0);
-    let eq = p.expect(TK_LIT_EQ, &SYNC_1);
+    let id = p.expect(TK_ID, &SYNC_1);
+    let eq = p.expect(TK_LIT_EQ, &SYNC_2);
     let str = p.expect(TK_STR, &EMPTY_SYNC);
     return;
 }
@@ -1688,6 +1685,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_LIT_EQ];
-global SYNC_1: List<i32> = [TK_STR];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_RPAREN];
+global SYNC_1: List<i32> = [TK_LIT_EQ];
+global SYNC_2: List<i32> = [TK_STR];
 

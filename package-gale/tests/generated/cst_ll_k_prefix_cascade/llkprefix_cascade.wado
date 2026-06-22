@@ -1308,11 +1308,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1702,7 +1699,7 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             if rep_scan_pos < 0 { break; }
         }
         _plus_first = false;
-        let x = p.expect(TK_X, &EMPTY_SYNC);
+        let x = p.expect(TK_X, &SYNC_2);
         let y = p.expect(TK_Y, &EMPTY_SYNC);
     }
     return;
@@ -1710,7 +1707,7 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_m__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k = p.expect(TK_K, &SYNC_2);
+    let k = p.expect(TK_K, &SYNC_3);
     let z = p.expect(TK_Z, &EMPTY_SYNC);
     return;
 }
@@ -1749,7 +1746,7 @@ fn _parse_m(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_c__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let x = p.expect(TK_X, &SYNC_3);
+    let x = p.expect(TK_X, &SYNC_2);
     let y = p.expect(TK_Y, &SYNC_4);
     let w = p.expect(TK_W, &EMPTY_SYNC);
     return;
@@ -1832,8 +1829,8 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_K];
 global SYNC_1: List<i32> = [TK_X];
-global SYNC_2: List<i32> = [TK_Z];
-global SYNC_3: List<i32> = [TK_Y];
+global SYNC_2: List<i32> = [TK_Y];
+global SYNC_3: List<i32> = [TK_Z];
 global SYNC_4: List<i32> = [TK_W];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_X], [TK_Y], [TK_W], [TK_EOF]];

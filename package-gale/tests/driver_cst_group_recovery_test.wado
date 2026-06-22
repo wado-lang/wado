@@ -1,0 +1,26 @@
+//! In-group error recovery: a missing element inside a `( … )` group is
+//! repaired in place (insert `<missing>`), the same as at top-level alt
+//! position. Guards the FIRST-of-rest `sync` threading in
+//! `gen_elements_with_non_greedy`; without it a group leaf would only
+//! delete-or-unwind, never insert.
+
+use g from "./grammars/group_recovery.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_group_recovery",
+        },
+    };
+
+test "clean parse of a full group" {
+    let r = g::parse(&"( a b c )");
+    assert r.ok(), "unexpected diagnostics";
+    assert g::to_string_tree(&r) == "(s ( a b c ))", g::to_string_tree(&r);
+}
+
+test "recovery: a missing middle group element is inserted in place" {
+    let r = g::parse(&"( a c )");
+    assert !r.ok(), "expected a diagnostic";
+    assert g::to_string_tree(&r) == "(s ( a <missing B> c ))", g::to_string_tree(&r);
+}

@@ -1383,11 +1383,8 @@ impl Display for NodeKind {
 
 impl Inspect for NodeKind {
     fn inspect(&self, f: &mut Formatter) {
-        if *self == K_ERROR {
-            f.write_str(&`<error>({*self as i32})`);
-        } else {
-            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
-        }
+        self.fmt(f);
+        f.write_str(&`({*self as i32})`);
     }
 }
 
@@ -1919,7 +1916,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+            let comma = p.expect(TK_LIT_COMMA, &SYNC_3);
             let arm = _parse_arm(p, follow);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_COMMA) {
@@ -1985,7 +1982,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let path = _parse_path(p, follow);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_LPAREN) {
-        let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_4);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -2032,7 +2029,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                let comma = p.expect(TK_LIT_COMMA, &SYNC_3);
                 let pattern = _parse_pattern(p, follow);
             }
         }
@@ -2124,7 +2121,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
     }
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_3);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_4);
         let mut opt_scan_pos: i32 = -1;
         opt_scan: {
             let tokens = &p.kinds;
@@ -2171,7 +2168,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                let comma = p.expect(TK_LIT_COMMA, &SYNC_3);
                 let pattern = _parse_pattern(p, follow);
             }
         }
@@ -2200,7 +2197,7 @@ fn _parse_pattern(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> (
 
 fn _parse_path__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let ident = p.expect(TK_IDENT, &SYNC_4);
+    let ident = p.expect(TK_IDENT, &SYNC_5);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -2222,7 +2219,7 @@ fn _parse_path__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let lit_coloncolon = p.expect(TK_LIT_COLONCOLON, &EMPTY_SYNC);
+        let lit_coloncolon = p.expect(TK_LIT_COLONCOLON, &SYNC_0);
         let ident = p.expect(TK_IDENT, &EMPTY_SYNC);
     }
     return;
@@ -2318,8 +2315,9 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_IDENT];
 global SYNC_1: List<i32> = [TK_LIT_LBRACE];
 global SYNC_2: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_RBRACE, TK_LIT_U5f];
-global SYNC_3: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_RPAREN, TK_LIT_U5f];
-global SYNC_4: List<i32> = [TK_LIT_COLONCOLON];
+global SYNC_3: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_U5f];
+global SYNC_4: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_RPAREN, TK_LIT_U5f];
+global SYNC_5: List<i32> = [TK_LIT_COLONCOLON];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_EQGT], [TK_IDENT]];
