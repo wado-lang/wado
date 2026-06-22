@@ -80,13 +80,36 @@ Each `#[param]` declaration resolves independently. Sources are checked in this 
 
 If a higher-priority source produces a value, lower-priority sources are not consulted.
 
-CLI overrides and environment variables yield strings. They are converted to the global's declared type via the [`FromParam`](#fromparam-trait) trait. `FromParam` is a _total_ conversion — it does not return an error. A value it cannot convert is handled by one of the strategies in [Failure Handling](#failure-handling); none of them is, by itself, a compile error.
+CLI overrides and environment variables yield strings. They are converted to the global's declared type via the [`FromParam`](#fromparam-trait) trait, which returns `Result<Self, Self::Err>`. A failed conversion is not, in itself, fatal: what happens is decided by the [Resolution Policy](#resolution-policy).
 
-The initializer expression is type-checked as written; no `FromParam` is involved on that path. When a conversion is ignored (see [Failure Handling](#failure-handling)), the initializer expression is the value that takes effect.
+The initializer expression is type-checked as written; no `FromParam` is involved on that path. It is the value that takes effect whenever an override is absent or its conversion is rejected by the policy.
 
-### Unknown `-D` Names
+### Resolution Policy
 
-`-D NAME=value` whose `NAME` does not match any `#[param]` declaration in the program is a compile error. This catches typos and prevents silent build drift. A future per-package scoping mechanism may relax this for cases where a single CLI invocation targets multiple build configurations.
+Three things can go wrong while resolving parameters. Each is a separate diagnostic class with a configurable level (`error`, `warn`, or `ignore`), set on the CLI:
+
+| Class             | Situation                                                       | Flag              | Default  |
+| ----------------- | --------------------------------------------------------------- | ----------------- | -------- |
+| unknown `-D` name | `-D NAME=value` whose `NAME` matches no `#[param]` declaration  | `--param-unknown` | `error`  |
+| invalid value     | an override resolved, but `FromParam` conversion returned `Err` | `--param-invalid` | `error`  |
+| missing value     | no override resolved; the initializer (default) would be used   | `--param-missing` | `ignore` |
+
+The defaults are strict where a mistake is likely (`unknown`, `invalid`) and lenient where falling back to the declared default is the normal case (`missing`). Each level means:
+
+- `error` — a compile error (or, where the check can only happen at runtime, a runtime trap; see below).
+- `warn` — emit a diagnostic and use the initializer's default value (for `unknown`, ignore the stray `-D`).
+- `ignore` — silently use the default.
+
+`--param-unknown` is relaxed to `warn`/`ignore` for the case the per-package scoping extension will eventually address: a single CLI invocation that targets several build configurations and legitimately passes a `-D` not declared in every one.
+
+#### Policy Applies as Early as It Can
+
+The flags choose _what_ a bad value means, not _when_ it is detected. The compiler applies the chosen policy at the earliest point it can know the outcome:
+
+- For the built-in parameter types (see [Supported Types](#supported-types-v1)), conversion is performed by the compiler at resolution time, so `--param-invalid` is enforced at compile time — a bad value with the default policy fails the build.
+- For user-defined `FromParam` types, the compiler cannot evaluate the conversion without compile-time function evaluation. v1 does not support them (see [Supported Types](#supported-types-v1)); v2 will, via the wasm-CTFE backend, at which point the same policy is enforced at compile time. Until then there is no path on which a user-typed conversion runs.
+
+This "diagnose as early as possible" rule keeps one policy meaning across both timings: the flag says how a bad value is handled; the compiler shifts the check left whenever it has enough information.
 
 ### Flat Namespace
 
@@ -102,36 +125,25 @@ CLI and environment variable values are strings. Conversion to the global's type
 
 ```wado
 pub trait FromParam {
-    fn from_param(s: &String) -> Self;
+    type Err;
+    fn from_param(s: &String) -> Result<Self, Self::Err>;
 }
 ```
 
-`FromParam` is a _total_ conversion: it returns `Self` directly, with no `Result` and no `Err` associated type. This is the central difference from `FromStr` (the general string parsing trait this WEP builds on, already in `core:prelude`), whose `from_str` returns `Result<Self, Self::Err>` so user code can recover from a parse failure.
+`FromParam` returns `Result`, mirroring `FromStr` (the general string-parsing trait already in `core:prelude`). The `Err` reports an unconvertible value; the [Resolution Policy](#resolution-policy) decides whether that aborts the build, warns, or is ignored. Keeping the conversion fallible — rather than total — is what makes the policy meaningful: the trait reports _whether_ a value converts, and the compiler flag decides _what to do_ about it. The two concerns stay separate.
 
-A compile-time parameter has no caller to hand a `Result` to: the value is fixed before the program runs. Modeling it as a fallible conversion would force every read site, or the resolution pass, to invent an error policy. Making `FromParam` total pushes that policy into the conversion itself, which is where the per-type knowledge lives.
+`FromParam` is intentionally distinct from `FromStr`:
 
-`FromParam` is also permitted to be more lenient than `FromStr` — for example, accepting both `"true"` and `"1"` for `bool` — without affecting the semantics of general string parsing in user code.
-
-#### Failure Handling
-
-Because `from_param` is total, an implementation cannot signal "this string is not a valid value" through its return type. On input it cannot convert, an implementation does one of:
-
-1. Best-effort coercion — return a sensible value anyway (e.g. `String` is the trimmed input; `bool` treats `"1"`/`"0"` like `"true"`/`"false"`).
-2. `panic` — signal that the input is unusable.
-
-These two impl-level choices, combined with _where_ the conversion runs (see [Resolution Timing and Optimization](#resolution-timing-and-optimization)), produce the three observable outcomes:
-
-- Best-effort → the returned value is used.
-- A conversion the compiler performs at resolution time (every built-in impl) that fails is **not** a build error: the pass emits a warning, ignores the override, and falls back to the initializer expression. This is the "ignore with a warning" outcome.
-- A `panic` reached only at runtime — possible when a user `FromParam` impl runs during global initialization rather than at resolution time — surfaces as a runtime trap. This escapes compile-time detection, so it is discouraged, but not prohibited.
-
-Built-in implementations never reach the runtime-panic outcome: the resolution pass converts them itself, so an unconvertible value always becomes a compile-time warning plus the initializer fallback.
+- It may be more lenient — e.g. accepting `"1"` / `"0"` for `bool` — without bending general string-parsing semantics in user code.
+- It trims unconditionally (see [Trimming](#trimming)).
 
 #### Trimming
 
-All built-in `FromParam` implementations trim leading and trailing ASCII whitespace from the input before parsing. This applies to `String` as well: parameter values cannot contain meaningful leading or trailing whitespace.
+All built-in `FromParam` implementations trim leading and trailing ASCII whitespace from the input before parsing. This applies to `String` as well: parameter values cannot carry meaningful leading or trailing whitespace.
 
-#### Built-In Implementations
+#### Supported Types (v1)
+
+v1 supports `#[param]` only on these built-in types. The compiler converts them itself at resolution time (no compile-time function evaluation needed), so the [policy](#resolution-policy) is enforced at compile time.
 
 | Type                              | Accepted form                                          |
 | --------------------------------- | ------------------------------------------------------ |
@@ -141,40 +153,47 @@ All built-in `FromParam` implementations trim leading and trailing ASCII whitesp
 | `f32`, `f64`                      | Standard floating-point literal (e.g., `3.14`, `-1e9`) |
 | `bool`                            | `"true"`, `"false"`, `"1"`, `"0"` (case-insensitive)   |
 
-Anything else — for example, a hex prefix on an integer, or `"yes"` for `bool` — is unconvertible. Per [Failure Handling](#failure-handling), the resolution pass converts these built-in types itself, so an unconvertible value becomes a compile warning and a fallback to the initializer rather than a build error. The accepted set may be extended in future WEPs.
+Anything else — a hex prefix on an integer, `"yes"` for `bool` — fails conversion and is handled per `--param-invalid`. The accepted set may be extended in future WEPs.
 
-User-defined types may implement `FromParam` to be usable as `#[param]` types. This is supported but not exercised by the v1 implementation; the focus is the built-in set above. A user-typed conversion is left as a `from_param(...)` call in the initializer, so it risks the runtime-panic outcome; implementors should prefer best-effort coercion.
+A `#[param]` on any other type — including a user-defined type that implements `FromParam` — is a compile error in v1: `#[param] on <Type>: only built-in types are supported (user-defined FromParam types require compile-time evaluation, planned for v2)`. v1 never executes a `FromParam` impl; it mirrors the built-in accepted sets natively. v2 lifts the restriction by evaluating arbitrary `FromParam` impls through the wasm-CTFE backend (see [niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 
 ### Resolution Timing and Optimization
 
-When an override resolves, the param-resolution pass handles the conversion by the global's declared type:
+When an override resolves, the param-resolution pass converts the string natively (the compiler owns the parsers for `String`, the integer types, the float types, and `bool`) and:
 
-- Built-in type: the pass converts the resolved string natively (the compiler owns the parsers for `String`, the integer types, the float types, and `bool`). Success replaces the initializer with a literal of the resolved value; failure emits a warning and leaves the original initializer in place. No interpreter is involved, so this works at the pass's position (after symbol resolution, before lowering).
-- User type: the pass rewrites the initializer to `<Type>::from_param("<resolved string>")`, an ordinary Wado expression, and leaves it to the rest of the pipeline.
+- on success, replaces the global's initializer with a literal of the resolved value;
+- on failure, applies `--param-invalid`: at `error` the build fails; at `warn`/`ignore` it leaves the original initializer in place (with or without a diagnostic).
 
-After the rewrite the global behaves like any other `global` whose initializer is an expression:
+No interpreter is involved, so this runs at the pass's position (after symbol resolution, before lowering). After the rewrite the global is an ordinary `global` whose initializer is a literal:
 
-- A literal scalar (numeric, `bool`) is eligible for Constant Global Promotion (CGP) to an immutable Wasm constant. `String` participates in the existing lazy-initialization path.
-- A `from_param(...)` call for a user type is constant-folded when its impl allows it; otherwise it stays a runtime call in the initializer, and that is the only path on which a `from_param` `panic` can surface at runtime.
+- A scalar literal (numeric, `bool`) is eligible for Constant Global Promotion (CGP) to an immutable Wasm constant.
+- A `String` literal participates in the existing lazy-initialization path.
 
-No new optimization is required. The only new behavior is the resolution pass converting built-in types and treating a failed conversion as a warning-and-fallback instead of a hard error.
+No new optimization is required; bake-in falls out of the existing global pipeline plus CGP.
 
 ### CLI Surface
 
-`wado compile`, `wado run`, `wado serve`, `wado test`, and `wado dump` all accept `-D NAME=value` (repeatable). The flag is parsed before module loading so that resolution can happen during compilation.
+`wado compile`, `wado run`, `wado serve`, `wado test`, and `wado dump` all accept `-D NAME=value` (repeatable) plus the three policy flags from [Resolution Policy](#resolution-policy). All are parsed before module loading so that resolution can happen during compilation.
 
 ```sh
 wado compile -D API_URL=https://prod.example.com -D PORT=80 app.wado
 wado run -D LOG_LEVEL=debug script.wado
+
+# Relax the policy: tolerate a stray -D and a bad value, fall back to defaults
+wado compile --param-unknown=warn --param-invalid=warn -D EXTRA=1 -D PORT=eighty app.wado
+
+# Tighten the policy: require every parameter to be supplied
+wado compile --param-missing=error -D API_URL=… -D PORT=80 -D BUILD_ID=… app.wado
 ```
 
 ### Out of Scope (v1)
 
 These are intentionally deferred:
 
+- User-defined `FromParam` types — v1 supports only the built-in types ([Supported Types](#supported-types-v1)). Arbitrary types need compile-time evaluation of the conversion; v2 enables it through the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)).
 - Parameter file (`WADO_PARAM_FILE`) — keep core feature minimal; can be added once the trade-offs are concrete.
 - Per-package scoping for `-D` — the flat namespace is enough for the v1 use cases. Add a structured override key (e.g., `-D 'auth-lib:NAME=...'` keyed on `[dependencies]` import names) only if user demand emerges.
-- Optional vs required distinction — v1 always falls back to the initializer expression, so a parameter without an override is just the initializer's value.
+- Per-parameter `required` — `--param-missing=error` already enforces "every parameter must be supplied" globally. A per-declaration `#[param(required)]` (and the matching initializer-less `global` syntax) is a separate, finer-grained feature; see [Future Extensions](#future-extensions).
 - `export` interaction — exposing a `#[param]` global at the Component Model boundary, and the question of whether a consumer can override a producer's compiled-in value, is an independent design problem.
 
 ## Implementation Strategy
@@ -188,9 +207,10 @@ No changes to `wado.toml`. `#[param]` is purely a source-level construct.
 1. **Parser**: `#[param]` is recognized as a global attribute. The parser accepts the named-argument form (`from_env = "..."`).
 2. **Symbol/Type pass**: each `#[param]` declaration registers its parameter name (`name = "..."` if given, otherwise the global's identifier) and the optional `from_env` mapping in a per-compilation parameter table.
 3. **Param resolution pass** (new, runs after symbol resolution and before TIR lowering):
-   - For each `-D NAME=value` from the CLI, look up `NAME` in the parameter table. Unknown names → compile error.
-   - For each `#[param]` declaration, in priority order, find a string value from `-D`, then from the declared `from_env` environment variable, otherwise mark the global as using its initializer.
-   - For overridden globals with a built-in declared type, convert the string natively: success → replace the initializer with the resolved literal; failure → warning, keep the initializer. For a user-typed global, rewrite the initializer to `<Type>::from_param("<resolved string>")`. No conversion outcome is a hard error (see [Failure Handling](#failure-handling)).
+   - Reject `#[param]` on a non-built-in type (the v1 [Supported Types](#supported-types-v1) restriction).
+   - For each `-D NAME=value`, look up `NAME` in the parameter table; apply `--param-unknown` to misses.
+   - For each `#[param]` declaration, in priority order, take a value from `-D`, then from the declared `from_env` variable; if none, apply `--param-missing` and keep the initializer.
+   - For an overridden global, convert the string natively. Success → replace the initializer with the resolved literal. Failure → apply `--param-invalid` (keep the initializer unless the level is `error`).
 4. **Existing optimizations** (constant folding, CGP, etc.) operate on the rewritten globals without further changes.
 
 ### `CompilerHost`
@@ -205,31 +225,34 @@ trait CompilerHost {
 }
 ```
 
-The CLI host implements these by reading `clap` arguments and `std::env::var` respectively. The test host can stub both.
+The CLI host implements these by reading `clap` arguments and `std::env::var` respectively. The test host can stub both. The three policy levels travel with the existing compile options, not the host.
 
 ### `FromParam` and `FromStr`
 
-`FromStr` already lives in `core:prelude` (Rust-compatible, returning `Result<Self, Self::Err>`, with `from_str_range` as the fundamental operation). This WEP adds:
+`FromStr` already lives in `core:prelude` (Rust-compatible, returning `Result<Self, Self::Err>`, with `from_str_range` as the fundamental operation). This WEP adds `FromParam` (also `Result`-returning) alongside it, auto-imported from `core:prelude`. Built-in impls delegate to the corresponding `FromStr` impl, trim unconditionally, and are lenient where it makes sense (`bool` accepts `"1"` / `"0"`).
 
-- `FromParam` — a separate, total trait (`fn from_param(s: &String) -> Self`). Built-in impls in the prelude delegate to the corresponding `FromStr` impl, trim unconditionally, are lenient where it makes sense (`bool` accepts `"1"` / `"0"`), and `panic` on an unconvertible value. The resolution pass mirrors these impls natively so it can convert a built-in parameter without an interpreter; a conversion the native path rejects becomes a warning-and-fallback (see [Failure Handling](#failure-handling)) rather than the impl's runtime `panic`.
-
-`FromParam` lives in `core:prelude` and is auto-imported.
+v1's resolution pass does not _execute_ these impls — it mirrors their accepted sets natively so a built-in parameter converts without an interpreter. The prelude impls therefore are the contract the native path must match (and are what user code calls at runtime, and what v2's wasm-CTFE backend will execute directly, removing the duplication).
 
 ### Errors
 
-| Condition                                           | Error                                            |
-| --------------------------------------------------- | ------------------------------------------------ |
-| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global` |
-| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`              |
-| `name = ""` (empty string)                          | `#[param] name must not be empty`                |
-| `-D NAME=value` for an undeclared parameter         | `unknown compile-time parameter: NAME` (error)   |
+Structural mistakes in the declaration are always errors:
 
-`FromParam` conversion never produces an error. When a built-in conversion cannot convert the resolved string (e.g. `-D PORT=eighty`), the resolution pass emits a warning instead and keeps the initializer:
+| Condition                                           | Error                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------- |
+| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global`              |
+| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`                           |
+| `name = ""` (empty string)                          | `#[param] name must not be empty`                             |
+| `#[param]` on a non-built-in type                   | `#[param] on <Type>: only built-in types are supported in v1` |
 
-| Condition                                       | Warning                                                                |
-| ----------------------------------------------- | ---------------------------------------------------------------------- |
-| built-in conversion fails on a `-D` value       | `cannot parse "<value>" as <Type> for parameter <NAME>; using default` |
-| built-in conversion fails on a `from_env` value | same as above, naming the env var instead of the parameter             |
+The three resolution diagnostics report at the level set by their flag ([Resolution Policy](#resolution-policy)); the message is the same whether it surfaces as an error or a warning:
+
+| Class         | Flag (default)             | Message                                                 |
+| ------------- | -------------------------- | ------------------------------------------------------- |
+| unknown name  | `--param-unknown` (error)  | `unknown compile-time parameter: <NAME>`                |
+| invalid value | `--param-invalid` (error)  | `cannot parse "<value>" as <Type> for parameter <NAME>` |
+| missing value | `--param-missing` (ignore) | `compile-time parameter <NAME> was not provided`        |
+
+For an `invalid` value sourced from `from_env`, the message names the environment variable instead of the parameter. At `warn`/`ignore`, `invalid` and `missing` fall back to the initializer's default.
 
 ### Documentation
 
@@ -244,19 +267,21 @@ The CLI host implements these by reading `clap` arguments and `std::env::var` re
 - No new literal syntax; `#[param]` slots into the existing attribute family alongside `#[inline]`, `#[expect_trap]`, etc.
 - Type and default come from the `global` itself, eliminating turbofish and avoiding redundant manifest schemas.
 - Bake-in semantics fall out of the existing global pipeline plus CGP — minimal new optimization work.
-- Build inputs are explicit: only declared parameters can be set, and a `-D` for an undeclared name is a hard error, catching typos in parameter _names_.
+- Build inputs are explicit and verified at compile time: undeclared names and unconvertible values both fail the build by default, catching typos in names _and_ values before an artifact ships.
+- One policy meaning across timings: `--param-{unknown,invalid,missing}` say _what_ a bad input means; the compiler diagnoses as early as it can (compile time for v1's built-in types).
 - `from_env` makes the set of consumed environment variables a documented, opt-in subset, avoiding Rust `env!()`'s "any env var leaks in" failure mode.
 
 ### Trade-offs
 
 - Flat namespace pushes collision avoidance to library authors. Acceptable: the same constraint applies to OS environment variables, which library authors already deal with.
-- A malformed parameter _value_ (e.g. `-D PORT=eighty`) is a warning, not an error, and the initializer's default silently takes effect. This trades strictness for build resilience; the warning is the signal that surfaces the misconfiguration. A future `required`/strict mode (see [Future Extensions](#future-extensions)) could promote it back to an error where a default is not acceptable.
-- `FromParam` is a dedicated trait and not `FromStr`, so there is some duplication. The benefits — lenient parameter parsing kept out of general string parsing semantics, and a total conversion that never fails the build — are judged worth the cost.
+- v1 supports only built-in parameter types. Accepted deliberately: every v1 use case (API URLs, ports, build IDs, flags) is a built-in type, and built-ins convert at compile time without compile-time function evaluation. User-defined types wait for v2's wasm-CTFE backend rather than forcing a runtime-conversion path with weaker (runtime) diagnostics.
+- `FromParam` duplicates parts of `FromStr`. The benefit — lenient, trimming parameter parsing kept out of general string-parsing semantics — is judged worth the cost; v2 collapses the second duplication (native mirror vs prelude impl) by executing the impls directly.
 - `String` parameters cannot carry meaningful surrounding whitespace because trim is unconditional. Acceptable for the target use cases (API URLs, identifiers, level names).
 
 ### Future Extensions
 
+- Arbitrary `FromParam` types via the wasm-CTFE backend ([niri Stage 5](./wep-2026-04-27-nir-interpreter.md)) — v2's headline addition: the conversion runs at compile time, so `--param-invalid` keeps its compile-time meaning for user types too.
 - Parameter file (`WADO_PARAM_FILE` or `wado.toml [params]`) once the convenience of grouping many overrides is demanded.
 - Per-package scoping for `-D` to override a specific dependency's parameter without affecting same-named parameters elsewhere.
-- Optional/required parameter distinction, with `Option<T>` typing or an explicit `required` flag.
+- Per-declaration `#[param(required)]` with initializer-less `global` syntax, for parameters that have no sensible default (finer-grained than the global `--param-missing=error`).
 - `export #[param]` and the associated cross-component override design.
