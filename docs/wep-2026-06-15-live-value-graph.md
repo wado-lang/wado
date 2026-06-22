@@ -15,13 +15,43 @@ stays out of scope.
 ## Status and next step (handoff)
 
 Operand promotion + build-once is the default (`b6bb675a9`); `rebuilds = 0` is
-met. The remaining gate to all three acceptance criteria is a **green default
-`-O2` e2e**. The **6 P0 runtime miscompiles are fixed** (`6bd41a28d`); the
-remaining failures are **missed optimizations under promotion**, not
-miscompiles — every program runs correctly, the `wir_expect` / `wir_not_expect`
-assertions just no longer see the optimization fire.
+met (criterion 1). The **default `-O2` e2e is fully green** (3014/0), and so is
+the whole suite — `mise run test` (all crates incl. `gale_cli`) and
+`mise run test-wado` (3378/0 + 1478/0). The merge gate (all tests green, every
+pre-existing failure fixed) is therefore met on this branch. What remains is
+**criterion 3's side-table half**: retiring `value_of` via Phase B.3
+(scheduling extraction for non-constant values); criterion 2 (optimize CPU
+halved on package-gale) is not yet measured.
 
-### Done: the 6 P0 miscompiles (`6bd41a28d`)
+### Latest session — e2e 8 → 0, P0s fixed, gale_cli unblocked
+
+Greened the eight remaining `-O2` fixtures and the pre-existing kiln panic, no
+regression (`oob` 14/14 and `WADO_VERIFY_VG` clean throughout):
+
+- Post-SROA bare-scalar store-to-load (`Engine::grow_bare_local_constants`):
+  `store_to_load_forwarding`, `field_forward_snapshot_after_mutation`. SROA turns
+  heap fields into bare scalars after the build-once graph was built and `inline`
+  coarsened it, so the new reads carry no value; `store_load_forward` regrows them
+  via a scratch `build_scoped` (not a counted rebuild).
+- **P0 miscompile** — `&mut self` on a `Box<T>` receiver was modelled as
+  non-mutating (boxing erases `&mut`/`&` into `Box`), so `x.bump(); assert x==2`
+  folded to `if true { panic }`. Fixed with a per-callee "writes through its
+  receiver" body analysis (`CallImmutability::method_writes_receiver`):
+  `bug_store_load_forward_mut_method_receiver` (O0+O2).
+- Construction tracking (`construction_field_value` + `existing_local_opaque`
+  leaf re-seed): `array_bounds_elim_le_guard_wir`, `optimize_bitmask_bce` —
+  recovers `arr.used == N` from `List::filled(N)`'s `used: N` for the hoisted
+  BCE bound.
+- Refreshed two drifted WIR expectations (behaviour already correct):
+  `opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`.
+- **Operand-promotion panic (Phase B.2 partial)** — a promoted `Operand::Value`
+  (a constant-struct `FieldAccess` receiver) hit `as_expr().expect("skeleton
+  operand")` in `ref_elim` / `licm` / `field_scalarize`, crashing the kiln
+  generator (`gale_cli`, `syntax_highlight`). Migrated those passes to treat a
+  promoted operand as a non-candidate (conservative, sound). ~100 such `expect`
+  sites remain in passes no current test reaches with a promoted operand.
+
+### Earlier: the 6 P0 miscompiles (`6bd41a28d`)
 
 Root cause was **not** `value_is_invariant` (that earlier hypothesis was
 wrong — the `_licm_repr` field hoist is a sound reference alias). It was
@@ -306,10 +336,12 @@ each is a static or measured fact, not a "byte-identical and X% faster" proxy.
       (persist gates + honest measurement + config-aware verify oracle).
 - [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s), measured by the
       sampling profile and wall time.
-- [ ] **The cache is deleted.** `vg_cache`, `carry_vg_cache`, `CachedAnalysis`,
-      and `run_gated_cached` reach zero references; the `value_of`
-      `ExprId → ValueId` side-table retires. If any survives, the graph is still
-      derived and the redesign is unfinished.
+- [~] **The cache is deleted.** Cache half **done**: `vg_cache`,
+  `carry_vg_cache`, `CachedAnalysis`, and `run_gated_cached` are at zero
+  references (the graph lives on `Body::values`). Side-table half **pending**:
+  the `value_of` `ExprId → ValueId` map still exists; retiring it needs Phase
+  B.3 (a scheduler that extracts non-constant values from the graph), so the
+  passes read `Operand::Value` end-to-end and no longer consult `value_of`.
 
 The three are mutually reinforcing: deleting the cache (3) requires removing the
 re-derivation it caches, which is the build-once change (1), which is what
@@ -595,13 +627,18 @@ is tracked against the three acceptance criteria, not against incidental speedup
       WEP's flagged "main regression risk" (extraction) is de-risked on a real
       workload. This is necessary groundwork; promote-late runs after every pass,
       so it moves no acceptance criterion yet (`rebuilds` unchanged at 2796).
-- [ ] **Phase B.2 — promote early + migrate the literal-matching passes.** Move
-      promotion ahead of the value passes so they read `Operand::Value`. The ~10
-      passes that structurally match operand literals (`const_fold`, `peephole`,
-      `const_object_globalization`, `container_sroa`, `copy_prop`,
-      `condition_implication`, `array_literal`, `elide_box_local`, …) must read a
-      promoted constant from the pool instead, or they regress (miss folds). This
-      is the gating migration for build-once.
+- [~] **Phase B.2 — promote early + migrate the literal-matching passes.**
+  Promote-early is now the production default (`promote_early_enabled() ->
+      true`), and the literal-matching passes the suite exercises read the
+  promoted constant from the pool — the full suite is green with it. The
+  remaining work is robustness: ~100 `as_expr().expect("skeleton operand")`
+  sites in passes that no current test reaches with a promoted operand. The
+  kiln-path subset (`ref_elim` / `licm` / `field_scalarize`) is migrated; the
+  rest hold as documented invariants. Measured: the full `-O2` e2e under
+  `WADO_PROMOTE_EARLY=1` (the materialise sub-feature, which promotes the most
+  positions) raises **zero** skeleton-operand panics, so the remaining sites
+  are not test-drivable today — they are migrated opportunistically when a
+  program (e.g. a future kiln grammar) exercises them.
 - [ ] **Phase B.3 — scheduling extraction for non-constant values.** Materialising
       a `Binary(Opaque, 1)` needs the skeleton computation behind the `Opaque`
       operand (a `Local` read, a `Call` result). The graph alone cannot re-emit
