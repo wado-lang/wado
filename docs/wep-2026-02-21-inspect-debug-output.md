@@ -27,36 +27,36 @@ The feature is called **inspect** throughout:
 
 Inspect output follows Wado literal syntax where possible:
 
-| Type               | Output                 | Example          |
-| ------------------ | ---------------------- | ---------------- |
-| `i32`, `i64`, etc. | Decimal number         | `42`             |
-| `u8`, `u16`, etc.  | Decimal number         | `255`            |
-| `f32`, `f64`       | Float number           | `3.14`           |
-| `bool`             | `true` / `false`       | `true`           |
-| `char`             | Quoted character       | `'A'`            |
-| `String`           | Escaped, quoted string | `"hello\"world"` |
-| `()` (unit) | `()` | `()` |
-| Struct | `Name { field: value, ... }` | `Point { x: 10, y: 20 }` |
-| Struct (generic) | `Name { field: value }` (no type args) | `Box { value: 42 }` |
-| Struct (`#[hidden]` field) | Field omitted, `..` appended | `Foo { visible: 1, .. }` |
-| Tuple | `[elem, ...]` | `[1, "a", true]` |
-| `List<T>` | `[elem, ...]` | `[1, 2, 3]` |
-| `TreeMap<K, V>` | `{key: value, ...}` | `{"a": 1, "b": 2}` |
-| `TreeSet<T>` | `{elem, ...}` | `{10, 20, 30}` |
-| `Value` (json\_value) | JSON-like representation | `{"key": "val"}` |
-| `Option::Some(v)` | `Some(inspect(v))` | `Some(42)` |
-| `Option::None` / `null` | `null` | `null` |
-| Enum | `TypeName::CaseName` | `Color::Red` |
-| Variant (no payload) | `TypeName::CaseName` | `Shape::Point` |
-| Variant (with payload) | `TypeName::CaseName(inspect(payload))` | `Shape::Circle(5.0)` |
-| Flags | `TypeName::MemberName \| ...` | `Perms::Read \| Perms::Write` |
-| Flags (none) | `TypeName::none()` | `Perms::none()` |
-| Newtype | `value as TypeName` | `1.5 as Meters` |
-| Resource (opaque handle) | `TypeName#0xHH` | `Fields#0x01` |
-| `&T` | `&inspect(inner)` | `&42` |
-| `&mut T` | `&mut inspect(inner)` | `&mut Point { x: 1, y: 2 }` |
-| Closure (default) | Signature only | `\|x: i32\| -> i32` |
-| Closure (`#` alternate) | TIR unparsed source | `\|x: i32\| x + 1` |
+| Type                       | Output                                 | Example                       |
+| -------------------------- | -------------------------------------- | ----------------------------- |
+| `i32`, `i64`, etc.         | Decimal number                         | `42`                          |
+| `u8`, `u16`, etc.          | Decimal number                         | `255`                         |
+| `f32`, `f64`               | Float number                           | `3.14`                        |
+| `bool`                     | `true` / `false`                       | `true`                        |
+| `char`                     | Quoted character                       | `'A'`                         |
+| `String`                   | Escaped, quoted string                 | `"hello\"world"`              |
+| `()` (unit)                | `()`                                   | `()`                          |
+| Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
+| Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
+| Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
+| Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
+| `List<T>`                  | `[elem, ...]`                          | `[1, 2, 3]`                   |
+| `TreeMap<K, V>`            | `{key: value, ...}`                    | `{"a": 1, "b": 2}`            |
+| `TreeSet<T>`               | `{elem, ...}`                          | `{10, 20, 30}`                |
+| `Value` (json\_value)      | JSON-like representation               | `{"key": "val"}`              |
+| `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
+| `Option::None` / `null`    | `null`                                 | `null`                        |
+| Enum                       | `TypeName::CaseName`                   | `Color::Red`                  |
+| Variant (no payload)       | `TypeName::CaseName`                   | `Shape::Point`                |
+| Variant (with payload)     | `TypeName::CaseName(inspect(payload))` | `Shape::Circle(5.0)`          |
+| Flags                      | `TypeName::MemberName \| ...`          | `Perms::Read \| Perms::Write` |
+| Flags (none)               | `TypeName::none()`                     | `Perms::none()`               |
+| Newtype                    | `value as TypeName`                    | `1.5 as Meters`               |
+| Resource (opaque handle)   | `TypeName#0xHH`                        | `Fields#0x01`                 |
+| `&T`                       | `&inspect(inner)`                      | `&42`                         |
+| `&mut T`                   | `&mut inspect(inner)`                  | `&mut Point { x: 1, y: 2 }`   |
+| Closure (default)          | Signature only                         | `\|x: i32\| -> i32`           |
+| Closure (`#` alternate)    | TIR unparsed source                    | `\|x: i32\| x + 1`            |
 
 `String` escaping covers `"`, `\`, and `\n` / `\r` / `\t`; any other control char (`< 0x20` or `0x7f`) is rendered as `\u{HEX}`. Printable non-ASCII is emitted verbatim.
 
