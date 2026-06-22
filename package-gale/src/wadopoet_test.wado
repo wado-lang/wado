@@ -8,6 +8,8 @@ use {
     FnSpec,
     GlobalSpec,
     ImplSpec,
+    str_lit,
+    char_lit,
 } from "./wadopoet.wado";
 
 
@@ -384,6 +386,86 @@ test "chaining builder methods" {
     assert w.to_string() == expected, `got: {w.to_string()}`;
 }
 
+
+test "str_lit wraps and quotes" {
+    assert `{str_lit(&"foo")}` == "\"foo\"";
+}
+
+test "str_lit empty" {
+    assert `{str_lit(&"")}` == "\"\"";
+}
+
+test "str_lit escapes quote and backslash" {
+    // input: a " \ b
+    let mut input = String::new();
+    input.push('a');
+    input.push('"');
+    input.push('\\');
+    input.push('b');
+    // expected literal text: "a\"\\b"
+    let mut expected = String::new();
+    expected.push('"');
+    expected.push('a');
+    expected.push('\\');
+    expected.push('"');
+    expected.push('\\');
+    expected.push('\\');
+    expected.push('b');
+    expected.push('"');
+    assert `{str_lit(&input)}` == expected, `got: {str_lit(&input)}`;
+}
+
+test "str_lit keeps printable non-ASCII verbatim" {
+    // The key contract: Japanese text is NOT \u-escaped.
+    assert `{str_lit(&"あ")}` == "\"あ\"";
+}
+
+test "str_lit escapes control chars" {
+    // input: newline, then U+0001 (no named escape)
+    let mut input = String::new();
+    input.push('\n');
+    input.push(char::from_u32_unchecked(1));
+    // expected literal text: "\n\u{1}"
+    let mut expected = String::new();
+    expected.push('"');
+    expected.push('\\');
+    expected.push('n');
+    expected.push('\\');
+    expected.push('u');
+    expected.push('{');
+    expected.push('1');
+    expected.push('}');
+    expected.push('"');
+    assert `{str_lit(&input)}` == expected, `got: {str_lit(&input)}`;
+}
+
+test "char_lit basic" {
+    assert `{char_lit('a')}` == "'a'";
+}
+
+test "char_lit escapes single quote" {
+    // expected literal text: '\''
+    let mut expected = String::new();
+    expected.push('\'');
+    expected.push('\\');
+    expected.push('\'');
+    expected.push('\'');
+    assert `{char_lit('\'')}` == expected, `got: {char_lit('\'')}`;
+}
+
+test "char_lit named control" {
+    // expected literal text: '\n'
+    let mut expected = String::new();
+    expected.push('\'');
+    expected.push('\\');
+    expected.push('n');
+    expected.push('\'');
+    assert `{char_lit('\n')}` == expected, `got: {char_lit('\n')}`;
+}
+
+test "char_lit keeps printable non-ASCII verbatim" {
+    assert `{char_lit('あ')}` == "'あ'";
+}
 
 test "ImplSpec basic" {
     let mut w = CodeWriter::new();

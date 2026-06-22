@@ -349,7 +349,15 @@ impl Inspect for String {
                 f.write_char('\\');
                 f.write_char('t');
             } else {
-                f.write_char(c);
+                let code = c as i32;
+                if code < 0x20 || code == 0x7f {
+                    // Control char with no named escape: `\u{HEX}`, never raw.
+                    f.write_str(&"\\u{");
+                    f.write_str(&`{code:x}`);
+                    f.write_char('}');
+                } else {
+                    f.write_char(c);
+                }
             }
             count += 1;
         }

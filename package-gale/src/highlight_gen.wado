@@ -1,7 +1,6 @@
 use { Grammar, LexerRule, ParserRule, Alternative, Element } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
-use { CodeWriter, FnSpec, GlobalSpec } from "./wadopoet.wado";
-use { escape_string } from "./gen_util.wado";
+use { CodeWriter, FnSpec, GlobalSpec, str_lit } from "./wadopoet.wado";
 
 /// `highlight`: build the token/rule mapping, then drive `highlight_walk`
 /// over the parsed `CstNode` tree. `parse` always returns a tree (partial on
@@ -63,14 +62,14 @@ fn gen_highlight_mapping(
             Rule(ri) => {
                 let rule = &lexer_rules[ri];
                 let capture = classify_lexer_rule(rule);
-                w.line(&`{escape_string(&capture)},  // TK_{rule.name}`);
+                w.line(&`{str_lit(&capture)},  // TK_{rule.name}`);
             },
             Eof => w.line(&`"",  // TK_EOF`),
             Error => w.line(&`"",  // TK_ERROR`),
             Lit(li) => {
                 let lit = &lit_tokens[li];
                 let capture = classify_literal(&lit.text);
-                w.line(&`{escape_string(&capture)},  // {lit.const_name}`);
+                w.line(&`{str_lit(&capture)},  // {lit.const_name}`);
             },
         }
     }
@@ -82,7 +81,7 @@ fn gen_highlight_mapping(
     w.line(&"let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
-        w.line(&`{escape_string(&rule.name)},`);
+        w.line(&`{str_lit(&rule.name)},`);
     }
     w.dedent();
     w.line(&"];");

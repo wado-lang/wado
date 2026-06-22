@@ -1092,7 +1092,7 @@ fn try_LETTERS(chars: &List<char>, start: i32) -> i32 {
     if !alts_ok_0 {
         alts_0_1: {
             pos = alts_saved_0;
-            if pos >= chars.len() || !('\u{1f600}' <= chars[pos] <= '\u{1f943}') { break alts_0_1; }
+            if pos >= chars.len() || !('😀' <= chars[pos] <= '🥃') { break alts_0_1; }
             pos += 1;
             alts_ok_0 = true;
         }
@@ -1123,7 +1123,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char == 'd' {
             end = try_lit_d(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_D; }
-        } else if '\u{1f600}' <= first_char <= '\u{1f943}' {
+        } else if '😀' <= first_char <= '🥃' {
             end = try_LETTERS(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LETTERS; }
         } else {

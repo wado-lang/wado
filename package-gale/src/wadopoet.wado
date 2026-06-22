@@ -137,6 +137,81 @@ impl CodeWriter {
     }
 }
 
+/// A Wado string literal. `Display` writes the source text of a `"..."`
+/// literal that the Wado lexer reads back to the wrapped value: only `"`,
+/// `\`, and control characters are escaped; every other scalar — including
+/// all printable non-ASCII (Japanese, emoji, …) — is emitted verbatim.
+///
+/// This is deliberately *not* `Inspect`. `Inspect` is debug output and may
+/// truncate or change format; `StrLit` is bound to the Wado string-literal
+/// grammar and guarantees round-trippable source.
+pub struct StrLit {
+    value: String,
+}
+
+/// A Wado char literal (`'x'`). Same escaping contract as `StrLit`, escaping
+/// `'` instead of `"`.
+pub struct CharLit {
+    value: char,
+}
+
+/// Wrap `value` so interpolating it in a template emits a valid Wado string
+/// literal: `str_lit(&"a\"b")` formats to `"a\"b"`.
+pub fn str_lit(value: &String) -> StrLit {
+    return StrLit { value: *value };
+}
+
+/// Wrap `value` so interpolating it in a template emits a valid Wado char
+/// literal: `char_lit('\n')` formats to `'\n'`.
+pub fn char_lit(value: char) -> CharLit {
+    return CharLit { value };
+}
+
+/// Write `c` as the body of a Wado literal delimited by `quote` (`'"'` for a
+/// string, `'\''` for a char). Escapes the delimiter, the backslash, and
+/// control characters; passes every other scalar through unchanged so
+/// printable non-ASCII text survives intact.
+fn write_literal_char(f: &mut Formatter, c: char, quote: char) {
+    if c == quote || c == '\\' {
+        f.write_char('\\');
+        f.write_char(c);
+    } else if c == '\n' {
+        f.write_str(&"\\n");
+    } else if c == '\r' {
+        f.write_str(&"\\r");
+    } else if c == '\t' {
+        f.write_str(&"\\t");
+    } else {
+        let code = c as i32;
+        if code < 0x20 || code == 0x7f {
+            // C0 control / DEL with no named escape: `\u{HEX}`.
+            f.write_str(&"\\u{");
+            f.write_str(&`{code:x}`);
+            f.write_char('}');
+        } else {
+            f.write_char(c);
+        }
+    }
+}
+
+impl Display for StrLit {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('"');
+        for let c of self.value.chars() {
+            write_literal_char(f, c, '"');
+        }
+        f.write_char('"');
+    }
+}
+
+impl Display for CharLit {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_char('\'');
+        write_literal_char(f, self.value, '\'');
+        f.write_char('\'');
+    }
+}
+
 pub struct FieldSpec {
     pub name: String,
     pub type_str: String,

@@ -4,7 +4,6 @@ use {
     literal_field_name,
     not_element_field_name,
     strip_suffix,
-    escape_string,
     literal_const_name,
     is_simple_cst_group,
     is_token_only_group,
@@ -32,7 +31,7 @@ use {
     rule_alts_labeled,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
-use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec } from "./wadopoet.wado";
+use { CodeWriter, StructSpec, ImplSpec, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
@@ -2011,7 +2010,7 @@ fn gen_rule_entry_wrapper(
     }
     f.set_return_type(&"Result<(), ParseError>");
     f.emit_begin(w);
-    let lit = escape_string(rule_display);
+    let lit = str_lit(rule_display);
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
     let fsep = if emit_follow { ", follow" } else { "" };
@@ -2460,7 +2459,7 @@ fn gen_multi_alt_body(
         // `pick literal_value alt#0` pure noise). Tournament / speculative
         // picks, and picks among alts that consume sub-structure, stay.
         if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-            w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_index});`);
+            w.line(&`trace_pick(p, &{str_lit(&rule.name)}, {alt_index});`);
         }
         gen_alt_body(
             w,
@@ -5748,7 +5747,7 @@ fn gen_prediction_code_inner(
                         w.line(&`let _sd_p_{idx} = {*fn_name}_scan_{idx}(_sd_tokens, _sd_pos);`);
                     }
                     if ctx.is_trace() {
-                        let rlit = escape_string(rule_display);
+                        let rlit = str_lit(rule_display);
                         for let mut i = 0; i < sorted_indices.len(); i += 1 {
                             let idx = sorted_indices[i];
                             w.line(&`trace_scan_alt(p, &{rlit}, {idx}, _sd_p_{idx});`);
@@ -5764,7 +5763,7 @@ fn gen_prediction_code_inner(
                         w.end();
                     }
                     if ctx.is_trace() {
-                        w.line(&`trace_pick(p, &{escape_string(rule_display)}, _sd_best_i);`);
+                        w.line(&`trace_pick(p, &{str_lit(rule_display)}, _sd_best_i);`);
                     }
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
@@ -5786,7 +5785,7 @@ fn gen_prediction_code_inner(
                         let is_last = i == sorted_indices.len() - 1;
                         if is_last {
                             if ctx.is_trace() {
-                                w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                                w.line(&`trace_pick(p, &{str_lit(rule_display)}, {idx});`);
                             }
                             w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                         } else {
@@ -5796,7 +5795,7 @@ fn gen_prediction_code_inner(
                                 // Full scan: success guarantees parse success.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
                                 if ctx.is_trace() {
-                                    w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                                    w.line(&`trace_pick(p, &{str_lit(rule_display)}, {idx});`);
                                 }
                                 w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.end();
@@ -5806,12 +5805,12 @@ fn gen_prediction_code_inner(
                                 w.line(&`let r_{idx} = {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                    w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, false);`);
                                 }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
                                 if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                    w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, true);`);
                                 }
                                 w.line(&`return r_{idx};`);
                                 w.end();
@@ -5821,12 +5820,12 @@ fn gen_prediction_code_inner(
                                 w.line(&`let r_{idx} = {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                                 w.begin(&`if let Err(_) = r_{idx}`);
                                 if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                                    w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, false);`);
                                 }
                                 w.line(&"p.pos = saved;");
                                 w.else_begin(&"else");
                                 if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                                    w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, true);`);
                                 }
                                 w.line(&`return r_{idx};`);
                                 w.end();
@@ -5842,19 +5841,19 @@ fn gen_prediction_code_inner(
                     let is_last = i == sorted_indices.len() - 1;
                     if is_last {
                         if ctx.is_trace() {
-                            w.line(&`trace_pick(p, &{escape_string(rule_display)}, {idx});`);
+                            w.line(&`trace_pick(p, &{str_lit(rule_display)}, {idx});`);
                         }
                         w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                     } else {
                         w.line(&`let r_{idx} = {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                         w.begin(&`if let Err(_) = r_{idx}`);
                         if ctx.is_trace() {
-                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, false);`);
+                            w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, false);`);
                         }
                         w.line(&"p.pos = saved;");
                         w.else_begin(&"else");
                         if ctx.is_trace() {
-                            w.line(&`trace_try(p, &{escape_string(rule_display)}, {idx}, true);`);
+                            w.line(&`trace_try(p, &{str_lit(rule_display)}, {idx}, true);`);
                         }
                         w.line(&`return r_{idx};`);
                         w.end();
@@ -6009,7 +6008,7 @@ fn gen_multi_alt_body_alt(
             // all-single-token rules (the chosen alt is obvious from the
             // lookahead token on the `enter` line).
             if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-                w.line(&`trace_pick(p, &{escape_string(&rule.name)}, {alt_index});`);
+                w.line(&`trace_pick(p, &{str_lit(&rule.name)}, {alt_index});`);
             }
             gen_alt_body(
                 w,
@@ -6132,7 +6131,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         let first = ctx.first_of_alt(&alt, &mut visiting);
         dedup_append_arr(&mut expected, &first);
     }
-    let msg = escape_string(&`expected {rule.name}`);
+    let msg = str_lit(&`expected {rule.name}`);
     w.line(&`return Result::Err(p.error(`);
     w.indent();
     w.line(&`{msg},`);
@@ -6142,8 +6141,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         if i > 0 {
             w.write(&", ");
         }
-        let s = escape_string(&expected[i]);
-        w.write(&s);
+        w.write(&`{str_lit(&expected[i])}`);
     }
     w.write(&"],\n");
     w.dedent();
