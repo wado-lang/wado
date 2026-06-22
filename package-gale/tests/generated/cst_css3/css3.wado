@@ -28403,6 +28403,10 @@ impl Parser {
         self.recovering = true;
     }
 
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
     fn push_rule_stack(&mut self, name: String) {
         if let Some(e) = &mut self.pending {
             e.rule_stack.push(name);
@@ -28538,7 +28542,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_any(&mut self) -> i32 {
+    fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
@@ -28554,7 +28558,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
@@ -28580,7 +28584,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
@@ -32362,7 +32366,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
+            let comment_or_space_or_cdo_or_cdc = p.expect_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32456,7 +32460,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
+            let comment_or_space_or_cdo_or_cdc = p.expect_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32550,7 +32554,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
+            let comment_or_space_or_cdo_or_cdc = p.expect_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     loop {
@@ -32644,7 +32648,7 @@ fn _parse_stylesheet__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let comment_or_space_or_cdo_or_cdc = p.match_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
+            let comment_or_space_or_cdo_or_cdc = p.expect_set([TK_Comment, TK_Space, TK_Cdo, TK_Cdc]);
         }
     }
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
@@ -32739,11 +32743,10 @@ fn _parse_charset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_charset__inner_alt_1(p, follow);
     }
-    p.fail(
+    p.no_viable(
         "expected charset",
         p.peek_span(),
         ["TK_Charset"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -32998,11 +33001,10 @@ fn _parse_imports__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         return _parse_imports__inner_alt_3(p, follow);
     }
-    p.fail(
+    p.no_viable(
         "expected imports",
         p.peek_span(),
         ["TK_Import"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -33195,11 +33197,10 @@ fn _parse_namespace___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         }
         return _parse_namespace___inner_alt_1(p, follow);
     }
-    p.fail(
+    p.no_viable(
         "expected namespace_",
         p.peek_span(),
         ["TK_Namespace"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -33352,7 +33353,7 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            let mediaonly_or_not = p.match_set([TK_MediaOnly, TK_Not]);
+            let mediaonly_or_not = p.expect_set([TK_MediaOnly, TK_Not]);
         }
         let ws = _parse_ws(p, &FOLLOW_MASK_8);
         let media_type = _parse_media_type(p, follow);
@@ -33417,11 +33418,10 @@ fn _parse_media_query__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected mediaQuery",
         p.peek_span(),
         ["TK_MediaOnly", "TK_Not", "TK_Comment", "TK_Space", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -33688,11 +33688,10 @@ fn _parse_combinator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let ws = _parse_ws(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected combinator",
         p.peek_span(),
         ["TK_Plus", "TK_Greater", "TK_Tilde", "TK_Space"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -33860,11 +33859,10 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: &List<List<i32
         }
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected simpleSelectorSequence",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -34080,7 +34078,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.match_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch]);
+        let prefixmatch_or_suffixmatch_or_substringmatch_or_eq_or_includes_or_dashmatch = p.expect_set([TK_PrefixMatch, TK_SuffixMatch, TK_SubstringMatch, TK_LIT_EQ, TK_Includes, TK_DashMatch]);
         let ws = _parse_ws(p, &FOLLOW_MASK_18);
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
@@ -34366,11 +34364,10 @@ fn _parse_negation_arg__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let pseudo = _parse_pseudo(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected negationArg",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -34413,11 +34410,10 @@ fn _parse_operator___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let ws = _parse_ws(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected operator_",
         p.peek_span(),
         ["TK_LIT_SLASH", "TK_Comma", "TK_Space", "TK_LIT_EQ"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -34460,11 +34456,10 @@ fn _parse_property___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let ident = _parse_ident(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected property_",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -34610,11 +34605,10 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             return _parse_ruleset__inner_alt_1(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected ruleset",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -34784,11 +34778,10 @@ fn _parse_declaration__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             return _parse_declaration__inner_alt_1(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected declaration",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -35050,11 +35043,10 @@ fn _parse_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let dx_image_transform = _parse_dx_image_transform(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected term",
         p.peek_span(),
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_String_", "TK_UnicodeRange", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Var", "TK_Url_", "TK_Url", "TK_Hash", "TK_Calc", "TK_Function_", "TK_UnknownDimension", "TK_DxImageTransform"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -35155,7 +35147,7 @@ fn _parse_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
     }
     let number = p.expect(TK_Number, &EMPTY_SYNC);
     return;
@@ -35197,7 +35189,7 @@ fn _parse_percentage__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
     }
     let percentage = p.expect(TK_Percentage, &EMPTY_SYNC);
     return;
@@ -35239,7 +35231,7 @@ fn _parse_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
     }
     let dimension = p.expect(TK_Dimension, &EMPTY_SYNC);
     return;
@@ -35281,7 +35273,7 @@ fn _parse_unknown_dimension__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
     }
     let unknowndimension = p.expect(TK_UnknownDimension, &EMPTY_SYNC);
     return;
@@ -35526,11 +35518,10 @@ fn _parse_any___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         let ws_2 = _parse_ws(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected any_",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_Hash", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_LIT_COLON", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACKET"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -35627,11 +35618,10 @@ fn _parse_unused__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         let ws = _parse_ws(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected unused",
         p.peek_span(),
         ["TK_LIT_LBRACE", "TK_AtKeyword", "TK_LIT_SEMI", "TK_Cdo", "TK_Cdc"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -35835,11 +35825,10 @@ fn _parse_nested_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         let at_rule = _parse_at_rule(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected nestedStatement",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_LIT_STAR", "TK_LIT_PIPE", "TK_Hash", "TK_LIT_DOT", "TK_LIT_LBRACKET", "TK_LIT_COLON", "TK_PseudoNot", "TK_Plus", "TK_Minus", "TK_Number", "TK_Percentage", "TK_Dimension", "TK_UnknownDimension", "TK_String_", "TK_Url_", "TK_Url", "TK_UnicodeRange", "TK_Includes", "TK_DashMatch", "TK_Function_", "TK_LIT_LPAREN", "TK_LIT_LBRACE", "TK_Media", "TK_Page", "TK_FontFace", "TK_Keyframes", "TK_Supports", "TK_Viewport", "TK_CounterStyle", "TK_FontFeatureValues", "TK_AtKeyword"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36003,11 +35992,10 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: &List<List<i32>> = &
             return _parse_supports_condition__inner_alt_3(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected supportsCondition",
         p.peek_span(),
         ["TK_Not", "TK_LIT_LPAREN", "TK_Function_"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36111,11 +36099,10 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: &List<List
             return _parse_supports_condition_in_parens__inner_alt_2(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected supportsConditionInParens",
         p.peek_span(),
         ["TK_LIT_LPAREN", "TK_Function_"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36300,7 +36287,7 @@ fn _parse_supports_declaration_condition(p: &mut Parser, follow: &List<List<i32>
 
 fn _parse_general_enclosed__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let function__or_lparen = p.match_set([TK_Function_, TK_LIT_LPAREN]);
+    let function__or_lparen = p.expect_set([TK_Function_, TK_LIT_LPAREN]);
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -36366,11 +36353,10 @@ fn _parse_url__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
         let url = p.expect(TK_Url, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected url",
         p.peek_span(),
         ["TK_Url_", "TK_Url"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36479,7 +36465,7 @@ fn _parse_calc_sum__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         if rep_scan_pos < 0 { break; }
         let space = p.expect(TK_Space, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_37);
-        let plus_or_minus = p.match_set([TK_Plus, TK_Minus]);
+        let plus_or_minus = p.expect_set([TK_Plus, TK_Minus]);
         let ws_2 = _parse_ws(p, &FOLLOW_MASK_30);
         let space_2 = p.expect(TK_Space, &SYNC_0);
         let ws_3 = _parse_ws(p, &FOLLOW_MASK_36);
@@ -36637,11 +36623,10 @@ fn _parse_calc_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         let ws_2 = _parse_ws(p, follow);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected calcValue",
         p.peek_span(),
         ["TK_Plus", "TK_Minus", "TK_Number", "TK_Dimension", "TK_UnknownDimension", "TK_Percentage", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36786,11 +36771,10 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: &List<List<i32>> 
             return _parse_font_face_declaration__inner_alt_1(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected fontFaceDeclaration",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To", "TK_Variable", "TK_LIT_STAR", "TK_LIT_U5f"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -36886,7 +36870,7 @@ fn _parse_keyframe_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage]);
+    let from__or_to_or_percentage = p.expect_set([TK_From, TK_To, TK_Percentage]);
     let ws = _parse_ws(p, follow);
     loop {
         if p.recovering { break; }
@@ -36935,7 +36919,7 @@ fn _parse_keyframe_selector__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_0);
         let ws = _parse_ws(p, &FOLLOW_MASK_40);
-        let from__or_to_or_percentage = p.match_set([TK_From, TK_To, TK_Percentage]);
+        let from__or_to_or_percentage = p.expect_set([TK_From, TK_To, TK_Percentage]);
         let ws_2 = _parse_ws(p, follow);
     }
     return;
@@ -37138,11 +37122,10 @@ fn _parse_font_family_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected fontFamilyName",
         p.peek_span(),
         ["TK_String_", "TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -37286,11 +37269,10 @@ fn _parse_ident__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected ident",
         p.peek_span(),
         ["TK_Ident", "TK_MediaOnly", "TK_Not", "TK_And", "TK_Or", "TK_From", "TK_To"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -37335,7 +37317,7 @@ fn _parse_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comment_or_space = p.match_set([TK_Comment, TK_Space]);
+        let comment_or_space = p.expect_set([TK_Comment, TK_Space]);
     }
     return;
 }

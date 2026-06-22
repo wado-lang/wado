@@ -1399,6 +1399,10 @@ impl Parser {
         self.recovering = true;
     }
 
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
     fn push_rule_stack(&mut self, name: String) {
         if let Some(e) = &mut self.pending {
             e.rule_stack.push(name);
@@ -1534,7 +1538,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_any(&mut self) -> i32 {
+    fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
@@ -1550,7 +1554,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
@@ -1576,7 +1580,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
@@ -1867,11 +1871,10 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
         let newline = p.expect(TK_NEWLINE, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected stat",
         p.peek_span(),
         ["TK_INT", "TK_ID", "TK_LIT_LPAREN", "TK_NEWLINE"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -1907,11 +1910,10 @@ fn _parse_expr__inner_atom(p: &mut Parser) -> () {
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected expr",
         p.peek_span(),
         ["TK_INT", "TK_ID", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -1932,7 +1934,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(0);
-                let _ = p.match_set([TK_LIT_STAR, TK_LIT_SLASH]);
+                let _ = p.expect_set([TK_LIT_STAR, TK_LIT_SLASH]);
                 let expr_2 = _parse_expr(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1945,7 +1947,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.b.set_alt(1);
-                let _ = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS]);
+                let _ = p.expect_set([TK_LIT_PLUS, TK_LIT_MINUS]);
                 let expr_2 = _parse_expr(p, 2);
                 p.b.finish_node(p.last_end());
             } else {

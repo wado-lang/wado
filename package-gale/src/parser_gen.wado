@@ -363,7 +363,6 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // Record a speculative failure as the "deepest" if it sits further into the
     // Record an unrecoverable match failure and enter recovery. Infallible
     // replacement for the old `return Result::Err(...)`: the deepest failure is
     // kept in `pending` (with its `code`) and `recovering` short-circuits the
@@ -382,6 +381,19 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.line(&"self.pending_code = code;");
     w.end();
     w.line(&"self.recovering = true;");
+    w.end();
+    w.blank();
+
+    // Alternative dispatch found no viable alternative: record the failure with
+    // the `NoViableAlternative` code and enter recovery (thin wrapper over
+    // `fail`).
+    let mut nv = FnSpec::new("no_viable");
+    nv.set_receiver(&"&mut self");
+    nv.add_param(&"message", &"String");
+    nv.add_param(&"span", &"Span");
+    nv.add_param(&"expected", &"List<String>");
+    nv.emit_begin(w);
+    w.line(&"self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);");
     w.end();
     w.blank();
 
@@ -598,9 +610,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.match_any()` — consumes one token of any kind (for `.` wildcard).
+    // `p.any()` — consumes one token of any kind (for `.` wildcard).
     // Fails at EOF.
-    let mut f9 = FnSpec::new("match_any");
+    let mut f9 = FnSpec::new("any");
     f9.set_receiver(&"&mut self");
     f9.set_return_type(&"i32");
     f9.emit_begin(w);
@@ -620,9 +632,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.match_not([...])` — consumes one token whose kind is not in the
+    // `p.expect_not([...])` — consumes one token whose kind is not in the
     // exclusion set (parser-side `~ X`). Fails at EOF or on an excluded kind.
-    let mut f10 = FnSpec::new("match_not");
+    let mut f10 = FnSpec::new("expect_not");
     f10.set_receiver(&"&mut self");
     f10.add_param(&"excluded", &"List<i32>");
     f10.set_return_type(&"i32");
@@ -653,10 +665,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     w.end();
     w.blank();
 
-    // `p.match_set([...])` — consumes one token whose kind is in the included
+    // `p.expect_set([...])` — consumes one token whose kind is in the included
     // set (parser-side token-only groups like `('b' | 'c')`). Fails outside the
     // set (EOF included unless listed); a listed EOF matches without advancing.
-    let mut f11 = FnSpec::new("match_set");
+    let mut f11 = FnSpec::new("expect_set");
     f11.set_receiver(&"&mut self");
     f11.add_param(&"included", &"List<i32>");
     f11.set_return_type(&"i32");
@@ -2930,7 +2942,7 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
                 w.line(&`let {r.field} = {fn_name}(p{follow_arg_str});`);
             }
         },
-        Wildcard(wop) => w.line(&`let {wop.field} = p.match_any();`),
+        Wildcard(wop) => w.line(&`let {wop.field} = p.any();`),
         Excluded(eop) => w.line(&`let {eop.field} = {gen_op_excluded_call(&eop)};`),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
@@ -2981,7 +2993,7 @@ fn group_token_only_kinds(alts: &List<AltBody>) -> Option<List<String>> {
 
 fn gen_group_body(w: &mut CodeWriter, g: &GroupOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        w.line(&`let _ = p.match_set([{join_kinds(&kinds)}]);`);
+        w.line(&`let _ = p.expect_set([{join_kinds(&kinds)}]);`);
         return;
     }
     if g.alts.len() == 1 {
@@ -3047,7 +3059,7 @@ fn gen_alt_dispatch(
         gen_ops(w, &alt_by_index(alts, br.alt_index).ops, ctx, nc);
     }
     w.else_begin(&"else");
-    w.line(&`let _ = p.match_set([{join_kinds(&all_first)}]);`);
+    w.line(&`let _ = p.expect_set([{join_kinds(&all_first)}]);`);
     w.end();
 }
 
@@ -4083,7 +4095,7 @@ fn gen_op_group(
 /// Token-only group emit (`(K_A | K_B | …)`): `lower` matched the
 /// shape and assigned the outer field name in `TokenOnlyShape.field`.
 /// `alts` carries the token kinds of the alternatives — the emit gates
-/// `p.advance()` on a `match_set` check so a token outside the group
+/// `p.advance()` on a `expect_set` check so a token outside the group
 /// fails cleanly instead of being silently consumed. ANTLR4 reports a
 /// `NoViableAltException` at the same site.
 fn gen_consume_token_group_op(
@@ -4094,7 +4106,7 @@ fn gen_consume_token_group_op(
 ) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`let {to.field} = p.match_set([{kinds}]);`);
+    w.line(&`let {to.field} = p.expect_set([{kinds}]);`);
 }
 
 /// Render the comma-separated list of token-kind constants for a
@@ -4225,10 +4237,10 @@ fn op_field(op: &Op) -> String {
     };
 }
 
-/// Render the `p.match_not([…])` expression for an `Op::Excluded`.
+/// Render the `p.expect_not([…])` expression for an `Op::Excluded`.
 /// Lower interns multi-element exclusion sets via
 /// `ctx.intern_kind_set`; if a future slice routes those through the
-/// generated `_kind_set_<id>_match_not` helper this is the
+/// generated `_kind_set_<id>_expect_not` helper this is the
 /// single call site to update.
 fn gen_op_excluded_call(e: &ExcludedOp) -> String {
     let mut list = String::with_capacity(32);
@@ -4238,7 +4250,7 @@ fn gen_op_excluded_call(e: &ExcludedOp) -> String {
         }
         list.push_str(&e.kinds[i]);
     }
-    return `p.match_not([{list}])`;
+    return `p.expect_not([{list}])`;
 }
 
 fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>) {
@@ -4270,7 +4282,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     }
     if let Wildcard(_) = elem {
         let field_name = dedup_name(&"wildcard", name_counts);
-        w.line(&`let {field_name} = p.match_any();`);
+        w.line(&`let {field_name} = p.any();`);
         return;
     }
     if let Not(ne) = elem {
@@ -5145,11 +5157,11 @@ fn gen_scan_guard_with_prefix(
 fn not_match_call(inner: &Element) -> String {
     if let TokenRef(t) = inner {
         let const_name = `TK_{t.name}`;
-        return `p.match_not([{const_name}])`;
+        return `p.expect_not([{const_name}])`;
     }
     if let Literal(l) = inner {
         let const_name = literal_const_name(&l.text);
-        return `p.match_not([{const_name}])`;
+        return `p.expect_not([{const_name}])`;
     }
     if let Group(g) = inner {
         let mut kinds: List<String> = [];
@@ -5161,7 +5173,7 @@ fn not_match_call(inner: &Element) -> String {
                 }
                 list.push_str(&kinds[i]);
             }
-            return `p.match_not([{list}])`;
+            return `p.expect_not([{list}])`;
         }
     }
     panic("not_match_call: unsupported inner element for parser-side ~");
@@ -5458,7 +5470,7 @@ fn gen_consume_token_group(
 ) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`let {var_name} = p.match_set([{kinds}]);`);
+    w.line(&`let {var_name} = p.expect_set([{kinds}]);`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
@@ -6390,7 +6402,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         dedup_append_arr(&mut expected, &first);
     }
     let msg = str_lit(`expected {rule.name}`);
-    w.line(&`p.fail(`);
+    w.line(&`p.no_viable(`);
     w.indent();
     w.line(&`{msg},`);
     w.line(&"p.peek_span(),");
@@ -6402,7 +6414,6 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         w.write(&`{str_lit(expected[i])}`);
     }
     w.write(&"],\n");
-    w.line(&"DiagnosticCode::NoViableAlternative,");
     w.dedent();
     w.line(&");");
     w.line(&"return;");

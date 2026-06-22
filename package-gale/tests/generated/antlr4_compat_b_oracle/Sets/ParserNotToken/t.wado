@@ -1192,6 +1192,10 @@ impl Parser {
         self.recovering = true;
     }
 
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
     fn push_rule_stack(&mut self, name: String) {
         if let Some(e) = &mut self.pending {
             e.rule_stack.push(name);
@@ -1327,7 +1331,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_any(&mut self) -> i32 {
+    fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
@@ -1343,7 +1347,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
@@ -1369,7 +1373,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
@@ -1404,7 +1408,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_a__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let not_lit_x = p.match_not([TK_LIT_X]);
+    let not_lit_x = p.expect_not([TK_LIT_X]);
     let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);
     return;
 }

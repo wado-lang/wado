@@ -2804,6 +2804,10 @@ impl Parser {
         self.recovering = true;
     }
 
+    fn no_viable(&mut self, message: String, span: Span, expected: List<String>) {
+        self.fail(message, span, expected, DiagnosticCode::NoViableAlternative);
+    }
+
     fn push_rule_stack(&mut self, name: String) {
         if let Some(e) = &mut self.pending {
             e.rule_stack.push(name);
@@ -2939,7 +2943,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_any(&mut self) -> i32 {
+    fn any(&mut self) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] != TK_EOF {
             let _i = self.advance();
@@ -2955,7 +2959,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_not(&mut self, excluded: List<i32>) -> i32 {
+    fn expect_not(&mut self, excluded: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         if k != TK_EOF {
@@ -2981,7 +2985,7 @@ impl Parser {
         return self.pos;
     }
 
-    fn match_set(&mut self, included: List<i32>) -> i32 {
+    fn expect_set(&mut self, included: List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
         for let x of included {
@@ -9755,7 +9759,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let k_deferred_or_k_immediate_or_k_exclusive = p.match_set([TK_K_DEFERRED, TK_K_IMMEDIATE, TK_K_EXCLUSIVE]);
+        let k_deferred_or_k_immediate_or_k_exclusive = p.expect_set([TK_K_DEFERRED, TK_K_IMMEDIATE, TK_K_EXCLUSIVE]);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
         let k_transaction = p.expect(TK_K_TRANSACTION, &SYNC_3);
@@ -9779,7 +9783,7 @@ fn _parse_begin_stmt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 
 fn _parse_commit_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let k_commit_or_k_end = p.match_set([TK_K_COMMIT, TK_K_END]);
+    let k_commit_or_k_end = p.expect_set([TK_K_COMMIT, TK_K_END]);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
         let k_transaction = p.expect(TK_K_TRANSACTION, &SYNC_3);
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_8(p.peek_kind())) {
@@ -9929,7 +9933,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -10046,7 +10050,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
+        let k_temp_or_k_temporary = p.expect_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
     let k_table = p.expect(TK_K_TABLE, &SYNC_3);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
@@ -10149,7 +10153,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
+        let k_temp_or_k_temporary = p.expect_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
     let k_trigger = p.expect(TK_K_TRIGGER, &SYNC_3);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
@@ -10411,7 +10415,7 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let k_temp_or_k_temporary = p.match_set([TK_K_TEMP, TK_K_TEMPORARY]);
+        let k_temp_or_k_temporary = p.expect_set([TK_K_TEMP, TK_K_TEMPORARY]);
     }
     let k_view = p.expect(TK_K_VIEW, &SYNC_3);
     if p.peek_kind() == TK_K_IF && p.peek_at(1) == TK_K_NOT && p.peek_at(2) == TK_K_EXISTS {
@@ -10683,7 +10687,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -10957,7 +10961,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -11629,7 +11633,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -11734,7 +11738,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -11780,7 +11784,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            let k_distinct_or_k_all = p.match_set([TK_K_DISTINCT, TK_K_ALL]);
+            let k_distinct_or_k_all = p.expect_set([TK_K_DISTINCT, TK_K_ALL]);
         }
         let result_column = _parse_result_column(p, follow);
         loop {
@@ -11990,11 +11994,10 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected select_or_values",
         p.peek_span(),
         ["TK_K_SELECT", "TK_K_VALUES"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -12472,7 +12475,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_offset_or_comma = p.match_set([TK_K_OFFSET, TK_LIT_COMMA]);
+            let k_offset_or_comma = p.expect_set([TK_K_OFFSET, TK_LIT_COMMA]);
             let expr = _parse_expr(p, follow);
         }
     }
@@ -12677,7 +12680,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             opt_scan_pos = pos;
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-            let k_asc_or_k_desc = p.match_set([TK_K_ASC, TK_K_DESC]);
+            let k_asc_or_k_desc = p.expect_set([TK_K_ASC, TK_K_DESC]);
         }
         let conflict_clause = _parse_conflict_clause(p, &follow_prepend(&FOLLOW_MASK_17, follow));
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_AUTOINCREMENT) {
@@ -12747,7 +12750,7 @@ fn _parse_conflict_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT) {
         let k_on = p.expect(TK_K_ON, &SYNC_46);
         let k_conflict = p.expect(TK_K_CONFLICT, &SYNC_47);
-        let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.match_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL, TK_K_IGNORE, TK_K_REPLACE]);
+        let k_rollback_or_k_abort_or_k_fail_or_k_ignore_or_k_replace = p.expect_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL, TK_K_IGNORE, TK_K_REPLACE]);
     }
     return;
 }
@@ -13450,11 +13453,10 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         let bind_parameter = p.expect(TK_BIND_PARAMETER, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected expr",
         p.peek_span(),
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP", "TK_BIND_PARAMETER", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_LIT_LPAREN", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -13486,7 +13488,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let _ = p.match_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT]);
+                let _ = p.expect_set([TK_LIT_STAR, TK_LIT_SLASH, TK_LIT_PERCENT]);
                 let expr_2 = _parse_expr(p, follow, 14);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13498,7 +13500,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let _ = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS]);
+                let _ = p.expect_set([TK_LIT_PLUS, TK_LIT_MINUS]);
                 let expr_2 = _parse_expr(p, follow, 13);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13510,7 +13512,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let _ = p.match_set([TK_LIT_LTLT, TK_LIT_GTGT, TK_LIT_AMP, TK_LIT_PIPE]);
+                let _ = p.expect_set([TK_LIT_LTLT, TK_LIT_GTGT, TK_LIT_AMP, TK_LIT_PIPE]);
                 let expr_2 = _parse_expr(p, follow, 12);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13522,7 +13524,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let _ = p.match_set([TK_LIT_LT, TK_LIT_LTEQ, TK_LIT_GT, TK_LIT_GTEQ]);
+                let _ = p.expect_set([TK_LIT_LT, TK_LIT_LTEQ, TK_LIT_GT, TK_LIT_GTEQ]);
                 let expr_2 = _parse_expr(p, follow, 11);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13534,7 +13536,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
-                let _ = p.match_set([TK_LIT_EQ, TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_LTGT]);
+                let _ = p.expect_set([TK_LIT_EQ, TK_LIT_EQEQ, TK_LIT_BANGEQ, TK_LIT_LTGT]);
                 let expr_2 = _parse_expr(p, follow, 10);
                 p.b.finish_node(p.last_end());
             } else {
@@ -13646,7 +13648,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
-                    let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
+                    let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
@@ -13665,7 +13667,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
-                    let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
+                    let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
@@ -13684,7 +13686,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
-                    let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
+                    let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
@@ -13703,7 +13705,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     if p.peek_kind() == TK_K_NOT {
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
-                    let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
+                    let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                     let expr_2 = _parse_expr(p, follow, 5);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
@@ -13728,7 +13730,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                         let k_null = p.expect(TK_K_NULL, &EMPTY_SYNC);
                     } else {
-                        let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
+                        let _ = p.expect_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                     }
                     p.b.finish_node(p.last_end());
                 } else {
@@ -13749,7 +13751,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                         let k_null = p.expect(TK_K_NULL, &EMPTY_SYNC);
                     } else {
-                        let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
+                        let _ = p.expect_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                     }
                     p.b.finish_node(p.last_end());
                 } else {
@@ -13878,7 +13880,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         if p.peek_kind() == TK_K_NOT {
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                         }
-                        let _ = p.match_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
+                        let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
                         let expr_2 = _parse_expr(p, follow, 5);
                         if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                             let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
@@ -13903,7 +13905,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                             let k_null = p.expect(TK_K_NULL, &EMPTY_SYNC);
                         } else {
-                            let _ = p.match_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
+                            let _ = p.expect_set([TK_K_ISNULL, TK_K_NOTNULL, TK_K_NOT]);
                         }
                         p.b.finish_node(p.last_end());
                     } else {
@@ -14122,7 +14124,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &
         let grp_kind = p.peek_kind();
         if grp_kind == TK_K_ON {
             let k_on = p.expect(TK_K_ON, &SYNC_49);
-            let k_delete_or_k_update = p.match_set([TK_K_DELETE, TK_K_UPDATE]);
+            let k_delete_or_k_update = p.expect_set([TK_K_DELETE, TK_K_UPDATE]);
             let grp_kind = p.peek_kind();
             if grp_kind == TK_K_SET {
                 let mut gd_winner: i32 = -1;
@@ -14301,7 +14303,7 @@ fn _parse_raise_function__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     if grp_kind == TK_K_IGNORE {
         let k_ignore = p.expect(TK_K_IGNORE, &EMPTY_SYNC);
     } else if _kind_set_39(grp_kind) {
-        let k_rollback_or_k_abort_or_k_fail = p.match_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL]);
+        let k_rollback_or_k_abort_or_k_fail = p.expect_set([TK_K_ROLLBACK, TK_K_ABORT, TK_K_FAIL]);
         let comma = p.expect(TK_LIT_COMMA, &SYNC_56);
         let error_message = _parse_error_message(p, follow);
     }
@@ -14350,7 +14352,7 @@ fn _parse_indexed_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let k_asc_or_k_desc = p.match_set([TK_K_ASC, TK_K_DESC]);
+        let k_asc_or_k_desc = p.expect_set([TK_K_ASC, TK_K_DESC]);
     }
     return;
 }
@@ -14602,7 +14604,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        let k_asc_or_k_desc = p.match_set([TK_K_ASC, TK_K_DESC]);
+        let k_asc_or_k_desc = p.expect_set([TK_K_ASC, TK_K_DESC]);
     }
     return;
 }
@@ -14678,11 +14680,10 @@ fn _parse_pragma_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             return _parse_pragma_value__inner_alt_1(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected pragma_value",
         p.peek_span(),
         ["TK_LIT_PLUS", "TK_LIT_MINUS", "TK_NUMERIC_LITERAL", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -14834,11 +14835,10 @@ fn _parse_result_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             return _parse_result_column__inner_alt_2(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected result_column",
         p.peek_span(),
         ["TK_LIT_STAR", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN", "TK_NUMERIC_LITERAL", "TK_BLOB_LITERAL", "TK_BIND_PARAMETER", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15325,11 +15325,10 @@ fn _parse_table_or_subquery__inner(p: &mut Parser, follow: &List<List<i32>> = &E
             return _parse_table_or_subquery__inner_alt_0(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected table_or_subquery",
         p.peek_span(),
         ["TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15448,11 +15447,10 @@ fn _parse_join_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let k_join = p.expect(TK_K_JOIN, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected join_operator",
         p.peek_span(),
         ["TK_LIT_COMMA", "TK_K_NATURAL", "TK_K_LEFT", "TK_K_INNER", "TK_K_CROSS", "TK_K_JOIN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15591,7 +15589,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            let k_distinct_or_k_all = p.match_set([TK_K_DISTINCT, TK_K_ALL]);
+            let k_distinct_or_k_all = p.expect_set([TK_K_DISTINCT, TK_K_ALL]);
         }
         let result_column = _parse_result_column(p, follow);
         loop {
@@ -15801,11 +15799,10 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected select_core",
         p.peek_span(),
         ["TK_K_SELECT", "TK_K_VALUES"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15884,11 +15881,10 @@ fn _parse_compound_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         let k_except = p.expect(TK_K_EXCEPT, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected compound_operator",
         p.peek_span(),
         ["TK_K_UNION", "TK_K_INTERSECT", "TK_K_EXCEPT"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15929,7 +15925,7 @@ fn _parse_signed_number__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let plus_or_minus = p.match_set([TK_LIT_PLUS, TK_LIT_MINUS]);
+        let plus_or_minus = p.expect_set([TK_LIT_PLUS, TK_LIT_MINUS]);
     }
     let numeric_literal = p.expect(TK_NUMERIC_LITERAL, &EMPTY_SYNC);
     return;
@@ -15953,11 +15949,10 @@ fn _parse_literal_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected literal_value",
         p.peek_span(),
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -15980,11 +15975,10 @@ fn _parse_unary_operator__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected unary_operator",
         p.peek_span(),
         ["TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE", "TK_K_NOT"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16072,11 +16066,10 @@ fn _parse_module_argument__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             return _parse_module_argument__inner_alt_0(p, follow);
         }
     }
-    p.fail(
+    p.no_viable(
         "expected module_argument",
         p.peek_span(),
         ["TK_NUMERIC_LITERAL", "TK_STRING_LITERAL", "TK_BLOB_LITERAL", "TK_K_NULL", "TK_K_CURRENT_TIME", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIMESTAMP", "TK_BIND_PARAMETER", "TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_LIT_LPAREN", "TK_LIT_MINUS", "TK_LIT_PLUS", "TK_LIT_TILDE"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16099,11 +16092,10 @@ fn _parse_column_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected column_alias",
         p.peek_span(),
         ["TK_IDENTIFIER", "TK_STRING_LITERAL"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16126,11 +16118,10 @@ fn _parse_keyword__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected keyword",
         p.peek_span(),
         ["TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16452,11 +16443,10 @@ fn _parse_table_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected table_alias",
         p.peek_span(),
         ["TK_IDENTIFIER", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
@@ -16510,11 +16500,10 @@ fn _parse_any_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
         let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
-    p.fail(
+    p.no_viable(
         "expected any_name",
         p.peek_span(),
         ["TK_IDENTIFIER", "TK_K_ABORT", "TK_K_ACTION", "TK_K_ADD", "TK_K_AFTER", "TK_K_ALL", "TK_K_ALTER", "TK_K_ANALYZE", "TK_K_AND", "TK_K_AS", "TK_K_ASC", "TK_K_ATTACH", "TK_K_AUTOINCREMENT", "TK_K_BEFORE", "TK_K_BEGIN", "TK_K_BETWEEN", "TK_K_BY", "TK_K_CASCADE", "TK_K_CASE", "TK_K_CAST", "TK_K_CHECK", "TK_K_COLLATE", "TK_K_COLUMN", "TK_K_COMMIT", "TK_K_CONFLICT", "TK_K_CONSTRAINT", "TK_K_CREATE", "TK_K_CROSS", "TK_K_CURRENT_DATE", "TK_K_CURRENT_TIME", "TK_K_CURRENT_TIMESTAMP", "TK_K_DATABASE", "TK_K_DEFAULT", "TK_K_DEFERRABLE", "TK_K_DEFERRED", "TK_K_DELETE", "TK_K_DESC", "TK_K_DETACH", "TK_K_DISTINCT", "TK_K_DROP", "TK_K_EACH", "TK_K_ELSE", "TK_K_END", "TK_K_ESCAPE", "TK_K_EXCEPT", "TK_K_EXCLUSIVE", "TK_K_EXISTS", "TK_K_EXPLAIN", "TK_K_FAIL", "TK_K_FOR", "TK_K_FOREIGN", "TK_K_FROM", "TK_K_FULL", "TK_K_GLOB", "TK_K_GROUP", "TK_K_HAVING", "TK_K_IF", "TK_K_IGNORE", "TK_K_IMMEDIATE", "TK_K_IN", "TK_K_INDEX", "TK_K_INDEXED", "TK_K_INITIALLY", "TK_K_INNER", "TK_K_INSERT", "TK_K_INSTEAD", "TK_K_INTERSECT", "TK_K_INTO", "TK_K_IS", "TK_K_ISNULL", "TK_K_JOIN", "TK_K_KEY", "TK_K_LEFT", "TK_K_LIKE", "TK_K_LIMIT", "TK_K_MATCH", "TK_K_NATURAL", "TK_K_NO", "TK_K_NOT", "TK_K_NOTNULL", "TK_K_NULL", "TK_K_OF", "TK_K_OFFSET", "TK_K_ON", "TK_K_OR", "TK_K_ORDER", "TK_K_OUTER", "TK_K_PLAN", "TK_K_PRAGMA", "TK_K_PRIMARY", "TK_K_QUERY", "TK_K_RAISE", "TK_K_RECURSIVE", "TK_K_REFERENCES", "TK_K_REGEXP", "TK_K_REINDEX", "TK_K_RELEASE", "TK_K_RENAME", "TK_K_REPLACE", "TK_K_RESTRICT", "TK_K_RIGHT", "TK_K_ROLLBACK", "TK_K_ROW", "TK_K_SAVEPOINT", "TK_K_SELECT", "TK_K_SET", "TK_K_TABLE", "TK_K_TEMP", "TK_K_TEMPORARY", "TK_K_THEN", "TK_K_TO", "TK_K_TRANSACTION", "TK_K_TRIGGER", "TK_K_UNION", "TK_K_UNIQUE", "TK_K_UPDATE", "TK_K_USING", "TK_K_VACUUM", "TK_K_VALUES", "TK_K_VIEW", "TK_K_VIRTUAL", "TK_K_WHEN", "TK_K_WHERE", "TK_K_WITH", "TK_K_WITHOUT", "TK_STRING_LITERAL", "TK_LIT_LPAREN"],
-        DiagnosticCode::NoViableAlternative,
     );
     return;
 }
