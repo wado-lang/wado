@@ -1092,7 +1092,7 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     if !alts_ok_0 {
         alts_0_1: {
             pos = alts_saved_0;
-            if pos >= chars.len() || !('\u{100}' <= chars[pos] <= '\u{fffc}') { break alts_0_1; }
+            if pos >= chars.len() || !('Ā' <= chars[pos] <= '￼') { break alts_0_1; }
             pos += 1;
             alts_ok_0 = true;
         }
@@ -1113,7 +1113,7 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
             if !alts_ok_2 {
                 alts_2_1: {
                     pos = alts_saved_2;
-                    if pos >= chars.len() || !('\u{100}' <= chars[pos] <= '\u{fffc}') { break alts_2_1; }
+                    if pos >= chars.len() || !('Ā' <= chars[pos] <= '￼') { break alts_2_1; }
                     pos += 1;
                     alts_ok_2 = true;
                 }
@@ -1143,7 +1143,7 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if 'A' <= first_char <= 'Z' {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if '\u{100}' <= first_char <= '\u{fffc}' {
+        } else if 'Ā' <= first_char <= '￼' {
             end = try_ID(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
