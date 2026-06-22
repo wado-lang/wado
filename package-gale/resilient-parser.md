@@ -97,21 +97,45 @@ closed (`<= 1` is effectively fail-fast, still returning a partial tree).
 Defaulted, so the common call is just `parse(input)`. There is no generator
 option for recovery on/off — recovery is always built in.
 
-## TODO
+## Status
 
-Everything above is built: the single-emitter parser, the uniform tree, full
-prediction (LL / tournament / caller-FOLLOW / ATN-class LR), error _reporting_
-(diagnostics with the deepest error + active rule chain), and highlight. Two
-buckets remain.
+Everything above is built. The parser is fully **infallible**: no generated
+function returns `Result` or propagates `?`. A match that cannot consume its
+terminal recovers in place via a `recovering` flag rather than unwinding a
+`Result`.
 
-**Recovery — error-token edits.** Error _reporting_ works; the lossless
-error-token _edits_ the design above calls for are not built yet:
+**Recovery — error-token edits (done).**
 
-- `expect_or_recover` — insert missing / delete extra / sync to FOLLOW.
-- `Missing` / `Skipped` / `K_ERROR` emission into the tree.
-- the no-viable-alt fallback (a `K_ERROR` node + `NoViableAlternative`).
-- honour the `max_errors` entry parameter.
-- fixtures asserting error-token trees for broken input.
+- `expect(kind, sync)` recovers locally: delete a spurious terminal
+  (`<skip>`, `ExtraToken`), insert a missing one when the current token
+  continues the rule (`<missing>`, `MissingToken`, `sync` = static
+  FIRST-of-rest), or skip an unrecoverable run into a lossless `<error>`
+  (`K_ERROR`) region and resync to a `sync` token. Only a no-sync mismatch
+  unwinds.
+- Scan-gated `*`/`+` loops over a RuleRef body enter a malformed element when
+  its FIRST token is present, so the broken element lands in the tree with its
+  repair edits.
+- The no-viable-alt fallback records a `NoViableAlternative` diagnostic (the
+  unwind/fold represents the error region).
+- `max_errors` is threaded onto the parser: once reached, recovery stops and
+  folds the tree closed.
+- Fixtures in `tests/driver_cst_error_recovery_test.wado` assert the
+  insert / delete / `<error>`-resync / `max_errors` trees;
+  `tests/driver_cst_diagnostics_test.wado` asserts the `NoViableAlternative`
+  code.
 
-**Highlight — polish.** Generate `NodeKind` `Display`/`Inspect` name impls and
-add `related`-note hints (e.g. matching brackets).
+**Highlight (done): `NodeKind` `Display`/`Inspect`.** Codegen emits name-aware
+impls next to `RULE_NAMES`, so `{node.kind}` prints the rule name and
+`{node.kind:?}` prints `name(id)`.
+
+### Deferred
+
+- **No-viable `K_ERROR` *node*.** The no-viable fallback carries the
+  `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
+  the diagnostic's `rule_stack` is built on unwind, which is incompatible
+  with placing a node and continuing. The fold represents the error region.
+- **`related`-note bracket hints (e.g. "'(' opened here").** Needs
+  bracket-pair detection the IR does not support today — `LiteralOp` carries
+  no literal text, and pairing openers/closers across nesting plus tracking
+  the opener position at runtime is a feature in its own right. ANTLR4 does
+  not generate these automatically either. Revisit if a consumer needs it.
