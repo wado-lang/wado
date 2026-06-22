@@ -129,9 +129,5 @@ It may include TODOs on WIP.
 - [Compile-Time Data Providers (bundled ICU)](./wep-2026-06-13-compile-time-data-providers.md)
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
-<<<<<<< HEAD
 - [Command-Line Argument Parsing (`core:args`)](./wep-2026-06-22-core-args.md)
-||||||| d0190daf1
-=======
 - [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
->>>>>>> origin/main
