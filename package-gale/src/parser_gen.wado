@@ -337,7 +337,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     f.set_return_type(&"Parser");
     f.emit_begin(w);
     w.line(&"let kinds = tokens.kinds.to_array();");
-    let mut init = String::from("tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX");
+    let mut init = String::from(
+        "tokens, kinds, pos: 0, pending: null, recovering: false, pending_code: DiagnosticCode::UnexpectedToken, speculating: false, max_errors: i32::MAX",
+    );
     if trace {
         init.push_str(&", trace_depth: 0");
     }
@@ -441,7 +443,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     rex.add_param(&"span", &"Span");
     rex.emit_begin(w);
     emit_diag_prologue(w);
-    w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));");
+    w.line(
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+    );
     w.end();
     w.blank();
 
@@ -452,7 +456,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     rmi.emit_begin(w);
     emit_diag_prologue(w);
     w.line(&"let name = token_kind_name(kind);");
-    w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));");
+    w.line(
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));",
+    );
     w.end();
     w.blank();
 
@@ -462,7 +468,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     run.add_param(&"span", &"Span");
     run.emit_begin(w);
     emit_diag_prologue(w);
-    w.line(&"self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));");
+    w.line(
+        &"self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input \"{self.tokens.token_text(self.pos)}\"`, span, lc.0, lc.1));",
+    );
     w.end();
     w.blank();
 
@@ -550,7 +558,9 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     // caller's continuation, which static scan cannot rule out).
     w.begin(&"if self.speculating");
     w.line(&"let name = token_kind_name(kind);");
-    w.line(&"self.fail(`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);");
+    w.line(
+        &"self.fail(`expected {name}, got \"{self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), [name], DiagnosticCode::UnexpectedToken);",
+    );
     w.line(&"return self.pos;");
     w.end();
     // single-token deletion: the current token is spurious, the expected one
@@ -2907,7 +2917,13 @@ fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
     return String::from("&EMPTY_SYNC");
 }
 
-pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, sync: &List<String> = &EMPTY_SYNC) {
+pub fn gen_op_leaf(
+    w: &mut CodeWriter,
+    op: &Op,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+    sync: &List<String> = &EMPTY_SYNC,
+) {
     // The Parser's `expect` / `match_*` append the matched token to the builder
     // and return the token index. `sync` is the rule's FIRST-of-rest at this
     // position — the set `expect` inserts a missing terminal against, passed by
@@ -2917,11 +2933,11 @@ pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_count
     return match *op {
         Token(t) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`let {t.field} = p.expect({t.kind}, {sync_ref});`)
+            w.line(&`let {t.field} = p.expect({t.kind}, {sync_ref});`);
         },
         Literal(l) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`let {l.field} = p.expect({l.kind}, {sync_ref});`)
+            w.line(&`let {l.field} = p.expect({l.kind}, {sync_ref});`);
         },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
@@ -6090,11 +6106,23 @@ fn gen_prediction_code_inner(
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
-                                emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
+                                emit_spec_alt_try(
+                                    w,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    idx,
+                                    ctx,
+                                    rule_display,
+                                );
                                 w.end();
                             } else {
                                 // No scan: save-and-rewind speculative parse.
-                                emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
+                                emit_spec_alt_try(
+                                    w,
+                                    &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                                    idx,
+                                    ctx,
+                                    rule_display,
+                                );
                             }
                         }
                     }
@@ -6111,7 +6139,13 @@ fn gen_prediction_code_inner(
                         }
                         w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                     } else {
-                        emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
+                        emit_spec_alt_try(
+                            w,
+                            &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`,
+                            idx,
+                            ctx,
+                            rule_display,
+                        );
                     }
                 }
             }
