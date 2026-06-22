@@ -50,3 +50,23 @@ test "tree: insert missing terminal" {
 test "tree: delete extra terminal" {
     assert_tree(&"let x y = z ;", &"(prog (item let x <skip y> = z ;))");
 }
+
+// At the second ID, `}` is neither the expected ID (match), the token before
+// it (delete), nor a continuation (insert), so the run of `}` is skipped into a
+// lossless `<error>` region until the rule resyncs on `;`; the absent ID is then
+// inserted. The original input round-trips through the tree.
+test "tree: error region resyncs to FOLLOW" {
+    assert_tree(
+        &"let x = } } ;",
+        &"(prog (item let x = (<error> <skip }> <skip }>) <missing ID> ;))",
+    );
+}
+
+// Two malformed items each insert a missing ID, so the uncapped parse reports
+// two diagnostics; `max_errors` stops recovery after the first and folds.
+test "max_errors caps recovery diagnostics" {
+    let full = errrec::parse(&"let x = ; let y = ;");
+    assert full.diagnostics.len() == 2, `expected 2, got {full.diagnostics.len()}`;
+    let capped = errrec::parse(&"let x = ; let y = ;", 1);
+    assert capped.diagnostics.len() == 1, `expected 1, got {capped.diagnostics.len()}`;
+}

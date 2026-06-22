@@ -1227,6 +1227,7 @@ struct Parser {
     pos: i32,
     pending: Option<ParseError>,
     recovering: bool,
+    max_errors: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
 }
@@ -1234,7 +1235,7 @@ struct Parser {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, b: TreeBuilder::new(), diagnostics: [] };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, max_errors: i32::MAX, b: TreeBuilder::new(), diagnostics: [] };
     }
 
     fn error(&self, message: String, span: Span, expected: List<String>) -> ParseError {
@@ -1272,14 +1273,22 @@ impl Parser {
     }
 
     fn report_extra(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         let lc = line_col(self.tokens.chars, span.start);
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn report_missing(&mut self, kind: i32, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         let lc = line_col(self.tokens.chars, span.start);
         let name = token_kind_name(kind);
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::MissingToken, `missing {name}`, span, lc.0, lc.1));
+    }
+
+    fn report_unexpected(&mut self, span: Span) {
+        if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
+        let lc = line_col(self.tokens.chars, span.start);
+        self.diagnostics.push(Diagnostic::error(DiagnosticCode::UnexpectedToken, `unexpected input "{self.tokens.token_text(self.pos)}"`, span, lc.0, lc.1));
     }
 
     fn peek_start(&self) -> i32 {
@@ -1340,6 +1349,32 @@ impl Parser {
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
             return _syn;
+        }
+        if !sync.is_empty() {
+            self.report_unexpected(self.tokens.span_at(self.pos));
+            if self.kinds[self.pos] != TK_EOF {
+                self.b.start_error(self.tokens.span_at(self.pos).start);
+                loop {
+                    let _k = self.kinds[self.pos];
+                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    let _sk = self.advance();
+                    self.tokens.mark_skipped(_sk);
+                    self.b.skip(_sk);
+                }
+                self.b.finish_node(self.last_end());
+            }
+            if self.kinds[self.pos] == kind {
+                if kind == TK_EOF {
+                    self.b.token(self.pos);
+                    return self.pos;
+                }
+                let _i = self.advance();
+                self.b.token(_i);
+                return _i;
+            }
+            let _syn2 = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
+            self.b.missing(_syn2);
+            return _syn2;
         }
         let name = token_kind_name(kind);
         self.fail(
@@ -1557,11 +1592,11 @@ fn _parse_assign(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    let _ = max_errors;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
+    p.max_errors = max_errors;
     entry(&mut p);
-    if p.recovering {
+    if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(e) = &p.pending {
             let lc = line_col(p.tokens.chars, e.span.start);
             let mut d = Diagnostic::error(DiagnosticCode::UnexpectedToken, e.message, e.span, lc.0, lc.1);
