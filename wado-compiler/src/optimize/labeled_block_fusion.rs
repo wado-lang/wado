@@ -334,9 +334,12 @@ fn check_fusion_preconditions_match(
     if arms.len() != 2 {
         return None;
     }
+    let Some(scrut_e) = scrut.as_expr() else {
+        return None;
+    };
     let ExprKind::Local {
         index: tested_idx, ..
-    } = &body.exprs[scrut.as_expr().expect("skeleton operand")].kind
+    } = &body.exprs[scrut_e].kind
     else {
         return None;
     };
@@ -1098,9 +1101,12 @@ fn perform_fusion(
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
+    let lv = let_value
+        .as_expr()
+        .expect("guarded by check_fusion_preconditions");
     let ExprKind::LabeledBlock {
         block: lb_block, ..
-    } = &engine.body.exprs[let_value.as_expr().expect("skeleton operand")].kind
+    } = &engine.body.exprs[lv].kind
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
@@ -1249,19 +1255,14 @@ fn transform_lb_stmt(
     };
 
     if let Some(value) = break_value {
-        let is_some_case = match value {
-            Some(v) => v.as_expr().is_some_and(|e| {
-                matches!(&engine.body.exprs[e].kind,
+        let some_case_expr = value.and_then(|v| v.as_expr()).filter(|&e| {
+            matches!(&engine.body.exprs[e].kind,
                 ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index)
-            }),
-            None => false,
-        };
+        });
 
-        if is_some_case {
+        if let Some(vc_expr) = some_case_expr {
             // Extract payload expression from the VariantConstruct.
-            let v = value.unwrap();
-            let ExprKind::VariantConstruct { payload, .. } =
-                &engine.body.exprs[v.as_expr().expect("skeleton operand")].kind
+            let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[vc_expr].kind
             else {
                 unreachable!()
             };
@@ -1486,7 +1487,7 @@ fn transform_lb_in_expr(
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
-            Shape::ExprsAndBlocks(vec![condition.as_expr().expect("skeleton operand")], blocks)
+            Shape::ExprsAndBlocks(condition.as_expr().into_iter().collect(), blocks)
         }
         ExprKind::Switch {
             scrutinee,
@@ -1496,7 +1497,7 @@ fn transform_lb_in_expr(
         } => {
             let mut blocks = arms.clone();
             blocks.push(*default);
-            Shape::ExprsAndBlocks(vec![scrutinee.as_expr().expect("skeleton operand")], blocks)
+            Shape::ExprsAndBlocks(scrutinee.as_expr().into_iter().collect(), blocks)
         }
         _ => Shape::None,
     };
@@ -1645,7 +1646,7 @@ fn subst_variant_payload_in_stmt(
             if let Some(eb) = else_block {
                 blocks.push(*eb);
             }
-            Shape::ExprAndBlocks(Some(condition.as_expr().expect("skeleton operand")), blocks)
+            Shape::ExprAndBlocks(condition.as_expr(), blocks)
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             Shape::ExprAndBlocks(None, vec![*b])
@@ -1687,7 +1688,9 @@ fn subst_variant_payload_in_expr(
     } = &engine.body.exprs[e].kind
     {
         *ci == case_index
-            && matches!(&engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. } if *index == temp_local)
+            && inner.as_expr().is_some_and(|ie| {
+                matches!(&engine.body.exprs[ie].kind, ExprKind::Local { index, .. } if *index == temp_local)
+            })
     } else {
         false
     };
