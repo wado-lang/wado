@@ -388,11 +388,11 @@ test "chaining builder methods" {
 
 
 test "str_lit wraps and quotes" {
-    assert `{str_lit(&"foo")}` == "\"foo\"";
+    assert `{str_lit("foo")}` == "\"foo\"";
 }
 
 test "str_lit empty" {
-    assert `{str_lit(&"")}` == "\"\"";
+    assert `{str_lit("")}` == "\"\"";
 }
 
 test "str_lit escapes quote and backslash" {
@@ -412,12 +412,12 @@ test "str_lit escapes quote and backslash" {
     expected.push('\\');
     expected.push('b');
     expected.push('"');
-    assert `{str_lit(&input)}` == expected, `got: {str_lit(&input)}`;
+    assert `{str_lit(input)}` == expected, `got: {str_lit(input)}`;
 }
 
 test "str_lit keeps printable non-ASCII verbatim" {
     // The key contract: Japanese text is NOT \u-escaped.
-    assert `{str_lit(&"あ")}` == "\"あ\"";
+    assert `{str_lit("あ")}` == "\"あ\"";
 }
 
 test "str_lit escapes control chars" {
@@ -436,7 +436,7 @@ test "str_lit escapes control chars" {
     expected.push('1');
     expected.push('}');
     expected.push('"');
-    assert `{str_lit(&input)}` == expected, `got: {str_lit(&input)}`;
+    assert `{str_lit(input)}` == expected, `got: {str_lit(input)}`;
 }
 
 test "char_lit basic" {

@@ -142,29 +142,27 @@ impl CodeWriter {
 /// `\`, and control characters are escaped; every other scalar — including
 /// all printable non-ASCII (Japanese, emoji, …) — is emitted verbatim.
 ///
-/// This is deliberately *not* `Inspect`. `Inspect` is debug output and may
-/// truncate or change format; `StrLit` is bound to the Wado string-literal
-/// grammar and guarantees round-trippable source.
-pub struct StrLit {
-    value: String,
-}
+/// A newtype over `String` (zero-cost: shares the representation, so
+/// `str_lit` is a retag, not a copy/allocation), with its own `Display`
+/// overriding `String`'s. It is deliberately *not* `Inspect`: `Inspect` is
+/// debug output and may truncate or change format; `StrLit` is bound to the
+/// Wado string-literal grammar and guarantees round-trippable source.
+pub type StrLit = String;
 
 /// A Wado char literal (`'x'`). Same escaping contract as `StrLit`, escaping
-/// `'` instead of `"`.
-pub struct CharLit {
-    value: char,
+/// `'` instead of `"`. A zero-cost newtype over `char` with its own `Display`.
+pub type CharLit = char;
+
+/// Tag `value` as a Wado string literal so interpolating it in a template
+/// emits a valid `"..."`: `str_lit("a\"b")` formats to `"a\"b"`.
+pub fn str_lit(value: String) -> StrLit {
+    return value as StrLit;
 }
 
-/// Wrap `value` so interpolating it in a template emits a valid Wado string
-/// literal: `str_lit(&"a\"b")` formats to `"a\"b"`.
-pub fn str_lit(value: &String) -> StrLit {
-    return StrLit { value: *value };
-}
-
-/// Wrap `value` so interpolating it in a template emits a valid Wado char
-/// literal: `char_lit('\n')` formats to `'\n'`.
+/// Tag `value` as a Wado char literal so interpolating it in a template emits
+/// a valid `'...'`: `char_lit('\n')` formats to `'\n'`.
 pub fn char_lit(value: char) -> CharLit {
-    return CharLit { value };
+    return value as CharLit;
 }
 
 /// Write `c` as the body of a Wado literal delimited by `quote` (`'"'` for a
@@ -201,7 +199,7 @@ fn write_literal_char(f: &mut Formatter, c: char, quote: char) {
 impl Display for StrLit {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_char('"');
-        for let c of self.value.chars() {
+        for let c of self.chars() {
             write_literal_char(f, c, '"');
         }
         f.write_char('"');
@@ -211,7 +209,7 @@ impl Display for StrLit {
 impl Display for CharLit {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_char('\'');
-        write_literal_char(f, self.value, '\'');
+        write_literal_char(f, *self as char, '\'');
         f.write_char('\'');
     }
 }
