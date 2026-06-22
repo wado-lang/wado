@@ -500,7 +500,10 @@ fn compute_receiver_mutating(
     project: &NirPackage,
     type_table: &TypeTable,
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
-) -> (IndexSet<(ModuleSource, String)>, IndexSet<(ModuleSource, String)>) {
+) -> (
+    IndexSet<(ModuleSource, String)>,
+    IndexSet<(ModuleSource, String)>,
+) {
     let mut has_body: IndexSet<(ModuleSource, String)> = IndexSet::default();
     let mut p0_of: IndexMap<(ModuleSource, String), u32> = IndexMap::default();
     for func_rc in &project.functions {
@@ -573,9 +576,10 @@ fn body_writes_through_receiver(
                 expr: inner,
             } if inner.as_expr().is_some_and(projects_p0) => found = true,
             ExprKind::Call { args, .. } => {
-                if args.iter().any(|a| {
-                    a.is_mut && a.expr.as_expr().is_some_and(projects_p0)
-                }) {
+                if args
+                    .iter()
+                    .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
+                {
                     found = true;
                 }
             }

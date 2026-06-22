@@ -57,8 +57,10 @@ re-seed off any mutated bound and off loop functions (where it clashed with the
 loop-scoped re-seed).
 
 Two more — `store_to_load_forwarding`, `field_forward_snapshot_after_mutation` —
-are now green via the post-SROA bare-scalar grow (below), taking the default
-`-O2` e2e to 6 failing.
+are now green via the post-SROA bare-scalar grow (below), and
+`bug_store_load_forward_mut_method_receiver` (a P0 miscompile, O0 + O2) via
+`&mut self`-receiver mutation modelling (below), taking the default `-O2` e2e to
+4 failing.
 
 The remaining failures still need the **forwarded store value itself**, which the
 re-seed cannot supply. The re-seed restores _consistency_ — it gives the guard's
@@ -88,9 +90,20 @@ preservation, owned by the maintenance / store-load-forward passes:
   already-built graph — building it under SROA's empty alias config wrongly
   forwarded an escaping field (`counter.total` after `&mut counter`), so that
   variant was dropped.
+- **`&mut self` receiver modelling** — `bug_store_load_forward_mut_method_receiver`:
+  **resolved** (`compute_receiver_mutating` in `optimize/alias`). `x.bump()` with
+  `bump(&mut self) { *self = … }` was a miscompile (assert folded to
+  `if true { panic }` at O0 and O2): boxing lowers both `&self` and `&mut self`
+  primitive receivers to a `Box<T>` param, so `method_mutates_receiver`'s
+  `MutRef`-only check judged `bump` non-mutating, and its bare-`Local` receiver
+  never entered `aliased` / `mut_escaped` — so the value graph forwarded the
+  pre-call `x.value`. Fixed by a call-graph fixpoint that marks each method
+  whose body writes through its receiver (param 0), distinguishing
+  `bump(&mut self)` from `fmt(&self)` (both `Box<T>`); `builder_alias_sets` then
+  flags the mutating receiver into `aliased`.
 - **Other passes** — `opt_hfs_defer_callclean_writeback`,
-  `wir_optimize_brif_select`, plus the pre-existing optimization-independent
-  `bug_store_load_forward_mut_method_receiver` (fails at `-O0` too).
+  `wir_optimize_brif_select` (both `wir_expect` shape checks, missed
+  optimizations).
 
 Direction: the maintenance must keep a reassigned local's / stored field's value
 where it is statically a constant (or re-derive it on the consuming read),
