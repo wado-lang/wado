@@ -392,6 +392,7 @@ fn analyze_expr(
                 fpt,
                 type_table,
                 false,
+                None,
             ) {
                 mark_potentially_mutated_local_operand(body, receiver, result);
             }
