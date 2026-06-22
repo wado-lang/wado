@@ -13,7 +13,7 @@
 //! name embeds a hole and a plain `TypeId` sweep suffices.
 
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -173,7 +173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let diags = std::mem::take(&mut self.infer_holes.diags);
-        let mut seen: std::collections::HashSet<(Span, String)> = std::collections::HashSet::new();
+        let mut seen: IndexSet<(Span, String)> = IndexSet::default();
         for (hole, (span, message)) in diags {
             let unsolved = self
                 .infer_holes

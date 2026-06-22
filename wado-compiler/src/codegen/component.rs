@@ -3695,9 +3695,10 @@ fn append_interface_instance_exports(
 
     let mut instances = ComponentInstanceSection::new();
     let mut exports = ComponentExportSection::new();
-    let mut instance_idx = ctx.instance_count();
+    let base_instance_idx = ctx.instance_count();
 
-    for (&fq, group) in &groups {
+    for (i, (&fq, group)) in groups.iter().enumerate() {
+        let instance_idx = base_instance_idx + i as u32;
         let mut type_items: Vec<(String, u32)> = Vec::new();
         for export in group {
             for (_, cm_ty) in &export.cm_params {
@@ -3720,7 +3721,6 @@ fn append_interface_instance_exports(
 
         instances.export_items(items);
         exports.export(fq, ComponentExportKind::Instance, instance_idx, None);
-        instance_idx += 1;
     }
 
     instances.append_to_component(component_bytes);

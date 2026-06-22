@@ -1122,7 +1122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_name,
                     trait_name,
                 );
-                bound_check_params = params.clone();
+                bound_check_params.clone_from(&params);
                 params
             }
             ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => self
@@ -1504,9 +1504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<ast::GenericParam>> {
         // `all_impl_index` is already in global build order, so iterating it
         // directly preserves the original order with no merge or per-call sort.
-        let Some(candidates) = self.tysys.trait_env.all_impl_index.get(struct_name) else {
-            return None;
-        };
+        let candidates = self.tysys.trait_env.all_impl_index.get(struct_name)?;
         for key in candidates {
             if let Some(m) = only_module
                 && &key.0 != m

@@ -357,6 +357,7 @@ pub struct AliasInfo {
 ///   participate in the CM async runtime; not CTFE-safe.
 /// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
 ///   refs), but bail conservatively.
+///
 /// Commit sink for niri's body rewrites. The rewrite logic reads through
 /// [`EditSink::body`] and commits every edit through the sink, so two backends
 /// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway

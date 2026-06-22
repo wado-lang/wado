@@ -650,15 +650,15 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
     manifest_root: &Path,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
-    std::collections::HashMap<String, String>,
+    wado_compiler::hashmap::IndexMap<String, String>,
 ) {
     use std::collections::VecDeque;
     use wado_compiler::name::{normalize_module_path, resolve_module_path};
 
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
-    let mut identities: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
+    let mut identities: wado_compiler::hashmap::IndexMap<String, String> =
+        wado_compiler::hashmap::IndexMap::default();
 
     // (harvest_key, loader_identity, filesystem_path, is_entry)
     let mut queue: VecDeque<(String, String, std::path::PathBuf, bool)> = VecDeque::new();
@@ -734,7 +734,7 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 /// itself, or anything already in loader form) pass through unchanged.
 pub(crate) fn remap_index_decl_files(
     index: &mut wado_compiler::kiln::InvocationIndex,
-    identities: &std::collections::HashMap<String, String>,
+    identities: &wado_compiler::hashmap::IndexMap<String, String>,
 ) {
     let rewritten: Vec<(String, String, String)> = index
         .entries()
@@ -989,7 +989,7 @@ mod kiln_dir_module_tests {
             "kiln:file:///g/arith.wado",
         );
 
-        let mut identities = std::collections::HashMap::new();
+        let mut identities = wado_compiler::hashmap::IndexMap::default();
         identities.insert(
             "/abs/example/eval.wado".to_string(),
             "./eval.wado".to_string(),

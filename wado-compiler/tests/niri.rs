@@ -1474,7 +1474,7 @@ fn reduce_local_block_splices_const_true_if_stmt() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition,
+            condition,
             then_block,
             else_block: Some(else_block),
         },
@@ -1502,7 +1502,7 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition,
+            condition,
             then_block,
             else_block: None,
         },
@@ -1527,7 +1527,7 @@ fn reduce_local_block_leaves_nonconst_if_alone() {
     let if_stmt = ps(
         &mut body,
         StmtKind::If {
-            condition: condition,
+            condition,
             then_block,
             else_block: None,
         },
@@ -2123,7 +2123,7 @@ fn arm(pattern: PatBuild, body: Build) -> ArmBuild {
         ArmData {
             pattern,
             guard: None,
-            body: body,
+            body,
             span: Span::default(),
         }
     })
@@ -2137,7 +2137,7 @@ fn arm_with_guard(pattern: PatBuild, guard: Build, body: Build) -> ArmBuild {
         ArmData {
             pattern,
             guard,
-            body: body,
+            body,
             span: Span::default(),
         }
     })
@@ -3375,7 +3375,7 @@ fn let_stmt_b(name: &str, local_index: u32, type_id: TypeId, value: Build) -> St
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value: value,
+                value,
                 skip_value_copy: false,
             },
         )

@@ -156,9 +156,9 @@ impl HeapState {
     /// a generation that cannot collide with a caller-allocated one (the snapshot
     /// does not carry the build's `next` counter).
     fn seed_from(&mut self, snap: &HeapSnapshot) {
-        self.per_slot = snap.per_slot.clone();
-        self.per_local = snap.per_local.clone();
-        self.field_global = snap.field_global.clone();
+        self.per_slot.clone_from(&snap.per_slot);
+        self.per_local.clone_from(&snap.per_local);
+        self.field_global.clone_from(&snap.field_global);
         self.default_version = snap.default_version;
         let max = snap
             .per_slot
@@ -307,7 +307,7 @@ pub fn build(
     let seed = std::mem::take(&mut body.values);
     let (pool, value_of, loop_entry_values, call_site_heap) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
-        b.pure_calls = pure_calls.clone();
+        b.pure_calls.clone_from(pure_calls);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.value_of, b.loop_entry_values, b.call_site_heap)
@@ -364,7 +364,7 @@ pub(crate) fn build_scoped(
     let scoped: Vec<(ExprId, ValueId)> = {
         let pool = std::mem::take(scratch);
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
-        b.current_value = seed.clone();
+        b.current_value.clone_from(seed);
         // Seed the heap with the caller's version state at the call site so a
         // spliced field read carries the version a fresh whole-function build
         // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.

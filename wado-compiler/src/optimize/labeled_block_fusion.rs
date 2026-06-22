@@ -334,9 +334,7 @@ fn check_fusion_preconditions_match(
     if arms.len() != 2 {
         return None;
     }
-    let Some(scrut_e) = scrut.as_expr() else {
-        return None;
-    };
+    let scrut_e = scrut.as_expr()?;
     let ExprKind::Local {
         index: tested_idx, ..
     } = &body.exprs[scrut_e].kind
@@ -1255,7 +1253,7 @@ fn transform_lb_stmt(
     };
 
     if let Some(value) = break_value {
-        let some_case_expr = value.and_then(|v| v.as_expr()).filter(|&e| {
+        let some_case_expr = value.and_then(Operand::as_expr).filter(|&e| {
             matches!(&engine.body.exprs[e].kind,
                 ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index)
         });

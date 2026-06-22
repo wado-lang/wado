@@ -138,9 +138,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         (*receiver, args[0].expr)
     };
 
-    let Some(receiver_expr) = receiver.as_expr() else {
-        return None;
-    };
+    let receiver_expr = receiver.as_expr()?;
     if !is_duplicable_receiver(&*engine.body, receiver_expr) {
         return None;
     }
@@ -158,9 +156,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         else {
             return None;
         };
-        let Some(vid) = inner.as_value() else {
-            return None;
-        };
+        let vid = inner.as_value()?;
         let crate::nir_value_graph::ValueKind::String(s) = engine.body.values.kind(vid) else {
             return None;
         };

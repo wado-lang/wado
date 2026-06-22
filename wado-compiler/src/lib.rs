@@ -651,7 +651,7 @@ fn compile_after_load<H: CompilerHost>(
     // The library world (`--lib`) overrides the target world FQ and is carried
     // owned on the package (the static registry cannot hold it).
     if let Some(lib_world) = lib_world_info {
-        package.target_world = lib_world.fq_name.clone();
+        package.target_world.clone_from(&lib_world.fq_name);
         package.lib_world_info = Some(lib_world);
     }
     package.skip_validation = options.skip_validation;
@@ -864,7 +864,7 @@ fn compile_after_load<H: CompilerHost>(
     // for well-formed programs.
     if !wir_package.trait_bound_violations.is_empty() {
         // Dedup by (call, site) so distinct sites each report their own location.
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = crate::hashmap::IndexSet::default();
         for v in &wir_package.trait_bound_violations {
             if seen.insert((v.call_name.clone(), v.span)) {
                 let _ = logger.error(compiler_host::Diagnostic {
