@@ -272,8 +272,8 @@ impl ModRef {
         false
     }
 
-    /// [`accumulate_expr`] for an operand: a promoted constant mods / refs
-    /// nothing, so it is skipped.
+    /// [`accumulate_expr`] for an operand. A promoted constant mods / refs
+    /// nothing, except a `String`, whose materialisation allocates (below).
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
@@ -525,7 +525,7 @@ impl ModRef {
                 self.allocates = true;
             }
 
-            // === Pure value-producing leaves ===
+            // Tombstone: no parent, no children, mods / refs nothing.
             ExprKind::Dead => {}
         }
     }
@@ -1392,7 +1392,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // GC-allocating literals (String / Bytes / Null) — see B1 finding
+    // GC-allocating literals (String / Bytes) — see B1 finding
     // -----------------------------------------------------------------
 
     // A promoted string literal lives as `Operand::Value(String)`; it has no

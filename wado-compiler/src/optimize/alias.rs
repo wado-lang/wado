@@ -378,13 +378,6 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::projection_root_local;
 
-/// Whether a `recv.m(...)` call may mutate its receiver's pointee: the receiver
-/// expression is itself a `&mut`, or the callee's declared first param is
-/// `&mut self`. `conservative_on_unknown` decides a callee absent from
-/// `first_param_types` — `alias`'s mutable-escape scan passes `true` (assume it
-/// mutates), while `copy_prop`'s copy-propagation guard passes `false` (it has
-/// its own receiver-type guards). Shared so the two analyses agree on the
-/// known-callee verdict.
 /// Call exprs that **mutate no caller local**: a free `Call` or `&self`
 /// `MethodCall` whose every argument is safe — not `mut`, an immutable `&`
 /// borrow, or a by-value value of a call-immutable type (a deep copy the callee
@@ -457,6 +450,13 @@ pub(super) fn pure_calls(
     out
 }
 
+/// Whether a `recv.m(...)` call may mutate its receiver's pointee: the receiver
+/// expression is itself a `&mut`, or the callee's declared first param is
+/// `&mut self`. `conservative_on_unknown` decides a callee absent from
+/// `first_param_types` — `alias`'s mutable-escape scan passes `true` (assume it
+/// mutates), while `copy_prop`'s copy-propagation guard passes `false` (it has
+/// its own receiver-type guards). Shared so the two analyses agree on the
+/// known-callee verdict.
 pub(super) fn method_mutates_receiver(
     body: &Body,
     receiver: crate::nir_arena::ExprId,

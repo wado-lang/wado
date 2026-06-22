@@ -443,14 +443,14 @@ enum Child {
     Block(BlockId),
 }
 
-/// The expression / block children of an expression, in walk order, *excluding*
-/// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
-/// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
-/// guard and body, never the arm pattern).
 fn op_child(op: Operand) -> Option<Child> {
     op.as_expr().map(Child::Expr)
 }
 
+/// The expression / block children of an expression, in walk order, *excluding*
+/// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
+/// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
+/// guard and body, never the arm pattern).
 fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
     match &body.exprs[e].kind {
         ExprKind::FieldAccess { expr: inner, .. }
@@ -590,9 +590,6 @@ fn collect_modified_vars_in_block(
     }
 }
 
-/// Mark a local as fully modified if it has a GC struct type and is passed to a
-/// function call (callees can mutate any field). Immutable `&T` locals are
-/// skipped — no callee can mutate the pointee through them.
 fn mark_gc_local_as_fully_modified_operand(
     body: &Body,
     op: Operand,
@@ -604,6 +601,9 @@ fn mark_gc_local_as_fully_modified_operand(
     }
 }
 
+/// Mark a local as fully modified if it has a GC struct type and is passed to a
+/// function call (callees can mutate any field). Immutable `&T` locals are
+/// skipped — no callee can mutate the pointee through them.
 fn mark_gc_local_as_fully_modified(
     body: &Body,
     e: ExprId,
@@ -672,14 +672,14 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// Mark a local as fully modified, traversing through unary ops and nested
-/// field accesses to the root.
 fn mark_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars) {
     if let Some(e) = op.as_expr() {
         mark_local_as_fully_modified(body, e, modified);
     }
 }
 
+/// Mark a local as fully modified, traversing through unary ops and nested
+/// field accesses to the root.
 fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedVars) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -715,8 +715,6 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
     }
 }
 
-/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
-/// pointee as clobbered.
 fn record_mut_ref_clobber_operand(
     body: &Body,
     op: Operand,
@@ -728,6 +726,8 @@ fn record_mut_ref_clobber_operand(
     }
 }
 
+/// If `expr` is a `&mut`-reference to a struct passed to a call, record its
+/// pointee as clobbered.
 fn record_mut_ref_clobber(
     body: &Body,
     e: ExprId,
@@ -753,7 +753,6 @@ fn record_mut_ref_clobber(
 
 /// Record a field-access write into `written_field_types`, keyed by the pointee
 /// type of the assigned object.
-
 fn record_written_field_type(
     body: &Body,
     target: ExprId,
@@ -774,7 +773,6 @@ fn record_written_field_type(
 }
 
 /// Mark what is modified by an assignment target.
-
 fn mark_assignment_target_as_modified(
     body: &Body,
     e: ExprId,
@@ -1378,8 +1376,9 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
     )
 }
 
-/// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of
-/// pure, total ops over `Local` and numeric/bool/char literal leaves.
+/// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of pure,
+/// total ops over `Local` leaves. A promoted (`Operand::Value`) leaf has no
+/// skeleton expr and is treated as hoistable.
 ///
 /// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
 /// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
@@ -1408,7 +1407,6 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
 }
 
 /// Collect every `Local` leaf of a hoistable-arithmetic tree.
-
 fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32)>) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => out.push((e, *index)),
@@ -1614,30 +1612,6 @@ fn hoist_invariant_arith(
     true
 }
 
-/// Common-subexpression elimination inside a loop body under operand promotion.
-///
-/// The value graph hash-conses a pure subexpression (`p * p` over a loop-carried
-/// `p`) to one `ValueId`, so the two occurrences in a guard and the body share
-/// an identity — but each is a distinct *skeleton* `Binary` expr the extractor
-/// can not promote to a bare `Operand::Value` (a loop-carried local's value is
-/// not reemittable at an arbitrary slot, so it stays a sourceless `Opaque`).
-/// Each is therefore re-emitted. This restores the one-computation `__cse_N`
-/// shape the standalone `cse` pass produced before hash-consing subsumed the
-/// *deduplication* (but not the materialisation): bind a clone of the
-/// subexpression to a temp placed before the earliest top-level statement that
-/// contains an occurrence, and redirect every occurrence to read the temp.
-///
-/// Soundness — placement and availability:
-/// - The temp lands before the earliest top-level statement of the loop body
-///   that holds an occurrence, so it dominates every (later or equal) occurrence
-///   in the body's linear statement list.
-/// - A value with ≥2 occurrences sharing one `ValueId` reads the *same* leaf
-///   values at each, so those leaves are in scope at all of them — hence bound
-///   before the earliest occurrence's statement (or loop-carried / a param),
-///   available where the temp is inserted. The clone re-emits the original
-///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
-///   value. Trap-prone ops are excluded, so computing it once up front (possibly
-///   on an iteration a conditional occurrence would have skipped) cannot trap.
 /// Whether `idx` is in scope at the CSE insertion point (before `min_i`): it is
 /// a loop-entry local, or bound by a top-level `let` of the loop body earlier.
 fn cse_local_available(
@@ -1706,6 +1680,30 @@ fn cse_operand_in_scope(
     }
 }
 
+/// Common-subexpression elimination inside a loop body under operand promotion.
+///
+/// The value graph hash-conses a pure subexpression (`p * p` over a loop-carried
+/// `p`) to one `ValueId`, so the two occurrences in a guard and the body share
+/// an identity — but each is a distinct *skeleton* `Binary` expr the extractor
+/// can not promote to a bare `Operand::Value` (a loop-carried local's value is
+/// not reemittable at an arbitrary slot, so it stays a sourceless `Opaque`).
+/// Each is therefore re-emitted. This restores the one-computation `__cse_N`
+/// shape the standalone `cse` pass produced before hash-consing subsumed the
+/// *deduplication* (but not the materialisation): bind a clone of the
+/// subexpression to a temp placed before the earliest top-level statement that
+/// contains an occurrence, and redirect every occurrence to read the temp.
+///
+/// Soundness — placement and availability:
+/// - The temp lands before the earliest top-level statement of the loop body
+///   that holds an occurrence, so it dominates every (later or equal) occurrence
+///   in the body's linear statement list.
+/// - A value with ≥2 occurrences sharing one `ValueId` reads the *same* leaf
+///   values at each, so those leaves are in scope at all of them — hence bound
+///   before the earliest occurrence's statement (or loop-carried / a param),
+///   available where the temp is inserted. The clone re-emits the original
+///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
+///   value. Trap-prone ops are excluded, so computing it once up front (possibly
+///   on an iteration a conditional occurrence would have skipped) cannot trap.
 fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable value, as (top-level stmt index, expr),

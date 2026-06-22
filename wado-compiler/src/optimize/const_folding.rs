@@ -260,11 +260,6 @@ fn build_global_env(
     env
 }
 
-/// Arena counterpart of [`const_seq_len`]: the statically-known
-/// [`SeqField::Len`] length of a constant `List` / `String` value held
-/// in the arena. Used by [`SeqLenCollector`] to read the value of an
-/// inline `GlobalVarSet(X, <const>)` directly from the function's arena
-/// body.
 /// The integer value of an operand — a promoted `ValueKind::Int` in the pool.
 fn operand_int_a(body: &Body, op: Operand) -> Option<u64> {
     body.operand_const_int(op)
@@ -274,6 +269,11 @@ fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {
     op.as_expr().and_then(|e| const_seq_len_a(body, e))
 }
 
+/// Arena counterpart of [`const_seq_len`]: the statically-known
+/// [`SeqField::Len`] length of a constant `List` / `String` value held
+/// in the arena. Used by [`SeqLenCollector`] to read the value of an
+/// inline `GlobalVarSet(X, <const>)` directly from the function's arena
+/// body.
 fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),

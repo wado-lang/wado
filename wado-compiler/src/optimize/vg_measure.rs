@@ -27,7 +27,7 @@ pub fn enabled() -> bool {
 /// graph query rebuilds a fresh graph and asserts the maintained partition
 /// refines it (`builder::partition_refines`) — proving per-edit maintenance
 /// never over-merges. Off by default (zero cost); slow when on (a fresh build
-/// per query), for small inputs. Reinstated for the all-pass maintenance work.
+/// per query), for small inputs.
 pub fn verify_enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("WADO_VERIFY_VG").is_some())

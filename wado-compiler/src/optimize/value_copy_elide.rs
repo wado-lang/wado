@@ -145,10 +145,8 @@ fn analyze_usage(body: &Body, type_table: &TypeTable) -> IndexMap<u32, LocalUsag
     usage
 }
 
-/// Apply the usage-marking rules for a single expression node — the analog of
-/// the old `UsageAnalyzer::visit_expr` arms, minus the recursion (the caller's
-/// walk visits every node).
-
+/// Apply the usage-marking rules for a single expression node. No recursion:
+/// the caller's walk visits every node.
 fn classify_expr(
     body: &Body,
     id: ExprId,
@@ -210,10 +208,7 @@ fn classify_expr(
     }
 }
 
-/// Mark every local that contributes to `expr`'s observable storage as
-/// potentially field-mutated, following pure projections (`FieldAccess`,
-/// `VariantPayload`, `Cast`, `Unary`). Mirrors `copy_prop`'s
-/// `mark_potentially_mutated_local`.
+/// [`mark_root_field_mutated`] for an operand.
 fn mark_root_field_mutated_operand(
     body: &Body,
     op: Operand,
@@ -224,6 +219,10 @@ fn mark_root_field_mutated_operand(
     }
 }
 
+/// Mark every local that contributes to `expr`'s observable storage as
+/// potentially field-mutated, following pure projections (`FieldAccess`,
+/// `VariantPayload`, `Cast`, `Unary`). Mirrors `copy_prop`'s
+/// `mark_potentially_mutated_local`.
 fn mark_root_field_mutated(body: &Body, expr: ExprId, usage: &mut IndexMap<u32, LocalUsage>) {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => {

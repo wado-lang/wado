@@ -72,8 +72,7 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     true
 }
 
-/// Move `src`'s node content into `id`; `src` is left as a dead `Unit`.
-
+/// Move `src`'s node content into `id`; `src` is left as a dead node.
 fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;

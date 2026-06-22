@@ -83,9 +83,9 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
         let cse_changed = engine.run(&[&rule]);
-        // Store-load forwarding shares cse's session: cse is graph-preserving
-        // (it replaces matching subexpressions in place, so `value_of` stays
-        // current), so forwarding runs on the same ValueGraph without a rebuild.
+        // Store-load forwarding shares cse's session: cse replaces matching
+        // subexpressions in place, leaving `value_of` current, so forwarding
+        // runs on the same ValueGraph without a rebuild.
         let mut unsafe_locals = address_taken_locals.clone();
         unsafe_locals.extend(stores_aliased_locals.iter().copied());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());

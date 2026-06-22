@@ -571,7 +571,6 @@ fn field_access_node(
                     has_access.insert(idx);
                     return;
                 }
-                // A promoted `Operand::Value` inner is no candidate-local access.
                 if let Some(inner_e) = inner.as_expr() {
                     field_access_node(body, NodeRef::Expr(inner_e), candidates, has_access);
                 }
@@ -952,7 +951,6 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
     } = &engine.body.exprs[id].kind
     {
         let (inner, field_index) = (*inner, *field_index);
-        // A promoted `Operand::Value` receiver is no scalarizable candidate local.
         if let Some(local_idx) = inner
             .as_expr()
             .and_then(|e| is_candidate_local(engine.body, e, ctx.safe_set))
@@ -982,7 +980,6 @@ fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
         } = &engine.body.exprs[target].kind
         {
             let (inner, field_index) = (*inner, *field_index);
-            // A promoted value write target is not a scalarizable candidate.
             if let Some(local_idx) = inner
                 .as_expr()
                 .and_then(|e| is_candidate_local(engine.body, e, ctx.safe_set))
@@ -1035,7 +1032,7 @@ fn expand_struct_let(
     ctx: &Rewrite,
     new_stmts: &mut Vec<StmtId>,
 ) {
-    // (field_index, value_expr) pairs in field-index order.
+    // (field_index, operand) pairs in field-index order.
     let mut pairs: Vec<(u32, Operand)> = match &engine.body.exprs[value].kind {
         ExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| (f.field_index, f.value)).collect()

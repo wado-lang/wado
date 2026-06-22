@@ -27,8 +27,7 @@ use crate::token::Span;
 /// `Local` / `FieldAccess` reads the graph resolves to a value), or an effectful
 /// / control subtree kept in the skeleton (`Call`, `MethodCall`, allocation
 /// literals, `If` / `Match` / `Block` value positions). Pure values no longer
-/// occupy `ExprId` slots; the slot holds their `ValueId` directly, so the
-/// `value_of: ExprId → ValueId` side-table retires.
+/// occupy `ExprId` slots; the slot holds their `ValueId` directly.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Operand {
     /// A pure value in the function's [`ValuePool`].
@@ -378,17 +377,14 @@ pub struct Body {
     pub stores_aliased_locals: IndexSet<u32>,
     /// The function's pure-value graph — the source of truth for every
     /// [`Operand::Value`] in the skeleton (WEP: The Live ValueGraph). Built once
-    /// by `lower::translate` and maintained in place by the optimizer's edits, it
-    /// is never re-derived from the skeleton; the per-pass rebuild and the
-    /// `value_of` side-table retire. Empty on a body built before the operand-
-    /// promotion migration populates it.
+    /// by `lower::translate` and maintained in place by the optimizer's edits;
+    /// never re-derived from the skeleton. Empty on a body built before operand
+    /// promotion populates it.
     pub values: ValuePool,
     /// The per-function value graph (`value_of` + `loop_entry_values`), persisted
-    /// here so it can survive across optimizer passes instead of living as a
+    /// here so it survives across optimizer passes instead of living as a
     /// per-`Engine`-session cache (WEP: The Live ValueGraph, build-once). `None`
-    /// until the first value query builds it. This is the storage foundation for
-    /// build-once; behavior is unchanged until the per-pass rebuild triggers are
-    /// removed (a later, soundness-coupled step).
+    /// until the first value query builds it.
     pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
 }
 
@@ -407,11 +403,10 @@ impl Body {
         }
     }
 
-    /// The raw integer bit pattern of a constant-int operand, reading the
-    /// `ValuePool` for `Operand::Value` and the literal node for `Operand::Expr`.
-    /// `None` for any non-int-constant operand. Width-agnostic (no type filter):
-    /// callers that only need the value (capacities, zero-tests) avoid threading
-    /// a `TypeTable`.
+    /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
+    /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
+    /// filter): callers that only need the value (capacities, zero-tests) avoid
+    /// threading a `TypeTable`.
     pub fn operand_const_int(&self, op: Operand) -> Option<u64> {
         match self.values.kind(op.as_value()?) {
             ValueKind::Int(value, _) => Some(*value),
@@ -798,8 +793,8 @@ impl Body {
     /// A liveness-based pass (`elide_local`, `dae`) must treat these as reads:
     /// the read lives in the value pool, not the skeleton, so the use index
     /// alone misses it. Precise (only values actually in operand slots, unlike
-    /// the pool-wide [`ValuePool::opaque_local_sources`]) and empty until
-    /// promotion runs, so it is behavior-neutral in the pre-promotion flow.
+    /// the pool-wide [`ValuePool::opaque_local_sources`]); empty until promotion
+    /// runs.
     pub fn locals_read_via_promotion(&self) -> IndexSet<u32> {
         let mut out = IndexSet::default();
         self.for_each_operand(|op| {

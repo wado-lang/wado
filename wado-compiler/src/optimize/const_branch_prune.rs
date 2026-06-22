@@ -163,11 +163,10 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 stmts.pop();
                 let bv_span = engine.body.exprs[id].span;
                 if stmts.is_empty() {
-                    // `id` becomes the broken value directly: lift a skeleton
-                    // subtree into `id` (changes `id`'s kind), or redirect `id`'s
-                    // parent slot to a constant. The redirect leaves `id`'s kind a
-                    // `LabeledBlock`, so report its real change status — once `id`
-                    // is orphaned a re-fire is a no-op and must not spin.
+                    // `id` becomes the broken value directly. `become_expr`
+                    // changes `id`'s kind; `redirect_expr` leaves it a
+                    // `LabeledBlock`, so return its real change status — a
+                    // re-fire on the orphaned `id` is a no-op and must not spin.
                     match brk_value {
                         Operand::Expr(e) => {
                             engine.become_expr(id, e);
@@ -217,11 +216,10 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
         }
     }
 
-    // An empty `[label:] { }` is left as an empty Block (a unit-typed
-    // skeleton form). Collapsing it to the pooled unit value would strip the
-    // node that downstream passes — notably heap-field-sync, which appends a
-    // convergence reread into each match arm's block — rely on as an insertion
-    // point. Empty blocks are reclaimed by block-flattening / DCE instead.
+    // An empty `[label:] { }` is left as an empty Block, not collapsed to the
+    // pooled unit value: downstream passes (notably heap-field-sync, which
+    // appends a convergence reread into each match arm's block) rely on it as
+    // an insertion point. Empty blocks are reclaimed by block-flattening / DCE.
     false
 }
 

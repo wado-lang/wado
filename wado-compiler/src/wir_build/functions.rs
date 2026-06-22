@@ -595,10 +595,9 @@ fn register_globals(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Convert a NIR global initializer expression (in arena form) to a WIR
-/// constant instruction. `type_id` is the type to interpret a literal as,
-/// propagated downward unchanged through enclosing casts (the outermost cast's
-/// type wins), matching the previous tree-shaped translator.
+/// Convert a NIR global initializer operand to a WIR constant instruction.
+/// `type_id` is the type to interpret a literal as, propagated downward unchanged
+/// through enclosing casts (the outermost cast's type wins).
 fn translate_global_init(
     body: &crate::nir_arena::Body,
     op: crate::nir_arena::Operand,

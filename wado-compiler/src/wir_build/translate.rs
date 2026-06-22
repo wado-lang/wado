@@ -1552,7 +1552,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let value_instr = self.translate_operand(*value);
                 // If the initializer diverges (`never`), no value reaches the stack,
-                // so LocalSet would be invalid. `translate_expr` already appends
+                // so LocalSet would be invalid. `translate_operand` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
                 if self.operand_type_id(*value) == TypeTable::NEVER {
@@ -1856,10 +1856,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
-    /// WEP: The Live ValueGraph). Constant value kinds lower directly from the
-    /// pool, using the source type recorded by the builder. Non-constant kinds
-    /// (`Binary`, `Opaque`, …) are not promoted yet — their materialisation
-    /// needs source recovery and is a later step — so reaching one is a bug.
+    /// WEP: The Live ValueGraph). Each kind lowers from the pool using the source
+    /// type recorded by the builder; composite kinds (`Binary`, `Select`,
+    /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
     pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
         use crate::nir_value_graph::ValueKind;
         use crate::wir::WirAbstractHeapType;

@@ -33,8 +33,7 @@ struct CandidateInfo {
     field_name_set: IndexSet<String>,
 }
 
-/// If `expr` is a direct `Call(f)` / `MethodCall(f)` whose callee is a
-/// candidate, return that candidate's index.
+/// [`candidate_call_idx`] for an operand.
 fn candidate_call_idx_operand(
     body: &Body,
     op: Operand,
@@ -44,6 +43,8 @@ fn candidate_call_idx_operand(
         .and_then(|e| candidate_call_idx(body, e, candidate_names))
 }
 
+/// If `expr` is a direct `Call(f)` / `MethodCall(f)` whose callee is a
+/// candidate, return that candidate's index.
 fn candidate_call_idx(
     body: &Body,
     expr: ExprId,
@@ -58,8 +59,7 @@ fn candidate_call_idx(
         .copied()
 }
 
-/// Walk the argument expressions of a (Method)Call so tracked-local escapes in
-/// the args invalidate the right candidate (the call's own ABI is accepted).
+/// [`walk_call_args_for_uses`] for an operand.
 fn walk_call_args_for_uses_operand(
     body: &Body,
     op: Operand,
@@ -73,6 +73,8 @@ fn walk_call_args_for_uses_operand(
     }
 }
 
+/// Walk the argument expressions of a (Method)Call so tracked-local escapes in
+/// the args invalidate the right candidate (the call's own ABI is accepted).
 fn walk_call_args_for_uses(
     body: &Body,
     expr: ExprId,

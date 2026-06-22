@@ -257,7 +257,6 @@ fn rewrite_array_clone_to_shallow(body: &mut Body) {
 
 /// If the expression at `value` is a one-argument call to an array-wrapper
 /// `$value_copy$T` helper, return that helper's key.
-
 fn wrapper_call_key(body: &Body, value: ExprId, wrappers: &IndexSet<FuncKey>) -> Option<FuncKey> {
     if let ExprKind::Call { func, args, .. } = &body.exprs[value].kind
         && args.len() == 1
@@ -357,7 +356,6 @@ fn is_immutable_ref_param(
 /// True when the binding `target_idx` and the source `value` reads from are
 /// both element-clean — i.e. demoting `value` (an array-wrapper value copy)
 /// to a shallow copy is observably equivalent to the deep copy.
-
 fn demote_candidate(
     body: &Body,
     value: ExprId,
@@ -455,7 +453,6 @@ fn stmt_binding_value(body: &Body, s: StmtId) -> Option<ExprId> {
 }
 
 /// Rewrite a value-copy-wrapper call to its synthesized shallow sibling.
-
 fn retarget_wrapper_call(
     body: &mut Body,
     value: ExprId,
@@ -1095,13 +1092,6 @@ impl ElementImmutable<'_, '_, '_> {
     }
 }
 
-/// True when the expression at `id` produces a value that may alias `self`'s
-/// storage — the tracked local itself, a projection of it, an `array_get`
-/// element read of a tracked spine, or an aggregate / closure that captures
-/// any such value.
-///
-/// A primitive-typed value is excluded: reading `self.used` (an `i32`)
-/// produces an independent copy, so passing it around cannot reach `self`.
 /// [`is_self_derived`] for an operand: a promoted constant is never self-derived.
 fn is_self_derived_op(
     body: &Body,
@@ -1123,6 +1113,13 @@ fn is_self_derived_operand(
         .map_or(false, |e| is_self_derived(body, e, tainted, tt))
 }
 
+/// True when the expression at `id` produces a value that may alias `self`'s
+/// storage — the tracked local itself, a projection of it, an `array_get`
+/// element read of a tracked spine, or an aggregate / closure that captures
+/// any such value.
+///
+/// A primitive-typed value is excluded: reading `self.used` (an `i32`)
+/// produces an independent copy, so passing it around cannot reach `self`.
 fn is_self_derived(
     body: &Body,
     id: ExprId,

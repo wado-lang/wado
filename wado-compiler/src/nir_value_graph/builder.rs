@@ -967,8 +967,7 @@ impl<'a> Builder<'a> {
     }
 
     /// Walk an operand: a promoted pure value resolves through the pool; an
-    /// effectful subtree walks as before. (Phase A operands are all `Expr`; this
-    /// is the seam Phase B uses once `lower` interns pure values.)
+    /// effectful subtree walks its skeleton.
     fn walk_operand(&mut self, op: Operand) -> Option<ValueId> {
         match op {
             Operand::Value(v) => Some(self.pool.find(v)),

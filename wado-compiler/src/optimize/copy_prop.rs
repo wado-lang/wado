@@ -1,8 +1,8 @@
 //! Copy propagation optimization for Wado NIR.
 //!
-//! Eliminates trivial copy bindings like `let x = y`, `let x = 42`,
-//! `let x = &y`, or `let x = &mut y` by propagating the source value to all
-//! uses of the target variable. See `can_propagate_copy` for the safety gates.
+//! Eliminates trivial copy bindings like `let x = y`, `let x = &y`,
+//! `let x = &mut y`, or a copy of a promoted operand by propagating the source
+//! to all uses of the target. See `can_propagate_copy` for the safety gates.
 //!
 //! Runs on the worklist rewrite engine (combine migration; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
@@ -38,7 +38,7 @@ struct CopyBinding {
     /// after the binding. The target's uses are confined to that scope, so a
     /// stable source can be propagated even when the source is reassigned
     /// elsewhere in the function (e.g. a loop counter copied inside the loop
-    /// body). Always `true` for literal sources.
+    /// body). Always `true` for a promoted-value source.
     source_scope_stable: bool,
 }
 
@@ -73,7 +73,7 @@ enum CopySource {
     },
     /// `let x = Operand::Value(v)` — a copy of a promoted operand. `x`'s reads
     /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
-    /// the copy is unconditionally stable (operand-promotion-aware copy_prop).
+    /// the copy is unconditionally stable.
     Promoted(crate::nir_value_graph::ValueId),
 }
 
@@ -124,7 +124,6 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
     if skip_value_copy {
         return None;
     }
-    // A promoted constant binding is not a copy of another place.
     let value = unwrap_copy_value(body, value.as_expr()?);
     let value_type = body.exprs[value].type_id;
 
@@ -241,8 +240,8 @@ fn analyze_function_body(
     analyze_block(body, body.root, &mut result, type_table, first_param_types);
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
-    // the local as dead / single-use and propagate or eliminate it out from under
-    // the promoted read. Empty (behavior-neutral) until operand promotion runs.
+    // the local as dead / single-use and eliminate it out from under the promoted
+    // read. Empty (behavior-neutral) until operand promotion runs.
     for idx in promoted_reads_set(body) {
         result.usage.entry(idx).or_default().read_count += 2;
     }
@@ -275,7 +274,7 @@ fn analyze_block(
         if let Some(mut binding) = analyze_copy_binding(body, stmt) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable for the propagation iff it is not mutated in
-            // those statements (literals are unconditionally stable).
+            // those statements (a promoted value is unconditionally stable).
             binding.source_scope_stable = match binding.source.local_index() {
                 Some(src) => !stmts[k + 1..]
                     .iter()

@@ -55,9 +55,9 @@ use super::mod_ref::{ModRef, can_move_past};
 /// per function from the pristine body. The `stats` are read-only oracles: a
 /// peephole rewrite can only remove a read, so a stale entry can only refuse an
 /// otherwise-valid elision (safe), never enable an unsound one. Each
-/// `apply_block` performs at most one elision — move the single-field
-/// initializer into its one `r.field` use via `become_expr` and drop the
-/// binding `Let` via `set_block_stmts` — then the worklist re-runs for the next.
+/// `apply_block` performs at most one elision — substitute the single-field
+/// initializer into its one `r.field` use and drop the binding `Let` via
+/// `set_block_stmts` — then the worklist re-runs for the next.
 pub(super) struct ElideBoxLocalRule {
     stats: IndexMap<u32, LocalStats>,
     blacklist: IndexSet<u32>,
@@ -241,7 +241,6 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
         } => {
             let inner = *inner;
             let field_name = field_name.clone();
-            // A promoted `Operand::Value` inner is a constant, not a box local.
             if let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
@@ -253,8 +252,7 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
             } else if let Some(ie) = inner.as_expr() {
                 stats_node(body, NodeRef::Expr(ie), stats);
             }
-            // A promoted `Operand::Value` inner (a pure FieldAccess value) is no
-            // box-local read — nothing to account.
+            // A promoted `Operand::Value` inner is a constant: no box-local read.
         }
         ExprKind::Local { index, .. } => {
             stats.entry(*index).or_default().total_reads += 1;

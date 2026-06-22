@@ -95,7 +95,7 @@ fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
     }
 }
 
-/// Count expressions in a NIR expression (recursive)
+/// Count expressions reachable through an operand (recursive).
 fn count_operand(body: &Body, op: Operand, type_table: &TypeTable) -> usize {
     // A promoted constant counts as the one literal node it replaced.
     op.as_expr().map_or(1, |e| count_expr(body, e, type_table))
@@ -710,34 +710,28 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
-                // Inline splices through the arena directly, not the maintaining
-                // engine edit API, so the persisted graph is stale for this
-                // function. Method A — coarsen, then regrow each splice point:
+                // Inline splices through the arena directly, bypassing the
+                // engine edit API, so the persisted graph is stale here. Method A
+                // — coarsen, then regrow each splice point:
                 //
-                // 1. Coarsen: clear `value_of` / `loop_entry_values`, dropping
-                //    every entry inline's restructuring could have staled
-                //    (conservative — a query then returns no identity, never a
-                //    wrong one; the value pool persists so promoted operands still
-                //    resolve). Keeping any caller entry is unsound here, even a
-                //    constant-valued one: a `Local` read pointing at a constant is
-                //    sound only while that constant is its reaching def, and
-                //    inlining can restructure control flow (introduce a loop
-                //    back-edge) so a fresh build makes the read loop-variant — two
-                //    distinct locals sharing a constant init then over-merge
+                // 1. Coarsen: clear `value_of` / `analysis_only` /
+                //    `loop_entry_values`. The value pool persists, so promoted
+                //    operands still resolve. Keeping any caller entry is unsound,
+                //    even a constant-valued one: a `Local` read pointing at a
+                //    constant is sound only while that constant is its reaching
+                //    def, and inlining can introduce a loop back-edge that makes a
+                //    fresh build see the read as loop-variant — two distinct
+                //    locals sharing a constant init then over-merge
                 //    (`WADO_VERIFY_VG` flags `index`/`init` on the closure / sroa
-                //    fixtures). Only a literal *expr node* is truly inline-invariant,
-                //    and keeping just those recovers nothing. Sound, precise
-                //    forwarding across inline is Route B's job (flow frozen into
-                //    operand slots), not a retain here.
+                //    fixtures). Sound forwarding across inline is Route B's job
+                //    (flow frozen into operand slots), not a retain here.
                 // 2. Regrow: re-value each inlined block self-contained, seeded
                 //    with its params bound to the call-site arg values and a fresh
-                //    heap, keeping only the resulting *constants* — those are the
-                //    folds inline newly exposes (induction bound, formatter
-                //    operand) and they equal what a fresh build assigns. The walk
-                //    runs in a scratch pool (see `build_scoped`), so it never
-                //    mutates the live graph's shared values; it touches only the
-                //    spliced region (no `builder::build`, `rebuilds = 0`) and
-                //    parks no cache.
+                //    heap, keeping only the resulting constants — the folds inline
+                //    newly exposes (induction bound, formatter operand), which
+                //    equal what a fresh build assigns. The walk runs in a scratch
+                //    pool (see `build_scoped`), never mutating the live graph's
+                //    shared values, and parks no cache.
                 if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
                     vg.value_of.clear();
                     vg.analysis_only.clear();
@@ -829,7 +823,6 @@ pub fn inline_functions(
     changed
 }
 
-/// Inline function calls in a block
 /// Inline function calls in a block (arena). Each statement is processed in
 /// place (1:1); a `Let` / `Expr` / `Return` value gets a top-level inline
 /// attempt (which then re-scans the inlined body), while other statements

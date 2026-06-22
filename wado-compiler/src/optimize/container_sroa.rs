@@ -671,6 +671,15 @@ fn element_layout_of(
     None
 }
 
+fn recognize_init_operand(
+    body: &Body,
+    op: Operand,
+    sig_kinds: &SigKindIndex,
+) -> Option<CandidateInit> {
+    op.as_expr()
+        .map_or(None, |e| recognize_init(body, e, sig_kinds))
+}
+
 /// Recognize the supported initializer form for container-SROA candidates.
 ///
 /// Two equivalent shapes are accepted, both matched purely *structurally*
@@ -686,15 +695,6 @@ fn element_layout_of(
 ///    fall through to form (1) on the inner constructor call. Neither the
 ///    label string nor the builder method name is inspected — only the
 ///    shape of the wrapper.
-fn recognize_init_operand(
-    body: &Body,
-    op: Operand,
-    sig_kinds: &SigKindIndex,
-) -> Option<CandidateInit> {
-    op.as_expr()
-        .map_or(None, |e| recognize_init(body, e, sig_kinds))
-}
-
 fn recognize_init(body: &Body, value: ExprId, sig_kinds: &SigKindIndex) -> Option<CandidateInit> {
     let inner = unwrap_builder_labeled_block(body, value).unwrap_or(value);
     let ExprKind::Call { func, args, .. } = &body.exprs[inner].kind else {
@@ -876,7 +876,6 @@ impl WhitelistChecker<'_> {
         }
     }
 
-    /// Check an expression used as a value-source for `push`/`index_assign`.
     /// Visit an operand for escape analysis. A promoted constant
     /// (`Operand::Value`) references no local, so there is nothing to visit.
     fn visit_operand(&mut self, body: &Body, op: Operand) {
@@ -901,6 +900,7 @@ impl WhitelistChecker<'_> {
         }
     }
 
+    /// Check an expression used as a value-source for `push`/`index_assign`.
     fn check_source(
         &mut self,
         body: &Body,

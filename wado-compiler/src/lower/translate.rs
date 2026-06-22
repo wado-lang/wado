@@ -885,16 +885,11 @@ impl FunctionTranslator<'_, '_> {
             }
             TirExprKind::BoolLiteral(b) => Some(ValueKind::Bool(*b)),
             TirExprKind::CharLiteral(c) => Some(ValueKind::Char(*c)),
-            // `Null` is a pure constant value too: its WIR materialisation
-            // (`None` variant or `ref.null`) depends only on the recorded type,
-            // which the extractor reads from the pool. Born as `Operand::Value`.
+            // Pure constants whose WIR depends only on type/bytes (read back
+            // from the pool by the extractor): `Null` → `None`/`ref.null`,
+            // string → `translate_string_literal`, unit → no runtime value.
             TirExprKind::Null => Some(ValueKind::Null),
-            // A string literal is a pure constant: its WIR materialisation
-            // (`translate_string_literal`) depends only on its bytes, which the
-            // extractor reads from the pool. Born as `Operand::Value`.
             TirExprKind::StringLiteral(s) => Some(ValueKind::String(s.clone())),
-            // The unit value `()` has no runtime representation; its WIR
-            // materialisation depends only on its type. Born as Operand::Value.
             TirExprKind::Unit => Some(ValueKind::Unit),
             _ => None,
         };

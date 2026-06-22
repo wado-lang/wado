@@ -14,7 +14,7 @@
 //! model for non-literal multi-use values is a later step; constants are always
 //! cheaper to rematerialize than to share, so they need no cost decision.
 //!
-//! [`materialize_literal`] is the shared materialization primitive, used in
+//! [`extract_const`] is the shared materialization primitive, used in
 //! production by `store_load_forward`. [`ExtractLiteralRule`] (the worklist
 //! rule form) is exercised by unit tests until the first union-producing
 //! pure-value pass wires it into a combined session.

@@ -321,7 +321,6 @@ fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
 /// struct with the field path from the value's root. Descends through the
 /// outer block tail (`{ …; *__b }` produced for direct literals) and through
 /// wrapper `StructLiteral` fields.
-
 fn collect_array_targets(
     body: &Body,
     expr: ExprId,
@@ -334,13 +333,11 @@ fn collect_array_targets(
             // The array struct may be a `let __b = <array>` binding (the `*__b`
             // direct-literal shape) or the block's tail expression (e.g.
             // `{ let capacity = 4; List { repr: array_new(capacity), used: 0 } }`,
-            // where a dead `let capacity` survives operand promotion). Walk the
-            // statements in order: record each immutable `let x = <const int>`
-            // into `const_env` first so a later `array_new(x)` reads through it
-            // (operand promotion no longer constant-folds the inlined builder's
-            // capacity binding into the `array_new` arg), then recurse into every
-            // statement's value / yielded operand — a non-struct candidate records
-            // no target, so trying all is safe.
+            // where a dead `let capacity` survives operand promotion). Record each
+            // immutable `let x = <const int>` into `const_env` first so a later
+            // `array_new(x)` resolves through it, then recurse into every
+            // statement's value — a non-struct candidate records no target, so
+            // trying all is safe.
             for &s in &body.blocks[*block].stmts {
                 let cand = match &body.stmts[s].kind {
                     StmtKind::Let {
@@ -440,13 +437,13 @@ fn array_new_capacity(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>)
     usize::try_from(const_int(body, args[0].expr, const_env)?).ok()
 }
 
-/// If `receiver` is `local` reached through zero or more field accesses,
-/// return the field-index path (`[]` for the bare local). The builder methods
-/// take `&mut self`, so peel a leading reference.
 fn place_path_operand(body: &Body, op: Operand, local: u32) -> Option<Vec<u32>> {
     op.as_expr().map_or(None, |e| place_path(body, e, local))
 }
 
+/// If `receiver` is `local` reached through zero or more field accesses,
+/// return the field-index path (`[]` for the bare local). The builder methods
+/// take `&mut self`, so peel a leading reference.
 fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
     let mut path = Vec::new();
     let mut cur = peel_ref(body, receiver);

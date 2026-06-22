@@ -211,12 +211,12 @@ fn stmt_blocks(body: &Body, stmt: StmtId) -> Vec<BlockId> {
     }
 }
 
-/// Recursively true when `expr` is a closed constant aggregate value.
 fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<u32>) -> bool {
     op.as_expr()
         .map_or(true, |e| is_globalizable_const(body, e, bound))
 }
 
+/// Recursively true when `expr` is a closed constant aggregate value.
 fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::EnumConstruct { .. } => true,
@@ -277,11 +277,11 @@ fn block_is_const(body: &Body, block: BlockId, bound: &mut IndexSet<u32>) -> boo
     }
 }
 
-/// True when `expr` contains at least one aggregate constructor.
 fn contains_aggregate_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_some_and(|e| contains_aggregate(body, e))
 }
 
+/// True when `expr` contains at least one aggregate constructor.
 fn contains_aggregate(body: &Body, expr: ExprId) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::StructLiteral { .. }
@@ -514,13 +514,13 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     }
 }
 
-/// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
-/// escapes; passing the binding itself by value is a consuming use (rejected).
 fn call_arg_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> bool {
     op.as_expr()
         .map_or(true, |e| call_arg_readonly(body, e, idx, gate))
 }
 
+/// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
+/// escapes; passing the binding itself by value is a consuming use (rejected).
 fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.exprs[arg].kind {
         ExprKind::Local { index, .. } => *index != idx,

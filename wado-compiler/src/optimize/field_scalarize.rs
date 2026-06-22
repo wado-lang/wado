@@ -220,7 +220,7 @@ fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsag
                 ..
             } => {
                 let (inner, field_index) = (*inner, *field_index);
-                // A promoted `Operand::Value` receiver is no scalarizable param.
+                // A promoted `Operand::Value` receiver names no scalarizable param.
                 if let Some(idx) = inner.as_expr().and_then(|e| extract_local_index(body, e))
                     && cx.struct_params.contains(&idx)
                 {
@@ -293,13 +293,13 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
     }
 }
 
-/// If `e` is a struct param (or &mut of one), mark it as conservative.
 fn mark_if_param_passed_operand(body: &Body, op: Operand, cx: &mut ParamUsageCtx) {
     if let Some(e) = op.as_expr() {
         mark_if_param_passed(body, e, cx);
     }
 }
 
+/// If `e` is a struct param (or &mut of one), mark it as conservative.
 fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -814,7 +814,6 @@ fn collect_function_aliased_locals(body: &Body, type_table: &TypeTable) -> Index
 /// source — record that source local as aliased. A deep value copy is
 /// wrapped in `copy_value(...)` (an `ExprKind::Call`), not a bare `Local`,
 /// so it does not match here.
-
 fn mark_whole_gc_ref_copy_source(
     body: &Body,
     value: ExprId,
@@ -1183,14 +1182,6 @@ fn count_field_accesses_in_stmt(
     }
 }
 
-/// `in_call_arg` is `true` only when this expression is the direct value
-/// of a `Call` / `MethodCall` / `CmRawCall` / `IndirectCall` argument (or
-/// the receiver of a method call). The call's write-back/re-read
-/// mechanism synchronises HFS scalars around the call, so `&[mut] local`
-/// in this position does NOT escape and need not mark the local aliased.
-/// Anywhere else (`Let`, struct/array literal field, `Assign` rhs,
-/// `Return` / `Break` value, …) the reference escapes and the local
-/// must be marked aliased.
 fn count_field_accesses_in_operand(
     body: &Body,
     op: Operand,
@@ -1204,6 +1195,14 @@ fn count_field_accesses_in_operand(
     }
 }
 
+/// `in_call_arg` is `true` only when this expression is the direct value
+/// of a `Call` / `MethodCall` / `CmRawCall` / `IndirectCall` argument (or
+/// the receiver of a method call). The call's write-back/re-read
+/// mechanism synchronises HFS scalars around the call, so `&[mut] local`
+/// in this position does NOT escape and need not mark the local aliased.
+/// Anywhere else (`Let`, struct/array literal field, `Assign` rhs,
+/// `Return` / `Break` value, …) the reference escapes and the local
+/// must be marked aliased.
 fn count_field_accesses_in_expr(
     body: &Body,
     e: ExprId,
@@ -2302,13 +2301,6 @@ fn walk_nested_loop(
 // Expression walker
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Walk an expression, mutating states and emitting sync stmts at the
-/// surrounding stmt level (`out`). Field access rewrites and call
-/// wrappings happen in place.
-///
-/// `result_used` indicates whether the expression's value is consumed
-/// by its parent. When false, a Call's non-unit return can be discarded
-/// without allocating a temp.
 fn walk_operand(
     body: &mut Body,
     op: Operand,
@@ -2335,6 +2327,13 @@ fn walk_expr_operand(
     }
 }
 
+/// Walk an expression, mutating states and emitting sync stmts at the
+/// surrounding stmt level (`out`). Field access rewrites and call
+/// wrappings happen in place.
+///
+/// `result_used` indicates whether the expression's value is consumed
+/// by its parent. When false, a Call's non-unit return can be discarded
+/// without allocating a temp.
 fn walk_expr(
     body: &mut Body,
     e: ExprId,
@@ -2399,7 +2398,6 @@ fn walk_expr(
 /// in an assignment. Returns the candidate index + a clone of the
 /// candidate. (Cloning avoids holding a borrow on `ctx` across the
 /// caller's mutations.)
-
 fn field_assign_to_candidate(
     body: &Body,
     target: ExprId,
@@ -2451,7 +2449,6 @@ fn field_read_to_candidate(
 /// field-canonical, and updates state to `FieldOnly` for `&mut`-touched
 /// candidates. The call expression itself is left in place; the wrap
 /// (if any) is just the pre-call write-back stmts.
-
 fn walk_call_expr(
     body: &mut Body,
     e: ExprId,
@@ -2655,7 +2652,6 @@ fn accumulate_call_sync(
 /// rewrites and call wrappings are handled by the higher-level
 /// `walk_expr`; this helper just propagates the walk through structural
 /// kinds.
-
 fn walk_other_expr_kinds(
     body: &mut Body,
     e: ExprId,
@@ -2850,7 +2846,6 @@ fn walk_labeled_block(
 /// is the `If` expression whose `else_branch` is updated when the implicit
 /// no-op path needs a synthesized else.
 #[allow(clippy::too_many_arguments)]
-
 fn walk_expr_branches_if(
     body: &mut Body,
     if_e: ExprId,
@@ -2981,17 +2976,17 @@ fn walk_expr_branches_match(
     *states = target;
 }
 
-/// Prepend prefix stmts into an expression's evaluation by wrapping the
-/// expression node `e` in place into a Block holding the prefix stmts
-/// followed by the original expression (moved to a fresh node) as its
-/// value-producing stmt. The node id `e` is preserved so its parent still
-/// references it; it now carries a `Block` of the same type id.
 fn wrap_expr_with_prefix_operand(body: &mut Body, op: Operand, prefix: Vec<StmtId>) {
     if let Some(e) = op.as_expr() {
         wrap_expr_with_prefix(body, e, prefix);
     }
 }
 
+/// Prepend prefix stmts into an expression's evaluation by wrapping the
+/// expression node `e` in place into a Block holding the prefix stmts
+/// followed by the original expression (moved to a fresh node) as its
+/// value-producing stmt. The node id `e` is preserved so its parent still
+/// references it; it now carries a `Block` of the same type id.
 fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_type = body.exprs[e].type_id;
     let expr_span = body.exprs[e].span;
@@ -3009,12 +3004,6 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     body.exprs[e].kind = ExprKind::Block(blk);
 }
 
-/// Insert convergence sync at the end of an arm body (the expression node
-/// `arm_e`). If the body is already a Block, append the sync stmts
-/// directly. Otherwise wrap the body in a Block { `body_as_stmt`; sync }
-/// (when body is unit-typed) or Block { let __tmp = body; sync; __tmp }
-/// (when non-unit, so the temp preserves the value across the trailing
-/// sync). The temp uses the per-type pool.
 fn emit_convergence_at_arm_body_end_operand(
     body: &mut Body,
     op: Operand,
@@ -3028,6 +3017,12 @@ fn emit_convergence_at_arm_body_end_operand(
     }
 }
 
+/// Insert convergence sync at the end of an arm body (the expression node
+/// `arm_e`). If the body is already a Block, append the sync stmts
+/// directly. Otherwise wrap the body in a Block { `body_as_stmt`; sync }
+/// (when body is unit-typed) or Block { let __tmp = body; sync; __tmp }
+/// (when non-unit, so the temp preserves the value across the trailing
+/// sync). The temp uses the per-type pool.
 fn emit_convergence_at_arm_body_end(
     body: &mut Body,
     arm_e: ExprId,
@@ -3115,13 +3110,13 @@ fn emit_convergence_at_arm_body_end(
 // Shared sync calculation helpers (used by walk_call_expr)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
-/// Also returns true for bare locals with `Ref(T)` type (after `ref_elim`).
 fn is_immut_ref_arg_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
     op.as_expr()
         .map_or(false, |e| is_immut_ref_arg(body, e, type_table))
 }
 
+/// Check if an expression is an immutable ref to a local (`Unary{Ref, Local}`).
+/// Also returns true for bare locals with `Ref(T)` type (after `ref_elim`).
 fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Unary {
@@ -3136,8 +3131,6 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
     }
 }
 
-/// For a call argument that might be a scalarized local, determine which
-/// fields need syncing based on the callee's field usage cache.
 #[allow(clippy::too_many_arguments)]
 fn add_sync_fields_for_arg_operand(
     body: &Body,
@@ -3165,6 +3158,8 @@ fn add_sync_fields_for_arg_operand(
     }
 }
 
+/// For a call argument that might be a scalarized local, determine which
+/// fields need syncing based on the callee's field usage cache.
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,

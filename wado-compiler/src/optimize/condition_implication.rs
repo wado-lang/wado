@@ -23,14 +23,10 @@
 //! simply fails. See `array_bounds_elim_oob_guard_var_mutated.wado` /
 //! `array_bounds_elim_oob_bound_shrunk.wado` for the fixtures pinning this.
 //!
-//! Runs on the worklist rewrite engine as a [`Rule`]: a per-function
-//! standalone engine session whose `apply_block` fires once at the body root.
-//! The single rewrite point (`condition → BoolLiteral(false)`) routes through
-//! `engine.replace_expr_kind` so the parent map and use index stay coherent.
-//! The session's value graph is built once, lazily; `set_false` replaces
-//! already-judged condition nodes only, so the cached graph stays valid for
-//! every later query (no node is re-queried after being rewritten and no new
-//! nodes are allocated).
+//! Runs via [`eliminate_at_root`], sharing licm's engine session (see
+//! `licm.rs`). The single rewrite point promotes a condition to constant
+//! `false` (`set_false`), replacing already-judged condition nodes only, so the
+//! shared value graph stays valid for every later query.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};

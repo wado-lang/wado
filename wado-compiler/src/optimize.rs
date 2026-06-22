@@ -118,15 +118,15 @@ use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
 /// Whether the operand-promotion keystone runs early (before the value passes).
-/// Now unconditional: operand promotion is the production path (the live
+/// Unconditional: operand promotion is the production path (the live
 /// ValueGraph). See `docs/wep-2026-06-15-live-value-graph.md`.
 pub(crate) fn promote_early_enabled() -> bool {
     true
 }
 
-/// Whether **any** operand promotion is active. Unconditional — promotion is the
-/// production path; the build-once persist, the cse subsumption, and the
-/// promotion-aware liveness in `elide_local` / `copy_prop` all key on it.
+/// Whether **any** operand promotion is active. Unconditional — the cse
+/// subsumption and the promotion-aware liveness in `elide_local` / `copy_prop`
+/// all key on it.
 pub(crate) fn promote_active() -> bool {
     true
 }
@@ -335,11 +335,8 @@ pub fn optimize(
     // Binary/Unary/Cast) into operand values, materialised by the WIR
     // extractor. Runs last so no binary-walking pass sees the promoted form;
     // orphaned arith / local-read nodes become unreachable from the skeleton
-    // root and are simply not emitted.
-    // Late freeze. Flag-off: the committed arith-only freeze (default). Flag-on:
-    // promote `FieldAccess` here — after every pass incl. SROA, so the struct
-    // shape is final and the materialised `let _av = obj.field` re-emits a valid
-    // load. (Early arith promotion already ran before the loop.)
+    // root and are simply not emitted. (Early arith promotion already ran before
+    // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
         extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
     });
@@ -536,13 +533,9 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
-    // Operand-promotion keystone (WEP: The Live ValueGraph), gated by
-    // `WADO_PROMOTE_EARLY` while under construction. When on, pure values are
-    // frozen into `Operand::Value` *before* the value passes, so the passes can
-    // be migrated to read operands (`engine.operand_value`) instead of rebuilding
-    // the value graph — the path to `rebuilds = 0` and `value_of` retirement.
-    // Default off: the committed branch keeps the late-freeze behavior (green),
-    // so this flag is the multi-session development harness, not a behavior change.
+    // Operand-promotion keystone (WEP: The Live ValueGraph). Pure values are
+    // frozen into `Operand::Value` before the value passes, so the passes read
+    // operands (`engine.operand_value`) instead of rebuilding the value graph.
     if promote_early_enabled() {
         // Arith only here (before the loop); `FieldAccess` promotion runs late
         // (after the SROA passes), since SROA scalarizes the structs a promoted
@@ -668,13 +661,11 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
-        // `cse` runs store-load forwarding in the same engine session (both
-        // graph-preserving, adjacent passes) — one ValueGraph build for both.
         // Under operand promotion (WEP P3), pure-value CSE is subsumed by
         // hash-consing (identical values already share a ValueId), so cse is
-        // skipped — removing its per-function `builder::build` (the path to
-        // `rebuilds = 0`). store-load forwarding is likewise subsumed once
-        // FieldAccess promotes at its heap version.
+        // skipped — removing its per-function `builder::build`. Store-load
+        // forwarding is likewise subsumed once FieldAccess promotes at its heap
+        // version.
         if !crate::optimize::promote_active() {
             gated!("nir/cse", eliminate_common_subexprs);
         }

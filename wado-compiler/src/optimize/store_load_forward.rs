@@ -26,9 +26,8 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
-/// Ungated variant: forwards stores to loads in every function. Used by the
-/// post-`field_scalarize` cleanup, which runs once outside the gated loop so
-/// the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
+/// Forwards stores to loads in every function. Used by the post-`field_scalarize`
+/// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
 /// forwarded to constants — the load→literal fold `field_scalarize` leaves to
 /// a later pass, and the only one that runs after it.
 pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {

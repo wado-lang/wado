@@ -1919,16 +1919,16 @@ fn remove_dead_global_sets_block(
     body.blocks[block].stmts = new_stmts;
 }
 
-/// Check whether an expression tree contains observable side effects.
-///
-/// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
-/// considered side effects. Pure function calls like array construction are not.
 /// Side-effect check for an operand. A promoted `Operand::Value` is a pure
 /// constant — no side effects, nothing to walk.
 fn operand_has_side_effects(body: &Body, op: Operand) -> bool {
     op.as_expr().is_some_and(|e| expr_has_side_effects(body, e))
 }
 
+/// Check whether an expression tree contains observable side effects.
+///
+/// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
+/// considered side effects. Pure function calls like array construction are not.
 fn expr_has_side_effects(body: &Body, e: ExprId) -> bool {
     if body.exprs[e].type_id == TypeTable::NEVER {
         return true;

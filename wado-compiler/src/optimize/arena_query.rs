@@ -161,14 +161,14 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     found
 }
 
-/// True when the expression at `id` and every sub-expression has no observable
-/// effect. The arena counterpart of `elide_local::is_pure_expr`; the two must
-/// agree, since both gate the same rewrites.
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.
 pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().map_or(true, |e| is_pure_expr(body, e))
 }
 
+/// True when the expression at `id` and every sub-expression has no observable
+/// effect. The arena counterpart of `elide_local::is_pure_expr`; the two must
+/// agree, since both gate the same rewrites.
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::BytesLiteral(_)

@@ -23,7 +23,7 @@ fn operand_lane_const(body: &Body, op: Operand) -> u8 {
 }
 
 /// Mechanical builtin shapes — each evaluates its operand expressions
-/// left-to-right (operand order matters: `translate_expr` can register
+/// left-to-right (operand order matters: `translate_operand` can register
 /// locals and literals) and wraps them in the given `WirInstr` variant.
 macro_rules! unary {
     ($self:expr, $args:expr, $variant:path) => {{
