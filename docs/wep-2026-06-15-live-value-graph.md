@@ -23,255 +23,74 @@ pre-existing failure fixed) is therefore met on this branch. What remains is
 (scheduling extraction for non-constant values); criterion 2 (optimize CPU
 halved on package-gale) is not yet measured.
 
-### Latest session — e2e 8 → 0, P0s fixed, gale_cli unblocked
+### Done — this branch (e2e 8 → 0, all green)
 
-Greened the eight remaining `-O2` fixtures and the pre-existing kiln panic, no
-regression (`oob` 14/14 and `WADO_VERIFY_VG` clean throughout):
+All eight remaining `-O2` fixtures and the pre-existing kiln panic are fixed;
+`mise run test` (e2e 3014/0 + `gale_cli`) and `mise run test-wado` (3378/0 +
+1478/0) are green, `oob` 14/14 and `WADO_VERIFY_VG` clean throughout. By
+mechanism:
 
-- Post-SROA bare-scalar store-to-load (`Engine::grow_bare_local_constants`):
-  `store_to_load_forwarding`, `field_forward_snapshot_after_mutation`. SROA turns
-  heap fields into bare scalars after the build-once graph was built and `inline`
-  coarsened it, so the new reads carry no value; `store_load_forward` regrows them
-  via a scratch `build_scoped` (not a counted rebuild).
-- **P0 miscompile** — `&mut self` on a `Box<T>` receiver was modelled as
-  non-mutating (boxing erases `&mut`/`&` into `Box`), so `x.bump(); assert x==2`
-  folded to `if true { panic }`. Fixed with a per-callee "writes through its
-  receiver" body analysis (`CallImmutability::method_writes_receiver`):
-  `bug_store_load_forward_mut_method_receiver` (O0+O2).
-- Construction tracking (`construction_field_value` + `existing_local_opaque`
-  leaf re-seed): `array_bounds_elim_le_guard_wir`, `optimize_bitmask_bce` —
-  recovers `arr.used == N` from `List::filled(N)`'s `used: N` for the hoisted
-  BCE bound.
-- Refreshed two drifted WIR expectations (behaviour already correct):
-  `opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`.
-- **Operand-promotion panic (Phase B.2 partial)** — a promoted `Operand::Value`
-  (a constant-struct `FieldAccess` receiver) hit `as_expr().expect("skeleton
-  operand")` in `ref_elim` / `licm` / `field_scalarize`, crashing the kiln
-  generator (`gale_cli`, `syntax_highlight`). Migrated those passes to treat a
-  promoted operand as a non-candidate (conservative, sound). ~100 such `expect`
-  sites remain in passes no current test reaches with a promoted operand.
+- BCE / guard cluster — the **re-seed (decision (a))** restores the operand
+  values `licm`'s `drop_local_readers` wipes, without a rebuild (`rebuilds` stays
+  0): loop-stable leaves to a `canonical_local`, field copies to a shared
+  `field_access`, derived `let`s recomputed, the build's param opaque reused
+  (`existing_local_opaque`). Plus `construction_field_value` recovering
+  `arr.used == N` from `List::filled(N)`'s `used: N` for `le_guard` / `bitmask`.
+  (`condition_implication`.)
+- Store-to-load past SROA — `Engine::grow_bare_local_constants` regrows the bare
+  scalars SROA mints after `inline` coarsened the graph (scratch `build_scoped`,
+  not a counted rebuild). (`store_load_forward`.)
+- **P0 miscompile** — a `&mut self` boxed receiver modelled as non-mutating
+  (`x.bump(); assert x==2` → `if true { panic }` at O0 and O2). Boxing lowers both
+  `&self` and `&mut self` to a `Box<T>` param, so the `MutRef`-only check misjudged
+  `bump`; fixed by a per-callee call-graph fixpoint that marks methods writing
+  through param 0 (`CallImmutability::method_writes_receiver`, `optimize/alias`).
+- **Operand-promotion panic (P0)** — a promoted `Operand::Value` (constant-struct
+  `FieldAccess` receiver) hit `as_expr().expect("skeleton operand")` in `ref_elim`
+  / `licm` / `field_scalarize`, crashing the kiln generator; those three migrated
+  to treat a promoted operand as a non-candidate (conservative, sound).
+- Earlier: the 6 P0 miscompiles (`6bd41a28d`, the `cse_loop_body` clone-scope bug)
+  and two drifted `wir_expect` refreshes (`opt_hfs_defer`, `brif_select`).
 
-### Earlier: the 6 P0 miscompiles (`6bd41a28d`)
+The minimal BCE reproducer, the exact `drop_local_readers` mechanism, and the
+full re-seed design are kept under "Roadmap" / "ideal end state" below as
+reference; they are resolved.
 
-Root cause was **not** `value_is_invariant` (that earlier hypothesis was
-wrong — the `_licm_repr` field hoist is a sound reference alias). It was
-`cse_loop_body` (licm.rs): it materialised the CSE temp by cloning `occs[0]`'s
-skeleton at `min_i` without checking the clone's `Local` leaves are in scope
-there. When the value graph unified an inner-scope local (`let a = start +
-width*2` inside a nested `if`) with its arithmetic value, `occs[0]` could be a
-bare `a` read, so the inserted `let __cse = a` landed before `a`'s definition
-and read the stale loop-carried value. Fix: pick the clone source from
-occurrences whose skeleton leaves are all loop-entry locals or top-level `let`s
-before `min_i` (the value graph already proves all occurrences equal, so any
-in-scope one is correct). Cleared `newtype_array_sort`, `closure_3`,
-`value_copy_demote`, `value_copy_demote_mixed_sites`,
-`value_copy_demote_element_mut` at -O2, no regression.
+## Remaining work — start here
 
-### Next: missed optimizations under promotion (BCE cluster)
+Criterion 1 (`rebuilds = 0`) and the cache half of criterion 3 are met; promote-
+early and build-once are the default. What is left is the **`value_of`
+side-table** (criterion 3's other half) and the CPU win it yields (criterion 2):
+make the value passes read operands, then delete the map. Execute **Route B**
+(full plan + confirmed touchpoints at "Route B execution plan" below):
 
-The re-seed (decision (a) below) is landed and sound; it took the default `-O2`
-e2e from 17 → 8 failing fixtures, greening the whole guard cluster:
+- [ ] **1. Availability-aware extraction — the one new analysis.** Materialise a
+      shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
+      version, a value a later pass may drop) into a `let _av = <value>` at a point
+      **dominating all uses**, keeping its leaves live. The single-use
+      enclosing-statement materialiser is insufficient; placement is a dominance +
+      liveness obligation, not an emission-point choice. Two shortcuts were built and
+      reverted (see "ideal end state"): scalar-only is sound but recovers nothing, and
+      a pinned aggregate/reference field changes value-copy semantics and trapped
+      `array_index_1` (~165 fixtures). Build it gated/off-by-default; prove it on the
+      BCE + i128 + `array_index_1` cases (runtime + `WADO_VERIFY_VG`) before flipping.
+- [ ] **2. Migrate the value passes off `value_of`** (17 `engine.value(expr)` call
+      sites in `const_fold` / `cse` / `copy_prop` / `licm` / `condition_implication` /
+      `select_lowering`) to operand / pool queries, coordinated with a golden refresh
+      (born-as-operands churns ~40 `wir_expect`).
+- [ ] **3. Fold `current_value` into `lower::translate`** so pure values are born
+      as `Operand::Value`; then **delete `value_of` and `nir_value_graph::builder`**
+      (criterion 3) and measure `optimize` CPU on package-gale (criterion 2).
 
-- Loop-stable re-seed + copy-chain (`6e42241cc`, `4944baa98`):
-  `array_bounds_elim_loop_guard` (+`_wir`), `optimize_bce_if_guard` /
-  `_ref_param` / `_field_access_equiv`, `wir_optimize_branchless_increment`.
-- Function-invariant field re-seed (`99980cbec`): the non-loop early-exit /
-  short-circuit guards `tir_optimize_early_exit_guard`,
-  `tir_optimize_short_circuit_bounds`.
-- Build-param-opaque reuse in the leaf re-seed (`8a3afe62f`): the
-  promoted-operand chained cursor `array_bounds_elim_offset_chain`.
+Lower-priority robustness, independent of the above:
 
-No regression — `array_bounds_elim_oob_*` (14) and `WADO_VERIFY_VG` stay green
-throughout; the `mut_escaped` gate + loop-free gate keep the invariant-field
-re-seed off any mutated bound and off loop functions (where it clashed with the
-loop-scoped re-seed).
-
-Two more — `store_to_load_forwarding`, `field_forward_snapshot_after_mutation` —
-are now green via the post-SROA bare-scalar grow (below), and
-`bug_store_load_forward_mut_method_receiver` (a P0 miscompile, O0 + O2) via
-`&mut self`-receiver mutation modelling (below). The construction-tracking pair
-`array_bounds_elim_le_guard_wir` and `optimize_bitmask_bce` then greened too
-(below), taking the default `-O2` e2e to **2 failing**
-(`opt_hfs_defer_callclean_writeback`, `wir_optimize_brif_select`).
-
-Construction tracking (resolved): a hoisted loop-invariant field copy
-`let _licm_used = arr.used` lost the value `arr` was built with, so the BCE saw
-an opaque bound that would not decompose. `construction_field_value` recovers it
-from the defining `let arr = … List { used: V }` (`List::filled(n)` constructs
-`used: n`), and the loop leaf re-seed now prefers the build's existing param
-opaque (`existing_local_opaque`) so the guard's `limit` and the construction's
-`limit` unify — then `i <= limit` ⟹ `i < limit + 1 == arr.used` folds. Gated on
-the receiver being neither `mut_escaped` nor reassigned, so a `pop()`-shrunk or
-rebound bound falls back to the opaque identity (oob 14/14 still green).
-
-The remaining failures still need the **forwarded store value itself**, which the
-re-seed cannot supply. The re-seed restores _consistency_ — it gives the guard's
-and check's copies of a dropped operand one shared identity (a `canonical_local`
-/ `field_access` opaque), which is all guard matching needs. Store-to-load
-forwarding instead needs the _concrete_ value the store wrote (`x = 99` → `99`,
-`result.used = N` → `N`), so `x == 99` folds to `true`. A `canonical` opaque
-does not fold. Same root cause (`drop_local_readers` wipes the reassigned
-local's / stored field's value), different requirement — a store-value
-preservation, owned by the maintenance / store-load-forward passes:
-
-- **Construction tracking** — `array_bounds_elim_le_guard_wir`,
-  `optimize_bitmask_bce`: **resolved** (`construction_field_value` +
-  `existing_local_opaque` leaf re-seed, see above). Recovers `arr.used == N` from
-  `List::filled(N)`'s `used: N` construction for the hoisted bound copy.
-- **Store-to-load forwarding** — `store_to_load_forwarding`,
-  `field_forward_snapshot_after_mutation`: **resolved** (`Engine::grow_bare_local_constants`).
-  The real root cause was not `drop_local_readers` but that the build-once graph
-  is built (and by `inline` coarsened) **before** SROA: SROA turns heap fields
-  into bare scalars (`__sroa_x = 99; … __sroa_x`), and the new reads carry no
-  value, so forwarding misses them. The post-loop `store_load_forward` now
-  re-derives each safe bare scalar's reaching constant through a scratch
-  `build_scoped` re-walk (the same splice-point growth `inline` uses — no live
-  rebuild) and seeds it; `const_fold_post_global` then folds `C == C → true` and
-  prunes the dead assert. Bare-local forwarding is immune to the call/heap bumps
-  that defeat the pre-SROA field form, so the constant is recoverable. The grow
-  runs with the session's real alias sets (sound by refinement) and only over an
-  already-built graph — building it under SROA's empty alias config wrongly
-  forwarded an escaping field (`counter.total` after `&mut counter`), so that
-  variant was dropped.
-- **`&mut self` receiver modelling** — `bug_store_load_forward_mut_method_receiver`:
-  **resolved** (`compute_receiver_mutating` in `optimize/alias`). `x.bump()` with
-  `bump(&mut self) { *self = … }` was a miscompile (assert folded to
-  `if true { panic }` at O0 and O2): boxing lowers both `&self` and `&mut self`
-  primitive receivers to a `Box<T>` param, so `method_mutates_receiver`'s
-  `MutRef`-only check judged `bump` non-mutating, and its bare-`Local` receiver
-  never entered `aliased` / `mut_escaped` — so the value graph forwarded the
-  pre-call `x.value`. Fixed by a call-graph fixpoint that marks each method
-  whose body writes through its receiver (param 0), distinguishing
-  `bump(&mut self)` from `fmt(&self)` (both `Box<T>`); `builder_alias_sets` then
-  flags the mutating receiver into `aliased`.
-- **Other passes** — `opt_hfs_defer_callclean_writeback`,
-  `wir_optimize_brif_select` (both `wir_expect` shape checks, missed
-  optimizations).
-
-Direction: the maintenance must keep a reassigned local's / stored field's value
-where it is statically a constant (or re-derive it on the consuming read),
-rather than `drop_local_readers` wiping it — the precise-drop refinement that
-helps every store-load consumer, not just the guard cluster. The bare-scalar
-re-derivation above is the first instance; the field-store cases
-(`le_guard_wir`, `bitmask`: `result.used == N`) still need it for `FieldAccess`.
-
-The decisive root cause (traced on the minimal reproducer below): **the value
-graph `condition_implication` reads has no `ValueId` for the operands it must
-compare.** `condition_implication` runs inside the `licm` session and reuses
-licm's _maintained_ (build-once) graph — but by the time it runs, the operands
-of every guard / check comparison resolve to `None`:
-
-- The hoisted bound. `licm` field-hoists `arr.len()`'s `arr.used` into
-  `let _licm_used_N = arr.used` and rewrites the guard `i < arr.used` and the
-  check to read `_licm_used_N`. `replace_expr_kind` runs
-  `maintain_value_after_edit`, which **drops** the now-`Local` leaf's
-  `value_of` entry (a `Local` is not operand-derivable) and, propagating up,
-  the comparison's entry too. So `value(i < _licm_used_N)` is `None`.
-- The induction variable. Independently, `operand_value` of the comparison's
-  **left** operand `i` is also `None` in the maintained graph for the failing
-  loops (it is `Some` for the loops that still optimize). The loop-carried
-  variable's value is lost across licm's edits as well.
-
-Minimal reproducer (no `assert`/`println` noise — a `&List` param keeps the
-`arr.used` bound a `FieldAccess`, not a const fold):
-
-```
-fn sum_list(arr: &List<i32>) -> i32 {
-  let mut sum = 0;
-  for let mut i = 0; i < arr.len(); i += 1 { sum += arr[i]; }
-  return sum;
-}
-```
-
-Under `-f bare-asserts` (strips the panic-formatting machinery, leaving only
-`sum_list`'s loop), the NIR is exactly:
-
-```
-let _licm_used_4: i32 = arr.used;     // hoisted for the guard
-let _licm_used_12: i32 = arr.used;    // hoisted for the check — a SECOND local
-let _licm_repr_13: Array<i32> = arr.repr;
-loop {
-  if !(i < _licm_used_4) { break }          // guard reads _licm_used_4
-  sum = (sum + { let __cond = (i < _licm_used_12);   // check reads _licm_used_12
-                 if !__cond { unreachable }; array_get(&_licm_repr_13, i) });
-  i = (i + 1);
-}
-```
-
-`arr.used` is hoisted **twice** (the guard's copy in one fixed-point iteration,
-the check's copy a later one — the check's `arr.used` only appears after
-`index_value` inlines). In a fresh build both `_licm_used_*` lets resolve to the
-same `field_access(value(arr), used, V0)`, so guard.bound == check.bound. The
-maintained graph drops both.
-
-The exact drop mechanism (`WADO_DBG` on `drop_local_readers`): two calls fire,
-`local = _licm_used_4` and `local = i`. `maintain_value_after_edit` calls
-`drop_local_readers(L)` whenever the value feeding `let L = v` / `L = v` changes,
-which **removes the `value_of` entry of every read of `L` and its ancestors**.
-The hoist `let _licm_used_4 = arr.used` and the increment `i = i + 1` each trip
-it, so the guard/check comparisons over `_licm_used_*` and `i` all go value-less.
-It is conservative-correct (avoids stale over-merge) but imprecise.
-
-Confirmed oracle: forcing `engine.body.value_graph = None` at the top of
-`eliminate_at_root` (fresh rebuild) makes **every** operand resolve and BCE fire
-(0 traps); the maintained graph leaves the induction-variable operand `None` on
-every failing loop. So the target state is exactly a fresh build's values.
-
-Two secondary issues, real but downstream of the above (also needed, neither
-sufficient alone):
-
-1. **Guard extractors match the skeleton.** `extract_loop_guard`,
-   `extract_early_exit_guard`, `extract_dominating_guard` pattern-match
-   `condition.as_expr()` → `ExprKind::Unary{Not}` / `Binary{GtEq|Lt}`; resolve
-   via `engine.operand_value` + the value-level helpers (`lt_of_value`,
-   `ge_operands_of_value`) instead.
-2. **`ConditionEliminator::visit_expr` lacks panic-check elimination.** A bounds
-   check inlined into value position (`sum + index(arr, i)`) is an
-   `ExprKind::If`; only `visit_stmt` rewrites the panic guard. Factor it into a
-   shared helper called from both.
-
-Decision: **(a) re-seed the maintained graph, preserving build-once** (chosen
-over rebuilding for `condition_implication`). Implemented (`6e42241cc`) as a
-pre-pass in `eliminate_at_root`, sound and validated (the `array_bounds_elim_oob_*`
-suite and `WADO_VERIFY_VG` stay green, no runtime regression). It restores the
-dropped operand values without a `builder::build` (`rebuilds` stays 0):
-
-- A **loop-stable** local — reassigned only as the final induction update,
-  never `&mut`-escaped — holds one value across the matched reads, so its
-  dropped reads re-seed to a single `ValuePool::canonical_local` identity. (The
-  earlier "canonical opaque over-merges" worry was about a _function-wide_
-  canonical; gating it to the loop body where the variable is single-valued is
-  sound — `WADO_VERIFY_VG` confirms.)
-- A **field copy** (`let L = recv.field`, local or global receiver) re-seeds to
-  a shared field identity — preferring a surviving sibling copy's real value,
-  else a synthesized `field_access(canonical_receiver, field, INITIAL)` — so two
-  copies of the same `recv.field` hoisted in different iterations match.
-- A **derived** `let L = <pure Binary/Unary/Cast>` re-seeds to its binding's
-  value (pass 2, after the leaves), keeping a `let __cond = i < n` comparison's
-  arithmetic shape rather than a flat opaque.
-
-This resolves the induction-variable identity (the systematic `left_v = None`
-blocker — every guard now extracts) but **does not yet green the BCE wir
-assertions**. The remaining gap is **cross-source bound identity**: a guard
-bound spelled `arr.len()` (a call result bound to a local `n`) and the check
-bound spelled `arr.used` (the inlined `index_value`'s field, hoisted to
-`_licm_used`) are _different syntactic sources_ that resolve to the same value
-only through inlining + field tracking — work a fresh build's flow does and the
-re-seed's per-copy classification does not. Closing it needs the re-seed to
-reconstruct those cross-binding equalities (e.g. recognise `n = arr.len() =
-recv.used` and unify it with the field copy), or the value graph to keep them
-through the edits. Oracle: the minimal `sum_list` reproducer eliminating its
-check with `WADO_VERIFY_VG` green and `rebuilds = 0`.
-
-Two abandoned re-seed shortcuts (do not retry): query-time leaf re-derivation in
-`maintain_pure_node` (the removed dead end — over-merges generally), and
-`build_scoped` (drops the walk-local loop-phi opaque the induction variable
-needs).
-
-`WADO_PROMOTE_FIELDS` (materialise pure `FieldAccess` values) is a _separate,
-further-out_ experiment — its optimizer-pass `skeleton operand` migration is
-done (guards landed) but it is **not** on the critical path to the green
-default.
+- [ ] One shared promoted-operand primitive (a `walk_operand` / `operand_local`
+      helper) for the ~100 remaining `expect("skeleton operand")` sites, so they
+      convert mechanically rather than per-pass. They hold as invariants today (the
+      full e2e under `WADO_PROMOTE_EARLY` raises zero of them).
+- [ ] Retire `grow_bare_local_constants` and the re-seed once born-as-operands
+      lands — they are the band-aids it replaces — and route `copy_prop` through
+      `method_writes_receiver` instead of the `None` it passes today.
 
 ### Dead ends (tried, measured, reverted — do not retry as-is)
 
