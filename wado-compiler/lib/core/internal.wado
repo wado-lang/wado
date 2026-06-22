@@ -7,6 +7,20 @@
 // implemented in Wado itself rather than as inline Wasm instructions,
 // making the codegen simpler and the compiler more maintainable.
 
+use { String } from "core:prelude/string.wado";
+use { Array } from "core:prelude/array.wado";
+use { List } from "core:prelude/list.wado";
+use { Formatter } from "core:prelude/format.wado";
+use {
+    Option,
+    Result,
+    Future,
+    StreamWritable,
+    Subtask,
+    WaitEvent,
+    Waitable,
+    WaitableSet,
+} from "core:prelude/types.wado";
 
 /// Returns the smaller of two i32 values (branchless).
 pub fn i32_min(a: i32, b: i32) -> i32 {

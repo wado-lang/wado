@@ -1,0 +1,15 @@
+//! Second independent module with the same `Dir` enum name as two_enum_a.wado
+//! but reversed case order (see ../two_enum_conflict.wado). Here `East` has
+//! discriminant index 1, whereas in module A it is index 2 — so resolving a
+//! `b::Dir` value's case name against A's enum routes it to the wrong arm.
+
+pub enum Dir {
+    West,
+    East,
+    South,
+    North,
+}
+
+pub fn east() -> Dir {
+    return Dir::East;
+}

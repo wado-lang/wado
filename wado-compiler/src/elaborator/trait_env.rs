@@ -48,6 +48,11 @@ pub(super) fn module_import_scope(
     symbols: &SymbolTable,
 ) -> ModuleImportScope {
     let mut scope = ModuleImportScope::default();
+    // Case (variant/enum/flags) names brought in by imported types. Applied
+    // after every type name is in scope, so a type always shadows a same-named
+    // case (e.g. a `FieldKind::List` case must not hide the prelude `List`
+    // type). Collected here, inserted with `or_insert` at the end.
+    let mut pending_cases: Vec<(String, ModuleSource)> = Vec::new();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
             let source = name::resolve_import_with_invocations(
@@ -61,11 +66,24 @@ pub(super) fn module_import_scope(
                 match use_item {
                     ast::UseItem::Simple { name, alias, .. } => {
                         let local_name = alias.as_ref().unwrap_or(name);
-                        scope.sources.insert(local_name.clone(), source.clone());
-                        if alias.is_some() {
-                            scope
-                                .original_names
-                                .insert(local_name.clone(), name.clone());
+                        // Resolve through re-export chains so a name imported
+                        // from a `pub use` barrel records its true definer
+                        // module — not the barrel, which doesn't register the
+                        // type, so `lookup_ref` would otherwise miss it and
+                        // resolve to nothing (issue #1416).
+                        let resolved = symbols.lookup_in_module(&source, name);
+                        let (def_source, def_name) = resolved
+                            .map(|sym| (sym.module_source().clone(), sym.name.clone()))
+                            .unwrap_or_else(|| (source.clone(), name.clone()));
+                        scope.sources.insert(local_name.clone(), def_source.clone());
+                        if local_name != &def_name {
+                            scope.original_names.insert(local_name.clone(), def_name);
+                        }
+                        // Importing a variant/enum/flags type brings its case
+                        // names into scope so bare `Some` / `Ok` / enum cases
+                        // resolve through the import branch.
+                        if let Some(sym) = resolved {
+                            collect_case_names(&mut pending_cases, sym, &def_source);
                         }
                     }
                     ast::UseItem::Namespace { name: ns } => {
@@ -93,7 +111,72 @@ pub(super) fn module_import_scope(
             }
         }
     }
+
+    // Auto-import the prelude: inject `core:prelude`'s exported type names into
+    // the scope so prelude types (`String`, `List`, `Option`, …) resolve
+    // through the import branch like any `use`. Modules opting out
+    // (`#![no_prelude]` — the prelude sub-modules and
+    // `core:internal`/`builtin`/`allocator`) import explicitly. Explicit `use`
+    // items above take precedence, so they are not overwritten.
+    if !module.has_no_prelude() {
+        let prelude = ModuleSource::prelude();
+        for name in symbols.reexport_names(&prelude) {
+            if scope.sources.contains_key(&name) {
+                continue;
+            }
+            let Some(sym) = symbols.lookup_in_module(&prelude, &name) else {
+                continue;
+            };
+            if !matches!(
+                sym.kind,
+                crate::symbol::SymbolKind::Struct(_)
+                    | crate::symbol::SymbolKind::Enum(_)
+                    | crate::symbol::SymbolKind::Flags(_)
+                    | crate::symbol::SymbolKind::Variant(_)
+                    | crate::symbol::SymbolKind::Newtype(_)
+                    | crate::symbol::SymbolKind::Resource(_)
+                    | crate::symbol::SymbolKind::BuiltinType
+                    | crate::symbol::SymbolKind::Trait(_)
+            ) {
+                continue;
+            }
+            let def_source = sym.module_source().clone();
+            scope.sources.insert(name.clone(), def_source.clone());
+            if name != *sym.name {
+                scope.original_names.insert(name, sym.name.clone());
+            }
+            collect_case_names(&mut pending_cases, sym, &def_source);
+        }
+    }
+
+    // Apply case names last, never overwriting a type name: a type always wins
+    // a name clash with a case (see `pending_cases`).
+    for (case, src) in pending_cases {
+        scope.sources.entry(case).or_insert(src);
+    }
+
     scope
+}
+
+/// Collect a variant/enum/flags symbol's case (or member) names so they can
+/// resolve unqualified (`Some`, `Ok`, an enum case used bare), pointing at the
+/// type's defining module. Other symbol kinds are ignored. Cases cannot be
+/// aliased, so each name maps to itself.
+fn collect_case_names(
+    pending: &mut Vec<(String, ModuleSource)>,
+    sym: &crate::symbol::Symbol,
+    def_source: &ModuleSource,
+) {
+    use crate::symbol::SymbolKind;
+    let cases: &[String] = match &sym.kind {
+        SymbolKind::Variant(v) => &v.cases,
+        SymbolKind::Enum(e) => &e.cases,
+        SymbolKind::Flags(f) => &f.members,
+        _ => return,
+    };
+    for case in cases {
+        pending.push((case.clone(), def_source.clone()));
+    }
 }
 
 use super::Elaborator;

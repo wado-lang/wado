@@ -4271,16 +4271,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return self.reify_anonymous_struct_literal(struct_lit, ctx, recorded_type);
         };
 
-        // Field positional info from the decl-interned struct.
+        // Resolve the decl's canonical (name, module) from `recorded_type` —
+        // the struct type annotate already resolved — instead of re-resolving
+        // the source-written `struct_name`, which may be an import alias or
+        // `ns::Type`. A second by-name lookup could pick a same-named struct
+        // from another module (issue #1416); `recorded_type` carries the
+        // definer directly.
+        let (decl_name, struct_module) = {
+            use crate::tir::ResolvedType;
+            let tt = self.tysys.type_table.borrow();
+            let peeled = tt.peel_refs(recorded_type);
+            match tt.get(peeled) {
+                ResolvedType::Struct {
+                    name,
+                    module_source,
+                    ..
+                }
+                | ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    ..
+                } => (name.clone(), module_source.clone()),
+                _ => (struct_name.clone(), self.current_module_source.clone()),
+            }
+        };
+        // Decl field shape: (name, index, raw_type, default_expr), cloned out
+        // of the lookup so the borrow ends before reifying.
         let lookup = self.type_lookup();
-        // Decl field shape: (name, index, raw_type, default_expr).
-        // Cloned out of the lookup so the borrow ends before reifying.
-        // `struct_module` is the struct's declaring module, consulted by the
-        // omitted-default loop below.
-        let info = lookup.struct_fields(&struct_name);
-        let struct_module = info
-            .map(|info| info.module_source.clone())
-            .unwrap_or_else(|| self.current_module_source.clone());
+        let info = lookup.struct_fields_in(&decl_name, &struct_module);
         let decl_fields: Vec<(String, u32, TypeId, Option<ast::Expr>)> = {
             info.map(|info| {
                 info.fields
@@ -6250,17 +6268,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `resolve_static_method_call` types the expression as the variant
         // (line 1105+ / 1173+ in method_call.rs), so `recorded_type` is
         // always the variant instance and reify reads it directly.
-        let (variant_name, variant_type, variant_type_args): (String, TypeId, Vec<TypeId>) = {
+        let (variant_name, variant_module, variant_type, variant_type_args): (
+            String,
+            ModuleSource,
+            TypeId,
+            Vec<TypeId>,
+        ) = {
             let tt = self.tysys.type_table.borrow();
             match tt.get(recorded_type).clone() {
                 ResolvedType::GenericInstance {
-                    name, type_args, ..
-                } => (name, recorded_type, type_args),
-                ResolvedType::Variant { name, .. } => (name, recorded_type, Vec::new()),
-                _ => (String::new(), recorded_type, Vec::new()),
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, recorded_type, type_args),
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => (name, module_source, recorded_type, Vec::new()),
+                _ => (
+                    String::new(),
+                    self.current_module_source.clone(),
+                    recorded_type,
+                    Vec::new(),
+                ),
             }
         };
-        if let Some(variant_info) = self.type_lookup().variant_case(&variant_name).cloned()
+        if let Some(variant_info) = self
+            .type_lookup()
+            .variant_case_in(&variant_name, &variant_module)
+            .cloned()
             && let Some((case_index, case_data)) = variant_info
                 .cases
                 .iter()
@@ -6270,6 +6306,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         {
             let payload_type = self.get_variant_case_payload_type(
                 &variant_name,
+                &variant_module,
                 &static_call.method,
                 &variant_type_args,
             );
@@ -8595,13 +8632,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Peel references for match ergonomics: `match &c { Red => … }`
         // presents the scrutinee as `&Color`.
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let decl_name = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::Enum { name, .. } => name,
+        let (decl_name, decl_module) = match self.tysys.type_table.borrow().get(peeled).clone() {
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => (name, module_source),
             _ => return None,
         };
-        let lookup = self.type_lookup();
-        lookup
-            .enum_case(&decl_name)?
+        self.type_lookup()
+            .enum_case_in(&decl_name, &decl_module)?
             .case_index
             .get(case_name)
             .copied()
@@ -8612,12 +8651,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
         use crate::tir::ResolvedType;
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let decl_name = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. } => name,
+        let (decl_name, decl_module) = match self.tysys.type_table.borrow().get(peeled).clone() {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            }
+            | ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name, module_source),
             _ => return false,
         };
         self.type_lookup()
-            .variant_case(&decl_name)
+            .variant_case_in(&decl_name, &decl_module)
             .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
     }
 
@@ -8634,14 +8681,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Peel references (match ergonomics): `if let None = rn` with
         // `rn: &Option<T>` matches a nullary case through the reference.
         let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let (decl_name, type_args) = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::Variant { name, .. } => (name, Vec::<TypeId>::new()),
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } => (name, type_args),
-            _ => (String::new(), Vec::new()),
-        };
-        let payload_type = self.get_variant_case_payload_type(&decl_name, case_name, &type_args);
+        let (decl_name, decl_module, type_args) =
+            match self.tysys.type_table.borrow().get(peeled).clone() {
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => (name, module_source, Vec::<TypeId>::new()),
+                ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } => (name, module_source, type_args),
+                _ => (
+                    String::new(),
+                    self.current_module_source.clone(),
+                    Vec::new(),
+                ),
+            };
+        let payload_type =
+            self.get_variant_case_payload_type(&decl_name, &decl_module, case_name, &type_args);
         TirPattern::Variant {
             enum_type: peeled,
             variant_name: case_name.to_string(),
@@ -8938,8 +8996,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             (Vec::new(), self.current_module_source.clone()),
                         ),
                     };
-                    let payload =
-                        self.get_variant_case_payload_type(&decl_name, &case_name, &type_args.0);
+                    let payload = self.get_variant_case_payload_type(
+                        &decl_name,
+                        &type_args.1,
+                        &case_name,
+                        &type_args.0,
+                    );
                     (payload, type_args.1)
                 };
 
@@ -9141,12 +9203,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn get_variant_case_payload_type(
         &self,
         variant_name: &str,
+        variant_module: &ModuleSource,
         case_name: &str,
         type_args: &[TypeId],
     ) -> TypeId {
-        let lookup = self.type_lookup();
         let (payload, type_param_indices): (TypeId, Vec<u32>) = {
-            let Some(variant_info) = lookup.variant_case(variant_name) else {
+            let lookup = self.type_lookup();
+            let Some(variant_info) = lookup.variant_case_in(variant_name, variant_module) else {
                 return crate::tir::TypeTable::UNKNOWN;
             };
             let Some(case_data) = variant_info.cases.iter().find(|c| c.name == case_name) else {

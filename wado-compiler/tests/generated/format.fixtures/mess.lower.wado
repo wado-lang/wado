@@ -128,10 +128,6 @@ struct Logger {
     prefix: String,
 }
 
-pub struct ConvertError {
-    pub message: String,
-}
-
 pub struct Formatter {
     pub fill: char,
     pub align: Alignment,
@@ -141,6 +137,10 @@ pub struct Formatter {
     pub precision: i32,
     pub indent: i32,
     pub buf: &mut String,
+}
+
+pub struct ConvertError {
+    pub message: String,
 }
 
 pub struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
@@ -477,16 +477,16 @@ pub struct "Box<u32>" {
     value: u32,
 }
 
+pub struct "Box<core:prelude/format.wado/Alignment>" {
+    value: Alignment,
+}
+
 pub struct "Box<core:prelude/traits.wado/Ordering>" {
     value: Ordering,
 }
 
 pub struct "Box<Fn<1,U>>" {
     value: fn mut(I::Item) -> U,
-}
-
-pub struct "Box<core:prelude/format.wado/Alignment>" {
-    value: Alignment,
 }
 
 struct __Closure_0 {
@@ -527,16 +527,16 @@ enum Color {
     Alpha,
 }
 
-pub enum Ordering {
-    Less,
-    Equal,
-    Greater,
-}
-
 pub enum Alignment {
     Left,
     Center,
     Right,
+}
+
+pub enum Ordering {
+    Less,
+    Equal,
+    Greater,
 }
 
 flags Access {
@@ -2175,7 +2175,7 @@ pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
                 __r.String::push_str(&"core:internal");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 24 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 38 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"i32_clamp: lo must be <= hi");
                 __r.String::push_str(&"\ncondition: lo <= hi\n");
@@ -3931,7 +3931,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 __r.String::push_str(&"core:prelude/fpfmt.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 292 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 296 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"digits must be <= 18");
                 __r.String::push_str(&"\ncondition: n <= 18\n");
@@ -5083,7 +5083,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 97 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 132 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: self.high != 0\n");
                 __r.String::push_str(&"self.high: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5135,7 +5135,7 @@ fn u128::round_to_mantissa(self: &u128, mant_bits: i32) -> [u64, i64] {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 133 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 168 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: a >> mant_bits - 1 as u64 == 1\n");
                 __r.String::push_str(&"a: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5254,7 +5254,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     }
     let ten: u128 = "core::prelude/int128.wado::u128::from_u64"(10);
     let mut digit_count: i32 = 0;
-    let mut temp: u128 = "$value_copy$T102"(*self);
+    let mut temp: u128 = "$value_copy$T105"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5267,7 +5267,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
     let offset: i32 = f.Formatter::prepare_int_write(is_neg, "", digit_count);
     let mut arr: Array<u8> = f.buf.String::internal_raw_bytes();
     let mut pos: i32 = (offset + digit_count);
-    let mut temp: u128 = "$value_copy$T102"(*self);
+    let mut temp: u128 = "$value_copy$T105"(*self);
     loop {
         if !(temp."u128^Ord::cmp"(&"core::prelude/int128.wado::u128::from_u64"(0)) == Ordering::Greater) {
             break;
@@ -5293,7 +5293,7 @@ fn u128::fmt_decimal_magnitude(self: &u128, f: &mut Formatter, is_neg: bool) {
                 __r.String::push_str(&"core:prelude/int128.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 304 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 339 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&"\ncondition: pos == offset\n");
                 __r.String::push_str(&"pos: ");
                 __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5374,7 +5374,7 @@ fn u128::fmt_base(self: &u128, f: &mut Formatter, base: i32, upper: bool, prefix
                     __r.String::push_str(&"core:prelude/int128.wado");
                     __r.String::push_str(&":");
                     let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                    Box<i32> { value: 357 }."i32^Display::fmt"(&mut __f);
+                    Box<i32> { value: 392 }."i32^Display::fmt"(&mut __f);
                     __r.String::push_str(&"\ncondition: pos == offset\n");
                     __r.String::push_str(&"pos: ");
                     __f = "core::prelude/format.wado::Formatter::new"(&mut __r);
@@ -5565,7 +5565,7 @@ pub fn i128::from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntErro
 
 pub fn i128::from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T180"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T182"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -6359,7 +6359,7 @@ pub fn parse_unsigned_prefix(s: &String) -> Result<i32, IntErrorKind> {
 
 pub fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
     "core::prelude/intparse.wado::assert_radix"(radix);
-    let __pattern_temp_0: [bool, i32] = "$value_copy$T180"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
+    let __pattern_temp_0: [bool, i32] = "$value_copy$T182"(match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
         Err(k) => {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::ParseIntError::new"(k));
@@ -10947,7 +10947,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 579 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 583 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"negative length");
                 __r.String::push_str(&"\ncondition: byte_len >= 0\n");
@@ -10972,7 +10972,7 @@ pub fn String::truncate(self: &mut String, byte_len: i32) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 580 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 584 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"not on a UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_len)\n");
@@ -11253,7 +11253,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 821 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 825 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range out of bounds");
                 __r.String::push_str(&"\ncondition: 0 <= start && start <= end && end <= self.used\n");
@@ -11311,7 +11311,7 @@ pub fn String::substr_bytes(self: &String, start: i32, end: i32) -> String {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 822 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 826 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"byte range not on UTF-8 character boundaries");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(start) && self.is_char_boundary(end)\n");
@@ -11521,7 +11521,7 @@ pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 958 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 962 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11580,7 +11580,7 @@ pub fn String::insert_str(self: &mut String, byte_index: i32, s: String) {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 999 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1003 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"insert_str index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -11627,7 +11627,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1027 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1031 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: byte_index >= 0 && byte_index < self.used\n");
@@ -11668,7 +11668,7 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
                 __r.String::push_str(&"core:prelude/string.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 1028 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 1032 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"remove index not on UTF-8 character boundary");
                 __r.String::push_str(&"\ncondition: self.is_char_boundary(byte_index)\n");
@@ -12841,7 +12841,7 @@ pub fn "StrCharIndicesIter^Iterator::for_each"(self: &mut StrCharIndicesIter, f:
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                f("$value_copy$T316"(item));
+                f("$value_copy$T318"(item));
             },
             _ => {
                 break;
@@ -12855,7 +12855,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T316"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return Option<[i32, char]>::Some(item);
                 }
             },
@@ -12872,7 +12872,7 @@ pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if pred("$value_copy$T316"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return true;
                 }
             },
@@ -12889,7 +12889,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
             Some(item) => {
-                if !pred("$value_copy$T316"(item)) {
+                if !pred("$value_copy$T318"(item)) {
                     return false;
                 }
             },
@@ -12942,7 +12942,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                if pred("$value_copy$T316"(item)) {
+                if pred("$value_copy$T318"(item)) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
@@ -12959,12 +12959,12 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
     let __match_5: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
     match __match_5 {
         Some(first) => {
-            let mut acc: [i32, char] = "$value_copy$T316"(first);
+            let mut acc: [i32, char] = "$value_copy$T318"(first);
             loop {
                 let __match_6: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
                 match __match_6 {
                     Some(item) => {
-                        acc = f("$value_copy$T316"(acc), "$value_copy$T316"(item));
+                        acc = f("$value_copy$T318"(acc), "$value_copy$T318"(item));
                     },
                     _ => {
                         break;
@@ -17808,304 +17808,6 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-pub fn ConvertError::new(message: String) -> ConvertError {
-    return ConvertError { message: message };
-}
-
-pub fn "Ordering^Eq::eq"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> bool {
-    return (self.value == other.value);
-}
-
-pub fn "Ordering^Ord::cmp"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> Ordering {
-    let a: Ordering = self.value;
-    let b: Ordering = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "ConvertError^Eq::eq"(self: &ConvertError, other: &ConvertError) -> bool {
-    return self.message."String^Eq::eq"(&other.message);
-}
-
-pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ordering {
-    let c: Ordering = self.message."String^Ord::cmp"(&other.message);
-    if (c != Ordering::Equal) {
-        return c;
-    }
-    return Ordering::Equal;
-}
-
-pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
-    if (self.value == 0) {
-        f.Formatter::write_str(&"Ordering::Less");
-    } else {
-        if (self.value == 1) {
-            f.Formatter::write_str(&"Ordering::Equal");
-        } else {
-            if (self.value == 2) {
-                f.Formatter::write_str(&"Ordering::Greater");
-            };
-        };
-    };
-}
-
-pub fn "ConvertError^Inspect::inspect"(self: &ConvertError, f: &mut Formatter) {
-    f.Formatter::write_str(&"ConvertError { ");
-    f.Formatter::write_str(&"message: ");
-    self.message."String^Inspect::inspect"(f);
-    f.Formatter::write_str(&" }");
-}
-
-pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&"StreamWritable<u8>");
-}
-
-pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
-    f.Formatter::write_str(&"Stream<u8>");
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
-}
-
-pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
-
-pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
-
-pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
-
-pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
-
-pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
-
-pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
-
-pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
-
-pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
-
-pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
-
-pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
-
-pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
-    self."Ordering^Inspect::inspect"(f);
-}
-
-pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Formatter) {
-    f.Formatter::open_brace("ConvertError {");
-    f.Formatter::write_newline_indent();
-    f.Formatter::write_str(&"message: ");
-    self.message."String^InspectAlt::inspect_alt"(f);
-    f.Formatter::write_str(&",");
-    f.Formatter::close_brace("}");
-}
-
-pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
-
-pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
-
-pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
-
-pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
-
-pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
-
-pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
-
-pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
-
-pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
-
-pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
-
-pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
-
-pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
-
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
-
-pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
-    self."Ordering^Inspect::inspect"(f);
-}
-
-pub fn "ConvertError^Display::fmt"(self: &ConvertError, f: &mut Formatter) {
-    self."ConvertError^Inspect::inspect"(f);
-}
-
-pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^Inspect::inspect"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
-    self."Fn<1,bool>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
-    self."Fn<1,()>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
-    self."Fn<2,T>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
-    self."Fn<2,u8>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
-    self."Fn<2,char>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
-    self."Fn<1,char>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
-    self."Fn<2,String>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
-    self."Fn<1,i32>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
-    self."Fn<2,I::Item>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
-}
-
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
-}
-
-pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
-    self."Ordering^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "ConvertError^DisplayAlt::fmt_alt"(self: &ConvertError, f: &mut Formatter) {
-    self."ConvertError^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
-    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
-    self."Stream<u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
-    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
-    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
-    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
-    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
-    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
-    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
-    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
-    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
-    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
-    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
-    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
-    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
-}
-
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
-}
-
 pub fn Formatter::resolved_seq_limit(self: &Formatter) -> i32 {
     if (self.precision == -2) {
         return 256;
@@ -18729,6 +18431,304 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
     self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
 }
 
+pub fn ConvertError::new(message: String) -> ConvertError {
+    return ConvertError { message: message };
+}
+
+pub fn "Ordering^Eq::eq"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> bool {
+    return (self.value == other.value);
+}
+
+pub fn "Ordering^Ord::cmp"(self: Box<core:prelude/traits.wado/Ordering>, other: Box<core:prelude/traits.wado/Ordering>) -> Ordering {
+    let a: Ordering = self.value;
+    let b: Ordering = other.value;
+    if (a < b) {
+        return Ordering::Less;
+    }
+    if (a > b) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "ConvertError^Eq::eq"(self: &ConvertError, other: &ConvertError) -> bool {
+    return self.message."String^Eq::eq"(&other.message);
+}
+
+pub fn "ConvertError^Ord::cmp"(self: &ConvertError, other: &ConvertError) -> Ordering {
+    let c: Ordering = self.message."String^Ord::cmp"(&other.message);
+    if (c != Ordering::Equal) {
+        return c;
+    }
+    return Ordering::Equal;
+}
+
+pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
+    if (self.value == 0) {
+        f.Formatter::write_str(&"Ordering::Less");
+    } else {
+        if (self.value == 1) {
+            f.Formatter::write_str(&"Ordering::Equal");
+        } else {
+            if (self.value == 2) {
+                f.Formatter::write_str(&"Ordering::Greater");
+            };
+        };
+    };
+}
+
+pub fn "ConvertError^Inspect::inspect"(self: &ConvertError, f: &mut Formatter) {
+    f.Formatter::write_str(&"ConvertError { ");
+    f.Formatter::write_str(&"message: ");
+    self.message."String^Inspect::inspect"(f);
+    f.Formatter::write_str(&" }");
+}
+
+pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"StreamWritable<u8>");
+}
+
+pub fn "Stream<u8>^Inspect::inspect"(self: &Stream<u8>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Stream<u8>");
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    f.Formatter::write_str(&"Future<Result<(), ErrorCode>>");
+}
+
+pub fn "Fn<1,bool>^Inspect::inspect"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^Inspect::inspect"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^Inspect::inspect"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^Inspect::inspect"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^Inspect::inspect"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^Inspect::inspect"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^Inspect::inspect"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
+    self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "ConvertError^InspectAlt::inspect_alt"(self: &ConvertError, f: &mut Formatter) {
+    f.Formatter::open_brace("ConvertError {");
+    f.Formatter::write_newline_indent();
+    f.Formatter::write_str(&"message: ");
+    self.message."String^InspectAlt::inspect_alt"(f);
+    f.Formatter::write_str(&",");
+    f.Formatter::close_brace("}");
+}
+
+pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^InspectAlt::inspect_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^InspectAlt::inspect_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter);
+
+pub fn "Fn<2,Ordering>^InspectAlt::inspect_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter);
+
+pub fn "Fn<1,()>^InspectAlt::inspect_alt"(self: Box<Fn<1,()>>, f: &mut Formatter);
+
+pub fn "Fn<2,T>^InspectAlt::inspect_alt"(self: Box<Fn<2,T>>, f: &mut Formatter);
+
+pub fn "Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter);
+
+pub fn "Fn<2,u8>^InspectAlt::inspect_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter);
+
+pub fn "Fn<2,char>^InspectAlt::inspect_alt"(self: Box<Fn<2,char>>, f: &mut Formatter);
+
+pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Formatter);
+
+pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+
+pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
+
+pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+
+pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
+    self."Ordering^Inspect::inspect"(f);
+}
+
+pub fn "ConvertError^Display::fmt"(self: &ConvertError, f: &mut Formatter) {
+    self."ConvertError^Inspect::inspect"(f);
+}
+
+pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Stream<u8>^Display::fmt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^Inspect::inspect"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Display::fmt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,bool>^Display::fmt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Ordering>^Display::fmt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,()>^Display::fmt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,T>^Display::fmt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^Display::fmt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,u8>^Display::fmt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,char>^Display::fmt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,char>^Display::fmt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+}
+
+pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
+    self."Ordering^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "ConvertError^DisplayAlt::fmt_alt"(self: &ConvertError, f: &mut Formatter) {
+    self."ConvertError^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
+    self."StreamWritable<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Stream<u8>^DisplayAlt::fmt_alt"(self: &Stream<u8>, f: &mut Formatter) {
+    self."Stream<u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Future<Result<(),wasi:cli/types.wado/ErrorCode>>^DisplayAlt::fmt_alt"(self: &Future<Result<(), ErrorCode>>, f: &mut Formatter) {
+    self."Future<Result<(),wasi:cli/types.wado/ErrorCode>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,bool>^DisplayAlt::fmt_alt"(self: Box<Fn<1,bool>>, f: &mut Formatter) {
+    self."Fn<1,bool>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Ordering>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Ordering>>, f: &mut Formatter) {
+    self."Fn<2,Ordering>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,()>^DisplayAlt::fmt_alt"(self: Box<Fn<1,()>>, f: &mut Formatter) {
+    self."Fn<1,()>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,T>^DisplayAlt::fmt_alt"(self: Box<Fn<2,T>>, f: &mut Formatter) {
+    self."Fn<2,T>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,ArraySlice<T>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,ArraySlice<T>>>, f: &mut Formatter) {
+    self."Fn<2,ArraySlice<T>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,u8>^DisplayAlt::fmt_alt"(self: Box<Fn<2,u8>>, f: &mut Formatter) {
+    self."Fn<2,u8>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,char>^DisplayAlt::fmt_alt"(self: Box<Fn<2,char>>, f: &mut Formatter) {
+    self."Fn<2,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,char>^DisplayAlt::fmt_alt"(self: Box<Fn<1,char>>, f: &mut Formatter) {
+    self."Fn<1,char>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
+    self."Fn<2,String>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
+    self."Fn<1,i32>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter) {
+    self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+}
+
+pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
+    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+}
+
 fn "List<u64>^SequenceLiteralBuilder::build"(self: &List<u64>) -> List<u64> {
     return *self;
 }
@@ -18995,7 +18995,7 @@ fn "List<u64>^IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64
                 __r.String::push_str(&"core:prelude/list.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 315 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 316 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: index < self.used\n");
@@ -19112,7 +19112,7 @@ fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prel
                 __r.String::push_str(&"core:prelude/list.wado");
                 __r.String::push_str(&":");
                 let mut __f: Formatter = "core::prelude/format.wado::Formatter::new"(&mut __r);
-                Box<i32> { value: 315 }."i32^Display::fmt"(&mut __f);
+                Box<i32> { value: 316 }."i32^Display::fmt"(&mut __f);
                 __r.String::push_str(&": ");
                 __r.String::push_str(&"index out of bounds");
                 __r.String::push_str(&"\ncondition: index < self.used\n");
@@ -19368,7 +19368,7 @@ fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
     return Tuple<f64,f64> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T316"(v: [i32, char]) -> [i32, char] {
+fn "$value_copy$T318"(v: [i32, char]) -> [i32, char] {
     return Tuple<i32,char> { 0: v.0, 1: v.1 };
 }
 
@@ -19376,11 +19376,11 @@ fn "$value_copy$T28"(v: String) -> String {
     return String { repr: core::builtin::array_clone::<u8>(&v.repr), used: v.used };
 }
 
-fn "$value_copy$T180"(v: [bool, i32]) -> [bool, i32] {
+fn "$value_copy$T182"(v: [bool, i32]) -> [bool, i32] {
     return Tuple<bool,i32> { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$T102"(v: u128) -> u128 {
+fn "$value_copy$T105"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 

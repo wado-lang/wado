@@ -334,6 +334,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         result
     }
 
+    /// Run `body` in `module`'s perspective, but skip the swap entirely when
+    /// `module` is already the current perspective — the common case on the
+    /// method / associated-type lookup path, where the receiver's impl usually
+    /// lives in the current module. Skipping avoids the `import_scope` clone
+    /// and, unlike [`Self::with_module_perspective`], leaves the in-progress
+    /// locals in place — which a same-module lookup legitimately resolves
+    /// against.
+    pub(super) fn with_module_perspective_for<R>(
+        &mut self,
+        module: &ModuleSource,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if self.current_module_source == *module {
+            return body(self);
+        }
+        let scope = self.tysys.trait_env.import_scope(module);
+        self.with_module_perspective(module.clone(), scope, body)
+    }
+
     /// Run `body` with use→def reference recording suppressed, restoring the
     /// previous setting on return. Used by type-checking queries that resolve
     /// foreign declaration signatures (see
@@ -953,28 +972,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Look up struct field info by (name, `module_source`).
-    ///
-    /// Disambiguates same-named structs across modules by also matching the
-    /// owning `module_source`. Falls back to scanning the shared `all_*`
-    /// table when the visible projection (current module + locally created
-    /// anonymous structs) doesn't have the entry.
     pub(super) fn lookup_struct_fields_in(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructFieldInfo> {
-        self.sem
-            .decls
-            .local_struct_fields
-            .get(name)
-            .filter(|info| info.module_source == *module_source)
-            .or_else(|| {
-                self.tysys
-                    .all_struct_fields
-                    .get(module_source)
-                    .and_then(|m| m.get(name))
-            })
+        self.type_lookup().struct_fields_in(name, module_source)
+    }
+
+    pub(super) fn lookup_variant_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&VariantInfo> {
+        self.type_lookup().variant_case_in(name, module_source)
+    }
+
+    pub(super) fn lookup_enum_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&EnumInfo> {
+        self.type_lookup().enum_case_in(name, module_source)
     }
 
     /// Build effect name → module source map from a module's import declarations.

@@ -1337,69 +1337,92 @@ impl<'a> TypeLookup<'a> {
                     }
                 }
             }
-            // The name is imported from `src` but absent from this registry
-            // there. If `src` defines it in *some* registry, the import is
-            // authoritative — it is simply not of this kind (e.g. an imported
-            // `enum ErrorCode` queried against the variant registry), so return
-            // `None` rather than let the global scan grab a same-named type from
-            // an unrelated module. If `src` does not define it at all, the
-            // import is a `pub use` re-export barrel; fall through to the scan to
-            // reach the real definer.
-            if self.src_defines(src, canonical) {
-                return None;
-            }
+            // Imported but absent from this registry: the name is simply of
+            // another kind (e.g. an imported `enum` queried against the variant
+            // registry). `src` is the true definer — `module_import_scope`
+            // resolves `pub use` chains — so there is nowhere else to look.
         }
-        for m in all_per_module.values() {
-            if let Some(v) = m.get(name) {
-                return Some(v);
-            }
-        }
+        // No global-scan fallback. A bare name resolves only through locals, the
+        // current module, or imports (the prelude is injected into every
+        // module's import scope, so its types resolve through the import branch
+        // above). Returning the first same-named match from any module is what
+        // let a type bind to an unrelated module's same-named type (issue #1416).
         None
     }
 
-    /// Whether `src` declares a type named `name` in any registry. Used to tell
-    /// a genuine import (the source defines the name) from a `pub use`
-    /// re-export barrel (the source merely forwards it).
-    fn src_defines(&self, src: &ModuleSource, name: &str) -> bool {
-        self.all_newtypes
-            .get(src)
-            .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_struct_fields
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_variant_cases
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_enum_cases
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_flags_cases
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_resource_types
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
-            || self
-                .all_generic_newtypes
-                .get(src)
-                .is_some_and(|m| m.contains_key(name))
+    /// Resolve `name` keyed strictly by `module_source`: the local override
+    /// matches only when its own module agrees, then the per-module table is
+    /// indexed directly. Unlike [`Self::lookup_ref`] it applies no import
+    /// precedence, so a resolved `ResolvedType` (which carries its
+    /// `module_source`) can never resolve to a same-named type from another
+    /// module (issue #1416). The bare-name lookups are for names written in
+    /// source, where import precedence is the right policy.
+    fn lookup_ref_in<V>(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+        local: &'a IndexMap<String, V>,
+        all_per_module: &'a IndexMap<ModuleSource, IndexMap<String, V>>,
+        module_of: impl Fn(&V) -> &ModuleSource,
+    ) -> Option<&'a V> {
+        local
+            .get(name)
+            .filter(|v| *module_of(v) == *module_source)
+            .or_else(|| all_per_module.get(module_source).and_then(|m| m.get(name)))
     }
 
     pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
         self.lookup_ref(name, Some(self.local_struct_fields), self.all_struct_fields)
     }
 
+    pub(super) fn struct_fields_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a StructFieldInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_struct_fields,
+            self.all_struct_fields,
+            |info| &info.module_source,
+        )
+    }
+
     pub(super) fn variant_case(&self, name: &str) -> Option<&'a VariantInfo> {
         self.lookup_ref(name, Some(self.local_variant_cases), self.all_variant_cases)
     }
 
+    pub(super) fn variant_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a VariantInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_variant_cases,
+            self.all_variant_cases,
+            |info| &info.module_source,
+        )
+    }
+
     pub(super) fn enum_case(&self, name: &str) -> Option<&'a EnumInfo> {
         self.lookup_ref(name, Some(self.local_enum_cases), self.all_enum_cases)
+    }
+
+    pub(super) fn enum_case_in(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<&'a EnumInfo> {
+        self.lookup_ref_in(
+            name,
+            module_source,
+            self.local_enum_cases,
+            self.all_enum_cases,
+            |info| &info.module_source,
+        )
     }
 
     pub(super) fn flags_case(&self, name: &str) -> Option<&'a FlagsInfo> {
