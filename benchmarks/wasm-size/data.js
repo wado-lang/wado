@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782171080522,
+  "lastUpdate": 1782172235065,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34925,6 +34925,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 283694,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f2b7b6a0374805dac370c5fe579dae617cb13b2f",
+          "message": "Merge pull request #1420 from wado-lang/claude/worklist-nir-optimize-588sz7\n\nrefactor(optimizer): live ValueGraph — build-once pure-value IR with operand promotion",
+          "timestamp": "2026-06-23T08:42:04+09:00",
+          "tree_id": "9f543c40eb3670b3c28d5d0bc8744de36d445387",
+          "url": "https://github.com/wado-lang/wado/commit/f2b7b6a0374805dac370c5fe579dae617cb13b2f"
+        },
+        "date": 1782172234560,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289376,
             "unit": "bytes"
           }
         ]
