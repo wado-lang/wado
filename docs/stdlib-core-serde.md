@@ -49,20 +49,17 @@ struct Header {
 
 ## Missing fields on deserialization
 
-By default, a missing required field produces `DeserializeError` with kind
-`MissingField`. To tolerate omission, mark the field with
-`#[serde(default)]` (uses the type's zero-value: `0`, `""`, `false`, `[]`,
-`null`, ...) or declare a default expression with `f: T = expr` (uses that
-expression). A field that declares `= expr` is implicitly
-`#[serde(default)]`, so the attribute is only needed on fields without a
-declared default.
+A missing required field produces `DeserializeError` with kind
+`MissingField`. A field with a default value (`f: T = expr`) is optional:
+when absent it falls back to that expression. This is the single mechanism
+for an optional field — for a zero-value fallback, write the zero literal
+(`= 0`, `= ""`, `= false`, `= []`, `= null`).
 
 ```wado
 struct Config {
     host: String,             // required - error if missing
-    #[serde(default)]
-    port: i32,                // missing -> 0  (zero-value)
-    timeout: i32 = 30,        // missing -> 30 (declared default)
+    port: i32 = 0,            // missing -> 0
+    timeout: i32 = 30,        // missing -> 30
 }
 impl Deserialize for Config;
 

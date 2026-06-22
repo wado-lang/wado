@@ -1,22 +1,14 @@
-// test: #[serde(default)] attribute for optional fields
-// Missing fields with #[serde(default)] use zero-values instead of erroring.
+// test: default field values make fields optional on deserialize.
+// Missing fields fall back to their declared defaults instead of erroring.
 use { Serialize, Deserialize } from "core:serde";
 use { to_string, from_string } from "core:json";
 
 struct Config {
     host: String,
-
-    #[serde(default)]
-    port: i32,
-
-    #[serde(default)]
-    verbose: bool,
-
-    #[serde(default)]
-    tags: List<String>,
-
-    #[serde(default)]
-    description: Option<String>,
+    port: i32 = 0,
+    verbose: bool = false,
+    tags: List<String> = [],
+    description: Option<String> = null,
 }
 
 impl Serialize for Config;
@@ -58,7 +50,7 @@ test "provided fields override defaults" {
 }
 
 test "missing required field still errors" {
-    // host has no #[serde(default)], so missing it should error
+    // host has no default value, so missing it should error
     let r = from_string::<Config>(`\{"port":8080\}`);
     if let Err(e) = r {
         // should report missing required field
