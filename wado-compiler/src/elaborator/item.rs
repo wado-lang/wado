@@ -554,6 +554,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
+            if let Some(serde_default) = field
+                .attrs
+                .iter()
+                .find(|a| a.name == "serde" && a.has_arg("default"))
+            {
+                let _ = scope.logger.error(TypeError::SerdeDefaultAttr {
+                    field: field.name.clone(),
+                    span: serde_default.span,
+                });
+            }
             if let Some(default_ast) = &field.default {
                 let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
                 scope.typecheck(resolved, type_id, default_ast.span());

@@ -109,7 +109,7 @@ the §11 struct-`Inspect` example keeps compiling), and two members are added:
 pub struct FieldMeta {
     name: String,            // source name, e.g. "user_name" (== field_names()[i])
     wire_name: String,       // serde rename / rename_all applied, e.g. "userName"
-    has_default: bool,       // #[serde(default)] or `f: T = expr`
+    has_default: bool,       // field has a default value `f: T = expr`
     doc: String,             // /// doc comment ("" if none)
     validate: List<ValidateEntry>,   // parsed #[validate(...)] (see §4)
 }

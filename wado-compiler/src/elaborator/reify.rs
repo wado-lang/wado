@@ -748,11 +748,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
             });
 
-            let serde_default = field.default.is_some()
-                || field
-                    .attrs
-                    .iter()
-                    .any(|a| a.name == "serde" && a.has_arg("default"));
+            // A field is optional on deserialize iff it has a default value.
+            // `#[serde(default)]` is removed (rejected in `resolve_struct`).
+            let serde_default = field.default.is_some();
 
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),

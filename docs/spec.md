@@ -4504,9 +4504,9 @@ test "slow computation" {
 }
 ```
 
-#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]` / `#[serde(default)]`
+#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]`
 
-Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...); `#[serde(default)]` falls back to a default value (the field's declared default expression if present, otherwise the type's zero-value) when the field is absent during deserialization. A field with a declared default (`f: T = expr`) is implicitly `#[serde(default)]`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
 
 ### Standard Library Attributes
 

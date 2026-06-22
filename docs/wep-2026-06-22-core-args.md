@@ -50,30 +50,31 @@ pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment; // w
 Struct fields become `--long` options; the field type and presence of a declared
 default select arity:
 
-| Wado field type  | argv meaning                               |
-| ---------------- | ------------------------------------------ |
-| `T` (no default) | required `--name <value>`                  |
-| `T = expr`       | optional `--name <value>`, absent → `expr` |
-| `Option<T>`      | optional `--name <value>`, absent → `null` |
-| `bool = false`   | flag `--name`, absent → `false`            |
-| `List<T>`        | repeatable, required (≥1)                  |
-| `List<T> = []`   | repeatable, optional (≥0)                  |
+| Wado field type    | argv meaning                               |
+| ------------------ | ------------------------------------------ |
+| `T` (no default)   | required `--name <value>`                  |
+| `T = expr`         | optional `--name <value>`, absent → `expr` |
+| `Option<T> = null` | optional `--name <value>`, absent → `null` |
+| `bool = false`     | flag `--name`, absent → `false`            |
+| `List<T> = []`     | repeatable, optional (≥0)                  |
+| `List<T>`          | repeatable, required (≥1)                  |
 
 ```wado
 struct Cli {
-    input: String,              // --input <v>   (required)
-    jobs: i32 = 1,              // --jobs <n>    (optional, default 1)
-    output: Option<String>,     // --output <v>  (optional)
-    verbose: bool = false,      // --verbose     (flag)
-    include: List<String> = [], // --include <v> (repeatable, optional)
+    input: String,                  // --input <v>   (required)
+    jobs: i32 = 1,                  // --jobs <n>    (optional, default 1)
+    output: Option<String> = null,  // --output <v>  (optional)
+    verbose: bool = false,          // --verbose     (flag)
+    include: List<String> = [],     // --include <v> (repeatable, optional)
 }
 impl Deserialize for Cli;
 ```
 
-This is the language's "has default → optional" rule extended to argv; the
-common case needs no attributes. Option names fold `-`/`_`, so `--dry-run` binds
-`dry_run` (a `core:args` normalization before `FieldSchema::lookup`; wire names
-unchanged).
+This is the language's single "has default → optional" rule extended to argv —
+no type is special-cased, so an optional option is `Option<T> = null`.
+
+Option names fold `-`/`_`, so `--dry-run` binds `dry_run` (a `core:args`
+normalization before `FieldSchema::lookup`; wire names unchanged).
 
 ### Value Conversion
 
@@ -102,9 +103,10 @@ impl Deserialize for Cli;
 // myprog in.txt out.txt a b --jobs 4
 ```
 
-The explicit hint enables optional (default or `Option<T>`) and variadic
-(`List<T> = []`) positionals. Schema validation requires: positionals contiguous
-in declaration order, required before optional, at most one variadic (last).
+The explicit hint enables optional (any field with a default, e.g.
+`= "out.txt"` or `Option<T> = null`) and variadic (`List<T> = []`) positionals.
+Schema validation requires: positionals contiguous in declaration order,
+required before optional, at most one variadic (last).
 
 ### Interaction with Default Field Values
 

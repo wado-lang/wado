@@ -13,18 +13,15 @@ use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } fr
 use { Benchmark } from "core:benchmark";
 
 struct Event {
-    #[serde(default)]
-    description: Option<String>,
+    description: Option<String> = null,
     id: i64,
-    #[serde(default)]
-    logo: Option<String>,
+    logo: Option<String> = null,
     name: String,
     #[serde(rename = "subTopicIds")]
     sub_topic_ids: List<i64>,
-    #[serde(default, rename = "subjectCode")]
-    subject_code: Option<String>,
-    #[serde(default)]
-    subtitle: Option<String>,
+    #[serde(rename = "subjectCode")]
+    subject_code: Option<String> = null,
+    subtitle: Option<String> = null,
     #[serde(rename = "topicIds")]
     topic_ids: List<i64>,
 }
@@ -58,15 +55,13 @@ struct Performance {
     #[serde(rename = "eventId")]
     event_id: i64,
     id: i64,
-    #[serde(default)]
-    logo: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
+    logo: Option<String> = null,
+    name: Option<String> = null,
     prices: List<Price>,
     #[serde(rename = "seatCategories")]
     seat_categories: List<SeatCategory>,
-    #[serde(default, rename = "seatMapImage")]
-    seat_map_image: Option<String>,
+    #[serde(rename = "seatMapImage")]
+    seat_map_image: Option<String> = null,
     start: i64,
     #[serde(rename = "venueCode")]
     venue_code: String,

@@ -329,9 +329,10 @@ A struct with any required field (no default) does not auto-derive `Default`.
 
 #### Interaction with Serde
 
-A declared field default makes the field optional on deserialize, falling back
-to that default when absent — no `#[serde(default)]` needed. This extends the
-"has default → optional" rule from construction to deserialization:
+A field default makes the field optional on deserialize, falling back to that
+default when absent. This extends the "has default → optional" rule from
+construction to deserialization, and is the single mechanism for an optional
+field (`#[serde(default)]` is removed):
 
 ```wado
 struct Config {
@@ -339,8 +340,7 @@ struct Config {
 }
 ```
 
-`#[serde(default)]` remains for a _defaultless_ field that should fall back to
-its type's zero-value (`Default::default()`). See the serde WEP's
+See the serde WEP's
 [Default Values for Missing Fields](./wep-2026-02-28-serde.md#default-values-for-missing-fields).
 
 ### WebIDL Mapping Improvement

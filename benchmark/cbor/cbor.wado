@@ -97,10 +97,8 @@ struct Media {
     expanded_url: String,
     type: String,
     sizes: MediaSizes,
-    #[serde(default)]
-    source_status_id: Option<i64>,
-    #[serde(default)]
-    source_status_id_str: Option<String>,
+    source_status_id: Option<i64> = null,
+    source_status_id_str: Option<String> = null,
 }
 impl Serialize for Media;
 impl Deserialize for Media;
@@ -110,8 +108,7 @@ struct StatusEntities {
     symbols: List<String>,
     urls: List<Url>,
     user_mentions: List<UserMention>,
-    #[serde(default)]
-    media: List<Media>,
+    media: List<Media> = [],
 }
 impl Serialize for StatusEntities;
 impl Deserialize for StatusEntities;
@@ -124,8 +121,7 @@ impl Deserialize for UserEntityUrls;
 
 struct UserEntities {
     description: UserEntityUrls,
-    #[serde(default)]
-    url: Option<UserEntityUrls>,
+    url: Option<UserEntityUrls> = null,
 }
 impl Serialize for UserEntities;
 impl Deserialize for UserEntities;
@@ -160,8 +156,7 @@ struct User {
     profile_background_tile: bool,
     profile_image_url: String,
     profile_image_url_https: String,
-    #[serde(default)]
-    profile_banner_url: Option<String>,
+    profile_banner_url: Option<String> = null,
     profile_link_color: String,
     profile_sidebar_border_color: String,
     profile_sidebar_fill_color: String,
@@ -194,15 +189,13 @@ struct Status {
     coordinates: Option<String>,
     place: Option<String>,
     contributors: Option<String>,
-    #[serde(default)]
-    retweeted_status: Option<Status>,
+    retweeted_status: Option<Status> = null,
     retweet_count: i32,
     favorite_count: i32,
     entities: StatusEntities,
     favorited: bool,
     retweeted: bool,
-    #[serde(default)]
-    possibly_sensitive: bool,
+    possibly_sensitive: bool = false,
     lang: String,
 }
 impl Serialize for Status;
