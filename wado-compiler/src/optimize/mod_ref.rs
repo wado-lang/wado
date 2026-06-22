@@ -68,7 +68,9 @@
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, PatId, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
+};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -270,6 +272,25 @@ impl ModRef {
         false
     }
 
+    /// [`accumulate_expr`] for an operand. A promoted constant mods / refs
+    /// nothing, except a `String`, whose materialisation allocates (below).
+    fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
+        match op {
+            Operand::Expr(e) => self.accumulate_expr(body, e, scope),
+            // A promoted constant is a pure leaf except `String`, whose WIR
+            // materialisation (`translate_string_literal`) builds a fresh
+            // `String` heap object with a distinct identity at each use site.
+            Operand::Value(v) => {
+                if matches!(
+                    body.values.kind(v),
+                    crate::nir_value_graph::ValueKind::String(_)
+                ) {
+                    self.allocates = true;
+                }
+            }
+        }
+    }
+
     fn accumulate_expr(&mut self, body: &Body, id: ExprId, scope: &mut AccumScope) {
         match &body.exprs[id].kind {
             // === Locals ===
@@ -279,7 +300,7 @@ impl ModRef {
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
                 self.accumulate_assign_target(body, target, scope);
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_operand(body, value, scope);
             }
 
             // === Globals ===
@@ -298,7 +319,7 @@ impl ModRef {
                 self.global_writes
                     .insert((module_source.clone(), name.clone()));
                 let value = *value;
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_operand(body, value, scope);
             }
 
             // === Heap reads ===
@@ -306,70 +327,70 @@ impl ModRef {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::Index { expr, index } => {
                 self.heap.reads = true;
                 self.may_trap = true; // null + OOB
                 let (expr, index) = (*expr, *index);
-                self.accumulate_expr(body, expr, scope);
-                self.accumulate_expr(body, index, scope);
+                self.accumulate_operand(body, expr, scope);
+                self.accumulate_operand(body, index, scope);
             }
 
             // === Heap allocations ===
             ExprKind::StructLiteral { fields, .. } => {
                 self.allocates = true;
                 for f in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                    self.accumulate_expr(body, f, scope);
+                    self.accumulate_operand(body, f, scope);
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 self.allocates = true;
                 for e in elements.clone() {
-                    self.accumulate_expr(body, e, scope);
+                    self.accumulate_operand(body, e, scope);
                 }
             }
             ExprKind::VariantConstruct { payload, .. } => {
                 self.allocates = true;
                 if let Some(p) = *payload {
-                    self.accumulate_expr(body, p, scope);
+                    self.accumulate_operand(body, p, scope);
                 }
             }
             ExprKind::ClosureToCanonical { functor, .. } => {
                 self.allocates = true;
                 let functor = *functor;
-                self.accumulate_expr(body, functor, scope);
+                self.accumulate_operand(body, functor, scope);
             }
 
             // === Calls ===
             ExprKind::Call { args, .. } => {
                 self.calls = true;
                 for a in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_operand(body, a, scope);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 self.calls = true;
                 let receiver = *receiver;
                 let args: Vec<_> = args.iter().map(|a| a.expr).collect();
-                self.accumulate_expr(body, receiver, scope);
+                self.accumulate_operand(body, receiver, scope);
                 for a in args {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_operand(body, a, scope);
                 }
             }
             ExprKind::IndirectCall { callee, args } => {
                 self.calls = true;
                 let callee = *callee;
                 let args = args.clone();
-                self.accumulate_expr(body, callee, scope);
+                self.accumulate_operand(body, callee, scope);
                 for a in args {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_operand(body, a, scope);
                 }
             }
             ExprKind::CmRawCall { args, .. } => {
                 self.calls = true;
                 for a in args.clone() {
-                    self.accumulate_expr(body, a, scope);
+                    self.accumulate_operand(body, a, scope);
                 }
             }
 
@@ -379,8 +400,8 @@ impl ModRef {
                     self.may_trap = true;
                 }
                 let (left, right) = (*left, *right);
-                self.accumulate_expr(body, left, scope);
-                self.accumulate_expr(body, right, scope);
+                self.accumulate_operand(body, left, scope);
+                self.accumulate_operand(body, right, scope);
             }
             ExprKind::Unary { op, expr } => {
                 match op {
@@ -392,14 +413,14 @@ impl ModRef {
                     NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {}
                 }
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::Cast { expr, .. } => {
                 // v1: conservatively trap-capable (numeric narrowing /
                 // ref.cast). Refine when a consumer needs the precision.
                 self.may_trap = true;
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
 
             // === Variant projection ===
@@ -415,13 +436,13 @@ impl ModRef {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver + case mismatch
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
                 self.heap.reads = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::EnumConstruct { .. } => {}
 
@@ -441,7 +462,7 @@ impl ModRef {
             } => {
                 let (condition, then_branch, else_branch) =
                     (*condition, *then_branch, *else_branch);
-                self.accumulate_expr(body, condition, scope);
+                self.accumulate_operand(body, condition, scope);
                 self.accumulate_block(body, then_branch, scope);
                 if let Some(eb) = else_branch {
                     self.accumulate_block(body, eb, scope);
@@ -453,7 +474,7 @@ impl ModRef {
             ExprKind::Match { expr, arms } => {
                 let expr = *expr;
                 let arms = arms.clone();
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
                 for arm in &arms {
                     // The arm's pattern can bind locals (`Binding`,
                     // `Tuple`, `Variant`, `Struct`, `Or`) and can carry
@@ -465,9 +486,9 @@ impl ModRef {
                     // for any consumer reasoning across a match.
                     self.accumulate_pattern_writes(body, arm.pattern, scope);
                     if let Some(g) = arm.guard {
-                        self.accumulate_expr(body, g, scope);
+                        self.accumulate_operand(body, g, scope);
                     }
-                    self.accumulate_expr(body, arm.body, scope);
+                    self.accumulate_operand(body, arm.body, scope);
                 }
                 if self.control < Control::NonLocal {
                     self.control = Control::Conditional;
@@ -482,7 +503,7 @@ impl ModRef {
                 let scrutinee = *scrutinee;
                 let default = *default;
                 let arms = arms.clone();
-                self.accumulate_expr(body, scrutinee, scope);
+                self.accumulate_operand(body, scrutinee, scope);
                 for arm in arms {
                     self.accumulate_block(body, arm, scope);
                 }
@@ -494,22 +515,18 @@ impl ModRef {
 
             // === GC-allocating literals ===
             //
-            // String and bytes literals each lower to a fresh
-            // `struct.new String { repr: array.new_data<u8>(...), used: N }`
-            // (wir_build/primitive_ops.rs:82,134). They are NOT pure
-            // value-producing leaves: each evaluation site builds a
-            // distinct heap object with its own identity.
-            ExprKind::StringLiteral(_) | ExprKind::BytesLiteral(_) => {
+            // Bytes literals lower to a fresh
+            // `array.new_data<u8>(...)` (wir_build/primitive_ops.rs:134):
+            // NOT a pure value-producing leaf; each evaluation site builds a
+            // distinct heap object with its own identity. (String literals are
+            // promoted to `Operand::Value`; their allocation is recognised in
+            // `accumulate_operand`.)
+            ExprKind::BytesLiteral(_) => {
                 self.allocates = true;
             }
 
-            // === Pure value-producing leaves ===
-            ExprKind::IntLiteral { .. }
-            | ExprKind::FloatLiteral { .. }
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
-            | ExprKind::Null
-            | ExprKind::Unit => {}
+            // Tombstone: no parent, no children, mods / refs nothing.
+            ExprKind::Dead => {}
         }
     }
 
@@ -522,14 +539,14 @@ impl ModRef {
                 self.heap.writes = true;
                 self.may_trap = true; // null receiver
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::Index { expr, index } => {
                 self.heap.writes = true;
                 self.may_trap = true; // null + OOB
                 let (expr, index) = (*expr, *index);
-                self.accumulate_expr(body, expr, scope);
-                self.accumulate_expr(body, index, scope);
+                self.accumulate_operand(body, expr, scope);
+                self.accumulate_operand(body, index, scope);
             }
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
@@ -538,7 +555,7 @@ impl ModRef {
                 self.heap.writes = true;
                 self.may_trap = true;
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             ExprKind::GlobalVarGet {
                 module_source,
@@ -560,16 +577,16 @@ impl ModRef {
             } => {
                 self.local_writes.insert(*local_index);
                 let value = *value;
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_operand(body, value, scope);
             }
             StmtKind::Expr(e) => {
                 let e = *e;
-                self.accumulate_expr(body, e, scope);
+                self.accumulate_operand(body, e, scope);
             }
             StmtKind::Return { value } => {
                 self.control.join(Control::NonLocal);
                 if let Some(v) = *value {
-                    self.accumulate_expr(body, v, scope);
+                    self.accumulate_operand(body, v, scope);
                 }
             }
             StmtKind::If {
@@ -578,7 +595,7 @@ impl ModRef {
                 else_block,
             } => {
                 let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-                self.accumulate_expr(body, condition, scope);
+                self.accumulate_operand(body, condition, scope);
                 self.accumulate_block(body, then_block, scope);
                 if let Some(eb) = else_block {
                     self.accumulate_block(body, eb, scope);
@@ -611,7 +628,7 @@ impl ModRef {
                     self.control.join(Control::NonLocal);
                 }
                 if let Some(v) = *value {
-                    self.accumulate_expr(body, v, scope);
+                    self.accumulate_operand(body, v, scope);
                 }
             }
             StmtKind::Continue => {
@@ -636,7 +653,7 @@ impl ModRef {
             StmtKind::LetDestructure { pattern, value, .. } => {
                 let (pattern, value) = (*pattern, *value);
                 self.accumulate_pattern_writes(body, pattern, scope);
-                self.accumulate_expr(body, value, scope);
+                self.accumulate_operand(body, value, scope);
             }
         }
     }
@@ -674,7 +691,7 @@ impl ModRef {
             }
             PatKind::ConstantValue { expr } => {
                 let expr = *expr;
-                self.accumulate_expr(body, expr, scope);
+                self.accumulate_operand(body, expr, scope);
             }
             PatKind::Wildcard
             | PatKind::Literal(_)
@@ -782,28 +799,37 @@ mod tests {
             },
         )
     }
-    fn int(body: &mut Body, v: i64) -> ExprId {
-        pe(
-            body,
-            ExprKind::IntLiteral {
-                value: v as u64,
-                repr: v.to_string(),
-            },
+    fn int(body: &mut Body, v: i64) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64, ty()), ty()),
         )
     }
-    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        pe(body, ExprKind::Binary { left, op, right })
+    fn bin(
+        body: &mut Body,
+        left: impl Into<Operand>,
+        op: NirBinaryOp,
+        right: impl Into<Operand>,
+    ) -> ExprId {
+        pe(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
     fn deref(body: &mut Body, expr: ExprId) -> ExprId {
         pe(
             body,
             ExprKind::Unary {
                 op: NirUnaryOp::Deref,
-                expr,
+                expr: expr.into(),
             },
         )
     }
-    fn let_stmt(body: &mut Body, index: u32, value: ExprId) -> StmtId {
+    fn let_stmt(body: &mut Body, index: u32, value: impl Into<Operand>) -> StmtId {
         ps(
             body,
             StmtKind::Let {
@@ -812,16 +838,22 @@ mod tests {
                 is_mut: false,
                 is_reactive: false,
                 type_id: ty(),
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
     }
-    fn assign(body: &mut Body, target: ExprId, value: ExprId) -> ExprId {
-        pe(body, ExprKind::Assign { target, value })
+    fn assign(body: &mut Body, target: ExprId, value: impl Into<Operand>) -> ExprId {
+        pe(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        )
     }
-    fn expr_stmt(body: &mut Body, e: ExprId) -> StmtId {
-        ps(body, StmtKind::Expr(e))
+    fn expr_stmt(body: &mut Body, e: impl Into<Operand>) -> StmtId {
+        ps(body, StmtKind::Expr(e.into()))
     }
     fn ret_none(body: &mut Body) -> StmtId {
         ps(body, StmtKind::Return { value: None })
@@ -844,13 +876,13 @@ mod tests {
             },
         )
     }
-    fn global_set(body: &mut Body, name: &str, value: ExprId) -> ExprId {
+    fn global_set(body: &mut Body, name: &str, value: impl Into<Operand>) -> ExprId {
         pe(
             body,
             ExprKind::GlobalVarSet {
                 module_source: ModuleSource::prelude(),
                 name: name.to_string(),
-                value,
+                value: value.into(),
             },
         )
     }
@@ -858,13 +890,13 @@ mod tests {
         pe(
             body,
             ExprKind::FieldAccess {
-                expr,
+                expr: expr.into(),
                 field_index: 0,
                 field_name: "value".to_string(),
             },
         )
     }
-    fn struct_literal(body: &mut Body, fields: Vec<ExprId>) -> ExprId {
+    fn struct_literal(body: &mut Body, fields: Vec<Operand>) -> ExprId {
         let fields = fields
             .into_iter()
             .enumerate()
@@ -895,7 +927,7 @@ mod tests {
         let args = args
             .into_iter()
             .map(|expr| ArenaCallArg {
-                expr,
+                expr: expr.into(),
                 is_mut: false,
             })
             .collect();
@@ -996,7 +1028,7 @@ mod tests {
     fn struct_literal_allocates_but_does_not_write_heap() {
         let mr = mr_expr(|b| {
             let l = local(b, 0);
-            struct_literal(b, vec![l])
+            struct_literal(b, vec![l.into()])
         });
         assert!(mr.allocates);
         assert!(!mr.heap.writes);
@@ -1111,7 +1143,7 @@ mod tests {
             pe(
                 b,
                 ExprKind::Match {
-                    expr: scrut,
+                    expr: scrut.into(),
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
@@ -1298,7 +1330,13 @@ mod tests {
 
     #[test]
     fn cannot_move_when_intervening_reads_candidate() {
-        let expr = mr_expr(|b| int(b, 0));
+        // A pure binary over constants — empty mod/ref; the move is blocked only
+        // by the intervening read of the erased candidate local.
+        let expr = mr_expr(|b| {
+            let l = int(b, 0);
+            let r = int(b, 1);
+            bin(b, l, NirBinaryOp::Add, r)
+        });
         let intervening = mr_stmt(|b| {
             let v = local(b, 7);
             let_stmt(b, 5, v)
@@ -1354,27 +1392,38 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // GC-allocating literals (String / Bytes / Null) — see B1 finding
+    // GC-allocating literals (String / Bytes) — see B1 finding
     // -----------------------------------------------------------------
 
-    fn string_lit(body: &mut Body, s: &str) -> ExprId {
-        pe(body, ExprKind::StringLiteral(s.to_string()))
+    // A promoted string literal lives as `Operand::Value(String)`; it has no
+    // `ExprKind`. Returned as the operand a real `&"..."` would reference.
+    fn string_val(body: &mut Body, s: &str) -> Operand {
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::String(s.to_string()),
+            ty(),
+        ))
     }
 
     fn bytes_lit(body: &mut Body) -> ExprId {
         pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
     }
 
-    fn null_lit(body: &mut Body) -> ExprId {
-        pe(body, ExprKind::Null)
-    }
-
     #[test]
     fn string_literal_allocates() {
-        // Lowered to struct.new String { repr: array.new_data<u8>(...), used: N }
-        // (wir_build/primitive_ops.rs:82) — produces a fresh GC object with a
-        // distinct identity. is_re_evaluation_safe must therefore reject.
-        let mr = mr_expr(|b| string_lit(b, "hello"));
+        // Materialises to struct.new String { repr: array.new_data<u8>(...) }
+        // (wir_build/primitive_ops.rs:82) — a fresh GC object with a distinct
+        // identity at each use site. is_re_evaluation_safe must therefore
+        // reject even though the string is a promoted constant value.
+        let mr = mr_expr(|b| {
+            let s = string_val(b, "hello");
+            pe(
+                b,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: s,
+                },
+            )
+        });
         assert!(mr.allocates);
         assert!(!mr.is_re_evaluation_safe());
     }
@@ -1387,30 +1436,19 @@ mod tests {
         assert!(!mr.is_re_evaluation_safe());
     }
 
-    #[test]
-    fn null_literal_is_pure() {
-        // `Null` at NIR alone is the bare null reference — no allocation.
-        // The Option-typed `None` lowering goes through VariantConstruct,
-        // which is already covered by struct_literal_allocates_*. So Null
-        // proper stays pure.
-        let mr = mr_expr(null_lit);
-        assert!(!mr.allocates);
-        assert!(mr.is_re_evaluation_safe());
-    }
-
     // -----------------------------------------------------------------
     // VariantTag / VariantTest are heap reads that may trap — see D2
     // -----------------------------------------------------------------
 
     fn variant_tag(body: &mut Body, expr: ExprId) -> ExprId {
-        pe(body, ExprKind::VariantTag { expr })
+        pe(body, ExprKind::VariantTag { expr: expr.into() })
     }
 
     fn variant_test(body: &mut Body, expr: ExprId) -> ExprId {
         pe(
             body,
             ExprKind::VariantTest {
-                expr,
+                expr: expr.into(),
                 case_index: 0,
                 case_name: "Some".to_string(),
             },
@@ -1466,7 +1504,7 @@ mod tests {
             pe(
                 b,
                 ExprKind::Match {
-                    expr: scrut,
+                    expr: scrut.into(),
                     arms: vec![ArmData {
                         pattern,
                         guard: None,
@@ -1497,7 +1535,10 @@ mod tests {
 
     fn cast(body: &mut Body, expr: ExprId, target_type: TypeId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Cast { expr, target_type },
+            kind: ExprKind::Cast {
+                expr: expr.into(),
+                target_type,
+            },
             type_id: target_type,
             span: sp(),
         })
@@ -1525,7 +1566,10 @@ mod tests {
         // loop itself, so its NonLocal contribution must NOT propagate
         // past the Loop boundary.
         let mr = mr_stmt(|b| {
-            let cond = pe(b, ExprKind::BoolLiteral(true));
+            let cond = Operand::Value(
+                b.values
+                    .alloc_unshared(crate::nir_value_graph::ValueKind::Bool(true), ty()),
+            );
             let brk = break_stmt(b, None);
             let then_block = pblock(b, vec![brk]);
             let inner = ps(

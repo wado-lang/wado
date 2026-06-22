@@ -226,12 +226,6 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b2_10: u8;
     let b3: u8;
     let code_12: u32;
-    let index_16: i32;
-    let index_18: i32;
-    let index_20: i32;
-    let index_22: i32;
-    let index_24: i32;
-    let index_26: i32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -245,8 +239,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_16 = start + 1;
-        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + index_16);
+        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if b1_4 <u 128 -> i32 {
             1;
         } else {
@@ -263,8 +256,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_18 = start + 1;
-        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + index_18);
+        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if (if b1_6 <u 128 -> i32 {
             1;
         } else {
@@ -289,8 +281,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        index_20 = start + 2;
-        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + index_20);
+        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely((if b2_7 <u 128 -> i32 {
             1;
         } else {
@@ -307,8 +298,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        index_22 = start + 1;
-        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + index_22);
+        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
         if @unlikely((if (if (if b1_9 <u 128 -> i32 {
             1;
         } else {
@@ -333,8 +323,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        index_24 = start + 2;
-        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + index_24);
+        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
         if @unlikely((if b2_10 <u 128 -> i32 {
             1;
         } else {
@@ -347,8 +336,7 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        index_26 = start + 3;
-        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + index_26);
+        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 3));
         if @unlikely((if b3 <u 128 -> i32 {
             1;
         } else {

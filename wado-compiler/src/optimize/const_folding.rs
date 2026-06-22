@@ -32,7 +32,7 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -143,15 +143,17 @@ impl<'a> ConstFoldRule<'a> {
 
 impl Rule for ConstFoldRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(kind) = self
+        let Some(value) = self
             .interpreter
             .borrow_mut()
-            .const_fold_kind_a(engine.body, id)
+            .const_fold_value_a(engine.body, id)
         else {
             return false;
         };
-        engine.replace_expr_kind(id, kind);
-        true
+        // Promote the folded scalar to an `Operand::Value` in its parent (WEP:
+        // The Live ValueGraph). A node with no operand parent slot (e.g. a body
+        // root) cannot be promoted; report no change so the worklist settles.
+        engine.replace_expr_with_value(id, value)
     }
 }
 
@@ -169,6 +171,9 @@ impl EditSink for EngineSink<'_, '_> {
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.engine.replace_expr_kind(e, kind);
+    }
+    fn replace_with_value(&mut self, e: ExprId, value: crate::const_eval::Value) -> bool {
+        self.engine.replace_expr_with_value(e, value)
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         self.engine.become_expr(dst, src);
@@ -242,13 +247,26 @@ fn build_global_env(
             let mut interp = Interpreter::new(type_table);
             interp.with_callees(callees);
             interp.with_globals(&env);
-            interp.reduce_to_lattice_a(global.initializer.body(), global.initializer.expr())
+            let body = global.initializer.body();
+            match global.initializer.expr() {
+                Operand::Expr(e) => interp.reduce_to_lattice_a(body, e),
+                op @ Operand::Value(_) => interp.operand_to_lattice_a(body, op),
+            }
         };
         if !matches!(lattice, Lattice::Unevaluated) {
             env.insert(key, lattice);
         }
     }
     env
+}
+
+/// The integer value of an operand — a promoted `ValueKind::Int` in the pool.
+fn operand_int_a(body: &Body, op: Operand) -> Option<u64> {
+    body.operand_const_int(op)
+}
+
+fn const_seq_len_operand_a(body: &Body, op: Operand) -> Option<i32> {
+    op.as_expr().and_then(|e| const_seq_len_a(body, e))
 }
 
 /// Arena counterpart of [`const_seq_len`]: the statically-known
@@ -266,21 +284,21 @@ fn const_seq_len_a(body: &Body, e: ExprId) -> Option<i32> {
                 .iter()
                 .rev()
                 .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => const_seq_len_a(body, *value),
-                    StmtKind::Expr(ex) => const_seq_len_a(body, *ex),
+                    StmtKind::Let { value, .. } => const_seq_len_operand_a(body, *value),
+                    StmtKind::Expr(ex) => const_seq_len_operand_a(body, *ex),
                     _ => None,
                 })
         }
         ExprKind::StructLiteral { fields, .. } => fields.iter().find_map(|f| {
             if f.name == SeqField::Len.field_name()
-                && let ExprKind::IntLiteral { value, .. } = &body.exprs[f.value].kind
+                && let Some(value) = operand_int_a(body, f.value)
             {
-                return i32::try_from(*value).ok();
+                return i32::try_from(value).ok();
             }
             None
         }),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            const_seq_len_a(body, *inner)
+            const_seq_len_operand_a(body, *inner)
         }
         _ => None,
     }
@@ -307,7 +325,8 @@ fn build_global_field_env(project: &NirPackage) -> GlobalFieldEnv {
     // direct source.
     for global in &project.globals {
         if !global.wado_mutable
-            && let Some(n) = const_seq_len_a(global.initializer.body(), global.initializer.expr())
+            && let Some(init_e) = global.initializer.expr().as_expr()
+            && let Some(n) = const_seq_len_a(global.initializer.body(), init_e)
         {
             record_seq_len(
                 &mut env,
@@ -363,7 +382,7 @@ impl SeqLenCollector<'_> {
             let key = (module_source.clone(), name.clone());
             let value = *value;
             if self.immutable.contains(&key)
-                && let Some(n) = const_seq_len_a(body, value)
+                && let Some(n) = const_seq_len_operand_a(body, value)
             {
                 record_seq_len(self.env, key, n);
             }
@@ -384,9 +403,9 @@ struct ConstFoldVisitor<'a> {
 /// up front (cloning the arm lists) releases the body borrow so the per-arm
 /// walk can mutate the arena.
 enum ExprShape {
-    If(ExprId, BlockId, Option<BlockId>),
-    Match(ExprId, Vec<ArmData>),
-    Switch(ExprId, Vec<BlockId>, BlockId),
+    If(Operand, BlockId, Option<BlockId>),
+    Match(Operand, Vec<ArmData>),
+    Switch(Operand, Vec<BlockId>, BlockId),
     Block(BlockId),
     Labeled(BlockId, String),
     None,
@@ -472,7 +491,7 @@ impl ConstFoldVisitor<'_> {
                 let condition = *condition;
                 let then_block = *then_block;
                 let else_block = *else_block;
-                let mut changed = self.visit_expr(engine, condition);
+                let mut changed = self.visit_operand(engine, condition);
                 changed |= self.visit_block(engine, then_block);
                 if let Some(eb) = else_block {
                     changed |= self.visit_block(engine, eb);
@@ -481,6 +500,10 @@ impl ConstFoldVisitor<'_> {
             }
             _ => unreachable!("non-control-flow stmt reached control-flow arm"),
         }
+    }
+
+    fn visit_operand(&mut self, engine: &mut Engine, op: Operand) -> bool {
+        op.as_expr().is_some_and(|e| self.visit_expr(engine, e))
     }
 
     fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
@@ -503,7 +526,7 @@ impl ConstFoldVisitor<'_> {
         // reaching-def across arms is the engine `ValueGraph`'s concern.
         match expr_shape(engine.body, e) {
             ExprShape::If(condition, then_branch, else_branch) => {
-                let mut changed = self.visit_expr(engine, condition);
+                let mut changed = self.visit_operand(engine, condition);
                 changed |= self.visit_block(engine, then_branch);
                 if let Some(eb) = else_branch {
                     changed |= self.visit_block(engine, eb);
@@ -512,18 +535,18 @@ impl ConstFoldVisitor<'_> {
                 changed
             }
             ExprShape::Match(scrutinee, arms) => {
-                let mut changed = self.visit_expr(engine, scrutinee);
+                let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
                     if let Some(g) = arm.guard {
-                        changed |= self.visit_expr(engine, g);
+                        changed |= self.visit_operand(engine, g);
                     }
-                    changed |= self.visit_expr(engine, arm.body);
+                    changed |= self.visit_operand(engine, arm.body);
                 }
                 changed |= self.reduce_local(engine, e);
                 changed
             }
             ExprShape::Switch(scrutinee, arms, default) => {
-                let mut changed = self.visit_expr(engine, scrutinee);
+                let mut changed = self.visit_operand(engine, scrutinee);
                 for arm in &arms {
                     changed |= self.visit_block(engine, *arm);
                 }
@@ -544,10 +567,49 @@ impl ConstFoldVisitor<'_> {
             ExprShape::None => {
                 // Bottom-up walk for the remaining expressions.
                 let mut changed = self.walk_children(engine, NodeRef::Expr(e));
+                changed |= self.project_struct_literal(engine, e);
                 changed |= self.reduce_local(engine, e);
                 changed
             }
         }
+    }
+
+    /// Fold `Struct { f: v, .. }.f` into `v` when the construction is
+    /// immediate (the `FieldAccess` receiver is the literal itself) and every
+    /// non-projected field is a pooled value, so dropping the struct discards
+    /// no side effect. After copy-prop substitutes a pure single-field box
+    /// literal into its sole `.field` use this is the fold that removes the
+    /// otherwise-dead `struct.new` (issue: operand-promotion missed-opt).
+    fn project_struct_literal(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+        let ExprKind::FieldAccess {
+            expr: recv,
+            field_name,
+            ..
+        } = &engine.body.exprs[e].kind
+        else {
+            return false;
+        };
+        let (recv, field_name) = (*recv, field_name.clone());
+        let Some(recv_e) = recv.as_expr() else {
+            return false;
+        };
+        let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
+            return false;
+        };
+        let mut projected = None;
+        for f in fields {
+            if f.name == field_name {
+                projected = Some(f.value);
+            } else if f.value.as_value().is_none() {
+                // A non-projected sibling may carry a side effect; keep the
+                // struct so its evaluation is preserved.
+                return false;
+            }
+        }
+        let Some(proj) = projected else {
+            return false;
+        };
+        engine.redirect_expr(e, proj)
     }
 
     /// Commit a single-node niri rewrite at `e` through the engine.
@@ -597,7 +659,7 @@ impl ConstFoldVisitor<'_> {
             ExprKind::Assign { target, value } => (*target, *value),
             _ => unreachable!("visit_assign called on non-Assign"),
         };
-        let mut changed = self.visit_expr(engine, value);
+        let mut changed = self.visit_operand(engine, value);
         let inner_to_walk = match &engine.body.exprs[target].kind {
             ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
                 Some(*inner)
@@ -605,7 +667,7 @@ impl ConstFoldVisitor<'_> {
             _ => None,
         };
         if let Some(inner) = inner_to_walk {
-            changed |= self.visit_expr(engine, inner);
+            changed |= self.visit_operand(engine, inner);
         }
         // A bare `local = …` reassignment drops the local's lattice to
         // unknown. A field / deref / index store needs nothing here — the
@@ -636,7 +698,10 @@ impl ConstFoldVisitor<'_> {
             // conservative up front.
             Lattice::NonConst
         } else {
-            self.interpreter.reduce_to_lattice_a(body, value)
+            match value {
+                Operand::Expr(e) => self.interpreter.reduce_to_lattice_a(body, e),
+                Operand::Value(_) => self.interpreter.operand_to_lattice_a(body, value),
+            }
         };
         // Drop any prior knowledge keyed by this index (rare — a fresh
         // `let` typically introduces a unique index, but defensive).
@@ -712,7 +777,9 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*inner].kind {
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+            {
                 effects.mut_borrowed.insert(*index);
             }
         }
@@ -720,19 +787,23 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
         ExprKind::Call { args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let Some(ae) = arg.expr.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
                 {
                     effects.mut_borrowed.insert(*index);
                 }
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+            if let Some(re) = receiver.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[re].kind
+            {
                 effects.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let Some(ae) = arg.expr.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
                 {
                     effects.mut_borrowed.insert(*index);
                 }

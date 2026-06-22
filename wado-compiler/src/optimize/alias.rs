@@ -21,7 +21,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprKind, NodeRef, StmtKind};
+use crate::nir_arena::{Body, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{AliasInfo, LocalSet};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -144,7 +144,32 @@ pub(super) fn builder_alias_sets(
         stores_aliased_locals,
         type_table,
     );
-    let aliased: IndexSet<u32> = info.aliased.iter().collect();
+    let mut aliased: IndexSet<u32> = info.aliased.iter().collect();
+    // A mutating method call `recv.m(…)` (`m` takes `&mut self`) takes the
+    // address of `recv` implicitly: the NIR receiver is a bare `Local`, with no
+    // `&mut recv` node for `collect_aliased_node` to see, so `recv` is otherwise
+    // absent from `aliased` and — since `mut_escaped ⊆ aliased` — from
+    // `mut_escaped` too. The value graph then never bumps `recv`'s fields across
+    // the call (`x.bump(); x.value` forwards the pre-call constant — a
+    // miscompile). Flag the receiver root here so the mutation is modelled.
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
+            && let Some(re) = receiver.as_expr()
+            && method_mutates_receiver(
+                body,
+                re,
+                func,
+                first_param_types,
+                type_table,
+                true,
+                Some(call_immutability),
+            )
+            && let Some(r) = projection_root_local(body, re)
+        {
+            aliased.insert(r);
+        }
+    });
     let mut_escaped = build_mut_escaped(
         body,
         locals,
@@ -187,6 +212,7 @@ fn build_mut_escaped(
             node,
             type_table,
             first_param_types,
+            call_immutability,
             &mut syntactic_mut,
         );
     });
@@ -238,6 +264,15 @@ pub(super) struct CallImmutability<'a> {
     box_name: String,
     list_name: String,
     memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+    /// Methods whose body provably writes through their receiver (param 0).
+    /// Boxing erases the `&self` / `&mut self` distinction — both become a
+    /// `Box<T>` param (see `lower/plan/boxing`) — so a receiver's mutability
+    /// cannot be read off its type; only the callee body distinguishes
+    /// `bump(&mut self) { *self = … }` from `fmt(&self)`. Computed by fixpoint.
+    receiver_mutating: IndexSet<(ModuleSource, String)>,
+    /// Methods with a body (so a not-mutating verdict is *proven*, not unknown).
+    /// A callee absent here (extern / builtin) stays conservatively mutating.
+    has_body: IndexSet<(ModuleSource, String)>,
 }
 
 impl<'a> CallImmutability<'a> {
@@ -259,13 +294,27 @@ impl<'a> CallImmutability<'a> {
         let list_name = items
             .struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
+        let first_param_types = first_param_types(project);
+        let (receiver_mutating, has_body) =
+            compute_receiver_mutating(project, type_table, &first_param_types);
         Self {
             type_table,
             struct_fields,
             box_name,
             list_name,
             memo: std::cell::RefCell::default(),
+            receiver_mutating,
+            has_body,
         }
+    }
+
+    /// Whether the method `(module, name)` writes through its receiver. `None`
+    /// for a callee with no body (extern / builtin) — the caller falls back to
+    /// its conservative default.
+    pub(super) fn method_writes_receiver(&self, key: &(ModuleSource, String)) -> Option<bool> {
+        self.has_body
+            .contains(key)
+            .then(|| self.receiver_mutating.contains(key))
     }
 
     pub(super) fn is_call_immutable(&self, type_id: TypeId) -> bool {
@@ -329,6 +378,78 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::projection_root_local;
 
+/// Call exprs that **mutate no caller local**: a free `Call` or `&self`
+/// `MethodCall` whose every argument is safe — not `mut`, an immutable `&`
+/// borrow, or a by-value value of a call-immutable type (a deep copy the callee
+/// cannot reach back through). The value graph can skip a `mut_escaped`
+/// receiver's per-call bump for these, so a field read keeps its version across a
+/// pure accessor (`arr.len()` does not split `arr.used`'s version) — the
+/// precondition for promoting a spliced `FieldAccess` (WEP: the field-bound
+/// recovery). Unknown callees stay impure for a `MethodCall` receiver
+/// (`method_mutates_receiver`'s conservative default); a free `Call` is pure when
+/// its args are all safe, since a callee can only mutate what it is handed
+/// mutably.
+pub(super) fn pure_calls(
+    body: &Body,
+    type_table: &TypeTable,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    call_immutability: &CallImmutability,
+) -> IndexSet<crate::nir_arena::ExprId> {
+    let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
+        if arg.is_mut {
+            return false;
+        }
+        let Some(ae) = arg.expr.as_expr() else {
+            return true; // a promoted constant operand mutates nothing
+        };
+        match &body.exprs[ae].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                ..
+            } => true,
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef | NirUnaryOp::Deref,
+                ..
+            } => false,
+            _ => call_immutability.is_call_immutable(body.exprs[ae].type_id),
+        }
+    };
+    // Walk reachable nodes only: `body.exprs` also holds orphaned nodes left by
+    // earlier promotion, whose stale `type_id`s are no longer in the table.
+    let mut out = IndexSet::default();
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        let NodeRef::Expr(e) = node else {
+            return;
+        };
+        let pure = match &body.exprs[e].kind {
+            ExprKind::Call { args, .. } => args.iter().all(&arg_safe),
+            ExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                receiver.as_expr().is_some_and(|re| {
+                    !method_mutates_receiver(
+                        body,
+                        re,
+                        func,
+                        first_param_types,
+                        type_table,
+                        true,
+                        Some(call_immutability),
+                    )
+                }) && args.iter().all(&arg_safe)
+            }
+            _ => false,
+        };
+        if pure {
+            out.insert(e);
+        }
+    });
+    out
+}
+
 /// Whether a `recv.m(...)` call may mutate its receiver's pointee: the receiver
 /// expression is itself a `&mut`, or the callee's declared first param is
 /// `&mut self`. `conservative_on_unknown` decides a callee absent from
@@ -343,17 +464,158 @@ pub(super) fn method_mutates_receiver(
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
     type_table: &TypeTable,
     conservative_on_unknown: bool,
+    call_immutability: Option<&CallImmutability>,
 ) -> bool {
     let receiver_is_mut_ref = matches!(
         type_table.get(body.exprs[receiver].type_id),
         ResolvedType::MutRef(_)
     );
-    let callee_mutates =
-        match first_param_types.get(&(func.module_source.clone(), func.name.clone())) {
+    let key = (func.module_source.clone(), func.name.clone());
+    // The receiver type alone cannot tell `&self` from `&mut self` once boxing
+    // has made both a `Box<T>` param, so consult the body-derived verdict: a
+    // method that writes through its receiver mutates it, one that does not is
+    // proven safe. A bodyless callee (`None` verdict) falls back to the legacy
+    // `MutRef`-param check (still valid for a genuine `&mut Struct` receiver) or
+    // the conservative default. `call_immutability` is `None` for the
+    // copy-propagation caller, which keeps its own type-based receiver guard.
+    let callee_mutates = match call_immutability.and_then(|ci| ci.method_writes_receiver(&key)) {
+        Some(writes) => writes,
+        None => match first_param_types.get(&key) {
             Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
             None => conservative_on_unknown,
-        };
+        },
+    };
     receiver_is_mut_ref || callee_mutates
+}
+
+/// Fixpoint over the call graph: the set of methods whose body provably writes
+/// through their receiver (param 0), plus the set of methods that have a body
+/// at all. A method writes through its receiver when the body assigns into a
+/// projection of param 0 (`self.f = …`, `*self = …`, `self[i] = …`), takes a
+/// `&mut` of such a place, passes one as a `mut` call argument, or calls a
+/// receiver-mutating method on such a place. The last clause is the fixpoint:
+/// `outer(&self) { self.inner() }` mutates its receiver iff `inner` does, so we
+/// iterate until the set stops growing. Conservative on every bodyless callee.
+fn compute_receiver_mutating(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+) -> (
+    IndexSet<(ModuleSource, String)>,
+    IndexSet<(ModuleSource, String)>,
+) {
+    let mut has_body: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    let mut p0_of: IndexMap<(ModuleSource, String), u32> = IndexMap::default();
+    for func_rc in &project.functions {
+        let f = func_rc.borrow();
+        if f.body.is_some()
+            && let Some(p0) = f.params.first()
+        {
+            let key = (f.module_source.clone(), f.name.clone());
+            has_body.insert(key.clone());
+            p0_of.insert(key, p0.local_index);
+        }
+    }
+    let mut mutating: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    loop {
+        let mut changed = false;
+        for func_rc in &project.functions {
+            let f = func_rc.borrow();
+            let key = (f.module_source.clone(), f.name.clone());
+            if mutating.contains(&key) {
+                continue;
+            }
+            let (Some(body), Some(&p0)) = (f.body.as_ref(), p0_of.get(&key)) else {
+                continue;
+            };
+            if body_writes_through_receiver(
+                body,
+                p0,
+                &mutating,
+                &has_body,
+                first_param_types,
+                type_table,
+            ) {
+                mutating.insert(key);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    (mutating, has_body)
+}
+
+/// Whether `body` writes through param-0's projection root `p0`, using the
+/// partial `mutating` set for the recursive method-call clause (monotone, so a
+/// `false` here is re-derived on the next fixpoint round if `mutating` grows).
+fn body_writes_through_receiver(
+    body: &Body,
+    p0: u32,
+    mutating: &IndexSet<(ModuleSource, String)>,
+    has_body: &IndexSet<(ModuleSource, String)>,
+    first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    type_table: &TypeTable,
+) -> bool {
+    let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
+        super::arena_query::projection_root_local(body, e) == Some(p0)
+    };
+    let mut found = false;
+    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+        if found {
+            return;
+        }
+        let NodeRef::Expr(e) = node else { return };
+        match &body.exprs[e].kind {
+            // A write to a projection of self: `self.f = …`, `*self = …`.
+            ExprKind::Assign { target, .. } if projects_p0(*target) => found = true,
+            // `&mut <self projection>` hands a mutable place out.
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } if inner.as_expr().is_some_and(projects_p0) => found = true,
+            ExprKind::Call { args, .. } => {
+                if args
+                    .iter()
+                    .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
+                {
+                    found = true;
+                }
+            }
+            ExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                if receiver.as_expr().is_some_and(projects_p0) {
+                    // self-rooted receiver: mutated iff the callee mutates its
+                    // own receiver. Unknown (bodyless) callee → conservative.
+                    let key = (func.module_source.clone(), func.name.clone());
+                    let inner_mut = if has_body.contains(&key) {
+                        mutating.contains(&key)
+                    } else {
+                        match first_param_types.get(&key) {
+                            Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
+                            None => true,
+                        }
+                    };
+                    if inner_mut {
+                        found = true;
+                    }
+                }
+                if args
+                    .iter()
+                    .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
+                {
+                    found = true;
+                }
+            }
+            _ => {}
+        }
+    });
+    found
 }
 
 /// Flag the roots of mutable-escape sites in a single node:
@@ -374,6 +636,7 @@ fn collect_mut_escaped_node(
     node: NodeRef,
     type_table: &TypeTable,
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
+    call_immutability: &CallImmutability,
     out: &mut IndexSet<u32>,
 ) {
     let NodeRef::Expr(e) = node else {
@@ -384,14 +647,19 @@ fn collect_mut_escaped_node(
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => {
-            if let Some(r) = projection_root_local(body, *inner) {
+            // A promoted `Operand::Value` inner has no projection root local.
+            if let Some(ie) = inner.as_expr()
+                && let Some(r) = projection_root_local(body, ie)
+            {
                 out.insert(r);
             }
         }
         ExprKind::Call { args, .. } => {
             for arg in args {
+                // A `mut` arg is a place; a promoted constant references no local.
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr)
+                    && let Some(e) = arg.expr.as_expr()
+                    && let Some(r) = projection_root_local(body, e)
                 {
                     out.insert(r);
                 }
@@ -404,15 +672,29 @@ fn collect_mut_escaped_node(
             ..
         } => {
             // Unknown callee (builtin / extern not in the project) → assume it
-            // may mutate the receiver (`conservative_on_unknown = true`).
-            if method_mutates_receiver(body, *receiver, func, first_param_types, type_table, true)
-                && let Some(r) = projection_root_local(body, *receiver)
+            // may mutate the receiver (`conservative_on_unknown = true`). A
+            // promoted-value receiver carries no local root, so it aliases
+            // nothing.
+            if let Some(re) = receiver.as_expr()
+                && method_mutates_receiver(
+                    body,
+                    re,
+                    func,
+                    first_param_types,
+                    type_table,
+                    true,
+                    Some(call_immutability),
+                )
+                && let Some(r) = projection_root_local(body, re)
             {
                 out.insert(r);
             }
             for arg in args {
                 if arg.is_mut
-                    && let Some(r) = projection_root_local(body, arg.expr)
+                    && let Some(r) = arg
+                        .expr
+                        .as_expr()
+                        .and_then(|e| projection_root_local(body, e))
                 {
                     out.insert(r);
                 }
@@ -592,8 +874,9 @@ fn collect_alias_edges_node(
             if let StmtKind::Let {
                 local_index, value, ..
             } = &body.stmts[s].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
-                && type_creates_alias(body.exprs[*value].type_id, type_table)
+                && let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
+                && type_creates_alias(body.exprs[ve].type_id, type_table)
             {
                 edges.push((*local_index, *src));
             }
@@ -601,8 +884,9 @@ fn collect_alias_edges_node(
         NodeRef::Expr(e) => {
             if let ExprKind::Assign { target, value } = &body.exprs[e].kind
                 && let ExprKind::Local { index: dst, .. } = &body.exprs[*target].kind
-                && let ExprKind::Local { index: src, .. } = &body.exprs[*value].kind
-                && type_creates_alias(body.exprs[*value].type_id, type_table)
+                && let Some(ve) = value.as_expr()
+                && let ExprKind::Local { index: src, .. } = &body.exprs[ve].kind
+                && type_creates_alias(body.exprs[ve].type_id, type_table)
             {
                 edges.push((*dst, *src));
             }
@@ -631,21 +915,22 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                if let Some(src) = local(*value) {
+                if let Some(src) = value.as_expr().and_then(local) {
                     out.insert(*local_index);
                     out.insert(src);
                 }
             }
             // `dst = src` (Assign Local→Local) — same aliasing.
-            StmtKind::Expr(expr) => {
+            StmtKind::Expr(Operand::Expr(expr)) => {
                 if let ExprKind::Assign { target, value } = &body.exprs[*expr].kind
                     && let Some(dst) = local(*target)
-                    && let Some(src) = local(*value)
+                    && let Some(src) = value.as_expr().and_then(local)
                 {
                     out.insert(dst);
                     out.insert(src);
                 }
             }
+            StmtKind::Expr(Operand::Value(_)) => {}
             StmtKind::LetDestructure { .. }
             | StmtKind::Return { .. }
             | StmtKind::Break { .. }
@@ -664,15 +949,18 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
                 op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
             } => {
-                if let Some(index) = local(*inner) {
+                if let Some(index) = inner.as_expr().and_then(local) {
                     out.insert(index);
                 }
             }
             // Calls with mut args may stash the reference — alias.
             ExprKind::Call { args, .. } => {
                 for arg in args {
+                    // A `mut` arg is a place (never a promoted constant); a
+                    // constant arg references no local.
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr)
+                        && let Some(e) = arg.expr.as_expr()
+                        && let Some(index) = local(e)
                     {
                         out.insert(index);
                     }
@@ -680,12 +968,12 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 // Auto-ref: receiver may be passed as `&mut self`.
-                if let Some(index) = local(*receiver) {
+                if let Some(index) = receiver.as_expr().and_then(local) {
                     out.insert(index);
                 }
                 for arg in args {
                     if arg.is_mut
-                        && let Some(index) = local(arg.expr)
+                        && let Some(index) = arg.expr.as_expr().and_then(local)
                     {
                         out.insert(index);
                     }
@@ -697,14 +985,14 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             // references) may modify them. Mark aliased.
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let Some(index) = local(field.value) {
+                    if let Some(index) = field.value.as_expr().and_then(local) {
                         out.insert(index);
                     }
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for &elem in elements {
-                    if let Some(index) = local(elem) {
+                    if let Some(index) = elem.as_expr().and_then(local) {
                         out.insert(index);
                     }
                 }
@@ -712,7 +1000,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             ExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                if let Some(index) = local(*p) {
+                if let Some(index) = p.as_expr().and_then(local) {
                     out.insert(index);
                 }
             }
@@ -737,14 +1025,8 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::GlobalVarSet { .. }
             | ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }
-            | ExprKind::IntLiteral { .. }
-            | ExprKind::FloatLiteral { .. }
-            | ExprKind::StringLiteral(_)
             | ExprKind::BytesLiteral(_)
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
-            | ExprKind::Null
-            | ExprKind::Unit
+            | ExprKind::Dead
             | ExprKind::EnumConstruct { .. } => {}
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}

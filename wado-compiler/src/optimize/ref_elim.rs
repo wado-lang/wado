@@ -31,7 +31,7 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -110,8 +110,11 @@ impl Rule for RefElimRule {
         match &engine.body.exprs[id].kind {
             // `r.field` for an eliminable ref `r` → resolved referent.
             ExprKind::FieldAccess { expr: inner, .. } => {
-                let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                // A promoted `Operand::Value` receiver is no eliminable ref local.
+                let Some(inner_e) = inner.as_expr() else {
+                    return false;
+                };
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind else {
                     return false;
                 };
                 let index = *index;
@@ -124,7 +127,7 @@ impl Rule for RefElimRule {
                 // keeping `inner`'s type_id / span — the surrounding code was
                 // sized to the ref-type tag `r` had at this position.
                 let kind = engine.body.exprs[resolved].kind.clone();
-                engine.replace_expr_kind(inner, kind);
+                engine.replace_expr_kind(inner_e, kind);
                 true
             }
             // `*r` for a single-use deref-only ref `r` → inline the literal.
@@ -133,7 +136,11 @@ impl Rule for RefElimRule {
                 expr: inner,
             } => {
                 let inner = *inner;
-                let ExprKind::Local { index, .. } = &engine.body.exprs[inner].kind else {
+                // A promoted `Operand::Value` inner names no local — no rewrite.
+                let Some(inner_e) = inner.as_expr() else {
+                    return false;
+                };
+                let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind else {
                     return false;
                 };
                 let Some(&source_e) = self.deref_sources.get(index) else {
@@ -141,7 +148,7 @@ impl Rule for RefElimRule {
                 };
                 // Single-use: move the source literal into this `*r` site,
                 // keeping the deref expr's type_id / span.
-                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Unit);
+                let kind = std::mem::replace(&mut engine.body.exprs[source_e].kind, ExprKind::Dead);
                 engine.replace_expr_kind(id, kind);
                 true
             }
@@ -165,12 +172,14 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
             Some(info) => Step::Tracked(info.referent_e),
             None => Step::Leaf,
         },
+        // A promoted `Operand::Value` receiver has no skeleton place to splice
+        // through; clone the field access as-is (`Step::Leaf`).
         ExprKind::FieldAccess {
             expr: inner,
             field_index,
             field_name,
-        } => Step::Field(
-            *inner,
+        } if inner.as_expr().is_some() => Step::Field(
+            inner.as_expr().expect("checked some"),
             *field_index,
             field_name.clone(),
             engine.body.exprs[e].type_id,
@@ -184,7 +193,7 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
             let resolved_inner = resolve_via_engine(engine, inner, refs);
             engine.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: resolved_inner,
+                    expr: resolved_inner.into(),
                     field_index,
                     field_name,
                 },
@@ -201,7 +210,10 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 fn is_valid_referent(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_valid_referent(body, *inner),
+        // A promoted `Operand::Value` receiver is not a pure local-read chain.
+        ExprKind::FieldAccess { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|ie| is_valid_referent(body, ie)),
         _ => false,
     }
 }
@@ -249,8 +261,9 @@ fn analyze_stmt(
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
+        && let Some(ve) = value.as_expr()
     {
-        register_let_binding(body, *local_index, *value, rebound, refs);
+        register_let_binding(body, *local_index, ve, rebound, refs);
     }
     // Then classify uses in the statement's children (the value, nested blocks).
     let mut kids = Vec::new();
@@ -273,9 +286,9 @@ fn register_let_binding(
     // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent.
     if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && is_valid_referent(body, *expr)
+        && let Some(referent_e) = expr.as_expr()
+        && is_valid_referent(body, referent_e)
     {
-        let referent_e = *expr;
         refs.insert(
             local_index,
             RefInfo {
@@ -318,6 +331,17 @@ fn analyze_node(
     }
 }
 
+fn analyze_expr_operand(
+    body: &Body,
+    op: Operand,
+    rebound: &IndexSet<u32>,
+    refs: &mut IndexMap<u32, RefInfo>,
+) {
+    if let Some(e) = op.as_expr() {
+        analyze_expr(body, e, rebound, refs);
+    }
+}
+
 fn analyze_expr(
     body: &Body,
     id: ExprId,
@@ -330,12 +354,14 @@ fn analyze_expr(
         // non-Local inner so nested ref uses are still classified.
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+            // A promoted `Operand::Value` inner is a constant, not a tracked ref.
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                 && refs.contains_key(index)
             {
                 return;
             }
-            analyze_expr(body, inner, rebound, refs);
+            analyze_expr_operand(body, inner, rebound, refs);
         }
         // Direct (non-field-access) use of a tracked ref local: non-eliminable.
         ExprKind::Local { index, .. } => {
@@ -379,17 +405,20 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
     if let StmtKind::Let {
         local_index, value, ..
     } = &body.stmts[stmt].kind
-        && let ExprKind::Unary { op, expr } = &body.exprs[*value].kind
+        && let Some(ve) = value.as_expr()
+        && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && matches!(
-            body.exprs[*expr].kind,
-            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-        )
+        && expr.as_expr().is_some_and(|e| {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+            )
+        })
     {
         refs.insert(
             *local_index,
             DerefOnlyRef {
-                source_e: *expr,
+                source_e: expr.as_expr().expect("skeleton operand"),
                 eliminable: true,
                 use_count: 0,
             },
@@ -417,6 +446,12 @@ fn deref_collect_node(body: &Body, node: NodeRef, refs: &mut IndexMap<u32, Deref
     }
 }
 
+fn deref_collect_expr_operand(body: &Body, op: Operand, refs: &mut IndexMap<u32, DerefOnlyRef>) {
+    if let Some(e) = op.as_expr() {
+        deref_collect_expr(body, e, refs);
+    }
+}
+
 fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnlyRef>) {
     match &body.exprs[id].kind {
         // `*r` where r is a deref-only candidate: an acceptable use.
@@ -425,14 +460,17 @@ fn deref_collect_expr(body: &Body, id: ExprId, refs: &mut IndexMap<u32, DerefOnl
             expr: inner,
         } => {
             let inner = *inner;
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            // A promoted `Operand::Value` inner names no local candidate.
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+            {
                 let index = *index;
                 if let Some(info) = refs.get_mut(&index) {
                     info.use_count += 1;
                     return;
                 }
             }
-            deref_collect_expr(body, inner, refs);
+            deref_collect_expr_operand(body, inner, refs);
         }
         // Any other bare use of r disqualifies it.
         ExprKind::Local { index, .. } => {

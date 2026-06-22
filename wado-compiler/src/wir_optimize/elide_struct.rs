@@ -154,6 +154,16 @@ fn is_pure_for_elision(instr: &WirInstr) -> bool {
         | WirInstr::ArrayNewDefault { .. }
         | WirInstr::ArrayNewData { .. }
         | WirInstr::ArrayNewFixed { .. } => false,
+        // Writes: a field initializer can assign a local/global/heap slot as a
+        // side effect (e.g. `low: local.tee v(1000)`, where `v` is read
+        // elsewhere). Eliding the struct would drop that write — not pure. (A
+        // dropped field init must be side-effect-free; an unread field with a
+        // write init must keep the struct.)
+        WirInstr::LocalSet { .. }
+        | WirInstr::LocalTee { .. }
+        | WirInstr::GlobalSet { .. }
+        | WirInstr::StructSet { .. }
+        | WirInstr::ArraySet { .. } => false,
         // Everything else (constants, LocalGet, arithmetic, comparisons, …):
         // recurse to ensure no impure sub-expressions are present.
         _ => {

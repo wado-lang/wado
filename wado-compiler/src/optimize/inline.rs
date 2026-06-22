@@ -12,7 +12,8 @@ use crate::module_source::ModuleSource;
 use crate::nir::{InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -56,9 +57,16 @@ enum BlockCut {
 /// cost estimate.
 fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) if is_cold_path_call(body, *e) => BlockCut::Cold,
+        StmtKind::Expr(e) if e.as_expr().is_some_and(|e| is_cold_path_call(body, e)) => {
+            BlockCut::Cold
+        }
         StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => BlockCut::Diverges,
-        StmtKind::Expr(e) if type_table.is_never(body.exprs[*e].type_id) => BlockCut::Diverges,
+        StmtKind::Expr(e)
+            if e.as_expr()
+                .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)) =>
+        {
+            BlockCut::Diverges
+        }
         _ => BlockCut::None,
     }
 }
@@ -66,17 +74,17 @@ fn block_cut(body: &Body, stmt: StmtId, type_table: &TypeTable) -> BlockCut {
 /// Inline cost of a single statement (its own expression count).
 fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(expr) => count_expr(body, *expr, type_table),
-        StmtKind::Let { value, .. } => count_expr(body, *value, type_table),
-        StmtKind::LetDestructure { value, .. } => count_expr(body, *value, type_table),
-        StmtKind::Return { value } => value.map_or(0, |v| count_expr(body, v, type_table)),
+        StmtKind::Expr(expr) => count_operand(body, *expr, type_table),
+        StmtKind::Let { value, .. } => count_operand(body, *value, type_table),
+        StmtKind::LetDestructure { value, .. } => count_operand(body, *value, type_table),
+        StmtKind::Return { value } => value.map_or(0, |v| count_operand(body, v, type_table)),
         StmtKind::If {
             condition,
             then_block,
             else_block,
             ..
         } => {
-            count_expr(body, *condition, type_table)
+            count_operand(body, *condition, type_table)
                 + count_block_exprs(body, *then_block, type_table)
                 + else_block.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
@@ -87,41 +95,46 @@ fn count_stmt(body: &Body, stmt: StmtId, type_table: &TypeTable) -> usize {
     }
 }
 
-/// Count expressions in a NIR expression (recursive)
+/// Count expressions reachable through an operand (recursive).
+fn count_operand(body: &Body, op: Operand, type_table: &TypeTable) -> usize {
+    // A promoted constant counts as the one literal node it replaced.
+    op.as_expr().map_or(1, |e| count_expr(body, e, type_table))
+}
+
 fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
     1 + match &body.exprs[id].kind {
         ExprKind::Binary { left, right, .. } => {
-            count_expr(body, *left, type_table) + count_expr(body, *right, type_table)
+            count_operand(body, *left, type_table) + count_operand(body, *right, type_table)
         }
-        ExprKind::Unary { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::Unary { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_expr(body, a.expr, type_table))
+            .map(|a| count_operand(body, a.expr, type_table))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_expr(body, *receiver, type_table)
+            count_operand(body, *receiver, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(body, a.expr, type_table))
+                    .map(|a| count_operand(body, a.expr, type_table))
                     .sum::<usize>()
         }
-        ExprKind::FieldAccess { expr, .. } => count_expr(body, *expr, type_table),
+        ExprKind::FieldAccess { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::Index { expr, index, .. } => {
-            count_expr(body, *expr, type_table) + count_expr(body, *index, type_table)
+            count_operand(body, *expr, type_table) + count_operand(body, *index, type_table)
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_expr(body, *e, type_table))
+            .map(|e| count_operand(body, *e, type_table))
             .sum(),
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_expr(body, f.value, type_table))
+            .map(|f| count_operand(body, f.value, type_table))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_expr(body, p, type_table))
+            payload.map_or(0, |p| count_operand(body, p, type_table))
         }
         ExprKind::Assign { target, value } => {
-            count_expr(body, *target, type_table) + count_expr(body, *value, type_table)
+            count_expr(body, *target, type_table) + count_operand(body, *value, type_table)
         }
         ExprKind::If {
             condition,
@@ -130,54 +143,49 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         } => {
             // Cold branches contribute nothing: `count_block_exprs` stops at a
             // `cold_path()` marker or a diverging statement within each arm.
-            count_expr(body, *condition, type_table)
+            count_operand(body, *condition, type_table)
                 + count_block_exprs(body, *then_branch, type_table)
                 + else_branch.map_or(0, |b| count_block_exprs(body, b, type_table))
         }
         ExprKind::Match { expr, arms } => {
-            count_expr(body, *expr, type_table)
+            count_operand(body, *expr, type_table)
                 + arms
                     .iter()
                     .map(|arm| {
-                        arm.guard.map_or(0, |g| count_expr(body, g, type_table))
-                            + count_expr(body, arm.body, type_table)
+                        arm.guard.map_or(0, |g| count_operand(body, g, type_table))
+                            + count_operand(body, arm.body, type_table)
                     })
                     .sum::<usize>()
         }
         ExprKind::Block(block) => count_block_exprs(body, *block, type_table),
-        ExprKind::Cast { expr, .. } => count_expr(body, *expr, type_table),
-        ExprKind::GlobalVarSet { value, .. } => count_expr(body, *value, type_table),
+        ExprKind::Cast { expr, .. } => count_operand(body, *expr, type_table),
+        ExprKind::GlobalVarSet { value, .. } => count_operand(body, *value, type_table),
         // Leaf expressions (no children)
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Unit
+        ExprKind::BytesLiteral(_)
+        | ExprKind::Dead
         | ExprKind::Local { .. }
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::Null => 0,
+        | ExprKind::GlobalVarGet { .. } => 0,
         // Closure and effect-related expressions
         ExprKind::EnumConstruct { .. } => 0,
-        ExprKind::CmRawCall { args, .. } => {
-            args.iter().map(|a| count_expr(body, *a, type_table)).sum()
-        }
+        ExprKind::CmRawCall { args, .. } => args
+            .iter()
+            .map(|a| count_operand(body, *a, type_table))
+            .sum(),
         ExprKind::IndirectCall { callee, args } => {
-            count_expr(body, *callee, type_table)
+            count_operand(body, *callee, type_table)
                 + args
                     .iter()
-                    .map(|a| count_expr(body, *a, type_table))
+                    .map(|a| count_operand(body, *a, type_table))
                     .sum::<usize>()
         }
-        ExprKind::ClosureToCanonical { functor, .. } => count_expr(body, *functor, type_table),
+        ExprKind::ClosureToCanonical { functor, .. } => count_operand(body, *functor, type_table),
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
         } => {
-            count_expr(body, *scrutinee, type_table)
+            count_operand(body, *scrutinee, type_table)
                 + arms
                     .iter()
                     .map(|a| count_block_exprs(body, *a, type_table))
@@ -187,7 +195,7 @@ fn count_expr(body: &Body, id: ExprId, type_table: &TypeTable) -> usize {
         // Lowered pattern matching nodes - count inner expressions
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
-        | ExprKind::VariantPayload { expr, .. } => count_expr(body, *expr, type_table),
+        | ExprKind::VariantPayload { expr, .. } => count_operand(body, *expr, type_table),
         ExprKind::LabeledBlock { block, .. } => count_block_exprs(body, *block, type_table),
     }
 }
@@ -432,14 +440,17 @@ fn collect_callees_from_block(body: &Body, block: BlockId, callees: &mut IndexSe
 
 fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<String>) {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value) => {
-            collect_callees_from_expr(body, *value, callees);
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            collect_callees_from_operand(body, *value, callees);
+        }
+        StmtKind::Expr(value) => {
+            if let Some(e) = value.as_expr() {
+                collect_callees_from_expr(body, e, callees);
+            }
         }
         StmtKind::Return { value } => {
             if let Some(expr) = *value {
-                collect_callees_from_expr(body, expr, callees);
+                collect_callees_from_operand(body, expr, callees);
             }
         }
         StmtKind::If {
@@ -448,7 +459,7 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
             else_block,
         } => {
             let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_operand(body, condition, callees);
             collect_callees_from_block(body, then_block, callees);
             if let Some(else_blk) = else_block {
                 collect_callees_from_block(body, else_blk, callees);
@@ -464,12 +475,18 @@ fn collect_callees_from_stmt(body: &Body, stmt: StmtId, callees: &mut IndexSet<S
     }
 }
 
+fn collect_callees_from_operand(body: &Body, op: Operand, callees: &mut IndexSet<String>) {
+    if let Some(e) = op.as_expr() {
+        collect_callees_from_expr(body, e, callees);
+    }
+}
+
 fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<String>) {
     match &body.exprs[id].kind {
         ExprKind::Call { func, args, .. } => {
             callees.insert(func_ref_inline_key(func));
             for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                collect_callees_from_expr(body, aid, callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::MethodCall {
@@ -480,35 +497,35 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         } => {
             callees.insert(func_ref_inline_key(func));
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            collect_callees_from_expr(body, receiver, callees);
+            let arg_ids: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+            collect_callees_from_operand(body, receiver, callees);
             for aid in arg_ids {
-                collect_callees_from_expr(body, aid, callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::Binary { left, right, .. } => {
             let (left, right) = (*left, *right);
-            collect_callees_from_expr(body, left, callees);
-            collect_callees_from_expr(body, right, callees);
+            collect_callees_from_operand(body, left, callees);
+            collect_callees_from_operand(body, right, callees);
         }
         ExprKind::Unary { expr, .. } => {
-            collect_callees_from_expr(body, *expr, callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);
             collect_callees_from_expr(body, target, callees);
-            collect_callees_from_expr(body, value, callees);
+            collect_callees_from_operand(body, value, callees);
         }
         ExprKind::Cast { expr, .. } => {
-            collect_callees_from_expr(body, *expr, callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::FieldAccess { expr, .. } => {
-            collect_callees_from_expr(body, *expr, callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Index { expr, index } => {
             let (expr, index) = (*expr, *index);
-            collect_callees_from_expr(body, expr, callees);
-            collect_callees_from_expr(body, index, callees);
+            collect_callees_from_operand(body, expr, callees);
+            collect_callees_from_operand(body, index, callees);
         }
         ExprKind::Block(block) => {
             collect_callees_from_block(body, *block, callees);
@@ -519,7 +536,7 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             else_branch,
         } => {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            collect_callees_from_expr(body, condition, callees);
+            collect_callees_from_operand(body, condition, callees);
             collect_callees_from_block(body, then_branch, callees);
             if let Some(else_blk) = else_branch {
                 collect_callees_from_block(body, else_blk, callees);
@@ -527,56 +544,56 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
         }
         ExprKind::StructLiteral { fields, .. } => {
             for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                collect_callees_from_expr(body, fid, callees);
+                collect_callees_from_operand(body, fid, callees);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             for eid in elements.clone() {
-                collect_callees_from_expr(body, eid, callees);
+                collect_callees_from_operand(body, eid, callees);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_callees_from_expr(body, callee, callees);
+            collect_callees_from_operand(body, callee, callees);
             for aid in arg_ids {
-                collect_callees_from_expr(body, aid, callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_callees_from_expr(body, *functor, callees);
+            collect_callees_from_operand(body, *functor, callees);
         }
         ExprKind::CmRawCall { args, .. } => {
             for aid in args.clone() {
-                collect_callees_from_expr(body, aid, callees);
+                collect_callees_from_operand(body, aid, callees);
             }
         }
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
             let arms = arms.clone();
-            collect_callees_from_expr(body, expr, callees);
+            collect_callees_from_operand(body, expr, callees);
             for arm in &arms {
                 if let Some(guard) = arm.guard {
-                    collect_callees_from_expr(body, guard, callees);
+                    collect_callees_from_operand(body, guard, callees);
                 }
-                collect_callees_from_expr(body, arm.body, callees);
+                collect_callees_from_operand(body, arm.body, callees);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = *payload {
-                collect_callees_from_expr(body, payload_expr, callees);
+                collect_callees_from_operand(body, payload_expr, callees);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(body, *block, callees);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_callees_from_expr(body, *value, callees);
+            collect_callees_from_operand(body, *value, callees);
         }
         ExprKind::VariantTag { expr }
         | ExprKind::VariantTest { expr, .. }
         | ExprKind::VariantPayload { expr, .. } => {
-            collect_callees_from_expr(body, *expr, callees);
+            collect_callees_from_operand(body, *expr, callees);
         }
         ExprKind::Switch {
             scrutinee,
@@ -587,21 +604,15 @@ fn collect_callees_from_expr(body: &Body, id: ExprId, callees: &mut IndexSet<Str
             let scrutinee = *scrutinee;
             let default = *default;
             let arms = arms.clone();
-            collect_callees_from_expr(body, scrutinee, callees);
+            collect_callees_from_operand(body, scrutinee, callees);
             for arm in arms {
                 collect_callees_from_block(body, arm, callees);
             }
             collect_callees_from_block(body, default, callees);
         }
         // Leaf nodes
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
+        ExprKind::BytesLiteral(_)
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -670,6 +681,8 @@ pub fn inline_functions(
         if func.body.is_some() {
             // Track which functions were inlined into this function
             let mut inlined_funcs: Vec<(ModuleSource, String)> = Vec::new();
+            // Splice-point re-valuation records (Method A): one per inlined block.
+            let mut reval: Vec<InlineRevalInfo> = Vec::new();
             // Take ownership of local_count and locals to avoid borrow conflicts
             // with the `&mut func.body` walk below.
             let mut local_count = func.local_count();
@@ -689,6 +702,7 @@ pub fn inline_functions(
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
                     &mut inline_counter,
+                    &mut reval,
                     false,
                 );
             }
@@ -696,6 +710,73 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
+                // Inline splices through the arena directly, bypassing the
+                // engine edit API, so the persisted graph is stale here. Method A
+                // — coarsen, then regrow each splice point:
+                //
+                // 1. Coarsen: clear `value_of` / `analysis_only` /
+                //    `loop_entry_values`. The value pool persists, so promoted
+                //    operands still resolve. Keeping any caller entry is unsound,
+                //    even a constant-valued one: a `Local` read pointing at a
+                //    constant is sound only while that constant is its reaching
+                //    def, and inlining can introduce a loop back-edge that makes a
+                //    fresh build see the read as loop-variant — two distinct
+                //    locals sharing a constant init then over-merge
+                //    (`WADO_VERIFY_VG` flags `index`/`init` on the closure / sroa
+                //    fixtures). Sound forwarding across inline is Route B's job
+                //    (flow frozen into operand slots), not a retain here.
+                // 2. Regrow: re-value each inlined block self-contained, seeded
+                //    with its params bound to the call-site arg values and a fresh
+                //    heap, keeping only the resulting constants — the folds inline
+                //    newly exposes (induction bound, formatter operand), which
+                //    equal what a fresh build assigns. The walk runs in a scratch
+                //    pool (see `build_scoped`), never mutating the live graph's
+                //    shared values, and parks no cache.
+                if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
+                    vg.value_of.clear();
+                    vg.analysis_only.clear();
+                    vg.loop_entry_values.clear();
+                }
+                if !reval.is_empty()
+                    && let Some(body) = func.body.as_mut()
+                    && body.value_graph.is_some()
+                {
+                    // Maximally-conservative alias sets (sound by
+                    // over-approximation; immaterial as only constants are kept).
+                    let all: IndexSet<u32> = (0..local_count).collect();
+                    let tt = project.type_table.borrow();
+                    // One scratch pool, cloned once and reused across every
+                    // inlined block (the walk only grows it with throwaway ids).
+                    // `live_base` marks which scratch ids are shared caller values
+                    // (below it) versus walk-local (at or above), so re-interning a
+                    // scoped value into the live pool stays caller-rooted.
+                    let live_base = body.values.len() as u32;
+                    let mut scratch = body.values.clone();
+                    for info in &reval {
+                        let heap_seed = body
+                            .value_graph
+                            .as_ref()
+                            .and_then(|vg| vg.call_site_heap_for(info.call_expr).cloned());
+                        let vo = crate::nir_value_graph::builder::build_scoped(
+                            body,
+                            info.block,
+                            info.skip,
+                            &info.seed,
+                            &all,
+                            &all,
+                            &all,
+                            Some(&tt),
+                            &mut scratch,
+                            heap_seed.as_ref(),
+                            live_base,
+                        );
+                        let vg = body.value_graph.as_mut().unwrap();
+                        for (e, v) in vo {
+                            vg.value_of.insert(e, v);
+                            vg.analysis_only.insert(e);
+                        }
+                    }
+                }
                 // Only this caller's body changed (callee bodies are copied,
                 // not modified), so report just the caller. The caller's
                 // call-graph edges shift, but stale edges only cost 1-hop
@@ -742,7 +823,6 @@ pub fn inline_functions(
     changed
 }
 
-/// Inline function calls in a block
 /// Inline function calls in a block (arena). Each statement is processed in
 /// place (1:1); a `Let` / `Expr` / `Return` value gets a top-level inline
 /// attempt (which then re-scans the inlined body), while other statements
@@ -764,35 +844,40 @@ fn inline_calls_in_block(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     mut cold: bool,
 ) {
     enum Shape {
         TopLevel(ExprId),
         Nested(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
     for stmt_id in body.blocks[block].stmts.clone() {
-        if let StmtKind::Expr(e) = &body.stmts[stmt_id].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt_id].kind
             && is_cold_path_call(body, *e)
         {
             cold = true;
         }
         let shape = match &body.stmts[stmt_id].kind {
-            StmtKind::Let { value, .. } => Shape::TopLevel(*value),
-            StmtKind::Expr(expr) => Shape::TopLevel(*expr),
-            StmtKind::Return { value: Some(v) } => Shape::TopLevel(*v),
+            StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::TopLevel),
+            StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::TopLevel),
+            StmtKind::Return { value: Some(v) } => v.as_expr().map_or(Shape::None, Shape::TopLevel),
             StmtKind::If {
                 condition,
                 then_block,
                 else_block,
-            } => Shape::If(*condition, *then_block, *else_block),
+            } => Shape::If(condition.as_expr(), *then_block, *else_block),
             StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
                 Shape::Block(*b)
             }
-            StmtKind::Break { value: Some(v), .. } => Shape::Nested(*v),
-            StmtKind::LetDestructure { value, .. } => Shape::Nested(*value),
+            StmtKind::Break { value: Some(v), .. } => {
+                v.as_expr().map_or(Shape::None, Shape::Nested)
+            }
+            StmtKind::LetDestructure { value, .. } => {
+                value.as_expr().map_or(Shape::None, Shape::Nested)
+            }
             _ => Shape::None,
         };
         match shape {
@@ -807,12 +892,13 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
                 match &mut body.stmts[stmt_id].kind {
-                    StmtKind::Let { value, .. } => *value = new_value,
-                    StmtKind::Expr(expr) => *expr = new_value,
-                    StmtKind::Return { value } => *value = Some(new_value),
+                    StmtKind::Let { value, .. } => *value = new_value.into(),
+                    StmtKind::Expr(expr) => *expr = new_value.into(),
+                    StmtKind::Return { value } => *value = Some(new_value.into()),
                     _ => {}
                 }
             }
@@ -826,21 +912,25 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                reval,
                 cold,
             ),
             Shape::If(cond, tb, eb) => {
-                inline_calls_in_expr(
-                    body,
-                    cond,
-                    candidates,
-                    current_module,
-                    local_count,
-                    locals,
-                    type_table,
-                    inlined_funcs,
-                    inline_counter,
-                    cold,
-                );
+                if let Some(cond) = cond {
+                    inline_calls_in_expr(
+                        body,
+                        cond,
+                        candidates,
+                        current_module,
+                        local_count,
+                        locals,
+                        type_table,
+                        inlined_funcs,
+                        inline_counter,
+                        reval,
+                        cold,
+                    );
+                }
                 inline_calls_in_block(
                     body,
                     tb,
@@ -851,6 +941,7 @@ fn inline_calls_in_block(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
                 if let Some(eb) = eb {
@@ -864,6 +955,7 @@ fn inline_calls_in_block(
                         type_table,
                         inlined_funcs,
                         inline_counter,
+                        reval,
                         cold,
                     );
                 }
@@ -878,6 +970,7 @@ fn inline_calls_in_block(
                 type_table,
                 inlined_funcs,
                 inline_counter,
+                reval,
                 cold,
             ),
             Shape::None => {}
@@ -899,6 +992,7 @@ fn inline_top_level(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> ExprId {
     let result = try_inline_call_expr(
@@ -910,6 +1004,7 @@ fn inline_top_level(
         locals,
         type_table,
         inline_counter,
+        reval,
         cold,
     )
     .or_else(|| {
@@ -922,6 +1017,7 @@ fn inline_top_level(
             locals,
             type_table,
             inline_counter,
+            reval,
             cold,
         )
     });
@@ -939,6 +1035,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            reval,
             cold,
         );
         new_id
@@ -953,6 +1050,7 @@ fn inline_top_level(
             type_table,
             inlined_funcs,
             inline_counter,
+            reval,
             cold,
         );
         value
@@ -967,18 +1065,23 @@ fn inline_top_level(
 fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
     let mut exprs = Vec::new();
     let mut blocks = Vec::new();
+    let push_op = |exprs: &mut Vec<ExprId>, o: Operand| {
+        if let Some(x) = o.as_expr() {
+            exprs.push(x);
+        }
+    };
     match &body.exprs[e].kind {
         ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
-        }
         | ExprKind::Index {
             expr: left,
             index: right,
         } => {
-            exprs.push(*left);
-            exprs.push(*right);
+            push_op(&mut exprs, *left);
+            push_op(&mut exprs, *right);
+        }
+        ExprKind::Assign { target, value } => {
+            exprs.push(*target);
+            push_op(&mut exprs, *value);
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -987,36 +1090,52 @@ fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => exprs.push(*inner),
-        ExprKind::CmRawCall { args, .. } => exprs.extend(args.iter().copied()),
+        | ExprKind::VariantPayload { expr: inner, .. } => push_op(&mut exprs, *inner),
+        ExprKind::CmRawCall { args, .. } => {
+            for a in args {
+                push_op(&mut exprs, *a);
+            }
+        }
         ExprKind::IndirectCall { callee, args } => {
-            exprs.push(*callee);
-            exprs.extend(args.iter().copied());
+            push_op(&mut exprs, *callee);
+            for a in args {
+                push_op(&mut exprs, *a);
+            }
         }
-        ExprKind::StructLiteral { fields, .. } => exprs.extend(fields.iter().map(|f| f.value)),
+        ExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                push_op(&mut exprs, f.value);
+            }
+        }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            exprs.extend(elements.iter().copied());
+            for el in elements {
+                push_op(&mut exprs, *el);
+            }
         }
-        ExprKind::VariantConstruct { payload, .. } => exprs.extend(payload.iter().copied()),
+        ExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                push_op(&mut exprs, *p);
+            }
+        }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => blocks.push(*block),
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            exprs.push(*condition);
+            push_op(&mut exprs, *condition);
             blocks.push(*then_branch);
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
         }
         ExprKind::Match { expr, arms } => {
-            exprs.push(*expr);
+            push_op(&mut exprs, *expr);
             for arm in arms {
                 if let Some(g) = arm.guard {
-                    exprs.push(g);
+                    push_op(&mut exprs, g);
                 }
-                exprs.push(arm.body);
+                push_op(&mut exprs, arm.body);
             }
         }
         ExprKind::Switch {
@@ -1025,7 +1144,7 @@ fn inline_expr_children(body: &Body, e: ExprId) -> (Vec<ExprId>, Vec<BlockId>) {
             default,
             ..
         } => {
-            exprs.push(*scrutinee);
+            push_op(&mut exprs, *scrutinee);
             blocks.extend(arms.iter().copied());
             blocks.push(*default);
         }
@@ -1066,9 +1185,10 @@ struct InlineBinding {
     /// The binding's declared type (the arg's type — handles monomorphization
     /// variance and `&mut self` ref wrapping).
     local_type: TypeId,
-    /// The argument expression id, already in the caller arena. The call node is
-    /// discarded after inlining, so its argument subtrees are reused directly.
-    value: ExprId,
+    /// The argument operand, already in the caller arena. The call node is
+    /// discarded after inlining, so its argument subtrees / pool values are
+    /// reused directly.
+    value: Operand,
 }
 
 /// Threaded context for the callee->caller splice: how to remap the callee's
@@ -1098,6 +1218,31 @@ impl InlineCtx<'_> {
     }
 }
 
+/// A spliced inlined block to re-value at the splice point (Method A): walk
+/// `block` after its `skip` param-binding statements, seeded with each remapped
+/// param local bound to the value of its call-site argument.
+pub(super) struct InlineRevalInfo {
+    pub block: BlockId,
+    pub skip: usize,
+    pub seed: IndexMap<u32, crate::nir_value_graph::ValueId>,
+    /// The original `Call` expr being inlined, keying its caller-heap snapshot
+    /// (`ValueGraphBuild::call_site_heap`) so the scoped re-valuation seeds the
+    /// callee body with the caller's field versions.
+    pub call_expr: ExprId,
+}
+
+/// The value of an operand in `caller`'s graph: a promoted value directly, or a
+/// skeleton expr's recorded value (`None` for an unvalued / impure operand).
+fn operand_value_in(caller: &Body, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+    match op {
+        Operand::Value(v) => Some(v),
+        Operand::Expr(e) => caller
+            .value_graph
+            .as_ref()
+            .and_then(|vg| vg.value_of.get(&e).copied()),
+    }
+}
+
 /// Core inlining routine: builds a labeled block (in the caller arena) that
 /// binds each prepared parameter value and executes the spliced callee body
 /// with locals remapped into the caller's frame and `return`s converted to
@@ -1110,9 +1255,11 @@ fn build_inlined_labeled_block(
     func_name: &str,
     bindings: Vec<InlineBinding>,
     call_span: Span,
+    call_expr: ExprId,
     local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
     let sanitized_name: String = func_name
         .chars()
@@ -1132,12 +1279,17 @@ fn build_inlined_labeled_block(
     let callee_local_count = candidate.local_count();
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
+    let skip = bindings.len();
+    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(skip);
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
+    let mut seed: IndexMap<u32, crate::nir_value_graph::ValueId> = IndexMap::default();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
+        if let Some(v) = operand_value_in(caller, binding.value) {
+            seed.insert(new_local_index, v);
+        }
         locals.push(NirLocal {
             name: binding.name.clone(),
             type_id: binding.local_type,
@@ -1188,6 +1340,12 @@ fn build_inlined_labeled_block(
         stmts: block_stmts,
         span: call_span,
     });
+    reval.push(InlineRevalInfo {
+        block: bid,
+        skip,
+        seed,
+        call_expr,
+    });
     caller.exprs.push(ExprNode {
         kind: ExprKind::LabeledBlock {
             label,
@@ -1212,9 +1370,10 @@ fn try_inline_call_expr(
     locals: &mut Vec<NirLocal>,
     _type_table: &TypeTable,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, arg_ids): (ModuleSource, String, Vec<ExprId>) =
+    let (module_source, func_name, arg_ops): (ModuleSource, String, Vec<Operand>) =
         match &caller.exprs[call_id].kind {
             ExprKind::Call { func, args, .. } => (
                 func.module_source.clone(),
@@ -1233,15 +1392,17 @@ fn try_inline_call_expr(
     let callee = candidate.body.as_ref()?;
     let call_span = caller.exprs[call_id].span;
 
+    // Args are already in the caller arena (operands of the discarded call); bind
+    // each to its param `Let` directly (WEP: The Live ValueGraph).
     let bindings: Vec<InlineBinding> = candidate
         .params
         .iter()
-        .zip(arg_ids.iter())
+        .zip(arg_ops.iter())
         .map(|(param, &arg)| InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.exprs[arg].type_id,
+            local_type: caller.operand_type(arg),
             value: arg,
         })
         .collect();
@@ -1253,9 +1414,11 @@ fn try_inline_call_expr(
         &func_name,
         bindings,
         call_span,
+        call_id,
         local_count,
         locals,
         inline_counter,
+        reval,
     );
     Some((inlined, inlined_key))
 }
@@ -1271,13 +1434,14 @@ fn try_inline_method_call_expr(
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, (ModuleSource, String))> {
-    let (module_source, func_name, receiver_id, arg_ids): (
+    let (module_source, func_name, receiver_op, arg_ops): (
         ModuleSource,
         String,
-        ExprId,
-        Vec<ExprId>,
+        Operand,
+        Vec<Operand>,
     ) = match &caller.exprs[call_id].kind {
         ExprKind::MethodCall {
             receiver,
@@ -1292,6 +1456,7 @@ fn try_inline_method_call_expr(
         ),
         _ => return None,
     };
+    let call_span = caller.exprs[call_id].span;
     let (candidate, inlined_key) =
         find_inline_candidate(candidates, &module_source, current_module, &func_name)?;
     // A cold call site keeps the call: inlining there only bloats the hot
@@ -1300,30 +1465,30 @@ fn try_inline_method_call_expr(
         return None;
     }
     let callee = candidate.body.as_ref()?;
-    let call_span = caller.exprs[call_id].span;
 
     let first_param = &candidate.params[0];
-    let recv_type = caller.exprs[receiver_id].type_id;
+    let recv_type = caller.operand_type(receiver_op);
     // Bind receiver to the first parameter (self). For `&mut self`, wrap the
-    // receiver in a `MutRef` so field mutations write back to the original;
-    // for `&self` / by-value, pass the receiver expression directly.
-    let (self_type_id, self_value) =
+    // receiver in a `MutRef` so field mutations write back to the original (the
+    // receiver is then an lvalue `Expr`, never a promoted constant); for
+    // `&self` / by-value, pass the receiver operand directly.
+    let (self_type_id, self_value): (TypeId, Operand) =
         if matches!(type_table.get(first_param.type_id), ResolvedType::MutRef(_)) {
             if matches!(type_table.get(recv_type), ResolvedType::MutRef(_)) {
-                (recv_type, receiver_id)
+                (recv_type, receiver_op)
             } else {
                 let mr = caller.exprs.push(ExprNode {
                     kind: ExprKind::Unary {
                         op: NirUnaryOp::MutRef,
-                        expr: receiver_id,
+                        expr: receiver_op,
                     },
                     type_id: first_param.type_id,
                     span: call_span,
                 });
-                (first_param.type_id, mr)
+                (first_param.type_id, mr.into())
             }
         } else {
-            (recv_type, receiver_id)
+            (recv_type, receiver_op)
         };
 
     let mut bindings: Vec<InlineBinding> = Vec::with_capacity(candidate.params.len());
@@ -1334,12 +1499,12 @@ fn try_inline_method_call_expr(
         local_type: self_type_id,
         value: self_value,
     });
-    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ids.iter()) {
+    for (param, &arg) in candidate.params.iter().skip(1).zip(arg_ops.iter()) {
         bindings.push(InlineBinding {
             callee_local_index: param.local_index,
             name: param.name.clone(),
             is_mut: param.is_mut,
-            local_type: caller.exprs[arg].type_id,
+            local_type: caller.operand_type(arg),
             value: arg,
         });
     }
@@ -1351,9 +1516,11 @@ fn try_inline_method_call_expr(
         &func_name,
         bindings,
         call_span,
+        call_id,
         local_count,
         locals,
         inline_counter,
+        reval,
     );
     Some((inlined, inlined_key))
 }
@@ -1390,7 +1557,7 @@ fn splice_block_into(
             StmtKind::Return { value } => {
                 let v = *value;
                 let span = callee.stmts[sid].span;
-                let value = v.map(|x| splice_expr(caller, callee, x, ctx));
+                let value = v.map(|x| splice_operand(caller, callee, x, ctx));
                 out.push(caller.stmts.push(StmtNode {
                     kind: StmtKind::Break {
                         label: Some(ctx.label.to_string()),
@@ -1465,16 +1632,16 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
                 is_mut,
                 is_reactive,
                 type_id,
-                value: splice_expr(caller, callee, v, ctx),
+                value: splice_operand(caller, callee, v, ctx),
                 skip_value_copy: scv,
             }
         }
-        StmtKind::Expr(e) => StmtKind::Expr(splice_expr(caller, callee, *e, ctx)),
+        StmtKind::Expr(e) => StmtKind::Expr(splice_operand(caller, callee, *e, ctx)),
         StmtKind::Return { value } => {
             let v = *value;
             StmtKind::Break {
                 label: Some(ctx.label.to_string()),
-                value: v.map(|x| splice_expr(caller, callee, x, ctx)),
+                value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
         StmtKind::If {
@@ -1484,7 +1651,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
         } => {
             let (c, t, e) = (*condition, *then_block, *else_block);
             StmtKind::If {
-                condition: splice_expr(caller, callee, c, ctx),
+                condition: splice_operand(caller, callee, c, ctx),
                 then_block: splice_block(caller, callee, t, ctx),
                 else_block: e.map(|b| splice_block(caller, callee, b, ctx)),
             }
@@ -1506,7 +1673,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
             let (l, v) = (label.clone(), *value);
             StmtKind::Break {
                 label: l.map(|x| ctx.lbl(&x)),
-                value: v.map(|x| splice_expr(caller, callee, x, ctx)),
+                value: v.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
         StmtKind::Continue => StmtKind::Continue,
@@ -1519,7 +1686,7 @@ fn splice_stmt(caller: &mut Body, callee: &Body, sid: StmtId, ctx: &InlineCtx) -
             StmtKind::LetDestructure {
                 pattern: splice_pat(caller, callee, p, ctx),
                 is_mut: m,
-                value: splice_expr(caller, callee, v, ctx),
+                value: splice_operand(caller, callee, v, ctx),
             }
         }
     };
@@ -1599,7 +1766,7 @@ fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> 
         PatKind::ConstantValue { expr } => {
             let e = *expr;
             PatKind::ConstantValue {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
             }
         }
         PatKind::Wildcard => PatKind::Wildcard,
@@ -1628,6 +1795,93 @@ fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> 
     caller.pats.push(PatNode { kind, span })
 }
 
+/// Splice an operand from the callee into the caller. An effectful subtree is
+/// spliced as an expr; a promoted pure value is re-interned into the caller's
+/// pool — `ValueId`s are pool-scoped, so the whole value tree must be
+/// re-allocated against the caller's pool with its child `ValueId`s (and
+/// `Opaque` source locals) remapped into the caller frame.
+fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx) -> Operand {
+    match op {
+        Operand::Expr(e) => Operand::Expr(splice_expr(caller, callee, e, ctx)),
+        Operand::Value(v) => Operand::Value(splice_value(caller, callee, v, ctx)),
+    }
+}
+
+/// Re-allocate a callee pure value (and its whole tree) into the caller's pool.
+/// `ValueId`s are pool-scoped, so every child id is recursively re-allocated and
+/// an `Opaque`'s source local is remapped into the caller frame — otherwise a
+/// composite value (`Binary` / `Cast` / `FieldAccess` / …) would carry child ids
+/// that denote unrelated values (often a different width) in the caller's pool.
+fn splice_value(
+    caller: &mut Body,
+    callee: &Body,
+    v: crate::nir_value_graph::ValueId,
+    ctx: &InlineCtx,
+) -> crate::nir_value_graph::ValueId {
+    use crate::nir_value_graph::{OpaqueSource, ValueKind};
+    let recorded_ty = callee.values.type_of(v);
+    let new_kind = match callee.values.kind(v).clone() {
+        ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {
+            op,
+            lhs: splice_value(caller, callee, lhs, ctx),
+            rhs: splice_value(caller, callee, rhs, ctx),
+            ty,
+        },
+        ValueKind::Unary { op, operand, ty } => ValueKind::Unary {
+            op,
+            operand: splice_value(caller, callee, operand, ctx),
+            ty,
+        },
+        ValueKind::Cast { operand, target } => ValueKind::Cast {
+            operand: splice_value(caller, callee, operand, ctx),
+            target,
+        },
+        ValueKind::Select { cond, then, else_ } => ValueKind::Select {
+            cond: splice_value(caller, callee, cond, ctx),
+            then: splice_value(caller, callee, then, ctx),
+            else_: splice_value(caller, callee, else_, ctx),
+        },
+        ValueKind::LoopPhi { entry, body_iter } => ValueKind::LoopPhi {
+            entry: splice_value(caller, callee, entry, ctx),
+            body_iter: splice_value(caller, callee, body_iter, ctx),
+        },
+        ValueKind::FieldAccess {
+            receiver,
+            field_index,
+            heap_ver,
+        } => ValueKind::FieldAccess {
+            receiver: splice_value(caller, callee, receiver, ctx),
+            field_index,
+            heap_ver,
+        },
+        ValueKind::Opaque(oid) => {
+            // Mint a fresh caller opaque, remapping its source local into the
+            // caller frame (a skeleton-`Expr` source splices that expr).
+            let new = match callee.values.opaque_source(oid) {
+                Some(OpaqueSource::Local(idx)) => caller
+                    .values
+                    .fresh_opaque_with_source(OpaqueSource::Local(ctx.local(idx))),
+                Some(OpaqueSource::Expr(e)) => {
+                    let spliced = splice_expr(caller, callee, e, ctx);
+                    caller
+                        .values
+                        .fresh_opaque_with_source(OpaqueSource::Expr(spliced))
+                }
+                None => caller.values.fresh_opaque(),
+            };
+            if let Some(t) = recorded_ty {
+                caller.values.set_type(new, t);
+            }
+            return new;
+        }
+        leaf => leaf,
+    };
+    match recorded_ty {
+        Some(t) => caller.values.alloc_unshared(new_kind, t),
+        None => caller.values.intern(new_kind),
+    }
+}
+
 fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) -> ExprId {
     let span = callee.exprs[id].span;
     let type_id = callee.exprs[id].type_id;
@@ -1645,35 +1899,35 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             ExprKind::GlobalVarSet {
                 module_source: ms,
                 name: n,
-                value: splice_expr(caller, callee, v, ctx),
+                value: splice_operand(caller, callee, v, ctx),
             }
         }
         ExprKind::Binary { left, op, right } => {
             let (l, o, r) = (*left, *op, *right);
             ExprKind::Binary {
-                left: splice_expr(caller, callee, l, ctx),
+                left: splice_operand(caller, callee, l, ctx),
                 op: o,
-                right: splice_expr(caller, callee, r, ctx),
+                right: splice_operand(caller, callee, r, ctx),
             }
         }
         ExprKind::Unary { op, expr } => {
             let (o, e) = (*op, *expr);
             ExprKind::Unary {
                 op: o,
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
             }
         }
         ExprKind::Assign { target, value } => {
             let (t, v) = (*target, *value);
             ExprKind::Assign {
                 target: splice_expr(caller, callee, t, ctx),
-                value: splice_expr(caller, callee, v, ctx),
+                value: splice_operand(caller, callee, v, ctx),
             }
         }
         ExprKind::Cast { expr, target_type } => {
             let (e, tt) = (*expr, *target_type);
             ExprKind::Cast {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
                 target_type: tt,
             }
         }
@@ -1683,14 +1937,14 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             args,
         } => {
             let (func, type_args) = (func.clone(), type_args.clone());
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
             ExprKind::Call {
                 func,
                 type_args,
                 args: arg_data
                     .into_iter()
                     .map(|(e, m)| ArenaCallArg {
-                        expr: splice_expr(caller, callee, e, ctx),
+                        expr: splice_operand(caller, callee, e, ctx),
                         is_mut: m,
                     })
                     .collect(),
@@ -1702,7 +1956,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 local_name: ln,
                 args: args
                     .into_iter()
-                    .map(|a| splice_expr(caller, callee, a, ctx))
+                    .map(|a| splice_operand(caller, callee, a, ctx))
                     .collect(),
             }
         }
@@ -1713,15 +1967,15 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             args,
         } => {
             let (rcv, func, type_args) = (*receiver, func.clone(), type_args.clone());
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            let arg_data: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
             ExprKind::MethodCall {
-                receiver: splice_expr(caller, callee, rcv, ctx),
+                receiver: splice_operand(caller, callee, rcv, ctx),
                 func,
                 type_args,
                 args: arg_data
                     .into_iter()
                     .map(|(e, m)| ArenaCallArg {
-                        expr: splice_expr(caller, callee, e, ctx),
+                        expr: splice_operand(caller, callee, e, ctx),
                         is_mut: m,
                     })
                     .collect(),
@@ -1734,7 +1988,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         } => {
             let (e, fi, fname) = (*expr, *field_index, field_name.clone());
             ExprKind::FieldAccess {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
                 field_index: fi,
                 field_name: fname,
             }
@@ -1742,8 +1996,8 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         ExprKind::Index { expr, index } => {
             let (e, i) = (*expr, *index);
             ExprKind::Index {
-                expr: splice_expr(caller, callee, e, ctx),
-                index: splice_expr(caller, callee, i, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
+                index: splice_operand(caller, callee, i, ctx),
             }
         }
         ExprKind::Block(b) => ExprKind::Block(splice_block(caller, callee, *b, ctx)),
@@ -1754,7 +2008,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         } => {
             let (c, t, e) = (*condition, *then_branch, *else_branch);
             ExprKind::If {
-                condition: splice_expr(caller, callee, c, ctx),
+                condition: splice_operand(caller, callee, c, ctx),
                 then_branch: splice_block(caller, callee, t, ctx),
                 else_branch: e.map(|b| splice_block(caller, callee, b, ctx)),
             }
@@ -1763,13 +2017,13 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             let e = *expr;
             let arms = arms.clone();
             ExprKind::Match {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
                 arms: arms
                     .into_iter()
                     .map(|a| ArmData {
                         pattern: splice_pat(caller, callee, a.pattern, ctx),
-                        guard: a.guard.map(|g| splice_expr(caller, callee, g, ctx)),
-                        body: splice_expr(caller, callee, a.body, ctx),
+                        guard: a.guard.map(|g| splice_operand(caller, callee, g, ctx)),
+                        body: splice_operand(caller, callee, a.body, ctx),
                         span: a.span,
                     })
                     .collect(),
@@ -1781,7 +2035,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             fields,
         } => {
             let (st, sn) = (*struct_type, struct_name.clone());
-            let field_data: Vec<(String, ExprId, u32)> = fields
+            let field_data: Vec<(String, Operand, u32)> = fields
                 .iter()
                 .map(|f| (f.name.clone(), f.value, f.field_index))
                 .collect();
@@ -1792,7 +2046,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                     .into_iter()
                     .map(|(name, value, field_index)| ArenaStructField {
                         name,
-                        value: splice_expr(caller, callee, value, ctx),
+                        value: splice_operand(caller, callee, value, ctx),
                         field_index,
                     })
                     .collect(),
@@ -1803,7 +2057,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             ExprKind::TupleLiteral {
                 elements: elements
                     .into_iter()
-                    .map(|e| splice_expr(caller, callee, e, ctx))
+                    .map(|e| splice_operand(caller, callee, e, ctx))
                     .collect(),
             }
         }
@@ -1812,17 +2066,17 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             ExprKind::ArrayLiteral {
                 elements: elements
                     .into_iter()
-                    .map(|e| splice_expr(caller, callee, e, ctx))
+                    .map(|e| splice_operand(caller, callee, e, ctx))
                     .collect(),
             }
         }
         ExprKind::IndirectCall { callee: c, args } => {
             let (c, args) = (*c, args.clone());
             ExprKind::IndirectCall {
-                callee: splice_expr(caller, callee, c, ctx),
+                callee: splice_operand(caller, callee, c, ctx),
                 args: args
                     .into_iter()
-                    .map(|a| splice_expr(caller, callee, a, ctx))
+                    .map(|a| splice_operand(caller, callee, a, ctx))
                     .collect(),
             }
         }
@@ -1839,7 +2093,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 closure_module.clone(),
             );
             ExprKind::ClosureToCanonical {
-                functor: splice_expr(caller, callee, f, ctx),
+                functor: splice_operand(caller, callee, f, ctx),
                 functor_id: fid,
                 target_fn_type: tft,
                 closure_module: cm,
@@ -1856,7 +2110,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 variant_type: vt,
                 case_index: ci,
                 case_name: cn,
-                payload: p.map(|x| splice_expr(caller, callee, x, ctx)),
+                payload: p.map(|x| splice_operand(caller, callee, x, ctx)),
             }
         }
         ExprKind::EnumConstruct {
@@ -1881,7 +2135,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             }
         }
         ExprKind::VariantTag { expr } => ExprKind::VariantTag {
-            expr: splice_expr(caller, callee, *expr, ctx),
+            expr: splice_operand(caller, callee, *expr, ctx),
         },
         ExprKind::VariantTest {
             expr,
@@ -1890,7 +2144,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         } => {
             let (e, ci, cn) = (*expr, *case_index, case_name.clone());
             ExprKind::VariantTest {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
                 case_index: ci,
                 case_name: cn,
             }
@@ -1902,7 +2156,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         } => {
             let (e, ci, pt) = (*expr, *case_index, *payload_type);
             ExprKind::VariantPayload {
-                expr: splice_expr(caller, callee, e, ctx),
+                expr: splice_operand(caller, callee, e, ctx),
                 case_index: ci,
                 payload_type: pt,
             }
@@ -1915,7 +2169,7 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
         } => {
             let (s, mv, arms, d) = (*scrutinee, *min_value, arms.clone(), *default);
             ExprKind::Switch {
-                scrutinee: splice_expr(caller, callee, s, ctx),
+                scrutinee: splice_operand(caller, callee, s, ctx),
                 min_value: mv,
                 arms: arms
                     .into_iter()
@@ -1924,20 +2178,8 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 default: splice_block(caller, callee, d, ctx),
             }
         }
-        ExprKind::IntLiteral { value, repr } => ExprKind::IntLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::FloatLiteral { value, repr } => ExprKind::FloatLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::BoolLiteral(b) => ExprKind::BoolLiteral(*b),
-        ExprKind::CharLiteral(c) => ExprKind::CharLiteral(*c),
-        ExprKind::StringLiteral(s) => ExprKind::StringLiteral(s.clone()),
         ExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
-        ExprKind::Null => ExprKind::Null,
-        ExprKind::Unit => ExprKind::Unit,
+        ExprKind::Dead => ExprKind::Dead,
         ExprKind::GlobalVarGet {
             module_source,
             name,
@@ -1964,6 +2206,7 @@ fn inline_calls_in_expr(
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<(ModuleSource, String)>,
     inline_counter: &mut u32,
+    reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) {
     enum Call {
@@ -1979,11 +2222,12 @@ fn inline_calls_in_expr(
     match kind {
         Call::Free => {
             // Recurse into arguments first, then attempt to inline this call.
-            let args: Vec<ExprId> = match &body.exprs[e].kind {
+            let args: Vec<Operand> = match &body.exprs[e].kind {
                 ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
                 _ => Vec::new(),
             };
             for a in args {
+                let Some(a) = a.as_expr() else { continue };
                 inline_calls_in_expr(
                     body,
                     a,
@@ -1994,6 +2238,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2006,6 +2251,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                reval,
                 cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
@@ -2020,7 +2266,7 @@ fn inline_calls_in_expr(
                 let moved = std::mem::replace(
                     &mut body.exprs[new_id],
                     ExprNode {
-                        kind: ExprKind::Unit,
+                        kind: ExprKind::Dead,
                         type_id: TypeTable::UNIT,
                         span,
                     },
@@ -2029,25 +2275,29 @@ fn inline_calls_in_expr(
             }
         }
         Call::Method => {
-            let (receiver, args): (ExprId, Vec<ExprId>) = match &body.exprs[e].kind {
+            let (receiver, args): (Operand, Vec<Operand>) = match &body.exprs[e].kind {
                 ExprKind::MethodCall { receiver, args, .. } => {
                     (*receiver, args.iter().map(|a| a.expr).collect())
                 }
                 _ => unreachable!(),
             };
-            inline_calls_in_expr(
-                body,
-                receiver,
-                candidates,
-                current_module,
-                local_count,
-                locals,
-                type_table,
-                inlined_funcs,
-                inline_counter,
-                cold,
-            );
+            if let Some(receiver) = receiver.as_expr() {
+                inline_calls_in_expr(
+                    body,
+                    receiver,
+                    candidates,
+                    current_module,
+                    local_count,
+                    locals,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                    reval,
+                    cold,
+                );
+            }
             for a in args {
+                let Some(a) = a.as_expr() else { continue };
                 inline_calls_in_expr(
                     body,
                     a,
@@ -2058,6 +2308,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2070,6 +2321,7 @@ fn inline_calls_in_expr(
                 locals,
                 type_table,
                 inline_counter,
+                reval,
                 cold,
             ) {
                 if !inlined_funcs.contains(&inlined_key) {
@@ -2084,7 +2336,7 @@ fn inline_calls_in_expr(
                 let moved = std::mem::replace(
                     &mut body.exprs[new_id],
                     ExprNode {
-                        kind: ExprKind::Unit,
+                        kind: ExprKind::Dead,
                         type_id: TypeTable::UNIT,
                         span,
                     },
@@ -2105,6 +2357,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }
@@ -2119,6 +2372,7 @@ fn inline_calls_in_expr(
                     type_table,
                     inlined_funcs,
                     inline_counter,
+                    reval,
                     cold,
                 );
             }

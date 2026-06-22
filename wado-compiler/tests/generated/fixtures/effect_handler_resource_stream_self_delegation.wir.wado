@@ -256,7 +256,7 @@ type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_4::__call" = fn();  // TypeId(90)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call" = fn(i32);  // TypeId(91)
+type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_5", i32);  // TypeId(91)
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_6", i32, ref "core:prelude//List<u8>");  // TypeId(92)
 
@@ -264,7 +264,7 @@ type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_8::__call" = fn();  // TypeId(94)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call" = fn(i32);  // TypeId(95)
+type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_9", i32);  // TypeId(95)
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_10::__call" = fn() -> ref "tuple//[Stream<u8>, StreamWritable<u8>]";  // TypeId(96)
 
@@ -734,6 +734,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -742,8 +743,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b26: block {
             l27: loop {
                 break_if b26 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l27;
             };
@@ -790,12 +791,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1004,9 +1004,8 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1026,7 +1025,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
     unreachable;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call"(self_0, self_1) {
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_6::__call"(self_0, self_1, data) {
@@ -1041,7 +1040,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.
     unreachable;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call"(self_0, self_1) {
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_10::__call"() {
@@ -1096,7 +1095,9 @@ fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_del
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_3"(__env, __p0) {
-    "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_5";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_5"(__env);
+    "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_5::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_4"(__env, __p0, __p1) {
@@ -1114,7 +1115,9 @@ fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_del
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_7"(__env, __p0) {
-    "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_9";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado//__Closure_9"(__env);
+    "wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__Closure_9::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_stream_self_delegation.wado/__closure_wrapper_8"(__env) {

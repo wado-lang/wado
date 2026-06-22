@@ -23,36 +23,11 @@ use std::cell::Cell;
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
-use crate::nir_engine::{CachedAnalysis, Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{ValueId, ValueKind};
 
-use cranelift_entity::EntityRef;
-
-use super::gate::{FunctionGate, GatedPass};
-
-pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::StoreLoadForward, len, |fid, cached| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        forward_one(
-            &mut func,
-            &type_table,
-            &first_param_types,
-            &call_immutability,
-            &mut buffers,
-            cached,
-        )
-    })
-}
-
-/// Ungated variant: forwards stores to loads in every function. Used by the
-/// post-`field_scalarize` cleanup, which runs once outside the gated loop so
-/// the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
+/// Forwards stores to loads in every function. Used by the post-`field_scalarize`
+/// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
 /// forwarded to constants — the load→literal fold `field_scalarize` leaves to
 /// a later pass, and the only one that runs after it.
 pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
@@ -69,15 +44,13 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &first_param_types,
             &call_immutability,
             &mut buffers,
-            None,
-        )
-        .0;
+        );
     }
     changed
 }
 
 /// Run store→load forwarding over one function body. Returns whether anything
-/// changed. Shared by the gated loop pass and the ungated post-scalarize run.
+/// changed.
 fn forward_one(
     func: &mut NirFunction,
     type_table: &crate::tir::TypeTable,
@@ -87,10 +60,9 @@ fn forward_one(
     >,
     call_immutability: &super::alias::CallImmutability,
     buffers: &mut EngineBuffers,
-    cached: Option<CachedAnalysis>,
-) -> (bool, Option<CachedAnalysis>) {
+) -> bool {
     if func.body.is_none() {
-        return (false, None);
+        return false;
     }
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
@@ -106,35 +78,34 @@ fn forward_one(
         ..
     } = &mut *func;
     let body = body.as_mut().expect("checked above");
-    let mut engine = if let Some(cached) = cached {
-        Engine::with_analysis(body, buffers, locals, type_table, cached)
-    } else {
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            type_table,
-            first_param_types,
-            call_immutability,
-        );
-        let mut engine = Engine::new(body, buffers, locals);
-        engine.set_alias_sets(aliased, untrackable, mut_escaped);
-        engine.set_value_graph_type_table(type_table);
-        engine
-    };
+    let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        body,
+        locals,
+        address_taken_locals,
+        stores_aliased_locals,
+        type_table,
+        first_param_types,
+        call_immutability,
+    );
+    let mut engine = Engine::new(body, buffers, locals);
+    engine.set_alias_sets(aliased, untrackable, mut_escaped);
+    engine.set_value_graph_type_table(type_table);
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
+    // Grow the build-once graph with the reaching constant of every safe bare
+    // scalar local. SROA / field_scalarize introduce such scalars after the
+    // graph was built (and `inline` coarsened it), so their reads carry no value
+    // and forwarding would miss them; the scratch re-walk recovers each one's
+    // forwarded literal (bare-local forwarding is immune to the call/heap bumps
+    // that defeat the pre-SROA field form). Constants only — sound by refinement.
+    let safe_scalars: IndexSet<u32> = (0..engine.locals().len() as u32)
+        .filter(|i| !unsafe_locals.contains(i))
+        .collect();
+    engine.grow_bare_local_constants(&safe_scalars);
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
     };
-    let changed = engine.run(&[&rule]);
-    let parked = if changed {
-        None
-    } else {
-        engine.into_analysis()
-    };
-    (changed, parked)
+    engine.run(&[&rule])
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
@@ -156,7 +127,10 @@ impl Rule for StoreLoadForwardRule {
     }
 }
 
-fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
+/// Forward stored literals to later reads at the body root. Shared by the
+/// standalone rule and the combined cse+forward session, which runs it on a
+/// `ValueGraph` cse already built (both passes are graph-preserving).
+pub(super) fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
     // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
     // their alias safety is upstream — the builder never seeds an aliased
     // receiver, so such a read never carries a literal `ValueId`.
@@ -178,47 +152,17 @@ fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
         let Some(vid) = engine.value(expr) else {
             continue;
         };
-        if !matches!(
-            engine.value_kind(vid),
-            ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Bool(_) | ValueKind::Char(_)
-        ) {
-            continue;
-        }
-        // Prefer an existing source literal (preserves its `repr` / span).
-        // When distinct literal exprs hash-cons to one `ValueId` (e.g. `0` vs
-        // `0x0`), `literal_source` returns the first one — the others' reprs
-        // are lost on substitution. Sound (VN equality ⇒ semantic equality),
-        // but visible in NIR dumps and diagnostic spans for these edge-case
-        // literals. A *folded* value (`1 + 1 → 2` with no literal `2` in the
-        // function) has no source, so synthesize the literal from the value
-        // graph kind, using the read's own type for the integer width / repr.
-        let new_kind = if let Some(src) = engine.literal_source(vid) {
-            engine.body.exprs[src].kind.clone()
-        } else if let Some(kind) = synth_literal_kind(engine, vid, expr) {
-            kind
-        } else {
+        // Resolve through the e-class representative so a value proven equal to
+        // a constant by a union (not only by build-time hash-consing) forwards
+        // too. With no unions this is the identity. The constant promotes into
+        // `expr`'s parent operand slot (WEP: The Live ValueGraph).
+        let vid = engine.value_find(vid);
+        let Some(value) = super::extract::extract_const(engine, vid, expr) else {
             continue;
         };
-        engine.replace_expr_kind(expr, new_kind);
-        changed = true;
+        changed |= engine.replace_expr_with_value(expr, value);
     }
     changed
-}
-
-/// Build a literal `ExprKind` for a folded value-graph constant that has no
-/// source literal in the body (e.g. `2` produced by folding `1 + 1` when no
-/// literal `2` exists), using `expr`'s own NIR type for the integer width and
-/// `repr`. Returns `None` for non-literal kinds or when no type table was
-/// supplied (folding disabled). Reuses niri's [`crate::const_eval::value_to_arena_kind`]
-/// so the synthesized literal is byte-identical to what the CTFE path emits.
-fn synth_literal_kind(engine: &mut Engine, vid: ValueId, expr: ExprId) -> Option<ExprKind> {
-    let vk = engine.value_kind(vid).clone();
-    let type_id = engine.body.exprs[expr].type_id;
-    let prim = engine
-        .value_graph_type_table()
-        .and_then(|tt| crate::const_eval::prim_of(type_id, tt));
-    let value = crate::nir_value_graph::value_kind_to_const(&vk, prim)?;
-    Some(crate::const_eval::value_to_arena_kind(value))
 }
 
 /// Collect value-position `Local` and `FieldAccess` read expressions. A

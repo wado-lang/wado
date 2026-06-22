@@ -188,11 +188,15 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_early_return"() with St
     let __local_1: ref "core:prelude/format.wado//Formatter";
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_3: ref "core:prelude/format.wado//Formatter";
+    let x_11: i32;
+    let self_12: i32;
+    let x_18: i32;
+    let self_19: i32;
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("positive"), used: 8 });
-    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(3, __local_1); __local_0);
-    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(4, __local_3); __local_2);
+    "core:cli/println"(__local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_0 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_12(x_11 = -3; 0 - x_11), __local_1); __local_0);
+    "core:cli/println"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_19(x_18 = 4; 4), __local_3); __local_2);
 }
 
 fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() with Stdout {
@@ -203,20 +207,18 @@ fn "wado-compiler/tests/fixtures/inline_merged.wado/test_generic_nested_ref"() w
     let __local_5_5: ref "core:prelude/string.wado//String";
     let __local_6_6: ref "core:prelude/format.wado//Formatter";
     let self_26: i32;
-    let __cse_28: bool;
-    let _licm_used_29: i32;
-    let _licm_repr_30: ref "Array<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
+    let _licm_used_28: i32;
+    let _licm_repr_29: ref "Array<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>";
     a = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 10 };
     b = struct.new "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem" { value: 20 };
     __b = struct.new "core:prelude//List<&mut wado-compiler/tests/fixtures/inline_merged.wado/InlineItem>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(a, b), used: 2 };
     i = 0;
-    _licm_used_29 = 2;
-    _licm_repr_30 = __b.repr;
+    _licm_used_28 = 2;
+    _licm_repr_29 = __b.repr;
     b2: block {
         l3: loop {
-            __cse_28 = i < _licm_used_29;
-            break_if b2 __cse_28 == 0;
-            "core:cli/println"(__local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_26(builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_30, i).value), __local_6_6); __local_5_5);
+            break_if b2 i >= _licm_used_28;
+            "core:cli/println"(__local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5_5 }; "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_26(builtin::array_get<ref "wado-compiler/tests/fixtures/inline_merged.wado//InlineItem">(_licm_repr_29, i).value), __local_6_6); __local_5_5);
             i = i + 1;
             continue l3;
         };
@@ -507,6 +509,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -515,8 +518,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b29: block {
             l30: loop {
                 break_if b29 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l30;
             };
@@ -584,12 +587,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -763,9 +765,8 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

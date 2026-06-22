@@ -484,7 +484,11 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
         global:__modules_initialized = 1;
     };
     __local_161 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Request_get_path_with_query"(request);
-    take_else = ref.is_null(__local_161) == 0;
+    take_else = (if ref.is_null(__local_161) == 0 -> bool {
+        1;
+    } else {
+        0;
+    });
     if take_else == 0 {
         body_str = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fallback"), used: 8 };
     } else {
@@ -939,12 +943,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
     let i: i32;
     arr = builtin::array_new<u8>(len);
     i = 0;
-    b72: block {
-        l73: loop {
-            break_if b72 i >= len;
+    b73: block {
+        l74: loop {
+            break_if b73 i >= len;
             builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
             i = i + 1;
-            continue l73;
+            continue l74;
         };
     };
     return arr;
@@ -953,12 +957,12 @@ fn "core:internal/memory_to_gc_array"(ptr, len) {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b74: block {
-        l75: loop {
-            break_if b74 i >= len;
+    b75: block {
+        l76: loop {
+            break_if b75 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l75;
+            continue l76;
         };
     };
 }
@@ -1019,12 +1023,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1064,16 +1067,16 @@ fn "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self) {
     _licm_used_10 = self.used;
     _licm_repr_11 = self.repr;
     __hfs_index_12 = self.index;
-    b80: block {
-        l81: loop {
+    b81: block {
+        l82: loop {
             if __hfs_index_12 >= _licm_used_10 {
                 self.index = __hfs_index_12;
-                break b80;
+                break b81;
             }
             byte = builtin::array_get_u8(_licm_repr_11, __hfs_index_12);
             __hfs_index_12 = __hfs_index_12 + 1;
             "core:prelude/list.wado/List<u8>::push"(__b, byte);
-            continue l81;
+            continue l82;
         };
     };
     return __b;
@@ -1094,9 +1097,8 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

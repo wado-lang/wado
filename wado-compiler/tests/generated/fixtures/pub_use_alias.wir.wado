@@ -69,6 +69,9 @@ fn "wado-compiler/tests/fixtures/pub_use_alias.wado/__cm_binding__Stdout_write_v
 }
 
 fn "wado-compiler/tests/fixtures/pub_use_alias.wado/__cm_export__run"() {
+    let result: i32;
+    let a: i32;
+    let b: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -81,7 +84,14 @@ fn "wado-compiler/tests/fixtures/pub_use_alias.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 });
+    a = 6;
+    b = 7;
+    result = a * b;
+    if result == 42 {
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 });
+    } else {
+        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failure"), used: 7 });
+    }
     "wasi/task-return"(0);
 }
 
@@ -117,12 +127,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b1: block {
-        l2: loop {
-            break_if b1 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l2;
+            continue l3;
         };
     };
 }

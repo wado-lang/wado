@@ -59,7 +59,9 @@
 //! `inline` copying the helper body into the caller.
 
 use crate::nir::NirLocal;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -212,11 +214,12 @@ fn check_fusion_preconditions_if_variant_test(
         return None;
     };
     let temp_local = *temp_local;
+    let lv = let_value.as_expr()?;
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
         ..
-    } = &body.exprs[*let_value].kind
+    } = &body.exprs[lv].kind
     else {
         return None;
     };
@@ -239,14 +242,14 @@ fn check_fusion_preconditions_if_variant_test(
         expr: vt_expr,
         case_index,
         ..
-    } = &body.exprs[condition].kind
+    } = &body.exprs[condition.as_expr()?].kind
     else {
         return None;
     };
     let case_index = *case_index;
     let ExprKind::Local {
         index: tested_idx, ..
-    } = &body.exprs[*vt_expr].kind
+    } = &body.exprs[vt_expr.as_expr()?].kind
     else {
         return None;
     };
@@ -309,11 +312,12 @@ fn check_fusion_preconditions_match(
         return None;
     };
     let temp_local = *temp_local;
+    let lv = let_value.as_expr()?;
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
         ..
-    } = &body.exprs[*let_value].kind
+    } = &body.exprs[lv].kind
     else {
         return None;
     };
@@ -321,7 +325,7 @@ fn check_fusion_preconditions_match(
     let lb_block = *lb_block;
 
     // --- Stmt 2: Expr(Match { scrut: Local(temp), arms: [Variant, Wildcard] }) ---
-    let StmtKind::Expr(match_expr) = &body.stmts[if_s].kind else {
+    let StmtKind::Expr(Operand::Expr(match_expr)) = &body.stmts[if_s].kind else {
         return None;
     };
     let ExprKind::Match { expr: scrut, arms } = &body.exprs[*match_expr].kind else {
@@ -330,9 +334,10 @@ fn check_fusion_preconditions_match(
     if arms.len() != 2 {
         return None;
     }
+    let scrut_e = scrut.as_expr()?;
     let ExprKind::Local {
         index: tested_idx, ..
-    } = &body.exprs[*scrut].kind
+    } = &body.exprs[scrut_e].kind
     else {
         return None;
     };
@@ -388,20 +393,27 @@ fn check_fusion_preconditions_match(
     }
 
     // --- temp must not be read outside the Match scrutinee position. ---
-    if count_local_uses_in_expr(body, variant_arm_body, temp_local) > 0 {
+    if count_local_uses_in_operand(body, variant_arm_body, temp_local) > 0 {
         return None;
     }
-    if count_local_uses_in_expr(body, else_arm_body, temp_local) > 0 {
+    if count_local_uses_in_operand(body, else_arm_body, temp_local) > 0 {
         return None;
     }
 
     // --- THEN/ELSE bodies must not contain free unlabeled break/continue
     //     when the labeled block being fused contains a loop. ---
     if block_contains_loop(body, lb_block) {
-        if arm_body_has_free_unlabeled_loop_exit(body, variant_arm_body) {
+        // A promoted-value arm body has no skeleton subtree, hence no loop exit.
+        if variant_arm_body
+            .as_expr()
+            .is_some_and(|e| arm_body_has_free_unlabeled_loop_exit(body, e))
+        {
             return None;
         }
-        if arm_body_has_free_unlabeled_loop_exit(body, else_arm_body) {
+        if else_arm_body
+            .as_expr()
+            .is_some_and(|e| arm_body_has_free_unlabeled_loop_exit(body, e))
+        {
             return None;
         }
     }
@@ -442,11 +454,14 @@ fn find_break_case_index_for_name_in_stmt(
             label: Some(l),
             value: Some(v),
         } if l == label => {
-            if let ExprKind::VariantConstruct {
-                case_index,
-                case_name,
-                ..
-            } = &body.exprs[*v].kind
+            // A promoted value break (e.g. a `Null` placeholder) is not a
+            // `VariantConstruct` — no case index.
+            if let Some(e) = v.as_expr()
+                && let ExprKind::VariantConstruct {
+                    case_index,
+                    case_name,
+                    ..
+                } = &body.exprs[e].kind
                 && case_name == variant_name
             {
                 return Some(*case_index);
@@ -465,19 +480,28 @@ fn find_break_case_index_for_name_in_stmt(
             find_break_case_index_for_name(body, *b, label, variant_name)
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            find_break_case_index_for_name_in_expr(body, *value, label, variant_name)
+            find_break_case_index_for_name_in_operand(body, *value, label, variant_name)
         }
         StmtKind::Expr(expr) => {
-            find_break_case_index_for_name_in_expr(body, *expr, label, variant_name)
+            find_break_case_index_for_name_in_operand(body, *expr, label, variant_name)
         }
-        StmtKind::Return { value } => {
-            value.and_then(|v| find_break_case_index_for_name_in_expr(body, v, label, variant_name))
-        }
+        StmtKind::Return { value } => value
+            .and_then(|v| find_break_case_index_for_name_in_operand(body, v, label, variant_name)),
         StmtKind::Break { value: Some(v), .. } => {
-            find_break_case_index_for_name_in_expr(body, *v, label, variant_name)
+            find_break_case_index_for_name_in_operand(body, *v, label, variant_name)
         }
         StmtKind::Break { value: None, .. } | StmtKind::Continue => None,
     }
+}
+
+fn find_break_case_index_for_name_in_operand(
+    body: &Body,
+    op: Operand,
+    label: &str,
+    variant_name: &str,
+) -> Option<u32> {
+    op.as_expr()
+        .and_then(|e| find_break_case_index_for_name_in_expr(body, e, label, variant_name))
 }
 
 fn find_break_case_index_for_name_in_expr(
@@ -494,13 +518,13 @@ fn find_break_case_index_for_name_in_expr(
             condition,
             then_branch,
             else_branch,
-        } => find_break_case_index_for_name_in_expr(body, *condition, label, variant_name)
+        } => find_break_case_index_for_name_in_operand(body, *condition, label, variant_name)
             .or_else(|| find_break_case_index_for_name(body, *then_branch, label, variant_name))
             .or_else(|| {
                 else_branch
                     .and_then(|b| find_break_case_index_for_name(body, b, label, variant_name))
             }),
-        ExprKind::Match { expr: scrut, arms } => find_break_case_index_for_name_in_expr(
+        ExprKind::Match { expr: scrut, arms } => find_break_case_index_for_name_in_operand(
             body,
             *scrut,
             label,
@@ -508,13 +532,12 @@ fn find_break_case_index_for_name_in_expr(
         )
         .or_else(|| {
             arms.iter().find_map(|arm| {
-                find_break_case_index_for_name_in_expr(body, arm.body, label, variant_name).or_else(
-                    || {
+                find_break_case_index_for_name_in_operand(body, arm.body, label, variant_name)
+                    .or_else(|| {
                         arm.guard.and_then(|g| {
-                            find_break_case_index_for_name_in_expr(body, g, label, variant_name)
+                            find_break_case_index_for_name_in_operand(body, g, label, variant_name)
                         })
-                    },
-                )
+                    })
             })
         }),
         _ => None,
@@ -538,6 +561,22 @@ fn arm_body_has_free_unlabeled_loop_exit(body: &Body, e: ExprId) -> bool {
 fn arm_body_into_block(engine: &mut Engine, arm_body: ExprId, fallback_span: Span) -> BlockId {
     if let ExprKind::Block(block) = &engine.body.exprs[arm_body].kind {
         *block
+    } else {
+        let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body.into()), fallback_span);
+        engine.alloc_block(vec![stmt], fallback_span)
+    }
+}
+
+/// Like [`arm_body_into_block`] but accepts an `Operand`: a promoted pure value
+/// (e.g. a unit arm body) has no skeleton node, so wrap it as a single-statement
+/// block carrying the value operand.
+fn arm_body_operand_into_block(
+    engine: &mut Engine,
+    arm_body: Operand,
+    fallback_span: Span,
+) -> BlockId {
+    if let Some(e) = arm_body.as_expr() {
+        arm_body_into_block(engine, e, fallback_span)
     } else {
         let stmt = engine.alloc_stmt(StmtKind::Expr(arm_body), fallback_span);
         engine.alloc_block(vec![stmt], fallback_span)
@@ -584,29 +623,42 @@ fn check_lb_breaks_in_stmt(
         StmtKind::Break {
             label: Some(l),
             value,
-        } if l == label => match value.map(|v| &body.exprs[v].kind) {
-            None | Some(ExprKind::Null) => true,
-            Some(ExprKind::VariantConstruct {
-                case_index: ci,
-                payload,
-                ..
-            }) => {
-                let ci = *ci;
-                let payload = *payload;
-                if let Some(p) = payload
-                    && expr_has_break_to(body, label, p)
-                {
-                    return false;
+        } if l == label => {
+            // A break carrying no value, or a promoted `Null` placeholder, is
+            // the empty/None break the fusion accepts.
+            let Some(e) = value.and_then(super::super::nir_arena::Operand::as_expr) else {
+                return value.is_none_or(|v| {
+                    v.as_value().is_some_and(|vid| {
+                        matches!(
+                            body.values.kind(vid),
+                            crate::nir_value_graph::ValueKind::Null
+                        )
+                    })
+                });
+            };
+            match &body.exprs[e].kind {
+                ExprKind::VariantConstruct {
+                    case_index: ci,
+                    payload,
+                    ..
+                } => {
+                    let ci = *ci;
+                    let payload = *payload;
+                    if let Some(p) = payload
+                        && expr_has_break_to_operand(body, label, p)
+                    {
+                        return false;
+                    }
+                    if ci == case_index
+                        && let Some(p) = payload
+                    {
+                        *payload_type = Some(body.operand_type(p));
+                    }
+                    true
                 }
-                if ci == case_index
-                    && let Some(p) = payload
-                {
-                    *payload_type = Some(body.exprs[p].type_id);
-                }
-                true
+                _ => false,
             }
-            _ => false,
-        },
+        }
         StmtKind::LabeledBlock { label: l, .. } if l == label => true,
         StmtKind::If {
             condition,
@@ -616,7 +668,7 @@ fn check_lb_breaks_in_stmt(
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            check_lb_breaks_in_expr(body, condition, label, case_index, payload_type)
+            check_lb_breaks_in_operand(body, condition, label, case_index, payload_type)
                 && check_lb_breaks_in_block(body, then_block, label, case_index, payload_type)
                 && else_block.is_none_or(|eb| {
                     check_lb_breaks_in_block(body, eb, label, case_index, payload_type)
@@ -626,16 +678,25 @@ fn check_lb_breaks_in_stmt(
             check_lb_breaks_in_block(body, *b, label, case_index, payload_type)
         }
         StmtKind::Let { value, .. } => {
-            check_lb_breaks_in_expr(body, *value, label, case_index, payload_type)
+            check_lb_breaks_in_operand(body, *value, label, case_index, payload_type)
         }
-        StmtKind::Break { value, .. } => {
-            value.is_none_or(|v| check_lb_breaks_in_expr(body, v, label, case_index, payload_type))
-        }
-        StmtKind::Return { value } => {
-            value.is_none_or(|v| check_lb_breaks_in_expr(body, v, label, case_index, payload_type))
-        }
+        StmtKind::Break { value, .. } => value
+            .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
+        StmtKind::Return { value } => value
+            .is_none_or(|v| check_lb_breaks_in_operand(body, v, label, case_index, payload_type)),
         _ => true,
     }
+}
+
+fn check_lb_breaks_in_operand(
+    body: &Body,
+    op: Operand,
+    label: &str,
+    case_index: u32,
+    payload_type: &mut Option<TypeId>,
+) -> bool {
+    op.as_expr()
+        .is_some_and(|e| check_lb_breaks_in_expr(body, e, label, case_index, payload_type))
 }
 
 fn check_lb_breaks_in_expr(
@@ -666,7 +727,7 @@ fn check_lb_breaks_in_expr(
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            check_lb_breaks_in_expr(body, condition, label, case_index, payload_type)
+            check_lb_breaks_in_operand(body, condition, label, case_index, payload_type)
                 && check_lb_breaks_in_block(body, then_branch, label, case_index, payload_type)
                 && else_branch.is_none_or(|eb| {
                     check_lb_breaks_in_block(body, eb, label, case_index, payload_type)
@@ -688,18 +749,18 @@ fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usi
 fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            count_local_uses_in_expr(body, *value, local_idx)
+            count_local_uses_in_operand(body, *value, local_idx)
         }
-        StmtKind::Expr(expr) => count_local_uses_in_expr(body, *expr, local_idx),
+        StmtKind::Expr(expr) => count_local_uses_in_operand(body, *expr, local_idx),
         StmtKind::Return { value } => {
-            value.map_or(0, |v| count_local_uses_in_expr(body, v, local_idx))
+            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
         }
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            count_local_uses_in_expr(body, *condition, local_idx)
+            count_local_uses_in_operand(body, *condition, local_idx)
                 + count_local_uses_in_block(body, *then_block, local_idx)
                 + else_block.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
         }
@@ -707,18 +768,23 @@ fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
             count_local_uses_in_block(body, *b, local_idx)
         }
         StmtKind::Break { value, .. } => {
-            value.map_or(0, |v| count_local_uses_in_expr(body, v, local_idx))
+            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
         }
         StmtKind::Continue => 0,
     }
+}
+
+fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usize {
+    op.as_expr()
+        .map_or(0, |e| count_local_uses_in_expr(body, e, local_idx))
 }
 
 fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => usize::from(is_local(body, e, local_idx)),
         ExprKind::Binary { left, right, .. } => {
-            count_local_uses_in_expr(body, *left, local_idx)
-                + count_local_uses_in_expr(body, *right, local_idx)
+            count_local_uses_in_operand(body, *left, local_idx)
+                + count_local_uses_in_operand(body, *right, local_idx)
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -728,48 +794,48 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
         | ExprKind::GlobalVarSet { value: inner, .. } => {
-            count_local_uses_in_expr(body, *inner, local_idx)
+            count_local_uses_in_operand(body, *inner, local_idx)
         }
         ExprKind::Assign { target, value } => {
             count_local_uses_in_expr(body, *target, local_idx)
-                + count_local_uses_in_expr(body, *value, local_idx)
+                + count_local_uses_in_operand(body, *value, local_idx)
         }
         ExprKind::Index { expr: inner, index } => {
-            count_local_uses_in_expr(body, *inner, local_idx)
-                + count_local_uses_in_expr(body, *index, local_idx)
+            count_local_uses_in_operand(body, *inner, local_idx)
+                + count_local_uses_in_operand(body, *index, local_idx)
         }
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_local_uses_in_expr(body, a.expr, local_idx))
+            .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
             .sum(),
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .map(|a| count_local_uses_in_expr(body, *a, local_idx))
+            .map(|a| count_local_uses_in_operand(body, *a, local_idx))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_local_uses_in_expr(body, *receiver, local_idx)
+            count_local_uses_in_operand(body, *receiver, local_idx)
                 + args
                     .iter()
-                    .map(|a| count_local_uses_in_expr(body, a.expr, local_idx))
+                    .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
                     .sum::<usize>()
         }
         ExprKind::IndirectCall { callee, args } => {
-            count_local_uses_in_expr(body, *callee, local_idx)
+            count_local_uses_in_operand(body, *callee, local_idx)
                 + args
                     .iter()
-                    .map(|a| count_local_uses_in_expr(body, *a, local_idx))
+                    .map(|a| count_local_uses_in_operand(body, *a, local_idx))
                     .sum::<usize>()
         }
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_local_uses_in_expr(body, f.value, local_idx))
+            .map(|f| count_local_uses_in_operand(body, f.value, local_idx))
             .sum(),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_local_uses_in_expr(body, *e, local_idx))
+            .map(|e| count_local_uses_in_operand(body, *e, local_idx))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_local_uses_in_expr(body, p, local_idx))
+            payload.map_or(0, |p| count_local_uses_in_operand(body, p, local_idx))
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             count_local_uses_in_block(body, *block, local_idx)
@@ -779,19 +845,19 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
             then_branch,
             else_branch,
         } => {
-            count_local_uses_in_expr(body, *condition, local_idx)
+            count_local_uses_in_operand(body, *condition, local_idx)
                 + count_local_uses_in_block(body, *then_branch, local_idx)
                 + else_branch.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
         }
         ExprKind::Match { expr, arms } => {
-            count_local_uses_in_expr(body, *expr, local_idx)
+            count_local_uses_in_operand(body, *expr, local_idx)
                 + arms
                     .iter()
                     .map(|arm| {
-                        count_local_uses_in_expr(body, arm.body, local_idx)
+                        count_local_uses_in_operand(body, arm.body, local_idx)
                             + arm
                                 .guard
-                                .map_or(0, |g| count_local_uses_in_expr(body, g, local_idx))
+                                .map_or(0, |g| count_local_uses_in_operand(body, g, local_idx))
                     })
                     .sum::<usize>()
         }
@@ -801,7 +867,7 @@ fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
             default,
             ..
         } => {
-            count_local_uses_in_expr(body, *scrutinee, local_idx)
+            count_local_uses_in_operand(body, *scrutinee, local_idx)
                 + arms
                     .iter()
                     .map(|arm| count_local_uses_in_block(body, *arm, local_idx))
@@ -834,20 +900,20 @@ fn count_variant_payload_uses_in_stmt(
 ) -> usize {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            count_variant_payload_uses_in_expr(body, *value, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *value, local_idx, case_index)
         }
         StmtKind::Expr(expr) => {
-            count_variant_payload_uses_in_expr(body, *expr, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *expr, local_idx, case_index)
         }
         StmtKind::Return { value } => value.map_or(0, |v| {
-            count_variant_payload_uses_in_expr(body, v, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, v, local_idx, case_index)
         }),
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            count_variant_payload_uses_in_expr(body, *condition, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *condition, local_idx, case_index)
                 + count_variant_payload_uses_in_block(body, *then_block, local_idx, case_index)
                 + else_block.map_or(0, |eb| {
                     count_variant_payload_uses_in_block(body, eb, local_idx, case_index)
@@ -857,10 +923,32 @@ fn count_variant_payload_uses_in_stmt(
             count_variant_payload_uses_in_block(body, *b, local_idx, case_index)
         }
         StmtKind::Break { value, .. } => value.map_or(0, |v| {
-            count_variant_payload_uses_in_expr(body, v, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, v, local_idx, case_index)
         }),
         StmtKind::Continue => 0,
     }
+}
+
+fn count_variant_payload_uses_in_operand(
+    body: &Body,
+    op: Operand,
+    local_idx: u32,
+    case_index: u32,
+) -> usize {
+    op.as_expr().map_or(0, |e| {
+        count_variant_payload_uses_in_expr(body, e, local_idx, case_index)
+    })
+}
+fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_depth: u32) -> bool {
+    op.as_expr()
+        .is_some_and(|e| expr_has_free_unlabeled_loop_exit(body, e, loop_depth))
+}
+fn expr_has_break_to_operand(body: &Body, label: &str, op: Operand) -> bool {
+    op.as_expr()
+        .is_some_and(|e| expr_has_break_to(body, label, e))
+}
+fn expr_contains_loop_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().is_some_and(|e| expr_contains_loop(body, e))
 }
 
 fn count_variant_payload_uses_in_expr(
@@ -876,15 +964,18 @@ fn count_variant_payload_uses_in_expr(
             ..
         } if *ci == case_index => {
             let inner = *inner;
-            if is_local(body, inner, local_idx) {
+            if inner
+                .as_expr()
+                .is_some_and(|e| is_local(body, e, local_idx))
+            {
                 return 1;
             }
-            count_variant_payload_uses_in_expr(body, inner, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, inner, local_idx, case_index)
         }
         ExprKind::Local { .. } => 0,
         ExprKind::Binary { left, right, .. } => {
-            count_variant_payload_uses_in_expr(body, *left, local_idx, case_index)
-                + count_variant_payload_uses_in_expr(body, *right, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *left, local_idx, case_index)
+                + count_variant_payload_uses_in_operand(body, *right, local_idx, case_index)
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -894,50 +985,50 @@ fn count_variant_payload_uses_in_expr(
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
         | ExprKind::GlobalVarSet { value: inner, .. } => {
-            count_variant_payload_uses_in_expr(body, *inner, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *inner, local_idx, case_index)
         }
         ExprKind::Assign { target, value } => {
             count_variant_payload_uses_in_expr(body, *target, local_idx, case_index)
-                + count_variant_payload_uses_in_expr(body, *value, local_idx, case_index)
+                + count_variant_payload_uses_in_operand(body, *value, local_idx, case_index)
         }
         ExprKind::Index { expr: inner, index } => {
-            count_variant_payload_uses_in_expr(body, *inner, local_idx, case_index)
-                + count_variant_payload_uses_in_expr(body, *index, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *inner, local_idx, case_index)
+                + count_variant_payload_uses_in_operand(body, *index, local_idx, case_index)
         }
         ExprKind::Call { args, .. } => args
             .iter()
-            .map(|a| count_variant_payload_uses_in_expr(body, a.expr, local_idx, case_index))
+            .map(|a| count_variant_payload_uses_in_operand(body, a.expr, local_idx, case_index))
             .sum(),
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .map(|a| count_variant_payload_uses_in_expr(body, *a, local_idx, case_index))
+            .map(|a| count_variant_payload_uses_in_operand(body, *a, local_idx, case_index))
             .sum(),
         ExprKind::MethodCall { receiver, args, .. } => {
-            count_variant_payload_uses_in_expr(body, *receiver, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *receiver, local_idx, case_index)
                 + args
                     .iter()
                     .map(|a| {
-                        count_variant_payload_uses_in_expr(body, a.expr, local_idx, case_index)
+                        count_variant_payload_uses_in_operand(body, a.expr, local_idx, case_index)
                     })
                     .sum::<usize>()
         }
         ExprKind::IndirectCall { callee, args } => {
-            count_variant_payload_uses_in_expr(body, *callee, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *callee, local_idx, case_index)
                 + args
                     .iter()
-                    .map(|a| count_variant_payload_uses_in_expr(body, *a, local_idx, case_index))
+                    .map(|a| count_variant_payload_uses_in_operand(body, *a, local_idx, case_index))
                     .sum::<usize>()
         }
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .map(|f| count_variant_payload_uses_in_expr(body, f.value, local_idx, case_index))
+            .map(|f| count_variant_payload_uses_in_operand(body, f.value, local_idx, case_index))
             .sum(),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .map(|e| count_variant_payload_uses_in_expr(body, *e, local_idx, case_index))
+            .map(|e| count_variant_payload_uses_in_operand(body, *e, local_idx, case_index))
             .sum(),
         ExprKind::VariantConstruct { payload, .. } => payload.map_or(0, |p| {
-            count_variant_payload_uses_in_expr(body, p, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, p, local_idx, case_index)
         }),
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             count_variant_payload_uses_in_block(body, *block, local_idx, case_index)
@@ -947,20 +1038,22 @@ fn count_variant_payload_uses_in_expr(
             then_branch,
             else_branch,
         } => {
-            count_variant_payload_uses_in_expr(body, *condition, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *condition, local_idx, case_index)
                 + count_variant_payload_uses_in_block(body, *then_branch, local_idx, case_index)
                 + else_branch.map_or(0, |eb| {
                     count_variant_payload_uses_in_block(body, eb, local_idx, case_index)
                 })
         }
         ExprKind::Match { expr, arms } => {
-            count_variant_payload_uses_in_expr(body, *expr, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *expr, local_idx, case_index)
                 + arms
                     .iter()
                     .map(|arm| {
-                        count_variant_payload_uses_in_expr(body, arm.body, local_idx, case_index)
+                        count_variant_payload_uses_in_operand(body, arm.body, local_idx, case_index)
                             + arm.guard.map_or(0, |g| {
-                                count_variant_payload_uses_in_expr(body, g, local_idx, case_index)
+                                count_variant_payload_uses_in_operand(
+                                    body, g, local_idx, case_index,
+                                )
                             })
                     })
                     .sum::<usize>()
@@ -971,7 +1064,7 @@ fn count_variant_payload_uses_in_expr(
             default,
             ..
         } => {
-            count_variant_payload_uses_in_expr(body, *scrutinee, local_idx, case_index)
+            count_variant_payload_uses_in_operand(body, *scrutinee, local_idx, case_index)
                 + arms
                     .iter()
                     .map(|arm| {
@@ -1006,9 +1099,12 @@ fn perform_fusion(
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
+    let lv = let_value
+        .as_expr()
+        .expect("guarded by check_fusion_preconditions");
     let ExprKind::LabeledBlock {
         block: lb_block, ..
-    } = &engine.body.exprs[*let_value].kind
+    } = &engine.body.exprs[lv].kind
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
@@ -1022,15 +1118,25 @@ fn perform_fusion(
             ..
         } => (*then_block, *else_block),
         StmtKind::Expr(match_expr) => {
-            let ExprKind::Match { arms, .. } = &engine.body.exprs[*match_expr].kind else {
+            let match_expr = match_expr
+                .as_expr()
+                .expect("match scrutinee is a skeleton expr");
+            let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
                 unreachable!()
             };
             let variant_body = arms[0].body;
             let else_body = arms[1].body;
-            let then_block = arm_body_into_block(engine, variant_body, span);
-            let else_block = match &engine.body.exprs[else_body].kind {
-                ExprKind::Unit => None,
-                _ => Some(arm_body_into_block(engine, else_body, span)),
+            let then_block = arm_body_operand_into_block(engine, variant_body, span);
+            // A unit-valued else arm (the `None` case) contributes no block.
+            let else_block = if else_body.as_value().is_some_and(|v| {
+                matches!(
+                    engine.body.values.kind(v),
+                    crate::nir_value_graph::ValueKind::Unit
+                )
+            }) {
+                None
+            } else {
+                Some(arm_body_operand_into_block(engine, else_body, span))
             };
             (then_block, else_block)
         }
@@ -1147,20 +1253,20 @@ fn transform_lb_stmt(
     };
 
     if let Some(value) = break_value {
-        let is_some_case = match value {
-            Some(v) => matches!(&engine.body.exprs[v].kind,
-                ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index),
-            None => false,
-        };
+        let some_case_expr = value.and_then(Operand::as_expr).filter(|&e| {
+            matches!(&engine.body.exprs[e].kind,
+                ExprKind::VariantConstruct { case_index: ci, .. } if *ci == case_index)
+        });
 
-        if is_some_case {
+        if let Some(vc_expr) = some_case_expr {
             // Extract payload expression from the VariantConstruct.
-            let v = value.unwrap();
-            let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[v].kind else {
+            let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[vc_expr].kind
+            else {
                 unreachable!()
             };
-            let payload_expr =
-                payload.unwrap_or_else(|| engine.alloc_expr(ExprKind::Unit, payload_type, span));
+            let payload_expr = payload.unwrap_or_else(|| {
+                engine.const_operand(crate::nir_value_graph::ValueKind::Unit, payload_type)
+            });
 
             // Emit: let __payload = payload_expr;
             let let_stmt = engine.alloc_stmt(
@@ -1302,19 +1408,18 @@ fn transform_lb_in_stmt_kind(
     span: Span,
 ) {
     let target = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value) => Some(*value),
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Some(*value),
+        StmtKind::Expr(value) => Some(*value),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => *value,
         StmtKind::If { .. }
         | StmtKind::Loop { .. }
         | StmtKind::LabeledBlock { .. }
         | StmtKind::Continue => None,
     };
-    if let Some(v) = target {
+    if let Some(e) = target.and_then(Operand::as_expr) {
         transform_lb_in_expr(
             engine,
-            v,
+            e,
             orig_label,
             fused_label,
             case_index,
@@ -1360,11 +1465,13 @@ fn transform_lb_in_expr(
             }
         }
         ExprKind::Match { expr, arms } => {
-            let mut exprs = vec![*expr];
+            // Promoted-value scrutinee / arm bodies / guards have no skeleton
+            // subtree to descend into.
+            let mut exprs: Vec<ExprId> = expr.as_expr().into_iter().collect();
             for arm in arms {
-                exprs.push(arm.body);
+                exprs.extend(arm.body.as_expr());
                 if let Some(g) = arm.guard {
-                    exprs.push(g);
+                    exprs.extend(g.as_expr());
                 }
             }
             Shape::Exprs(exprs)
@@ -1378,7 +1485,7 @@ fn transform_lb_in_expr(
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
-            Shape::ExprsAndBlocks(vec![*condition], blocks)
+            Shape::ExprsAndBlocks(condition.as_expr().into_iter().collect(), blocks)
         }
         ExprKind::Switch {
             scrutinee,
@@ -1388,7 +1495,7 @@ fn transform_lb_in_expr(
         } => {
             let mut blocks = arms.clone();
             blocks.push(*default);
-            Shape::ExprsAndBlocks(vec![*scrutinee], blocks)
+            Shape::ExprsAndBlocks(scrutinee.as_expr().into_iter().collect(), blocks)
         }
         _ => Shape::None,
     };
@@ -1519,10 +1626,13 @@ fn subst_variant_payload_in_stmt(
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => Shape::Expr(*value),
-        StmtKind::Expr(expr) => Shape::Expr(*expr),
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            // A promoted-constant value mentions no local — nothing to rewrite.
+            value.as_expr().map_or(Shape::None, Shape::Expr)
+        }
+        StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::Return { value } => match value {
-            Some(v) => Shape::Expr(*v),
+            Some(v) => v.as_expr().map_or(Shape::None, Shape::Expr),
             None => Shape::None,
         },
         StmtKind::If {
@@ -1534,13 +1644,13 @@ fn subst_variant_payload_in_stmt(
             if let Some(eb) = else_block {
                 blocks.push(*eb);
             }
-            Shape::ExprAndBlocks(Some(*condition), blocks)
+            Shape::ExprAndBlocks(condition.as_expr(), blocks)
         }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
             Shape::ExprAndBlocks(None, vec![*b])
         }
         StmtKind::Break { value, .. } => match value {
-            Some(v) => Shape::Expr(*v),
+            Some(v) => v.as_expr().map_or(Shape::None, Shape::Expr),
             None => Shape::None,
         },
         StmtKind::Continue => Shape::None,
@@ -1576,7 +1686,9 @@ fn subst_variant_payload_in_expr(
     } = &engine.body.exprs[e].kind
     {
         *ci == case_index
-            && matches!(&engine.body.exprs[*inner].kind, ExprKind::Local { index, .. } if *index == temp_local)
+            && inner.as_expr().is_some_and(|ie| {
+                matches!(&engine.body.exprs[ie].kind, ExprKind::Local { index, .. } if *index == temp_local)
+            })
     } else {
         false
     };
@@ -1600,14 +1712,18 @@ fn subst_variant_payload_in_expr(
     }
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
-        }
         | ExprKind::Index {
             expr: left,
             index: right,
-        } => Walk::Exprs(vec![*left, *right]),
+        } => Walk::Exprs(
+            [*left, *right]
+                .into_iter()
+                .filter_map(Operand::as_expr)
+                .collect(),
+        ),
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
@@ -1615,27 +1731,33 @@ fn subst_variant_payload_in_expr(
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. } => Walk::Exprs(vec![*inner]),
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
-        ExprKind::CmRawCall { args, .. } => Walk::Exprs(args.clone()),
+        | ExprKind::GlobalVarSet { value: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
+        }
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
+        ExprKind::CmRawCall { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|o| o.as_expr()).collect())
+        }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![*receiver];
-            v.extend(args.iter().map(|a| a.expr));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![*callee];
-            v.extend(args.iter().copied());
+            let mut v: Vec<ExprId> = callee.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::StructLiteral { fields, .. } => {
-            Walk::Exprs(fields.iter().map(|f| f.value).collect())
+            Walk::Exprs(fields.iter().filter_map(|f| f.value.as_expr()).collect())
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            Walk::Exprs(elements.clone())
+            Walk::Exprs(elements.iter().filter_map(|o| o.as_expr()).collect())
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            Walk::Exprs(payload.iter().copied().collect())
+            Walk::Exprs(payload.iter().filter_map(|o| o.as_expr()).collect())
         }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => Walk::Block(*block),
         ExprKind::If {
@@ -1647,13 +1769,15 @@ fn subst_variant_payload_in_expr(
             if let Some(eb) = else_branch {
                 blocks.push(*eb);
             }
-            Walk::ExprsAndBlocks(vec![*condition], blocks)
+            Walk::ExprsAndBlocks(condition.as_expr().into_iter().collect(), blocks)
         }
         ExprKind::Match { expr, arms } => {
-            let mut exprs = vec![*expr];
+            let mut exprs: Vec<ExprId> = expr.as_expr().into_iter().collect();
             for arm in arms {
-                exprs.push(arm.body);
-                if let Some(g) = arm.guard {
+                if let Some(b) = arm.body.as_expr() {
+                    exprs.push(b);
+                }
+                if let Some(g) = arm.guard.and_then(Operand::as_expr) {
                     exprs.push(g);
                 }
             }
@@ -1667,7 +1791,7 @@ fn subst_variant_payload_in_expr(
         } => {
             let mut blocks = arms.clone();
             blocks.push(*default);
-            Walk::ExprsAndBlocks(vec![*scrutinee], blocks)
+            Walk::ExprsAndBlocks(scrutinee.as_expr().into_iter().collect(), blocks)
         }
         _ => Walk::None,
     };
@@ -1714,8 +1838,8 @@ fn stmt_contains_loop(body: &Body, s: StmtId) -> bool {
         }
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value)
-        | StmtKind::Return { value: Some(value) } => expr_contains_loop(body, *value),
+        | StmtKind::Return { value: Some(value) } => expr_contains_loop_operand(body, *value),
+        StmtKind::Expr(value) => expr_contains_loop_operand(body, *value),
         _ => false,
     }
 }
@@ -1754,18 +1878,20 @@ fn stmt_has_free_unlabeled_loop_exit(body: &Body, s: StmtId, loop_depth: u32) ->
             then_block,
             else_block,
         } => {
-            expr_has_free_unlabeled_loop_exit(body, *condition, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *condition, loop_depth)
                 || stmts_have_free_unlabeled_loop_exit(body, *then_block, loop_depth)
                 || else_block
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(body, b, loop_depth))
         }
         StmtKind::Let { value, .. }
         | StmtKind::LetDestructure { value, .. }
-        | StmtKind::Expr(value)
         | StmtKind::Return { value: Some(value) }
         | StmtKind::Break {
             value: Some(value), ..
-        } => expr_has_free_unlabeled_loop_exit(body, *value, loop_depth),
+        } => expr_has_free_unlabeled_loop_exit_operand(body, *value, loop_depth),
+        StmtKind::Expr(value) => {
+            expr_has_free_unlabeled_loop_exit_operand(body, *value, loop_depth)
+        }
         _ => false,
     }
 }
@@ -1780,14 +1906,14 @@ fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) ->
             then_branch,
             else_branch,
         } => {
-            expr_has_free_unlabeled_loop_exit(body, *condition, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *condition, loop_depth)
                 || stmts_have_free_unlabeled_loop_exit(body, *then_branch, loop_depth)
                 || else_branch
                     .is_some_and(|b| stmts_have_free_unlabeled_loop_exit(body, b, loop_depth))
         }
         ExprKind::Binary { left, right, .. } => {
-            expr_has_free_unlabeled_loop_exit(body, *left, loop_depth)
-                || expr_has_free_unlabeled_loop_exit(body, *right, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *left, loop_depth)
+                || expr_has_free_unlabeled_loop_exit_operand(body, *right, loop_depth)
         }
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
@@ -1797,48 +1923,48 @@ fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) ->
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. }
         | ExprKind::GlobalVarSet { value: inner, .. } => {
-            expr_has_free_unlabeled_loop_exit(body, *inner, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *inner, loop_depth)
         }
         ExprKind::Assign { target, value } => {
             expr_has_free_unlabeled_loop_exit(body, *target, loop_depth)
-                || expr_has_free_unlabeled_loop_exit(body, *value, loop_depth)
+                || expr_has_free_unlabeled_loop_exit_operand(body, *value, loop_depth)
         }
         ExprKind::Call { args, .. } => args
             .iter()
-            .any(|a| expr_has_free_unlabeled_loop_exit(body, a.expr, loop_depth)),
+            .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, a.expr, loop_depth)),
         ExprKind::MethodCall { receiver, args, .. } => {
-            expr_has_free_unlabeled_loop_exit(body, *receiver, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *receiver, loop_depth)
                 || args
                     .iter()
-                    .any(|a| expr_has_free_unlabeled_loop_exit(body, a.expr, loop_depth))
+                    .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, a.expr, loop_depth))
         }
         ExprKind::IndirectCall { callee, args } => {
-            expr_has_free_unlabeled_loop_exit(body, *callee, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *callee, loop_depth)
                 || args
                     .iter()
-                    .any(|a| expr_has_free_unlabeled_loop_exit(body, *a, loop_depth))
+                    .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, *a, loop_depth))
         }
         ExprKind::CmRawCall { args, .. } => args
             .iter()
-            .any(|a| expr_has_free_unlabeled_loop_exit(body, *a, loop_depth)),
+            .any(|a| expr_has_free_unlabeled_loop_exit_operand(body, *a, loop_depth)),
         ExprKind::Index { expr: inner, index } => {
-            expr_has_free_unlabeled_loop_exit(body, *inner, loop_depth)
-                || expr_has_free_unlabeled_loop_exit(body, *index, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *inner, loop_depth)
+                || expr_has_free_unlabeled_loop_exit_operand(body, *index, loop_depth)
         }
         ExprKind::StructLiteral { fields, .. } => fields
             .iter()
-            .any(|f| expr_has_free_unlabeled_loop_exit(body, f.value, loop_depth)),
+            .any(|f| expr_has_free_unlabeled_loop_exit_operand(body, f.value, loop_depth)),
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
-            .any(|e| expr_has_free_unlabeled_loop_exit(body, *e, loop_depth)),
+            .any(|e| expr_has_free_unlabeled_loop_exit_operand(body, *e, loop_depth)),
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.is_some_and(|p| expr_has_free_unlabeled_loop_exit(body, p, loop_depth))
+            payload.is_some_and(|p| expr_has_free_unlabeled_loop_exit_operand(body, p, loop_depth))
         }
         ExprKind::Match { expr, arms } => {
-            expr_has_free_unlabeled_loop_exit(body, *expr, loop_depth)
-                || arms
-                    .iter()
-                    .any(|arm| expr_has_free_unlabeled_loop_exit(body, arm.body, loop_depth))
+            expr_has_free_unlabeled_loop_exit_operand(body, *expr, loop_depth)
+                || arms.iter().any(|arm| {
+                    expr_has_free_unlabeled_loop_exit_operand(body, arm.body, loop_depth)
+                })
         }
         ExprKind::Switch {
             scrutinee,
@@ -1846,7 +1972,7 @@ fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_depth: u32) ->
             default,
             ..
         } => {
-            expr_has_free_unlabeled_loop_exit(body, *scrutinee, loop_depth)
+            expr_has_free_unlabeled_loop_exit_operand(body, *scrutinee, loop_depth)
                 || arms
                     .iter()
                     .any(|b| stmts_have_free_unlabeled_loop_exit(body, *b, loop_depth))

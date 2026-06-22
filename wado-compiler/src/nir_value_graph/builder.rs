@@ -32,10 +32,10 @@
 use crate::hashmap::IndexMap;
 use crate::nir::{FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 
-use super::{HeapVersion, ValueId, ValuePool};
+use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
 /// Per-function heap-version tracker. The builder threads one `HeapState`
 /// through the walk; on every Skel node that may write the heap, the
@@ -148,10 +148,33 @@ impl HeapState {
         self.field_global = snap.field_global;
         self.default_version = snap.default_version;
     }
+
+    /// Seed a fresh `HeapState` (as in [`build_scoped`]) with a snapshot taken at
+    /// a call site of the enclosing build, so a re-valued field read sees the
+    /// caller's version rather than a fresh `INITIAL`. `next` is advanced past
+    /// every restored version: a write inside the re-valued region then allocates
+    /// a generation that cannot collide with a caller-allocated one (the snapshot
+    /// does not carry the build's `next` counter).
+    fn seed_from(&mut self, snap: &HeapSnapshot) {
+        self.per_slot.clone_from(&snap.per_slot);
+        self.per_local.clone_from(&snap.per_local);
+        self.field_global.clone_from(&snap.field_global);
+        self.default_version = snap.default_version;
+        let max = snap
+            .per_slot
+            .values()
+            .chain(snap.per_local.values())
+            .chain(snap.field_global.values())
+            .chain(std::iter::once(&snap.default_version))
+            .copied()
+            .max()
+            .unwrap_or(HeapVersion::INITIAL);
+        self.next = max.bump();
+    }
 }
 
-#[derive(Clone)]
-struct HeapSnapshot {
+#[derive(Clone, Debug)]
+pub(crate) struct HeapSnapshot {
     per_slot: IndexMap<(u32, u32), HeapVersion>,
     per_local: IndexMap<u32, HeapVersion>,
     field_global: IndexMap<u32, HeapVersion>,
@@ -187,22 +210,59 @@ struct FlowArm {
 /// Impure positions are absent from `value_of`. A rule that wants "this
 /// expression's value" should look it up and treat the absence as "no
 /// value-graph identity available" rather than panicking.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValueGraphBuild {
-    pub pool: ValuePool,
     pub value_of: IndexMap<ExprId, ValueId>,
-    /// For each literal `ValueId`, the first `ExprId` we observed producing
-    /// it. Lets a consumer (e.g. store-load-forward) clone the original
-    /// literal `ExprKind` — including its source `repr` — when replacing a
-    /// `Local` read with the forwarded literal, avoiding `repr` churn in
-    /// diagnostic output and NIR dumps.
-    pub literal_source: IndexMap<ValueId, ExprId>,
+    /// Exprs whose `value_of` came from a scoped splice-point re-valuation
+    /// ([`build_scoped`], Method A const-splice), seeded with the call site's
+    /// argument values. Such a constant equals what the program computes but can
+    /// be *more precise* than a fresh whole-function build, so the
+    /// `WADO_VERIFY_VG` refine oracle excludes these exprs (validated by the e2e
+    /// runtime suite instead).
+    pub analysis_only: crate::hashmap::IndexSet<ExprId>,
     /// Per-loop pre-header snapshot of `current_value`, keyed by the loop
     /// body's `BlockId`. Hoisting to the pre-header requires each `Local`
     /// leaf's use-site value to equal this entry value — cross-iteration
     /// invariance is not enough (`loop { x = 5; … x + n … }` has an
     /// invariant use value that differs from the pre-header `x`).
     pub loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// Per-`Call`-expr snapshot of the heap version state at the call site (after
+    /// argument evaluation, before the call's own effects). The build computes
+    /// the caller's correct field versions here; persisting them lets the inline
+    /// splice re-value the callee body with the caller's heap context — seeding
+    /// [`build_scoped`] with this instead of a fresh `INITIAL` heap — so a spliced
+    /// `FieldAccess` (e.g. `arr.len()` → `arr.used`) carries the version a fresh
+    /// whole-function build would assign, the prerequisite for promoting it to an
+    /// operand without a rebuild (see the WEP "ideal end state").
+    pub(crate) call_site_heap: IndexMap<ExprId, HeapSnapshot>,
+    /// The build config (param seeding + alias sets) this graph was produced
+    /// with, so the `WADO_VERIFY_VG` oracle rebuilds with *this* config (not the
+    /// consuming session's) — a config-view difference is not mistaken for an
+    /// over-merge while a genuine maintenance staleness still fails.
+    pub config: BuildConfig,
+}
+
+impl ValueGraphBuild {
+    /// The caller-heap snapshot captured at `call`'s site, if any, for seeding the
+    /// inline splice's scoped re-valuation ([`build_scoped`]).
+    pub(crate) fn call_site_heap_for(&self, call: ExprId) -> Option<&HeapSnapshot> {
+        self.call_site_heap.get(&call)
+    }
+}
+
+/// The parameters [`build`] was called with, retained so a verify-time rebuild
+/// reproduces the same value partition. Only for the verify oracle.
+#[derive(Clone, Default, Debug)]
+pub struct BuildConfig {
+    pub param_locals: Vec<u32>,
+    pub aliased: crate::hashmap::IndexSet<u32>,
+    pub untrackable: crate::hashmap::IndexSet<u32>,
+    pub mut_escaped: crate::hashmap::IndexSet<u32>,
+    /// `ExprId` indices of calls that mutate no caller local
+    /// ([`crate::optimize::alias::pure_calls`]); `bump_call_effects` skips the
+    /// `mut_escaped` per-call bump for these. In the config so the verify oracle's
+    /// rebuild reproduces the same versions as the maintained graph.
+    pub pure_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 /// Build the `ValueGraph` for one function body.
@@ -230,23 +290,267 @@ pub struct ValueGraphBuild {
 /// receiver, or a `stores` stash). [`Builder::bump_call_effects`] bumps only
 /// these across a call; a reference-aliased local whose every escape is an
 /// immutable `&v` keeps its forwarded fields, since no callee can mutate it.
+#[allow(clippy::too_many_arguments)]
 pub fn build(
-    body: &Body,
+    body: &mut Body,
     param_locals: &[u32],
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
+    pure_calls: &crate::hashmap::IndexSet<ExprId>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
-    let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table);
-    b.seed_params(param_locals);
-    b.walk_block(body.root);
+    // Build into the body's own pool: take it out as the seed (so a promoted
+    // `Operand::Value` resolves through the same ids), grow it during the walk,
+    // and write it back. `body.values` is the one persistent pool — ids stay
+    // stable across builds (it only grows), the prerequisite for build-once.
+    let seed = std::mem::take(&mut body.values);
+    let (pool, value_of, loop_entry_values, call_site_heap) = {
+        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
+        b.pure_calls.clone_from(pure_calls);
+        b.seed_params(param_locals);
+        b.walk_block(body.root);
+        (b.pool, b.value_of, b.loop_entry_values, b.call_site_heap)
+    };
+    body.values = pool;
     ValueGraphBuild {
-        pool: b.pool,
-        value_of: b.value_of,
-        literal_source: b.literal_source,
-        loop_entry_values: b.loop_entry_values,
+        value_of,
+        analysis_only: crate::hashmap::IndexSet::default(),
+        loop_entry_values,
+        call_site_heap,
+        config: BuildConfig {
+            param_locals: param_locals.to_vec(),
+            aliased: aliased.clone(),
+            untrackable: untrackable.clone(),
+            mut_escaped: mut_escaped.clone(),
+            pure_calls: pure_calls.clone(),
+        },
     }
+}
+
+/// Scoped re-valuation of one self-contained inlined block, seeded with the
+/// call site's `param → value` map (Method A — splice-point growth). Walks only
+/// `block` after its first `skip` param-binding statements (params pre-seeded),
+/// with a fresh heap (a field read on a param is conservatively fresh), using
+/// `body`'s existing pool so produced values share ids with the graph. Returns
+/// only **constant-literal** entries: a scoped walk's non-constant values carry
+/// context local to the walk (a `FieldAccess`'s `HeapVersion` numbers from the
+/// fresh heap and would over-merge; an `Opaque` of a remapped local is
+/// walk-local), while a constant equals what a fresh build assigns. Never walks
+/// the caller's untouched remainder, so it adds no `builder::build`
+/// (`rebuilds = 0`) and parks no cache.
+///
+/// `scratch` is a pool the caller clones from `body.values` once and reuses
+/// across every inlined block of the function: the walk stamps types
+/// (`set_type`) on the values it interns, and doing that on a value the main
+/// graph shares would mutate its main-graph type and perturb the structural
+/// passes — so the walk runs in `scratch`, leaving `body.values` untouched
+/// (seeded `ValueId`s stay valid; the clone preserves ids). Only the constant
+/// *literals* are re-interned into the main pool, which is idempotent.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_scoped(
+    body: &mut Body,
+    block: BlockId,
+    skip: usize,
+    seed: &IndexMap<u32, ValueId>,
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+    scratch: &mut ValuePool,
+    heap_seed: Option<&HeapSnapshot>,
+    live_base: u32,
+) -> IndexMap<ExprId, ValueId> {
+    let scoped: Vec<(ExprId, ValueId)> = {
+        let pool = std::mem::take(scratch);
+        let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, pool);
+        b.current_value.clone_from(seed);
+        // Seed the heap with the caller's version state at the call site so a
+        // spliced field read carries the version a fresh whole-function build
+        // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.
+        // a `pop()`-shrunk `.used` — and would over-merge).
+        if let Some(h) = heap_seed {
+            b.heap_state.seed_from(h);
+        }
+        let stmts: Vec<StmtId> = b.body.blocks[block]
+            .stmts
+            .iter()
+            .skip(skip)
+            .copied()
+            .collect();
+        for s in stmts {
+            b.walk_stmt(s);
+        }
+        let scoped = b.value_of.iter().map(|(&e, &v)| (e, v)).collect();
+        *scratch = b.pool;
+        scoped
+    };
+    // Surface every caller-rooted re-emittable value (constants, plus
+    // `FieldAccess` / arithmetic over the call-site args at their true version),
+    // re-interned into the live pool. A walk-local value (an `Opaque` of a
+    // remapped callee local) is dropped — it has no caller-pool identity.
+    let mut out = IndexMap::default();
+    for (e, sv) in scoped {
+        if let Some(lv) = reintern_live_rooted(scratch, &mut body.values, sv, live_base) {
+            out.insert(e, lv);
+        }
+    }
+    out
+}
+
+/// Whether `id`'s value (resolved through its e-class) is a constant literal — a
+/// build-context-free value safe to freeze into an operand at the early freeze
+/// (see `extract::freeze_pure_arith`'s constant-leaf promotion).
+pub(crate) fn is_const_value(pool: &ValuePool, id: ValueId) -> bool {
+    is_const_kind(pool.kind(pool.find_imm(id)))
+}
+
+/// Whether a `ValueKind` is a constant literal (carries no build-local context).
+fn is_const_kind(k: &ValueKind) -> bool {
+    matches!(
+        k,
+        ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::String(_)
+            | ValueKind::Null
+            | ValueKind::Unit
+    )
+}
+
+/// Re-intern a constant `ValueKind` into `pool`, returning its id there.
+fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
+    match k {
+        ValueKind::Int(v, t) => pool.int_typed(v, t),
+        ValueKind::Float(b, t) => pool.float_bits(b, t),
+        ValueKind::Bool(b) => pool.bool(b),
+        ValueKind::Char(c) => pool.char(c),
+        ValueKind::String(s) => pool.string(s),
+        ValueKind::Null => pool.null(),
+        ValueKind::Unit => pool.unit(),
+        _ => unreachable!("is_const_kind gates this"),
+    }
+}
+
+/// Re-intern a value computed in a [`build_scoped`] `scratch` pool into the live
+/// `live` pool, when it is rooted entirely in **caller** values — every leaf an
+/// id below `live_base` (the pool length the scratch was cloned at, so those ids
+/// are shared and valid in `live`). Such a value is a constant, or a
+/// `FieldAccess` / arithmetic / `Select` tree over the call-site argument values,
+/// and it carries the caller's heap version (from the seeded heap), so it equals
+/// what a fresh whole-function build assigns the spliced node — sound to surface.
+///
+/// Returns `None` for a walk-local `Opaque` (a remapped callee local with no seed
+/// value) or a `LoopPhi`: those have no meaning in the caller pool. The recursion
+/// is the cross-pool copy [`build_scoped`]'s constant case did, widened past
+/// constants to the re-emittable caller-rooted values (WEP: promote the spliced
+/// `FieldAccess` at its true version).
+fn reintern_live_rooted(
+    scratch: &ValuePool,
+    live: &mut ValuePool,
+    id: ValueId,
+    live_base: u32,
+) -> Option<ValueId> {
+    if id.index() < live_base {
+        return Some(id);
+    }
+    let kind = scratch.kind(id).clone();
+    Some(match kind {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::String(_)
+        | ValueKind::Null
+        | ValueKind::Unit => reintern_const(live, kind),
+        ValueKind::Binary { op, lhs, rhs, ty } => {
+            let l = reintern_live_rooted(scratch, live, lhs, live_base)?;
+            let r = reintern_live_rooted(scratch, live, rhs, live_base)?;
+            live.binary(op, l, r, ty)
+        }
+        ValueKind::Unary { op, operand, ty } => {
+            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
+            live.unary(op, o, ty)
+        }
+        ValueKind::Cast { operand, target } => {
+            let o = reintern_live_rooted(scratch, live, operand, live_base)?;
+            live.cast(o, target)
+        }
+        ValueKind::FieldAccess {
+            receiver,
+            field_index,
+            heap_ver,
+        } => {
+            let r = reintern_live_rooted(scratch, live, receiver, live_base)?;
+            live.field_access(r, field_index, heap_ver)
+        }
+        ValueKind::Select { cond, then, else_ } => {
+            let c = reintern_live_rooted(scratch, live, cond, live_base)?;
+            let t = reintern_live_rooted(scratch, live, then, live_base)?;
+            let e = reintern_live_rooted(scratch, live, else_, live_base)?;
+            live.select(c, t, e)
+        }
+        ValueKind::Opaque(_) | ValueKind::LoopPhi { .. } => return None,
+    })
+}
+
+/// Soundness check for conservative per-edit maintenance: the maintained
+/// partition must **refine** the fresh one — every pair the maintained graph
+/// merges, a fresh build also merges. The reverse (a fresh build merges a pair
+/// the maintained graph splits) is allowed: conservative coarsening, a missed
+/// optimization, never a miscompile. `Err` names the first expression pair the
+/// maintained graph merges but a fresh build splits (the only unsound direction).
+pub(crate) fn partition_refines(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Result<(), String> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Err(format!(
+                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
+                ));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    Ok(())
+}
+
+/// Debug aid: the first `(prev_e, e)` pair the maintained graph merges but a
+/// fresh build splits, for instrumenting a verify failure.
+pub(crate) fn first_overmerge_pair(
+    pool: &mut ValuePool,
+    maintained: &ValueGraphBuild,
+    fresh: &ValueGraphBuild,
+    exprs: &[ExprId],
+) -> Option<(ExprId, ExprId)> {
+    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
+    for &e in exprs {
+        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
+            continue;
+        };
+        let rm = pool.find(vm);
+        let rf = pool.find(vf);
+        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
+            if prev_rf != rf {
+                return Some((prev_e, e));
+            }
+        } else {
+            m_to_f.insert(rm, (rf, e));
+        }
+    }
+    None
 }
 
 struct Builder<'a> {
@@ -258,9 +562,6 @@ struct Builder<'a> {
     current_value: IndexMap<u32, ValueId>,
     /// Heap-version tracker. See [`HeapState`].
     heap_state: HeapState,
-    /// `ValueId` → first source `ExprId` for literal values, so consumers can
-    /// reuse the original `repr`. See [`ValueGraphBuild::literal_source`].
-    literal_source: IndexMap<ValueId, ExprId>,
     /// Store→load forwarding for fields: the value last stored to
     /// `(receiver, field, version)`, returned for reads at the same triple.
     /// Versions are monotonic and never reused, so a write or branch join
@@ -291,6 +592,11 @@ struct Builder<'a> {
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
+    /// Per-`Call`-expr heap snapshots. See [`ValueGraphBuild::call_site_heap`].
+    call_site_heap: IndexMap<ExprId, HeapSnapshot>,
+    /// `ExprId` indices of calls that mutate no caller local. See
+    /// [`BuildConfig::pure_calls`].
+    pure_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 impl<'a> Builder<'a> {
@@ -300,14 +606,14 @@ impl<'a> Builder<'a> {
         untrackable: &crate::hashmap::IndexSet<u32>,
         mut_escaped: &crate::hashmap::IndexSet<u32>,
         type_table: Option<&'a crate::tir::TypeTable>,
+        pool: ValuePool,
     ) -> Self {
         Self {
             body,
-            pool: ValuePool::new(),
+            pool,
             value_of: IndexMap::default(),
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
-            literal_source: IndexMap::default(),
             field_store: IndexMap::default(),
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
@@ -315,6 +621,8 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
+            call_site_heap: IndexMap::default(),
+            pure_calls: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -326,13 +634,26 @@ impl<'a> Builder<'a> {
     /// mixed-prim op (which niri refuses) is not folded. Returns `None` when an
     /// operand is non-constant, a type is unavailable, or the op is not
     /// foldable — the caller then builds the structural `Binary` node.
+    /// Type of an operand during the build: from the skeleton expr, or from the
+    /// build pool for a promoted constant (its source type was seeded there).
+    fn operand_type(&self, op: Operand) -> crate::tir::TypeId {
+        match op {
+            Operand::Expr(e) => self.body.exprs[e].type_id,
+            Operand::Value(v) => self
+                .pool
+                .type_of(v)
+                .expect("promoted operand has a recorded type"),
+        }
+    }
+
     fn fold_binary_const(
         &mut self,
         op: NirBinaryOp,
         lhs: ValueId,
         rhs: ValueId,
-        left: ExprId,
-        right: ExprId,
+        left: Operand,
+        right: Operand,
+        result_type: crate::tir::TypeId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         // Reflexivity: operands sharing a `ValueId` are the same value, so
@@ -343,7 +664,7 @@ impl<'a> Builder<'a> {
         if lhs == rhs
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
-                crate::const_eval::prim_of(self.body.exprs[left].type_id, tt),
+                crate::const_eval::prim_of(self.operand_type(left), tt),
                 Some(
                     crate::tir::PrimitiveType::F32
                         | crate::tir::PrimitiveType::F64
@@ -351,14 +672,47 @@ impl<'a> Builder<'a> {
                 )
             )
         {
-            return Some(
-                self.const_to_value(crate::const_eval::Value::Bool(op == NirBinaryOp::Eq)),
-            );
+            return Some(self.const_to_value(
+                crate::const_eval::Value::Bool(op == NirBinaryOp::Eq),
+                result_type,
+            ));
+        }
+        // Logical identities with one constant-bool operand. `&&` / `||`
+        // short-circuit, but both operands reach here as pure values (the
+        // conditional rhs walk above already accounted for any effects), so
+        // dropping the non-taken arm is sound: `false || x → x`,
+        // `true || x → true`, `true && x → x`, `false && x → false` (and the
+        // mirror cases with the constant on the right).
+        if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
+            let lb = as_bool(self.pool.kind(lhs));
+            let rb = as_bool(self.pool.kind(rhs));
+            let folded = match op {
+                NirBinaryOp::Or => match (lb, rb) {
+                    (Some(true), _) | (_, Some(true)) => {
+                        Some(self.const_to_value(crate::const_eval::Value::Bool(true), result_type))
+                    }
+                    (Some(false), _) => Some(rhs),
+                    (_, Some(false)) => Some(lhs),
+                    _ => None,
+                },
+                NirBinaryOp::And => match (lb, rb) {
+                    (Some(false), _) | (_, Some(false)) => Some(
+                        self.const_to_value(crate::const_eval::Value::Bool(false), result_type),
+                    ),
+                    (Some(true), _) => Some(rhs),
+                    (_, Some(true)) => Some(lhs),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(v) = folded {
+                return Some(v);
+            }
         }
         let lv = self.value_to_const(lhs, left, tt)?;
         let rv = self.value_to_const(rhs, right, tt)?;
         let result = crate::const_eval::eval_binary(lv, op, rv)?;
-        Some(self.const_to_value(result))
+        Some(self.const_to_value(result, result_type))
     }
 
     /// Const-fold a `Unary` (`Neg` / `Not` / `BitNot`) on a literal operand.
@@ -366,12 +720,13 @@ impl<'a> Builder<'a> {
         &mut self,
         op: NirUnaryOp,
         operand: ValueId,
-        inner: ExprId,
+        inner: Operand,
+        result_type: crate::tir::TypeId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         let v = self.value_to_const(operand, inner, tt)?;
         let result = crate::const_eval::eval_unary(op, v)?;
-        Some(self.const_to_value(result))
+        Some(self.const_to_value(result, result_type))
     }
 
     /// Bridge a literal `ValueId` to niri's [`crate::const_eval::Value`], reading the
@@ -380,18 +735,24 @@ impl<'a> Builder<'a> {
     fn value_to_const(
         &self,
         vn: ValueId,
-        expr: ExprId,
+        op: Operand,
         tt: &crate::tir::TypeTable,
     ) -> Option<crate::const_eval::Value> {
-        let prim = crate::const_eval::prim_of(self.body.exprs[expr].type_id, tt);
+        let prim = crate::const_eval::prim_of(self.operand_type(op), tt);
         super::value_kind_to_const(self.pool.kind(vn), prim)
     }
 
-    /// Intern niri's folded [`crate::const_eval::Value`] back as a literal `ValueId`.
-    fn const_to_value(&mut self, v: crate::const_eval::Value) -> ValueId {
+    /// Intern niri's folded [`crate::const_eval::Value`] back as a literal
+    /// `ValueId`, carrying `result_type` as the width-bearing type for `Int` /
+    /// `Float` (the folded expr's NIR type).
+    fn const_to_value(
+        &mut self,
+        v: crate::const_eval::Value,
+        result_type: crate::tir::TypeId,
+    ) -> ValueId {
         match v {
-            crate::const_eval::Value::Int { value, .. } => self.pool.int(value),
-            crate::const_eval::Value::Float { value, .. } => self.pool.float(value),
+            crate::const_eval::Value::Int { value, .. } => self.pool.int_typed(value, result_type),
+            crate::const_eval::Value::Float { value, .. } => self.pool.float(value, result_type),
             crate::const_eval::Value::Bool(b) => self.pool.bool(b),
             crate::const_eval::Value::Char(c) => self.pool.char(c),
         }
@@ -409,10 +770,12 @@ impl<'a> Builder<'a> {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: inner,
-            } => match &self.body.exprs[*inner].kind {
-                ExprKind::Local { index, .. } => Some(*index),
-                _ => None,
-            },
+            } => inner
+                .as_expr()
+                .and_then(|ie| match &self.body.exprs[ie].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                }),
             _ => None,
         };
         match target {
@@ -445,7 +808,9 @@ impl<'a> Builder<'a> {
     fn receiver_root(&self, recv_expr: ExprId) -> Option<u32> {
         match &self.body.exprs[recv_expr].kind {
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::FieldAccess { expr, .. } => self.receiver_root(*expr),
+            ExprKind::FieldAccess { expr, .. } => {
+                expr.as_expr().and_then(|e| self.receiver_root(e))
+            }
             _ => None,
         }
     }
@@ -459,15 +824,40 @@ impl<'a> Builder<'a> {
     /// call's arguments. Non-`mut_escaped` locals (non-aliased, or aliased only
     /// through an immutable `&v`) cannot be mutated by any callee, so their
     /// fields survive the call.
-    fn bump_call_effects(&mut self) {
-        for &l in &self.mut_escaped {
+    /// Invalidate the locals a call at `call` may mutate. A call proven to mutate
+    /// no caller local ([`BuildConfig::pure_calls`]) bumps only the `untrackable`
+    /// (stashed) locals any call can reach; otherwise every `mut_escaped` local is
+    /// bumped (conservative). Skipping the bump for a pure accessor keeps a
+    /// `mut_escaped` receiver's field version stable across it.
+    fn bump_call_effects(&mut self, call: ExprId) {
+        let pure = self.pure_calls.contains(&call);
+        let targets: Vec<u32> = if pure {
+            self.mut_escaped
+                .iter()
+                .filter(|l| self.untrackable.contains(*l))
+                .copied()
+                .collect()
+        } else {
+            self.mut_escaped.iter().copied().collect()
+        };
+        for l in targets {
             self.heap_state.bump_local(l);
+            // A `&mut`-escaped local's *scalar* value can also be overwritten by
+            // the callee (`set_bool(&mut c, false)`), not only its heap fields, so
+            // drop its tracked `current_value` to a fresh opaque. Without this the
+            // graph keeps the pre-call constant (`c = true`) for reads after the
+            // call — a stale value the WIR codegen ignores (it reads the slot) but
+            // that over-merges with the call result a fresh build splits.
+            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(l));
+            self.current_value.insert(l, opaque);
         }
     }
 
     fn seed_params(&mut self, param_locals: &[u32]) {
         for &idx in param_locals {
-            let opaque = self.pool.fresh_opaque();
+            // A parameter's value re-emits as `local.get idx` — record the
+            // source so the extractor can materialise a promoted value over it.
+            let opaque = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
             self.current_value.insert(idx, opaque);
         }
     }
@@ -484,32 +874,36 @@ impl<'a> Builder<'a> {
             StmtKind::Let {
                 local_index, value, ..
             } => {
-                let v = self
-                    .walk_expr(value)
-                    .unwrap_or_else(|| self.pool.fresh_opaque());
+                let v = self.walk_operand(value).unwrap_or_else(|| {
+                    self.pool
+                        .fresh_opaque_with_source(OpaqueSource::Local(local_index))
+                });
                 self.current_value.insert(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.
-                self.seed_struct_literal_fields(local_index, v, value);
-                self.update_ref_target(local_index, value);
+                // A promoted constant binding has no struct fields / ref target.
+                if let Some(ve) = value.as_expr() {
+                    self.seed_struct_literal_fields(local_index, v, ve);
+                    self.update_ref_target(local_index, ve);
+                }
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.walk_expr(value);
+                self.walk_operand(value);
                 // Destructured bindings are Opaque for now; field-projection
                 // Value kinds for them are a follow-up.
                 self.bind_pattern_opaque(pattern);
             }
             StmtKind::Expr(e) => {
-                self.walk_expr(e);
+                self.walk_operand(e);
             }
             StmtKind::Return { value } => {
                 if let Some(v) = value {
-                    self.walk_expr(v);
+                    self.walk_operand(v);
                 }
             }
             StmtKind::Break { value, .. } => {
                 if let Some(v) = value {
-                    self.walk_expr(v);
+                    self.walk_operand(v);
                 }
             }
             StmtKind::Continue => {}
@@ -518,7 +912,7 @@ impl<'a> Builder<'a> {
                 then_block,
                 else_block,
             } => {
-                let cond_v = self.walk_expr(condition);
+                let cond_v = self.walk_operand(condition);
                 let pre = self.flow_snapshot();
                 self.walk_block(then_block);
                 let then_arm = FlowArm {
@@ -565,48 +959,27 @@ impl<'a> Builder<'a> {
         let id = self.compute_value(expr);
         if let Some(id) = id {
             self.value_of.insert(expr, id);
+            // Record the source type so extraction can materialise this value
+            // once the typed `ExprNode` is promoted away.
+            self.pool.set_type(id, self.body.exprs[expr].type_id);
         }
         id
+    }
+
+    /// Walk an operand: a promoted pure value resolves through the pool; an
+    /// effectful subtree walks its skeleton.
+    fn walk_operand(&mut self, op: Operand) -> Option<ValueId> {
+        match op {
+            Operand::Value(v) => Some(self.pool.find(v)),
+            Operand::Expr(e) => self.walk_expr(e),
+        }
     }
 
     fn compute_value(&mut self, expr: ExprId) -> Option<ValueId> {
         match self.body.exprs[expr].kind.clone() {
             // ---- Literals ----
-            ExprKind::IntLiteral { value, .. } => {
-                let v = self.pool.int(value);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::FloatLiteral { value, .. } => {
-                let v = self.pool.float(value);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::BoolLiteral(b) => {
-                let v = self.pool.bool(b);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::CharLiteral(c) => {
-                let v = self.pool.char(c);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::StringLiteral(s) => {
-                let v = self.pool.string(s);
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::Null => {
-                let v = self.pool.null();
-                self.record_literal(expr, v);
-                Some(v)
-            }
-            ExprKind::Unit => {
-                let v = self.pool.unit();
-                self.record_literal(expr, v);
-                Some(v)
-            }
+            // Orphaned tombstone: no value.
+            ExprKind::Dead => None,
 
             // ---- Local read ----
             ExprKind::Local { index, .. } => Some(self.read_local(index)),
@@ -618,7 +991,7 @@ impl<'a> Builder<'a> {
                 // impure (a `?` short-circuit on `lhs` would skip the rhs
                 // walk and miss any local assignments / heap writes inside
                 // it).
-                let lhs = self.walk_expr(left);
+                let lhs = self.walk_operand(left);
                 let rhs = if matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
                     // Short-circuit `&&` / `||`: the rhs runs conditionally, so
                     // its effects "may or may not have happened" — any local it
@@ -626,7 +999,7 @@ impl<'a> Builder<'a> {
                     // invalidated (both below). Else `false && { x = 2; true }`
                     // would commit `x = 2` and forward the never-stored value.
                     let saved_cur = self.current_value.clone();
-                    let rhs = self.walk_expr(right);
+                    let rhs = self.walk_operand(right);
                     let changed: crate::hashmap::IndexSet<u32> = self
                         .current_value
                         .iter()
@@ -643,18 +1016,22 @@ impl<'a> Builder<'a> {
                     self.drop_ref_targets_for(&changed);
                     // Invalidate only what the rhs writes, not a blanket
                     // `bump_all`: a pure rhs leaves unrelated fields intact.
-                    let eff = collect_node_heap_effects(self.body, NodeRef::Expr(right));
-                    self.apply_loop_heap_effects(&eff);
+                    if let Some(re) = right.as_expr() {
+                        let eff = collect_node_heap_effects(self.body, NodeRef::Expr(re));
+                        self.apply_loop_heap_effects(&eff);
+                    }
                     rhs
                 } else {
-                    self.walk_expr(right)
+                    self.walk_operand(right)
                 };
                 let lhs = lhs?;
                 let rhs = rhs?;
-                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right) {
+                let result_type = self.body.exprs[expr].type_id;
+                if let Some(folded) = self.fold_binary_const(op, lhs, rhs, left, right, result_type)
+                {
                     return Some(folded);
                 }
-                Some(self.pool.binary(op, lhs, rhs))
+                Some(self.pool.binary(op, lhs, rhs, result_type))
             }
             ExprKind::Unary { op, expr: inner } => {
                 // `Ref` / `MutRef` / `Deref` are address-taking / heap-bearing
@@ -662,21 +1039,22 @@ impl<'a> Builder<'a> {
                 // subtrees still land in `value_of`) but do not assign an id
                 // to this expr.
                 if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                    self.walk_expr(inner);
+                    self.walk_operand(inner);
                     None
                 } else {
-                    let operand = self.walk_expr(inner)?;
-                    if let Some(folded) = self.fold_unary_const(op, operand, inner) {
+                    let operand = self.walk_operand(inner)?;
+                    let result_type = self.body.exprs[expr].type_id;
+                    if let Some(folded) = self.fold_unary_const(op, operand, inner, result_type) {
                         return Some(folded);
                     }
-                    Some(self.pool.unary(op, operand))
+                    Some(self.pool.unary(op, operand, result_type))
                 }
             }
             ExprKind::Cast {
                 expr: inner,
                 target_type,
             } => {
-                let operand = self.walk_expr(inner)?;
+                let operand = self.walk_operand(inner)?;
                 Some(self.pool.cast(operand, target_type))
             }
 
@@ -693,10 +1071,12 @@ impl<'a> Builder<'a> {
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        let bare_local =
-                            matches!(&self.body.exprs[*recv].kind, ExprKind::Local { .. });
-                        let root = self.receiver_root(*recv);
-                        let recv_v = self.walk_expr(*recv);
+                        let bare_local = matches!(
+                            &self.body.exprs[recv.as_expr().expect("skeleton operand")].kind,
+                            ExprKind::Local { .. }
+                        );
+                        let root = self.receiver_root(recv.as_expr().expect("skeleton operand"));
+                        let recv_v = self.walk_operand(*recv);
                         Some((root, recv_v, bare_local))
                     }
                     _ => {
@@ -705,7 +1085,7 @@ impl<'a> Builder<'a> {
                     }
                 };
                 let v = self
-                    .walk_expr(value)
+                    .walk_operand(value)
                     .unwrap_or_else(|| self.pool.fresh_opaque());
                 match target_kind {
                     ExprKind::Local { index, .. } => {
@@ -713,8 +1093,10 @@ impl<'a> Builder<'a> {
                         // `local = S { f: lit, … }` rebinds `local` to a fresh
                         // object; seed each pure field like the `Let` case so a
                         // later `local.f` read forwards the literal.
-                        self.seed_struct_literal_fields(index, v, value);
-                        self.update_ref_target(index, value);
+                        if let Some(ve) = value.as_expr() {
+                            self.seed_struct_literal_fields(index, v, ve);
+                            self.update_ref_target(index, ve);
+                        }
                     }
                     ExprKind::FieldAccess { field_index, .. } => {
                         let (root, recv_v, bare_local) = field_place.expect("field target");
@@ -748,7 +1130,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::GlobalVarSet { value, .. } => {
-                self.walk_expr(value);
+                self.walk_operand(value);
                 // Globals share the heap from the optimizer's perspective.
                 self.heap_state.bump_all();
                 None
@@ -762,7 +1144,7 @@ impl<'a> Builder<'a> {
                 // stay opaque: forwarding the tail would let CSE drop the side
                 // effects of the leading statements (e.g. `{ cold_path(); e }`).
                 let tail = if let [only] = self.body.blocks[block].stmts[..]
-                    && let StmtKind::Expr(e) = &self.body.stmts[only].kind
+                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
                 {
                     Some(*e)
                 } else {
@@ -780,7 +1162,7 @@ impl<'a> Builder<'a> {
                 then_branch,
                 else_branch,
             } => {
-                let cond_v = self.walk_expr(condition);
+                let cond_v = self.walk_operand(condition);
                 let pre = self.flow_snapshot();
                 self.walk_block(then_branch);
                 let then_arm = FlowArm {
@@ -813,7 +1195,7 @@ impl<'a> Builder<'a> {
                 None
             }
             ExprKind::Match { expr: scrut, arms } => {
-                self.walk_expr(scrut);
+                self.walk_operand(scrut);
                 self.walk_match_arms(&arms);
                 None
             }
@@ -823,7 +1205,7 @@ impl<'a> Builder<'a> {
                 default,
                 ..
             } => {
-                self.walk_expr(scrutinee);
+                self.walk_operand(scrutinee);
                 let pre = self.flow_snapshot();
                 let mut flow_arms: Vec<FlowArm> = Vec::with_capacity(arms.len() + 1);
                 for arm in arms.iter().copied().chain(std::iter::once(default)) {
@@ -847,13 +1229,16 @@ impl<'a> Builder<'a> {
                 // The receiver must be a pure value for the FieldAccess to
                 // get a ValueId — an impure receiver (a Call result, for
                 // instance) propagates None.
-                let walked = self.walk_expr(inner)?;
+                let walked = self.walk_operand(inner)?;
                 // Reference look-through: a read `r.f` where `r = &v` forwards
                 // from `v`'s field slot (the pointee's current VN / root),
                 // using `v`'s live slot state so a stale forward is impossible.
-                let (recv, root) = match self.reference_lookthrough(inner) {
+                // A promoted `Operand::Value` receiver has no skeleton place: no
+                // reference target and no receiver root local.
+                let inner_e = inner.as_expr();
+                let (recv, root) = match inner_e.and_then(|ie| self.reference_lookthrough(ie)) {
                     Some((pointee_vn, pointee)) => (pointee_vn, Some(pointee)),
-                    None => (walked, self.receiver_root(inner)),
+                    None => (walked, inner_e.and_then(|ie| self.receiver_root(ie))),
                 };
                 let heap_ver = self.heap_state.version_of(root, field_index);
                 // Store→load forwarding: a value stored to this exact
@@ -864,70 +1249,75 @@ impl<'a> Builder<'a> {
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
-                self.walk_expr(inner);
-                self.walk_expr(index);
+                self.walk_operand(inner);
+                self.walk_operand(index);
                 None
             }
             ExprKind::VariantTag { expr: inner }
             | ExprKind::VariantTest { expr: inner, .. }
             | ExprKind::VariantPayload { expr: inner, .. } => {
-                self.walk_expr(inner);
+                self.walk_operand(inner);
                 None
             }
 
             // ---- Allocation-bearing constructors (Skel-side per Q1) ----
             ExprKind::StructLiteral { fields, .. } => {
                 for f in fields {
-                    self.walk_expr(f.value);
+                    self.walk_operand(f.value);
                 }
                 None
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for e in elements {
-                    self.walk_expr(e);
+                    self.walk_operand(e);
                 }
                 None
             }
             ExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
-                    self.walk_expr(p);
+                    self.walk_operand(p);
                 }
                 None
             }
             ExprKind::EnumConstruct { .. } => None,
             ExprKind::ClosureToCanonical { functor, .. } => {
-                self.walk_expr(functor);
+                self.walk_operand(functor);
                 None
             }
 
             // ---- Calls (effectful, may write the heap) ----
             ExprKind::Call { args, .. } => {
                 for a in args {
-                    self.walk_expr(a.expr);
+                    self.walk_operand(a.expr);
                 }
-                self.bump_call_effects();
+                // Heap version state the callee body would observe, captured
+                // after argument evaluation and before this call's own effects —
+                // persisted so the inline splice can re-value the callee with the
+                // caller's field versions ([`ValueGraphBuild::call_site_heap`]).
+                self.call_site_heap.insert(expr, self.heap_state.snapshot());
+                self.bump_call_effects(expr);
                 None
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
-                    self.walk_expr(a);
+                    self.walk_operand(a);
                 }
                 // Raw CM calls have opaque captures; stay fully conservative.
                 self.heap_state.bump_all();
                 None
             }
             ExprKind::MethodCall { receiver, args, .. } => {
-                self.walk_expr(receiver);
+                self.walk_operand(receiver);
                 for a in args {
-                    self.walk_expr(a.expr);
+                    self.walk_operand(a.expr);
                 }
-                self.bump_call_effects();
+                self.bump_call_effects(expr);
                 None
             }
             ExprKind::IndirectCall { callee, args } => {
-                self.walk_expr(callee);
+                self.walk_operand(callee);
                 for a in args {
-                    self.walk_expr(a);
+                    self.walk_operand(a);
                 }
                 self.heap_state.bump_all();
                 None
@@ -936,10 +1326,6 @@ impl<'a> Builder<'a> {
             // ---- Other Skel-side leaves ----
             ExprKind::GlobalVarGet { .. } | ExprKind::BytesLiteral(_) => None,
         }
-    }
-
-    fn record_literal(&mut self, expr: ExprId, value: ValueId) {
-        self.literal_source.entry(value).or_insert(expr);
     }
 
     /// Seed the field-store map from a `let x = S { f: v, … }` binding so a
@@ -972,7 +1358,7 @@ impl<'a> Builder<'a> {
                     let Some(&last) = self.body.blocks[*b].stmts.last() else {
                         return;
                     };
-                    let StmtKind::Expr(tail) = &self.body.stmts[last].kind else {
+                    let StmtKind::Expr(Operand::Expr(tail)) = &self.body.stmts[last].kind else {
                         return;
                     };
                     producer = *tail;
@@ -1001,11 +1387,16 @@ impl<'a> Builder<'a> {
                         .iter()
                         .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || block_breaks_to_node(self.body, NodeRef::Expr(value), &label)
+                        || value.as_expr().is_some_and(|ve| {
+                            block_breaks_to_node(self.body, NodeRef::Expr(ve), &label)
+                        })
                     {
                         return;
                     }
-                    producer = value;
+                    let Some(pe) = value.as_expr() else {
+                        return;
+                    };
+                    producer = pe;
                 }
                 _ => return,
             }
@@ -1015,9 +1406,15 @@ impl<'a> Builder<'a> {
         };
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
-        let pairs: Vec<(u32, ExprId)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
         for (field_index, field_value) in pairs {
-            if let Some(&fv) = self.value_of.get(&field_value) {
+            // A promoted constant field is its own `ValueId`; a skeleton field is
+            // resolved through `value_of`.
+            let fv = match field_value {
+                Operand::Value(v) => Some(v),
+                Operand::Expr(e) => self.value_of.get(&e).copied(),
+            };
+            if let Some(fv) = fv {
                 let ver = self.heap_state.version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
             }
@@ -1069,7 +1466,7 @@ impl<'a> Builder<'a> {
         } else {
             // Unbound locals shouldn't occur on well-typed NIR; cache a
             // fresh Opaque so subsequent reads agree.
-            let v = self.pool.fresh_opaque();
+            let v = self.pool.fresh_opaque_with_source(OpaqueSource::Local(idx));
             self.current_value.insert(idx, v);
             v
         }
@@ -1078,7 +1475,9 @@ impl<'a> Builder<'a> {
     fn bind_pattern_opaque(&mut self, pat: PatId) {
         match self.body.pats[pat].kind.clone() {
             PatKind::Binding { local_index, .. } => {
-                let v = self.pool.fresh_opaque();
+                let v = self
+                    .pool
+                    .fresh_opaque_with_source(OpaqueSource::Local(local_index));
                 self.current_value.insert(local_index, v);
             }
             PatKind::Tuple(children, _) => {
@@ -1102,7 +1501,7 @@ impl<'a> Builder<'a> {
                 }
             }
             PatKind::ConstantValue { expr } => {
-                self.walk_expr(expr);
+                self.walk_operand(expr);
             }
             PatKind::Wildcard
             | PatKind::Literal(_)
@@ -1418,7 +1817,10 @@ impl<'a> Builder<'a> {
         for arm in arms {
             if let Some(g) = arm.guard {
                 any_guard = true;
-                collect_writes_in_expr(self.body, g, &mut guard_writes);
+                // A promoted constant guard (`Operand::Value`) writes nothing.
+                if let Some(ge) = g.as_expr() {
+                    collect_writes_in_expr(self.body, ge, &mut guard_writes);
+                }
             }
         }
         for idx in &guard_writes {
@@ -1438,9 +1840,9 @@ impl<'a> Builder<'a> {
             self.flow_restore(&pre);
             self.bind_pattern_opaque(arm.pattern);
             if let Some(g) = arm.guard {
-                self.walk_expr(g);
+                self.walk_operand(g);
             }
-            self.walk_expr(arm.body);
+            self.walk_operand(arm.body);
             // Match arm bodies are expressions; without a `TypeTable` the
             // builder cannot detect a never-typed (`=> return …`) body, so
             // every arm is conservatively treated as falling through. A
@@ -1497,7 +1899,12 @@ impl<'a> Builder<'a> {
     /// local's `per_slot` (or `field_global` when the local is aliased); a
     /// `&mut`/method/mut-arg borrow bumps the local's `per_local`; an external
     /// write (non-builtin call, indirect call, opaque store) invalidates every
-    /// reference-aliased local's fields. Non-touched fields survive.
+    /// `mut_escaped` local's fields. Non-touched fields survive — and an
+    /// *immutably*-`&`-escaped local (`&config` passed to `fn process(&Config)`)
+    /// is **not** `mut_escaped`, so its fields survive the call, matching the
+    /// per-call [`Builder::bump_call_effects`] (which the loop path must agree
+    /// with — using the wider `aliased` here lost the forward for an immutable
+    /// reference field read across a loop call: `opt_licm_immut_ref`).
     fn apply_loop_heap_effects(&mut self, eff: &LoopHeapEffects) {
         for &(local, field) in &eff.written_fields {
             if self.aliased.contains(&local) {
@@ -1510,7 +1917,7 @@ impl<'a> Builder<'a> {
             self.heap_state.bump_local(local);
         }
         if eff.has_external_writes {
-            for &local in &self.aliased {
+            for &local in &self.mut_escaped {
                 self.heap_state.bump_local(local);
             }
         }
@@ -1584,7 +1991,9 @@ fn is_builtin_pure_call(func: &FunctionRef) -> bool {
 fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            root_local_of(body, inner.as_expr().expect("skeleton operand"))
+        }
         _ => None,
     }
 }
@@ -1622,7 +2031,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                 expr: inner,
                 field_index,
                 ..
-            } => match &body.exprs[*inner].kind {
+            } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
                 ExprKind::Local { index, .. } => {
                     eff.written_fields.insert((*index, *field_index));
                 }
@@ -1636,7 +2045,7 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => match &body.exprs[*inner].kind {
+        } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
             ExprKind::Local { index, .. } => {
                 eff.mut_borrowed.insert(*index);
             }
@@ -1644,11 +2053,11 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                 expr: receiver,
                 field_index,
                 ..
-            } => match &body.exprs[*receiver].kind {
+            } => match &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
                 ExprKind::Local { index, .. } => {
                     eff.written_fields.insert((*index, *field_index));
                 }
-                _ => match root_local_of(body, *receiver) {
+                _ => match root_local_of(body, receiver.as_expr().expect("skeleton operand")) {
                     Some(root) => {
                         eff.mut_borrowed.insert(root);
                     }
@@ -1660,7 +2069,8 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Call { func, args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } =
+                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1670,12 +2080,15 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } = &body.exprs[*receiver].kind {
+            if let ExprKind::Local { index, .. } =
+                &body.exprs[receiver.as_expr().expect("skeleton operand")].kind
+            {
                 eff.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } = &body.exprs[arg.expr].kind
+                    && let ExprKind::Local { index, .. } =
+                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1710,11 +2123,13 @@ fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::I
             local_index, value, ..
         } => {
             out.insert(*local_index);
-            collect_writes_in_expr(body, *value, out);
+            if let Some(ve) = value.as_expr() {
+                collect_writes_in_expr(body, ve, out);
+            }
         }
         StmtKind::LetDestructure { pattern, value, .. } => {
             collect_writes_in_pattern(body, *pattern, out);
-            collect_writes_in_expr(body, *value, out);
+            collect_writes_in_operand(body, *value, out);
         }
         _ => {
             let mut kids = Vec::new();
@@ -1728,6 +2143,12 @@ fn collect_writes_in_stmt(body: &Body, stmt: StmtId, out: &mut crate::hashmap::I
                 }
             }
         }
+    }
+}
+
+fn collect_writes_in_operand(body: &Body, op: Operand, out: &mut crate::hashmap::IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_writes_in_expr(body, e, out);
     }
 }
 
@@ -1765,6 +2186,14 @@ fn collect_writes_in_pattern(body: &Body, pat: PatId, out: &mut crate::hashmap::
     }
 }
 
+/// The boolean a constant `Bool` value carries, if any.
+fn as_bool(kind: &super::ValueKind) -> Option<bool> {
+    match kind {
+        super::ValueKind::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1776,23 +2205,41 @@ mod tests {
 
     // ----- Body builders for tests -----
 
-    fn build_t(body: &Body, params: &[NirParam]) -> ValueGraphBuild {
+    fn build_t(body: &mut Body, params: &[NirParam]) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, &empty, &empty, &empty, None)
+        let no_pure_calls = crate::hashmap::IndexSet::default();
+        build(
+            body,
+            &param_locals,
+            &empty,
+            &empty,
+            &empty,
+            &no_pure_calls,
+            None,
+        )
     }
 
     /// `build` with an explicit reference-aliased set (no `untrackable`). The
     /// aliased set doubles as `mut_escaped` so these tests exercise the
     /// call-invalidation path (a mutably-aliased local is clobbered by calls).
     fn build_aliased(
-        body: &Body,
+        body: &mut Body,
         params: &[NirParam],
         aliased: &crate::hashmap::IndexSet<u32>,
     ) -> ValueGraphBuild {
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let empty = crate::hashmap::IndexSet::default();
-        build(body, &param_locals, aliased, &empty, aliased, None)
+        let no_pure_calls = crate::hashmap::IndexSet::default();
+        build(
+            body,
+            &param_locals,
+            aliased,
+            &empty,
+            aliased,
+            &no_pure_calls,
+            None,
+        )
     }
 
     fn empty_body() -> Body {
@@ -1821,14 +2268,11 @@ mod tests {
         });
     }
 
-    fn int_lit(body: &mut Body, value: u64) -> ExprId {
-        alloc_expr(
-            body,
-            ExprKind::IntLiteral {
-                value,
-                repr: value.to_string(),
-            },
-        )
+    fn int_lit(body: &mut Body, value: u64) -> Operand {
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(value, TypeTable::I32),
+            TypeTable::I32,
+        ))
     }
 
     fn local_ref(body: &mut Body, idx: u32) -> ExprId {
@@ -1841,7 +2285,7 @@ mod tests {
         )
     }
 
-    fn let_stmt(body: &mut Body, idx: u32, value: ExprId, is_mut: bool) -> StmtId {
+    fn let_stmt(body: &mut Body, idx: u32, value: impl Into<Operand>, is_mut: bool) -> StmtId {
         alloc_stmt(
             body,
             StmtKind::Let {
@@ -1850,24 +2294,45 @@ mod tests {
                 is_mut,
                 is_reactive: false,
                 type_id: TypeTable::UNIT,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
     }
 
-    fn assign_stmt(body: &mut Body, idx: u32, value: ExprId) -> StmtId {
+    fn assign_stmt(body: &mut Body, idx: u32, value: impl Into<Operand>) -> StmtId {
         let target = local_ref(body, idx);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value });
-        alloc_stmt(body, StmtKind::Expr(assign))
+        let assign = alloc_expr(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        );
+        alloc_stmt(body, StmtKind::Expr(assign.into()))
     }
 
-    fn binary(body: &mut Body, op: NirBinaryOp, left: ExprId, right: ExprId) -> ExprId {
-        alloc_expr(body, ExprKind::Binary { left, op, right })
+    fn binary(
+        body: &mut Body,
+        op: NirBinaryOp,
+        left: impl Into<Operand>,
+        right: impl Into<Operand>,
+    ) -> ExprId {
+        alloc_expr(
+            body,
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
+            },
+        )
     }
 
-    fn bool_lit(body: &mut Body, b: bool) -> ExprId {
-        alloc_expr(body, ExprKind::BoolLiteral(b))
+    fn bool_lit(body: &mut Body, b: bool) -> Operand {
+        Operand::Value(
+            body.values
+                .alloc_unshared(crate::nir_value_graph::ValueKind::Bool(b), TypeTable::BOOL),
+        )
     }
 
     fn block_with(body: &mut Body, stmts: Vec<StmtId>) -> crate::nir_arena::BlockId {
@@ -1881,17 +2346,28 @@ mod tests {
         alloc_expr(
             body,
             ExprKind::FieldAccess {
-                expr,
+                expr: expr.into(),
                 field_index,
                 field_name: format!("__f{field_index}"),
             },
         )
     }
 
-    fn field_assign_stmt(body: &mut Body, recv: ExprId, field_index: u32, value: ExprId) -> StmtId {
+    fn field_assign_stmt(
+        body: &mut Body,
+        recv: ExprId,
+        field_index: u32,
+        value: impl Into<Operand>,
+    ) -> StmtId {
         let target = field_access(body, recv, field_index);
-        let assign = alloc_expr(body, ExprKind::Assign { target, value });
-        alloc_stmt(body, StmtKind::Expr(assign))
+        let assign = alloc_expr(
+            body,
+            ExprKind::Assign {
+                target,
+                value: value.into(),
+            },
+        );
+        alloc_stmt(body, StmtKind::Expr(assign.into()))
     }
 
     fn call_void(body: &mut Body) -> ExprId {
@@ -1926,45 +2402,51 @@ mod tests {
 
     #[test]
     fn literal_int_gets_value_id() {
+        // A pure scalar literal is born as `Operand::Value`; its identity is the
+        // pooled value directly, not a `value_of` entry for a skeleton node.
         let mut body = empty_body();
         let lit = int_lit(&mut body, 42);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(lit));
-        root_with(&mut body, vec![s]);
-        let r = build_t(&body, &[]);
-        let v = r.value_of[&lit];
-        assert_eq!(r.pool.kind(v), &ValueKind::Int(42));
+        let v = lit.as_value().unwrap();
+        assert_eq!(
+            body.values.kind(v),
+            &ValueKind::Int(42, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
     fn let_then_read_returns_same_value() {
-        // let x = 1; x
+        // let x = 1; x — the read of `x` resolves to the bound literal's value.
         let mut body = empty_body();
         let lit = int_lit(&mut body, 1);
+        let lit_v = lit.as_value().unwrap();
         let let_s = let_stmt(&mut body, 0, lit, false);
         let read = local_ref(&mut body, 0);
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, s2]);
-        let r = build_t(&body, &[]);
-        let lit_v = r.value_of[&lit];
+        let r = build_t(&mut body, &[]);
         let read_v = r.value_of[&read];
         assert_eq!(lit_v, read_v);
-        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(1));
+        assert_eq!(
+            body.values.kind(read_v),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
     fn equivalent_arithmetic_dedupes() {
-        // let a = 1 + 2; let b = 1 + 2;
+        // let a = 1 + 2; let b = 1 + 2; — two binaries over the *same* operand
+        // values share a hash-consed `ValueId` (CSE). Each operand value is shared
+        // (one pool id per constant), as a real CSE-able program presents them;
+        // distinct unshared constants would not coincide, and need not — they fold.
         let mut body = empty_body();
-        let one_a = int_lit(&mut body, 1);
-        let two_a = int_lit(&mut body, 2);
-        let add_a = binary(&mut body, NirBinaryOp::Add, one_a, two_a);
+        let one = int_lit(&mut body, 1);
+        let two = int_lit(&mut body, 2);
+        let add_a = binary(&mut body, NirBinaryOp::Add, one, two);
         let let_a = let_stmt(&mut body, 0, add_a, false);
-        let one_b = int_lit(&mut body, 1);
-        let two_b = int_lit(&mut body, 2);
-        let add_b = binary(&mut body, NirBinaryOp::Add, one_b, two_b);
+        let add_b = binary(&mut body, NirBinaryOp::Add, one, two);
         let let_b = let_stmt(&mut body, 1, add_b, false);
         root_with(&mut body, vec![let_a, let_b]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
     }
 
@@ -1977,19 +2459,24 @@ mod tests {
         let two = int_lit(&mut body, 2);
         let assign = assign_stmt(&mut body, 0, two);
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, assign, s_read]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
     fn if_merge_builds_select() {
-        // let mut x = 1; if true { x = 2; } else { x = 3; }; x
+        // fn(c: bool) { let mut x = 1; if c { x = 2; } else { x = 3; }; x }
+        // A non-constant (param-Opaque) condition keeps the merge a Select; a
+        // constant condition would fold to the taken arm (see `select`).
         let mut body = empty_body();
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
-        let cond = bool_lit(&mut body, true);
+        let cond = local_ref(&mut body, 1);
         let two = int_lit(&mut body, 2);
         let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
@@ -1999,21 +2486,34 @@ mod tests {
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: Some(else_block),
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
+        let cond_param = NirParam {
+            name: "c".to_string(),
+            type_id: TypeTable::BOOL,
+            local_index: 1,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&mut body, &[cond_param]);
         let read_v = r.value_of[&read];
-        match r.pool.kind(read_v) {
+        match body.values.kind(read_v) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
-                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(3));
+                assert!(matches!(body.values.kind(*cond), ValueKind::Opaque(_)));
+                assert_eq!(
+                    body.values.kind(*then),
+                    &ValueKind::Int(2, crate::tir::TypeTable::I32)
+                );
+                assert_eq!(
+                    body.values.kind(*else_),
+                    &ValueKind::Int(3, crate::tir::TypeTable::I32)
+                );
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2021,31 +2521,45 @@ mod tests {
 
     #[test]
     fn if_without_else_merges_with_pre_value() {
-        // let mut x = 1; if true { x = 2; }; x
+        // fn(c: bool) { let mut x = 1; if c { x = 2; }; x }
+        // Non-constant condition (see `if_merge_builds_select`).
         let mut body = empty_body();
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
-        let cond = bool_lit(&mut body, true);
+        let cond = local_ref(&mut body, 1);
         let two = int_lit(&mut body, 2);
         let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
         let if_s = alloc_stmt(
             &mut body,
             StmtKind::If {
-                condition: cond,
+                condition: cond.into(),
                 then_block,
                 else_block: None,
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
-        match r.pool.kind(r.value_of[&read]) {
+        let cond_param = NirParam {
+            name: "c".to_string(),
+            type_id: TypeTable::BOOL,
+            local_index: 1,
+            is_mut: false,
+            span: Span::default(),
+        };
+        let r = build_t(&mut body, &[cond_param]);
+        match body.values.kind(r.value_of[&read]) {
             ValueKind::Select { cond, then, else_ } => {
-                assert_eq!(r.pool.kind(*cond), &ValueKind::Bool(true));
-                assert_eq!(r.pool.kind(*then), &ValueKind::Int(2));
-                assert_eq!(r.pool.kind(*else_), &ValueKind::Int(1));
+                assert!(matches!(body.values.kind(*cond), ValueKind::Opaque(_)));
+                assert_eq!(
+                    body.values.kind(*then),
+                    &ValueKind::Int(2, crate::tir::TypeTable::I32)
+                );
+                assert_eq!(
+                    body.values.kind(*else_),
+                    &ValueKind::Int(1, crate::tir::TypeTable::I32)
+                );
             }
             other => panic!("expected Select, got {other:?}"),
         }
@@ -2058,11 +2572,12 @@ mod tests {
         let one = int_lit(&mut body, 1);
         let let_s = let_stmt(&mut body, 0, one, true);
         let cond = bool_lit(&mut body, true);
-        let two_a = int_lit(&mut body, 2);
-        let assign_then = assign_stmt(&mut body, 0, two_a);
+        // Both arms write the same value `2` (one shared pool id), so the merge
+        // agrees without a Select.
+        let two = int_lit(&mut body, 2);
+        let assign_then = assign_stmt(&mut body, 0, two);
         let then_block = block_with(&mut body, vec![assign_then]);
-        let two_b = int_lit(&mut body, 2);
-        let assign_else = assign_stmt(&mut body, 0, two_b);
+        let assign_else = assign_stmt(&mut body, 0, two);
         let else_block = block_with(&mut body, vec![assign_else]);
         let if_s = alloc_stmt(
             &mut body,
@@ -2073,11 +2588,14 @@ mod tests {
             },
         );
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, if_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // Both arms wrote Int(2); the merge picks that without a Select.
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2093,11 +2611,11 @@ mod tests {
         let lb = block_with(&mut body, vec![assign]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, loop_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
     }
@@ -2117,11 +2635,14 @@ mod tests {
         let lb = block_with(&mut body, vec![assign]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_x, let_i, loop_s, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // `x` is not touched by the loop, so it retains its Int(1).
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2130,8 +2651,8 @@ mod tests {
         let mut body = empty_body();
         let read1 = local_ref(&mut body, 0);
         let read2 = local_ref(&mut body, 0);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2.into()));
         root_with(&mut body, vec![s1, s2]);
         let param = NirParam {
             name: "x".to_string(),
@@ -2140,25 +2661,24 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         let v1 = r.value_of[&read1];
         let v2 = r.value_of[&read2];
         assert_eq!(v1, v2);
-        assert!(matches!(r.pool.kind(v1), ValueKind::Opaque(_)));
+        assert!(matches!(body.values.kind(v1), ValueKind::Opaque(_)));
     }
 
     #[test]
     fn binary_on_param_reads_dedupes() {
         // fn(x: i32) { x + 1; x + 1; }
         let mut body = empty_body();
+        let one = int_lit(&mut body, 1);
         let read1 = local_ref(&mut body, 0);
-        let one_a = int_lit(&mut body, 1);
-        let add_a = binary(&mut body, NirBinaryOp::Add, read1, one_a);
+        let add_a = binary(&mut body, NirBinaryOp::Add, read1, one);
         let read2 = local_ref(&mut body, 0);
-        let one_b = int_lit(&mut body, 1);
-        let add_b = binary(&mut body, NirBinaryOp::Add, read2, one_b);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b));
+        let add_b = binary(&mut body, NirBinaryOp::Add, read2, one);
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(add_a.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(add_b.into()));
         root_with(&mut body, vec![s1, s2]);
         let param = NirParam {
             name: "x".to_string(),
@@ -2167,7 +2687,7 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         // Both `x + 1` expressions share a ValueId because `x` is a stable
         // (write-once) Opaque and `1` is hash-consed.
         assert_eq!(r.value_of[&add_a], r.value_of[&add_b]);
@@ -2196,11 +2716,11 @@ mod tests {
         );
         let let_s = let_stmt(&mut body, 0, call, false);
         let read = local_ref(&mut body, 0);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_s, s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
         // The call itself has no value_of entry.
@@ -2217,13 +2737,13 @@ mod tests {
         let read1 = field_access(&mut body, recv1, 0);
         let recv2 = local_ref(&mut body, 0);
         let read2 = field_access(&mut body, recv2, 0);
-        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1));
-        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2));
+        let s1 = alloc_stmt(&mut body, StmtKind::Expr(read1.into()));
+        let s2 = alloc_stmt(&mut body, StmtKind::Expr(read2.into()));
         root_with(&mut body, vec![s1, s2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read1], r.value_of[&read2]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read1]),
+            body.values.kind(r.value_of[&read1]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2259,7 +2779,7 @@ mod tests {
         let let_b2 = let_stmt(&mut body, 4, read_b2, false);
 
         root_with(&mut body, vec![let_a, let_b, write, let_a2, let_b2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
 
         // `obj.f` reads straddle a write of `f`: different heap versions, distinct VN.
         assert_ne!(r.value_of[&read_a], r.value_of[&read_a2]);
@@ -2279,7 +2799,7 @@ mod tests {
             let read1 = field_access(&mut body, recv1, 0);
             let let_1 = let_stmt(&mut body, 1, read1, false);
             let call = call_void(&mut body);
-            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+            let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
             let recv2 = local_ref(&mut body, 0);
             let read2 = field_access(&mut body, recv2, 0);
             let let_2 = let_stmt(&mut body, 2, read2, false);
@@ -2288,7 +2808,7 @@ mod tests {
             if let Some(idx) = aliased {
                 set.insert(idx);
             }
-            let r = build_aliased(&body, &[param_seed()], &set);
+            let r = build_aliased(&mut body, &[param_seed()], &set);
             (r.value_of[&read1], r.value_of[&read2])
         };
         // Aliased `obj`: the call invalidates its field.
@@ -2305,9 +2825,9 @@ mod tests {
         let mut body = empty_body();
         let call = call_void(&mut body);
         let fa = field_access(&mut body, call, 0);
-        let s = alloc_stmt(&mut body, StmtKind::Expr(fa));
+        let s = alloc_stmt(&mut body, StmtKind::Expr(fa.into()));
         root_with(&mut body, vec![s]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(!r.value_of.contains_key(&fa));
     }
 
@@ -2357,10 +2877,10 @@ mod tests {
                 default,
             },
         );
-        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e));
+        let switch_s = alloc_stmt(&mut body, StmtKind::Expr(switch_e.into()));
 
         root_with(&mut body, vec![let_pre, switch_s]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         // The read inside arm 1 must share a VN with the pre-switch read.
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_arm]);
     }
@@ -2401,7 +2921,7 @@ mod tests {
             },
         );
         root_with(&mut body, vec![let_pre, if_s]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read_pre], r.value_of[&read_in_else]);
     }
 
@@ -2449,13 +2969,13 @@ mod tests {
         );
 
         let read = local_ref(&mut body, 0);
-        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read));
+        let s_read = alloc_stmt(&mut body, StmtKind::Expr(read.into()));
         root_with(&mut body, vec![let_x, lb_stmt, s_read]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         // Post-LB `x` must be Opaque — the break-path write of 2 means the
         // value is unknown, even though fall-through never observes it.
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Opaque(_)
         ));
     }
@@ -2500,7 +3020,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_eq!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -2535,7 +3055,7 @@ mod tests {
         let let_b = let_stmt(&mut body, 2, read_b, false);
 
         root_with(&mut body, vec![let_a, if_s, let_b]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert_ne!(r.value_of[&read_a], r.value_of[&read_b]);
     }
 
@@ -2578,7 +3098,7 @@ mod tests {
         let let_f2 = let_stmt(&mut body, 4, read_f2, false);
 
         root_with(&mut body, vec![let_g0, if_s, let_g1, let_f1, let_f2]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         // `g` untouched across the if: same VN.
         assert_eq!(r.value_of[&read_g0], r.value_of[&read_g1]);
         // `f` reads after the merge are at one fresh post-merge version.
@@ -2601,10 +3121,14 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         let read_v = r.value_of[&read];
-        assert_eq!(r.pool.kind(read_v), &ValueKind::Int(7));
-        assert_eq!(read_v, r.value_of[&seven]);
+        assert_eq!(
+            body.values.kind(read_v),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
+        // The forwarded read resolves to the stored literal's pool value.
+        assert_eq!(read_v, seven.as_value().unwrap());
     }
 
     #[test]
@@ -2621,8 +3145,11 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write1, write2, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(9));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(9, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2635,16 +3162,16 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(0u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2659,13 +3186,16 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, call_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2698,12 +3228,15 @@ mod tests {
         let read = field_access(&mut body, recv, 0);
         let let_n = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![let_x, let_n]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(5));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(5, crate::tir::TypeTable::I32)
+        );
     }
 
     /// `let v = S { f0: 7 }` then a one-field struct literal helper.
-    fn one_field_struct(body: &mut Body, value: ExprId) -> ExprId {
+    fn one_field_struct(body: &mut Body, value: impl Into<Operand>) -> ExprId {
         alloc_expr(
             body,
             ExprKind::StructLiteral {
@@ -2711,7 +3244,7 @@ mod tests {
                 struct_name: "S".to_string(),
                 fields: vec![crate::nir_arena::ArenaStructField {
                     name: "f0".to_string(),
-                    value,
+                    value: value.into(),
                     field_index: 0,
                 }],
             },
@@ -2724,7 +3257,7 @@ mod tests {
             body,
             ExprKind::Unary {
                 op: NirUnaryOp::Ref,
-                expr: inner,
+                expr: inner.into(),
             },
         )
     }
@@ -2743,8 +3276,11 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2765,9 +3301,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, reassign, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2795,9 +3331,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, loop_s, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2833,9 +3369,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2865,8 +3401,11 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![let_v, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2903,8 +3442,11 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 3, read, false);
         root_with(&mut body, vec![let_v, let_w, let_r, if_s, let_y]);
-        let r = build_t(&body, &[]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(2));
+        let r = build_t(&mut body, &[]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(2, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -2934,7 +3476,7 @@ mod tests {
             ExprKind::Binary {
                 left: cond,
                 op: NirBinaryOp::And,
-                right: rhs_expr,
+                right: rhs_expr.into(),
             },
         );
         let let_b = let_stmt(&mut body, 3, and, false);
@@ -2942,9 +3484,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 4, read, false);
         root_with(&mut body, vec![let_v1, let_v2, let_r, let_b, let_y]);
-        let r = build_t(&body, &[]);
+        let r = build_t(&mut body, &[]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -2967,12 +3509,12 @@ mod tests {
                 struct_name: "S".to_string(),
                 fields: vec![crate::nir_arena::ArenaStructField {
                     name: "f0".to_string(),
-                    value: n_read,
+                    value: n_read.into(),
                     field_index: 0,
                 }],
             },
         );
-        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit));
+        let tail_stmt = alloc_stmt(&mut body, StmtKind::Expr(struct_lit.into()));
         let inner_block = block_with(&mut body, vec![let_n, tail_stmt]);
         let block_expr = alloc_expr(&mut body, ExprKind::Block(inner_block));
         let let_x = let_stmt(&mut body, 2, block_expr, false);
@@ -2987,11 +3529,11 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[param]);
+        let r = build_t(&mut body, &[param]);
         // x.f0 forwards n = limit + 1.
         assert_eq!(r.value_of[&read], r.value_of[&n_value]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::Binary {
                 op: NirBinaryOp::Add,
                 ..
@@ -3013,8 +3555,11 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     // ----- Loop-entry value snapshots -----
@@ -3046,10 +3591,13 @@ mod tests {
             is_mut: false,
             span: Span::default(),
         };
-        let r = build_t(&body, &[n]);
+        let r = build_t(&mut body, &[n]);
         let entries = &r.loop_entry_values[&lb];
         assert_eq!(entries.get(&0).copied(), Some(r.value_of[&n_read]));
-        assert_eq!(r.pool.kind(entries[&1]), &ValueKind::Int(0));
+        assert_eq!(
+            body.values.kind(entries[&1]),
+            &ValueKind::Int(0, crate::tir::TypeTable::I32)
+        );
         assert_ne!(entries[&1], r.value_of[&i_read]);
     }
 
@@ -3068,8 +3616,11 @@ mod tests {
         let lb = block_with(&mut body, vec![write, let_x]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         root_with(&mut body, vec![loop_s]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3083,15 +3634,18 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let lb = block_with(&mut body, vec![call_s]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let recv_r = local_ref(&mut body, 0);
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, loop_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(7));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(7, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3103,7 +3657,7 @@ mod tests {
         let seven = int_lit(&mut body, 7);
         let write = field_assign_stmt(&mut body, recv_w, 0, seven);
         let call = call_void(&mut body);
-        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call));
+        let call_s = alloc_stmt(&mut body, StmtKind::Expr(call.into()));
         let lb = block_with(&mut body, vec![call_s]);
         let loop_s = alloc_stmt(&mut body, StmtKind::Loop { body: lb });
         let recv_r = local_ref(&mut body, 0);
@@ -3112,9 +3666,9 @@ mod tests {
         root_with(&mut body, vec![write, loop_s, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(0u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3137,9 +3691,9 @@ mod tests {
         let read = field_access(&mut body, recv_r, 0);
         let let_y = let_stmt(&mut body, 1, read, false);
         root_with(&mut body, vec![write, loop_s, let_y]);
-        let r = build_t(&body, &[param_seed()]);
+        let r = build_t(&mut body, &[param_seed()]);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
     }
@@ -3161,8 +3715,11 @@ mod tests {
         let read = field_access(&mut body, recv_a_r, 0);
         let let_y = let_stmt(&mut body, 2, read, false);
         root_with(&mut body, vec![write_a, write_b, let_y]);
-        let r = build_t(&body, &[param_seed()]);
-        assert_eq!(r.pool.kind(r.value_of[&read]), &ValueKind::Int(1));
+        let r = build_t(&mut body, &[param_seed()]);
+        assert_eq!(
+            body.values.kind(r.value_of[&read]),
+            &ValueKind::Int(1, crate::tir::TypeTable::I32)
+        );
     }
 
     #[test]
@@ -3185,10 +3742,22 @@ mod tests {
         root_with(&mut body, vec![write_a, write_b, let_y]);
         let mut aliased = crate::hashmap::IndexSet::default();
         aliased.insert(1u32);
-        let r = build_aliased(&body, &[param_seed()], &aliased);
+        let r = build_aliased(&mut body, &[param_seed()], &aliased);
         assert!(matches!(
-            r.pool.kind(r.value_of[&read]),
+            body.values.kind(r.value_of[&read]),
             ValueKind::FieldAccess { .. }
         ));
+    }
+
+    #[test]
+    fn builder_records_value_types_for_extraction() {
+        // `let a = <i32 lit>;` — the value carries its source type so extraction
+        // can materialise it once the typed ExprNode is promoted away.
+        let mut body = empty_body();
+        // A promoted scalar carries its source type in the pool directly.
+        let Operand::Value(v) = int_lit(&mut body, 7) else {
+            unreachable!("int_lit yields a pool value")
+        };
+        assert_eq!(body.values.type_of(v), Some(TypeTable::I32));
     }
 }

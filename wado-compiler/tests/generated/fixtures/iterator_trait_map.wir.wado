@@ -122,9 +122,9 @@ type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core
 
 type "functype//core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>") -> ref "core:prelude/string.wado//String";  // TypeId(47)
 
-type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call" = fn(char) -> char;  // TypeId(48)
+type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0", char) -> char;  // TypeId(48)
 
-type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call" = fn(char) -> char;  // TypeId(49)
+type "functype//wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call" = fn(ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1", char) -> char;  // TypeId(49)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(50)
 
@@ -371,6 +371,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -379,8 +380,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b14: block {
             l15: loop {
                 break_if b14 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l15;
             };
@@ -435,6 +436,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let digit: i32;
     let ch: i32;
     let shift_u64: u64;
+    let __cse_13: i32;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
@@ -444,14 +446,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         b25: block {
             l26: loop {
                 break_if b25 temp == 0_i64;
-                pos = pos - 1;
+                pos = local.tee __cse_13(pos - 1);
                 digit = builtin::i32_wrap_i64(temp & mask64);
                 ch = (if digit < 10 -> i32 {
                     48 + digit;
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 });
-                builtin::array_set_u8(arr, pos, ch & 255);
+                builtin::array_set_u8(arr, __cse_13, ch & 255);
                 shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
                 temp = temp >>u shift_u64;
                 continue l26;
@@ -483,8 +485,10 @@ fn "core:prelude/primitive.wado/u64::fmt_base"(self, f, base, upper, prefix) {
     let self_10: ref "core:prelude/string.wado//String";
     bits_per_digit = (if base == 2 -> i32 {
         1;
+    } else if base == 8 -> i32 {
+        3;
     } else {
-        select i32(base == 8, 3, 4);
+        4;
     });
     mask = base - 1;
     digit_count = "core:prelude/primitive.wado/count_digits_u64_base"(self, bits_per_digit);
@@ -506,12 +510,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -557,14 +560,14 @@ fn "core:prelude/string.wado/String^Eq::eq"(self, other) {
 fn "core:prelude/string.wado/String^Eq::eq_bytes"(a, b, len) {
     let i: i32;
     i = 0;
-    b34: block {
-        l35: loop {
-            break_if b34 i >= len;
+    b35: block {
+        l36: loop {
+            break_if b35 i >= len;
             if builtin::array_get_u8(a, i) != builtin::array_get_u8(b, i) {
                 return 0;
             }
             i = i + 1;
-            continue l35;
+            continue l36;
         };
     };
     return 1;
@@ -645,12 +648,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b45: block {
-        l46: loop {
-            break_if b45 i >= n;
+    b46: block {
+        l47: loop {
+            break_if b46 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l46;
+            continue l47;
         };
     };
 }
@@ -744,7 +747,6 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_14: ref "core:prelude/string.wado//StrCharIter";
     let s_37: ref "core:prelude/string.wado//String";
     let s_51: ref "core:prelude/string.wado//String";
-    let _licm_arith_52: bool;
     limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
         if f.precision == -2 {
             break __inline_Formatter__resolved_seq_limit_0: 256;
@@ -755,20 +757,19 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     count = 0;
     truncated = 0;
     self_14 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
-    _licm_arith_52 = limit >= 0;
-    b65: block {
-        l66: loop {
+    b66: block {
+        l67: loop {
             let __sroa___match_10_discriminant: i32;
             let __sroa___match_10_payload_0: char;
             multivalue_bind [__sroa___match_10_discriminant, __sroa___match_10_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_14);
             if __sroa___match_10_discriminant == 0 {
-                if (if _licm_arith_52 -> i32 {
+                if (if limit >= 0 -> i32 {
                     count >= limit;
                 } else {
                     0;
                 }) {
                     truncated = 1;
-                    break b65;
+                    break b66;
                 }
                 if __sroa___match_10_payload_0 == 34 {
                     "core:prelude/string.wado/String::push"(f.buf, 92);
@@ -802,9 +803,9 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
                 }
                 count = count + 1;
             } else {
-                break b65;
+                break b66;
             }
-            continue l66;
+            continue l67;
         };
     };
     "core:prelude/string.wado/String::push"(f.buf, 34);
@@ -817,17 +818,17 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
 fn "core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    b78: block {
-        l79: loop {
+    b79: block {
+        l80: loop {
             let __sroa___match_4_discriminant: i32;
             let __sroa___match_4_payload_0: char;
             multivalue_bind [__sroa___match_4_discriminant, __sroa___match_4_payload_0] = "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(iter);
             if __sroa___match_4_discriminant == 0 {
                 "core:prelude/string.wado/String::push"(s, __sroa___match_4_payload_0);
             } else {
-                break b78;
+                break b79;
             }
-            continue l79;
+            continue l80;
         };
     };
     return s;
@@ -848,7 +849,7 @@ fn "core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>^
     return 1, 0;
 }
 
-fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(c) {
+fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(self, c) {
     let value: u32;
     return local.tee value(c | ((if c >=u 65 -> i32 {
         c <=u 90;
@@ -857,7 +858,7 @@ fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(c)
     }) * 32));
 }
 
-fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(c) {
+fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(self, c) {
     let value: u32;
     return local.tee value(c ^ ((if c >=u 97 -> i32 {
         c <=u 122;
@@ -867,11 +868,15 @@ fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(c)
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_trait_map.wado/__closure_wrapper_0"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_0"(__env);
+    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_0::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/iterator_trait_map.wado/__closure_wrapper_1"(__env, __p0) {
-    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/iterator_trait_map.wado//__Closure_1"(__env);
+    return "wado-compiler/tests/fixtures/iterator_trait_map.wado/__Closure_1::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/iterator_trait_map.wado/__cm_export__run" as "run"

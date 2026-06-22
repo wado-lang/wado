@@ -1,6 +1,6 @@
 global mut heap_offset: i32 = 8;
 
-global mut POW10: List<u64> = null;
+global mut POW10: List<u64> = %0;
 
 pub global PARSE_DIGITS_MAX: i32 = 19;
 
@@ -587,7 +587,7 @@ export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if (oldsize > 0) {
-            core::builtin::memory_fill(oldptr, 0xFF, oldsize);
+            core::builtin::memory_fill(oldptr, 255, oldsize);
         }
         return 0;
     }
@@ -1917,7 +1917,7 @@ pub fn env(name: String) -> Option<String> with Environment {
         }
         i = (i + 1);
     }
-    return null;
+    return %2;
 }
 
 pub fn args() -> List<String> with Environment {
@@ -2457,7 +2457,7 @@ pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let code: i32 = core::builtin::waitable_set_poll(ws, out_ptr);
     if (code == 0) {
         let freed: i32 = core::builtin::realloc(out_ptr, 8, 4, 0);
-        return null;
+        return %8;
     }
     let evt_handle: i32 = core::builtin::i32_load(out_ptr);
     let payload: i32 = core::builtin::i32_load((out_ptr + 4));
@@ -3730,8 +3730,8 @@ pub fn log2_pow10(x: i32) -> i32 {
 
 pub fn unpack64(f: f64) -> UnpackResult {
     let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
-    let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
-    let exp_mask: u64 = 0x7FF;
+    let mantissa_mask: u64 = 4503599627370495;
+    let exp_mask: u64 = 2047;
     let shift: i32 = (64 - 53);
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(1074 + shift);
@@ -3746,15 +3746,15 @@ pub fn unpack64(f: f64) -> UnpackResult {
         let s: u64 = (64 - "core::prelude/fpfmt.wado::u64_bit_len"(m)) as u64;
         return UnpackResult { mantissa: (m << s), exponent: (e - s as i32) };
     }
-    let m: u64 = (0x8000000000000000 | (raw_mantissa << shift_u64));
+    let m: u64 = (9223372036854775808 | (raw_mantissa << shift_u64));
     let e: i32 = ((raw_exp - 1) + min_exp);
     return UnpackResult { mantissa: m, exponent: e };
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
     let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
-    let mantissa_mask: u32 = 0x007FFFFF;
-    let exp_mask: u32 = 0xFF;
+    let mantissa_mask: u32 = 8388607;
+    let exp_mask: u32 = 255;
     let shift: i32 = (64 - 24);
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(149 + shift);
@@ -3769,7 +3769,7 @@ pub fn unpack32(f: f32) -> UnpackResult {
         let s: u64 = (64 - "core::prelude/fpfmt.wado::u64_bit_len"(m)) as u64;
         return UnpackResult { mantissa: (m << s), exponent: (e - s as i32) };
     }
-    let m: u64 = (0x8000000000000000 | (raw_mantissa << shift_u64));
+    let m: u64 = (9223372036854775808 | (raw_mantissa << shift_u64));
     let e: i32 = ((raw_exp - 1) + min_exp);
     return UnpackResult { mantissa: m, exponent: e };
 }
@@ -3798,65 +3798,65 @@ pub fn unrounded_div(u: u64, d: u64) -> u64 {
 
 fn pow10_coarse(i: i32) -> PmHiLo {
     return match i {
-        0 => PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 },
-        1 => PmHiLo { hi: 0xcf42894a5dce35eb, lo: 0xadf9b3537d798a46 },
-        2 => PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 },
-        3 => PmHiLo { hi: 0x873e4f75e2224e69, lo: 0xa588bb5917fb5d6e },
-        4 => PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 },
-        5 => PmHiLo { hi: 0xb080392cc4349ded, lo: 0x427286b26955304c },
-        6 => PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 },
-        7 => PmHiLo { hi: 0xe65829b3046b0afb, lo: 0xf34b5a5ceed5aeed },
-        8 => PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec },
-        9 => PmHiLo { hi: 0x964e858c91ba2656, lo: 0xc595f8072aef0790 },
-        10 => PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c },
-        11 => PmHiLo { hi: 0xc428d05aa4751e4d, lo: 0x55681eb3c3d94779 },
-        12 => PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 },
-        13 => PmHiLo { hi: 0x8000000000000000, lo: 0x0000000000000000 },
-        14 => PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 },
-        15 => PmHiLo { hi: 0xa70c3c40a64e6c52, lo: 0x666f6f49a09826dc },
-        16 => PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c },
-        17 => PmHiLo { hi: 0xda01ee641a708dea, lo: 0x17f190b7df336b6a },
-        18 => PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 },
-        19 => PmHiLo { hi: 0x8e41ade9fbebc27e, lo: 0xeba770ec417b8cf8 },
-        20 => PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 },
-        21 => PmHiLo { hi: 0xb9a74a0637ce2ee2, lo: 0x926ac1d428e8c96d },
-        22 => PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 },
-        23 => PmHiLo { hi: 0xf24a01a73cf2dcd0, lo: 0x439cc4c698c37313 },
-        24 => PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 },
-        25 => PmHiLo { hi: 0x9e19db92b4e31baa, lo: 0x93f85d3d957cb92e },
+        0 => PmHiLo { hi: 9244100769003082159, lo: 16115135738366041479 },
+        1 => PmHiLo { hi: 14934650266808366571, lo: 12536248208931260998 },
+        2 => PmHiLo { hi: 12064114410120881698, lo: 5824576295778454961 },
+        3 => PmHiLo { hi: 9745314011399999081, lo: 11927989604419591534 },
+        4 => PmHiLo { hi: 15744403932561434697, lo: 5820440219632367201 },
+        5 => PmHiLo { hi: 12718228212127407597, lo: 4788037454677749836 },
+        6 => PmHiLo { hi: 10273702932711667007, lo: 12358241885162901859 },
+        7 => PmHiLo { hi: 16598062275523971835, lo: 17531205329660260077 },
+        8 => PmHiLo { hi: 13407807929942597100, lo: 7857851839894723564 },
+        9 => PmHiLo { hi: 10830740992659433046, lo: 14237558506670458768 },
+        10 => PmHiLo { hi: 17498005798264095395, lo: 368606216923924028 },
+        11 => PmHiLo { hi: 14134776518227074637, lo: 6154202648235558777 },
+        12 => PmHiLo { hi: 11417981541647679049, lo: 9845253181526428546 },
+        13 => PmHiLo { hi: 9223372036854775808, lo: 0 },
+        14 => PmHiLo { hi: 14901161193847656250, lo: 0 },
+        15 => PmHiLo { hi: 12037062152420224082, lo: 7381240676301154012 },
+        16 => PmHiLo { hi: 9723461371658033918, lo: 10835615918790446684 },
+        17 => PmHiLo { hi: 15709099088952724970, lo: 1725319251657714538 },
+        18 => PmHiLo { hi: 12689709186578246117, lo: 11619183890829246576 },
+        19 => PmHiLo { hi: 10250665447337476734, lo: 16980665080036953336 },
+        20 => PmHiLo { hi: 16560843210556190338, lo: 8136200465769716229 },
+        21 => PmHiLo { hi: 13377742608693866210, lo: 10550458194032380269 },
+        22 => PmHiLo { hi: 10806454419566533850, lo: 13061090860691293809 },
+        23 => PmHiLo { hi: 17458768723248864464, lo: 4871985254153548563 },
+        24 => PmHiLo { hi: 14103081061443981064, lo: 17688398255684648759 },
+        25 => PmHiLo { hi: 11392378155556871082, lo: 10662374636882016558 },
         _ => core::internal::unreachable(),
     };
 }
 
 fn pow10_fine(i: i32) -> u64 {
     return match i {
-        0 => 0x8000000000000000,
-        1 => 0xa000000000000000,
-        2 => 0xc800000000000000,
-        3 => 0xfa00000000000000,
-        4 => 0x9c40000000000000,
-        5 => 0xc350000000000000,
-        6 => 0xf424000000000000,
-        7 => 0x9896800000000000,
-        8 => 0xbebc200000000000,
-        9 => 0xee6b280000000000,
-        10 => 0x9502f90000000000,
-        11 => 0xba43b74000000000,
-        12 => 0xe8d4a51000000000,
-        13 => 0x9184e72a00000000,
-        14 => 0xb5e620f480000000,
-        15 => 0xe35fa931a0000000,
-        16 => 0x8e1bc9bf04000000,
-        17 => 0xb1a2bc2ec5000000,
-        18 => 0xde0b6b3a76400000,
-        19 => 0x8ac7230489e80000,
-        20 => 0xad78ebc5ac620000,
-        21 => 0xd8d726b7177a8000,
-        22 => 0x878678326eac9000,
-        23 => 0xa968163f0a57b400,
-        24 => 0xd3c21bcecceda100,
-        25 => 0x84595161401484a0,
-        26 => 0xa56fa5b99019a5c8,
+        0 => 9223372036854775808,
+        1 => 11529215046068469760,
+        2 => 14411518807585587200,
+        3 => 18014398509481984000,
+        4 => 11258999068426240000,
+        5 => 14073748835532800000,
+        6 => 17592186044416000000,
+        7 => 10995116277760000000,
+        8 => 13743895347200000000,
+        9 => 17179869184000000000,
+        10 => 10737418240000000000,
+        11 => 13421772800000000000,
+        12 => 16777216000000000000,
+        13 => 10485760000000000000,
+        14 => 13107200000000000000,
+        15 => 16384000000000000000,
+        16 => 10240000000000000000,
+        17 => 12800000000000000000,
+        18 => 16000000000000000000,
+        19 => 10000000000000000000,
+        20 => 12500000000000000000,
+        21 => 15625000000000000000,
+        22 => 9765625000000000000,
+        23 => 12207031250000000000,
+        24 => 15258789062500000000,
+        25 => 9536743164062500000,
+        26 => 11920928955078125000,
         _ => core::internal::unreachable(),
     };
 }
@@ -4018,7 +4018,7 @@ pub fn short(f: f64) -> FormatResult {
     let mut min_m: u64 = 0;
     let mut z: i32 = 11;
     let mut p: i32 = 0;
-    let m_is_power_of_2: bool = (m == 0x8000000000000000);
+    let m_is_power_of_2: bool = (m == 9223372036854775808);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
         min_m = (m - (1 as u64 << (z - 2) as u64));
@@ -4059,7 +4059,7 @@ pub fn short32(f: f32) -> FormatResult {
     let mut min_m: u64 = 0;
     let mut z: i32 = 40;
     let mut p: i32 = 0;
-    let m_is_power_of_2: bool = (m == 0x8000000000000000);
+    let m_is_power_of_2: bool = (m == 9223372036854775808);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
         min_m = (m - (1 as u64 << (z - 2) as u64));
@@ -4102,10 +4102,10 @@ pub fn u64_mul(a: u64, b: u64) -> u64 {
 }
 
 pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
-    let inv5: u64 = 0xcccccccccccccccd;
-    let inv5p2: u64 = 0x8f5c28f5c28f5c29;
-    let inv5p4: u64 = 0xd288ce703afb7e91;
-    let inv5p8: u64 = 0xc767074b22e90e21;
+    let inv5: u64 = 14757395258967641293;
+    let inv5p2: u64 = 10330176681277348905;
+    let inv5p4: u64 = 15170602326218735249;
+    let inv5p8: u64 = 14368461155438497313;
     let thresh_10: u64 = 1844674407370955161;
     let thresh_100: u64 = 184467440737095516;
     let thresh_10000: u64 = 1844674407370955;
@@ -4435,14 +4435,14 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
-    if (bits == 0x8000000000000000 as i64) {
+    if (bits == -9223372036854775808 as i64) {
         return [true, true, SpecialKind::Zero];
     }
     let is_neg: bool = (bits < 0);
-    let exp_mask: i64 = 0x7FF0000000000000;
+    let exp_mask: i64 = 9218868437227405312;
     if ((bits & exp_mask) == exp_mask) {
         core::builtin::cold_path();
-        let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
+        let mantissa_mask: i64 = 4503599627370495;
         if ((bits & mantissa_mask) != 0) {
             return [true, false, SpecialKind::NaN];
         }
@@ -4478,7 +4478,7 @@ pub fn parse(d: u64, p: i32) -> f64 {
 
 pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     if (((start < 0) || (end > s.String::len())) || (start >= end)) {
-        return null;
+        return %1;
     }
     let len: i32 = end;
     let mut sign: f64 = 1.0;
@@ -4493,7 +4493,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         }
     }
     if (i >= len) {
-        return null;
+        return %8;
     }
     let remaining: i32 = (len - i);
     let c0: u8 = s.String::get_byte_unchecked(i);
@@ -4516,7 +4516,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 }
             }
         }
-        return null;
+        return %39;
     }
     if (((c0 == 'n' as u8) || (c0 == 'N' as u8)) && (remaining == 3)) {
         core::builtin::cold_path();
@@ -4525,7 +4525,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         if (((c1 == 'a' as u8) || (c1 == 'A' as u8)) && ((c2 == 'n' as u8) || (c2 == 'N' as u8))) {
             return Option<f64>::Some((0.0 / 0.0));
         }
-        return null;
+        return %51;
     }
     let MAX_DIGITS: i32 = 19;
     let mut d: u64 = 0;
@@ -4543,7 +4543,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let int_digits: i32 = (i - digit_start);
     if ((i < len) && (s.String::get_byte_unchecked(i) == '.' as u8)) {
         if (int_digits == 0) {
-            return null;
+            return %62;
         }
         i = (i + 1);
         let frac_start: i32 = i;
@@ -4558,12 +4558,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             i = (i + 1);
         }
         if (i == frac_start) {
-            return null;
+            return %70;
         }
     }
     let total_digits: i32 = (int_digits + frac);
     if ((total_digits == 0) || (total_digits > MAX_DIGITS)) {
-        return null;
+        return %72;
     }
     let mut p: i32 = 0;
     if ((i < len) && ((s.String::get_byte_unchecked(i) == 'e' as u8) || (s.String::get_byte_unchecked(i) == 'E' as u8))) {
@@ -4581,7 +4581,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         }
         let exp_start: i32 = i;
         if ((i >= len) || ((len - i) > 3)) {
-            return null;
+            return %84;
         }
         loop {
             if !(((i < len) && (s.String::get_byte_unchecked(i) >= '0' as u8)) && (s.String::get_byte_unchecked(i) <= '9' as u8)) {
@@ -4593,12 +4593,12 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             i = (i + 1);
         }
         if (i == exp_start) {
-            return null;
+            return %90;
         }
         p = (p * exp_sign);
     }
     if (i != len) {
-        return null;
+        return %91;
     }
     if (d == 0) {
         return Option<f64>::Some(core::builtin::f64_copysign(0.0, sign));
@@ -4683,16 +4683,16 @@ pub fn "FormatResult^Ord::cmp"(self: &FormatResult, other: &FormatResult) -> Ord
 }
 
 pub fn "SpecialKind^Inspect::inspect"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"SpecialKind::NotSpecial");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"SpecialKind::Zero");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"SpecialKind::Inf");
             } else {
-                if (self.value == 3) {
+                if (self.value == %9) {
                     f.Formatter::write_str(&"SpecialKind::NaN");
                 };
             };
@@ -5850,7 +5850,7 @@ pub fn "i128^Shr::shr"(self: &i128, rhs: u32) -> i128 {
     let shift: i32 = rhs as i32;
     if (shift >= 128) {
         if (self.high < 0) {
-            return i128 { low: 0xFFFFFFFFFFFFFFFF, high: -1 };
+            return i128 { low: 18446744073709551615, high: -1 };
         } else {
             return "core::prelude/int128.wado::i128::from_i64"(0);
         }
@@ -6012,7 +6012,7 @@ pub fn "f32^TryFrom<u128>::try_from"(value: u128) -> Result<f32, ConvertError> {
 fn "u128^Step::next_step"(self: &u128) -> Option<u128> {
     let max: u128 = "core::prelude/int128.wado::u128::from_pair"(18446744073709551615, 18446744073709551615);
     if *self."u128^Eq::eq"(&max) {
-        return null;
+        return %2;
     }
     return Option<u128>::Some(*self."u128^Add::add"(&"core::prelude/int128.wado::u128::from_u64"(1)));
 }
@@ -6020,7 +6020,7 @@ fn "u128^Step::next_step"(self: &u128) -> Option<u128> {
 fn "i128^Step::next_step"(self: &i128) -> Option<i128> {
     let max: i128 = "core::prelude/int128.wado::i128::from_pair"(18446744073709551615, 9223372036854775807);
     if *self."i128^Eq::eq"(&max) {
-        return null;
+        return %2;
     }
     return Option<i128>::Some(*self."i128^Add::add"(&"core::prelude/int128.wado::i128::from_i64"(1)));
 }
@@ -6634,16 +6634,16 @@ pub fn "ParseFloatError^Ord::cmp"(self: &ParseFloatError, other: &ParseFloatErro
 }
 
 pub fn "IntErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"IntErrorKind::Empty");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"IntErrorKind::InvalidDigit");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"IntErrorKind::PosOverflow");
             } else {
-                if (self.value == 3) {
+                if (self.value == %9) {
                     f.Formatter::write_str(&"IntErrorKind::NegOverflow");
                 };
             };
@@ -6652,10 +6652,10 @@ pub fn "IntErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/IntE
 }
 
 pub fn "FloatErrorKind^Inspect::inspect"(self: Box<core:prelude/intparse.wado/FloatErrorKind>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"FloatErrorKind::Empty");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"FloatErrorKind::Invalid");
         };
     };
@@ -7247,7 +7247,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
         return 1;
     }
     let mut highest_bit: i32 = 0;
-    let high32: i64 = ((val_i64 >> 32) & 0xFFFFFFFF);
+    let high32: i64 = ((val_i64 >> 32) & 4294967295);
     if (high32 != 0) {
         let mut b: i32 = 63;
         loop {
@@ -7335,18 +7335,18 @@ fn "bool^LenientFromStr::from_str_lenient"(s: &String) -> Result<bool, LenientPa
 }
 
 pub fn char::from_u32(value: u32) -> Option<char> {
-    if (value > 0x10FFFF) {
-        return null;
+    if (value > 1114111) {
+        return %1;
     }
-    if ((value >= 0xD800) && (value <= 0xDFFF)) {
-        return null;
+    if ((value >= 55296) && (value <= 57343)) {
+        return %4;
     }
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(value));
 }
 
 pub fn char::from_i32(value: i32) -> Option<char> {
     if (value < 0) {
-        return null;
+        return %1;
     }
     return "core::prelude/primitive.wado::char::from_u32"(value as u32);
 }
@@ -7449,13 +7449,13 @@ pub fn char::hex_digit_value(self: Box<char>) -> i32 {
 
 pub fn char::len_utf8(self: Box<char>) -> i32 {
     let cp: i32 = self.value as i32;
-    if (cp < 0x80) {
+    if (cp < 128) {
         return 1;
     }
-    if (cp < 0x800) {
+    if (cp < 2048) {
         return 2;
     }
-    if (cp < 0x10000) {
+    if (cp < 65536) {
         return 3;
     }
     return 4;
@@ -7463,31 +7463,31 @@ pub fn char::len_utf8(self: Box<char>) -> i32 {
 
 pub fn char::encode_utf8(self: Box<char>) -> List<u8> {
     let cp: i32 = self.value as i32;
-    if (cp < 0x80) {
+    if (cp < 128) {
         return __seq_lit: {
             let mut __b: List<u8> = "core::prelude/list.wado::List<u8>^SequenceLiteralBuilder::new_literal"(1);
             __b."List<u8>^SequenceLiteralBuilder::push_literal"(cp as u8);
             break __seq_lit: __b."List<u8>^SequenceLiteralBuilder::build"();
         } as List<u8>;
     }
-    if (cp < 0x800) {
+    if (cp < 2048) {
         let mut buf: List<u8> = "core::prelude/list.wado::List<u8>::with_capacity"(2);
-        buf."List<u8>::push"((0xC0 | (cp >> 6)) as u8);
-        buf."List<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+        buf."List<u8>::push"((192 | (cp >> 6)) as u8);
+        buf."List<u8>::push"((128 | (cp & 63)) as u8);
         return buf;
     }
-    if (cp < 0x10000) {
+    if (cp < 65536) {
         let mut buf: List<u8> = "core::prelude/list.wado::List<u8>::with_capacity"(3);
-        buf."List<u8>::push"((0xE0 | (cp >> 12)) as u8);
-        buf."List<u8>::push"((0x80 | ((cp >> 6) & 0x3F)) as u8);
-        buf."List<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+        buf."List<u8>::push"((224 | (cp >> 12)) as u8);
+        buf."List<u8>::push"((128 | ((cp >> 6) & 63)) as u8);
+        buf."List<u8>::push"((128 | (cp & 63)) as u8);
         return buf;
     }
     let mut buf: List<u8> = "core::prelude/list.wado::List<u8>::with_capacity"(4);
-    buf."List<u8>::push"((0xF0 | (cp >> 18)) as u8);
-    buf."List<u8>::push"((0x80 | ((cp >> 12) & 0x3F)) as u8);
-    buf."List<u8>::push"((0x80 | ((cp >> 6) & 0x3F)) as u8);
-    buf."List<u8>::push"((0x80 | (cp & 0x3F)) as u8);
+    buf."List<u8>::push"((240 | (cp >> 18)) as u8);
+    buf."List<u8>::push"((128 | ((cp >> 12) & 63)) as u8);
+    buf."List<u8>::push"((128 | ((cp >> 6) & 63)) as u8);
+    buf."List<u8>::push"((128 | (cp & 63)) as u8);
     return buf;
 }
 
@@ -9954,56 +9954,56 @@ pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I
 
 fn "i8^Step::next_step"(self: Box<i8>) -> Option<i8> {
     if (self.value == 127) {
-        return null;
+        return %1;
     }
     return Option<i8>::Some((self.value + 1 as i8));
 }
 
 fn "i16^Step::next_step"(self: Box<i16>) -> Option<i16> {
     if (self.value == 32767) {
-        return null;
+        return %1;
     }
     return Option<i16>::Some((self.value + 1 as i16));
 }
 
 fn "i32^Step::next_step"(self: Box<i32>) -> Option<i32> {
     if (self.value == 2147483647) {
-        return null;
+        return %1;
     }
     return Option<i32>::Some((self.value + 1));
 }
 
 fn "i64^Step::next_step"(self: Box<i64>) -> Option<i64> {
     if (self.value == 9223372036854775807) {
-        return null;
+        return %1;
     }
     return Option<i64>::Some((self.value + 1 as i64));
 }
 
 fn "u8^Step::next_step"(self: Box<u8>) -> Option<u8> {
     if (self.value == 255) {
-        return null;
+        return %1;
     }
     return Option<u8>::Some((self.value + 1 as u8));
 }
 
 fn "u16^Step::next_step"(self: Box<u16>) -> Option<u16> {
     if (self.value == 65535) {
-        return null;
+        return %1;
     }
     return Option<u16>::Some((self.value + 1 as u16));
 }
 
 fn "u32^Step::next_step"(self: Box<u32>) -> Option<u32> {
     if (self.value == 4294967295) {
-        return null;
+        return %1;
     }
     return Option<u32>::Some((self.value + 1 as u32));
 }
 
 fn "u64^Step::next_step"(self: Box<u64>) -> Option<u64> {
     if (self.value == 18446744073709551615) {
-        return null;
+        return %1;
     }
     return Option<u64>::Some((self.value + 1 as u64));
 }
@@ -10451,33 +10451,33 @@ fn byte_to_ascii_lowercase(b: u8) -> u8 {
 
 fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar {
     let b0: u8 = bytes."ArraySlice<u8>::get_unchecked"(start);
-    if (b0 < 0x80) {
+    if (b0 < 128) {
         return Utf8Scalar { code: b0 as u32, advance: 1, valid: true };
     }
-    if (b0 < 0xC2) {
+    if (b0 < 194) {
         core::builtin::cold_path();
         return Utf8Scalar { code: 0, advance: 1, valid: false };
     }
-    if (b0 < 0xE0) {
+    if (b0 < 224) {
         if ((start + 1) >= len) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
-        if ((b1 < 0x80) || (b1 > 0xBF)) {
+        if ((b1 < 128) || (b1 > 191)) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
-        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 as u32 & 0x3F));
+        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 as u32 & 63));
         return Utf8Scalar { code: code, advance: 2, valid: true };
     }
-    if (b0 < 0xF0) {
+    if (b0 < 240) {
         if ((start + 1) >= len) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
-        if ((((b1 < 0x80) || (b1 > 0xBF)) || ((b0 == 0xE0) && (b1 < 0xA0))) || ((b0 == 0xED) && (b1 >= 0xA0))) {
+        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 224) && (b1 < 160))) || ((b0 == 237) && (b1 >= 160))) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
@@ -10486,20 +10486,20 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 2));
-        if ((b2 < 0x80) || (b2 > 0xBF)) {
+        if ((b2 < 128) || (b2 > 191)) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
-        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 as u32 & 0x3F) << 6)) | (b2 as u32 & 0x3F));
+        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 as u32 & 63) << 6)) | (b2 as u32 & 63));
         return Utf8Scalar { code: code, advance: 3, valid: true };
     }
-    if (b0 < 0xF5) {
+    if (b0 < 245) {
         if ((start + 1) >= len) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
         let b1: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 1));
-        if ((((b1 < 0x80) || (b1 > 0xBF)) || ((b0 == 0xF0) && (b1 < 0x90))) || ((b0 == 0xF4) && (b1 > 0x8F))) {
+        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 240) && (b1 < 144))) || ((b0 == 244) && (b1 > 143))) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 1, valid: false };
         }
@@ -10508,7 +10508,7 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
         let b2: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 2));
-        if ((b2 < 0x80) || (b2 > 0xBF)) {
+        if ((b2 < 128) || (b2 > 191)) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 2, valid: false };
         }
@@ -10517,11 +10517,11 @@ fn decode_utf8_scalar(bytes: ArraySlice<u8>, start: i32, len: i32) -> Utf8Scalar
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
         let b3: u8 = bytes."ArraySlice<u8>::get_unchecked"((start + 3));
-        if ((b3 < 0x80) || (b3 > 0xBF)) {
+        if ((b3 < 128) || (b3 > 191)) {
             core::builtin::cold_path();
             return Utf8Scalar { code: 0, advance: 3, valid: false };
         }
-        let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 as u32 & 0x3F) << 12)) | ((b2 as u32 & 0x3F) << 6)) | (b3 as u32 & 0x3F));
+        let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 as u32 & 63) << 12)) | ((b2 as u32 & 63) << 6)) | (b3 as u32 & 63));
         return Utf8Scalar { code: code, advance: 4, valid: true };
     }
     core::builtin::cold_path();
@@ -10733,7 +10733,7 @@ pub fn "String^Ord::cmp"(self: &String, other: &String) -> Ordering {
 #[inline]
 pub fn "StrUtf8ByteIter^Iterator::next"(self: &mut StrUtf8ByteIter) -> Option<u8> {
     if (self.index >= self.used) {
-        return null;
+        return %0;
     }
     let byte: u8 = core::builtin::array_get_u8(&self.repr, self.index);
     self.index = (self.index + 1);
@@ -10803,7 +10803,7 @@ pub fn "StrUtf8ByteIter^Iterator::find"(self: &mut StrUtf8ByteIter, pred: fn mut
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::any"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> bool {
@@ -10841,7 +10841,7 @@ pub fn "StrUtf8ByteIter^Iterator::all"(self: &mut StrUtf8ByteIter, pred: fn mut(
 }
 
 pub fn "StrUtf8ByteIter^Iterator::last"(self: &mut StrUtf8ByteIter) -> Option<u8> {
-    let mut result: Option<u8> = null;
+    let mut result: Option<u8> = %0;
     loop {
         let __match_3: Option<u8> = self."StrUtf8ByteIter^Iterator::next"();
         match __match_3 {
@@ -10872,7 +10872,7 @@ pub fn "StrUtf8ByteIter^Iterator::nth"(self: &mut StrUtf8ByteIter, n: i32) -> Op
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> Option<i32> {
@@ -10891,7 +10891,7 @@ pub fn "StrUtf8ByteIter^Iterator::position"(self: &mut StrUtf8ByteIter, pred: fn
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
@@ -10914,7 +10914,7 @@ pub fn "StrUtf8ByteIter^Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrUtf8ByteIter^Iterator::filter"(self: &StrUtf8ByteIter, pred: fn mut(u8) -> bool) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
@@ -10935,31 +10935,31 @@ pub fn "StrUtf8ByteIter^Iterator::skip"(self: &StrUtf8ByteIter, n: i32) -> IterS
 
 pub fn "StrCharIter^Iterator::next"(self: &mut StrCharIter) -> Option<char> {
     if (self.byte_index >= self.used) {
-        return null;
+        return %0;
     }
     let b0: u8 = core::builtin::array_get_u8(&self.repr, self.byte_index);
     self.byte_index = (self.byte_index + 1);
-    if (b0 < 0x80) {
+    if (b0 < 128) {
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32));
     }
-    if (b0 < 0xE0) {
+    if (b0 < 224) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
-        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
+        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
-    if (b0 < 0xF0) {
+    if (b0 < 240) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
         let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
-        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
     }
     let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
     let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
     let b3: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
-    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<char>::Some("core::prelude/primitive.wado::char::from_u32_unchecked"(code));
 }
 
@@ -11026,7 +11026,7 @@ pub fn "StrCharIter^Iterator::find"(self: &mut StrCharIter, pred: fn mut(char) -
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrCharIter^Iterator::any"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> bool {
@@ -11064,7 +11064,7 @@ pub fn "StrCharIter^Iterator::all"(self: &mut StrCharIter, pred: fn mut(char) ->
 }
 
 pub fn "StrCharIter^Iterator::last"(self: &mut StrCharIter) -> Option<char> {
-    let mut result: Option<char> = null;
+    let mut result: Option<char> = %0;
     loop {
         let __match_3: Option<char> = self."StrCharIter^Iterator::next"();
         match __match_3 {
@@ -11095,7 +11095,7 @@ pub fn "StrCharIter^Iterator::nth"(self: &mut StrCharIter, n: i32) -> Option<cha
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(char) -> bool) -> Option<i32> {
@@ -11114,7 +11114,7 @@ pub fn "StrCharIter^Iterator::position"(self: &mut StrCharIter, pred: fn mut(cha
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
@@ -11137,7 +11137,7 @@ pub fn "StrCharIter^Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, ch
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrCharIter^Iterator::filter"(self: &StrCharIter, pred: fn mut(char) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIter> {
@@ -11166,16 +11166,16 @@ pub fn String::chars(self: &String) -> StrCharIter {
 
 pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
     if (byte_index >= self.used) {
-        return null;
+        return %0;
     }
     let b0: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
-    let needed: i32 = if (b0 < 0x80) {
+    let needed: i32 = if (b0 < 128) {
         1;
     } else {
-        if (b0 < 0xE0) {
+        if (b0 < 224) {
             2;
         } else {
-            if (b0 < 0xF0) {
+            if (b0 < 240) {
                 3;
             } else {
                 4;
@@ -11183,31 +11183,31 @@ pub fn String::char_at_byte(self: &String, byte_index: i32) -> Option<char> {
         };
     };
     if ((byte_index + needed) > self.used) {
-        return null;
+        return %8;
     }
     return Option<char>::Some(self.String::char_at_byte_unchecked(byte_index));
 }
 
 pub fn String::char_at_byte_unchecked(self: &String, byte_index: i32) -> char {
     let b0: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
-    if (b0 < 0x80) {
+    if (b0 < 128) {
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32);
     }
-    if (b0 < 0xE0) {
+    if (b0 < 224) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
+        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
     }
-    if (b0 < 0xF0) {
+    if (b0 < 240) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
         let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
-        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
     }
     let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
     let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
     let b3: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 3)) as u32;
-    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return "core::prelude/primitive.wado::char::from_u32_unchecked"(code);
 }
 
@@ -11217,25 +11217,25 @@ pub fn String::push(self: &mut String, c: char) {
         core::builtin::cold_path();
         self.String::grow((self.used + 4));
     }
-    if (code < 0x80) {
+    if (code < 128) {
         core::builtin::array_set_u8(&mut self.repr, self.used, code as u8);
         self.used = (self.used + 1);
     } else {
-        if (code < 0x800) {
-            core::builtin::array_set_u8(&mut self.repr, self.used, (0xC0 | (code >> 6)) as u8);
-            core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (0x80 | (code & 0x3F)) as u8);
+        if (code < 2048) {
+            core::builtin::array_set_u8(&mut self.repr, self.used, (192 | (code >> 6)) as u8);
+            core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | (code & 63)) as u8);
             self.used = (self.used + 2);
         } else {
-            if (code < 0x10000) {
-                core::builtin::array_set_u8(&mut self.repr, self.used, (0xE0 | (code >> 12)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (0x80 | ((code >> 6) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (0x80 | (code & 0x3F)) as u8);
+            if (code < 65536) {
+                core::builtin::array_set_u8(&mut self.repr, self.used, (224 | (code >> 12)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | ((code >> 6) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (128 | (code & 63)) as u8);
                 self.used = (self.used + 3);
             } else {
-                core::builtin::array_set_u8(&mut self.repr, self.used, (0xF0 | (code >> 18)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (0x80 | ((code >> 12) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (0x80 | ((code >> 6) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (self.used + 3), (0x80 | (code & 0x3F)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, self.used, (240 | (code >> 18)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (self.used + 1), (128 | ((code >> 12) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (self.used + 2), (128 | ((code >> 6) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (self.used + 3), (128 | (code & 63)) as u8);
                 self.used = (self.used + 4);
             }
         }
@@ -11311,13 +11311,13 @@ pub fn String::truncate_chars(self: &mut String, char_count: i32) {
             break;
         }
         let b: u8 = core::builtin::array_get_u8(&self.repr, byte_pos);
-        if (b < 0x80) {
+        if (b < 128) {
             byte_pos = (byte_pos + 1);
         } else {
-            if (b < 0xE0) {
+            if (b < 224) {
                 byte_pos = (byte_pos + 2);
             } else {
-                if (b < 0xF0) {
+                if (b < 240) {
                     byte_pos = (byte_pos + 3);
                 } else {
                     byte_pos = (byte_pos + 4);
@@ -11337,12 +11337,12 @@ pub fn String::is_char_boundary(self: &String, byte_index: i32) -> bool {
         return false;
     }
     let b: u8 = core::builtin::array_get_u8(&self.repr, byte_index);
-    return ((b < 0x80) || (b >= 0xC0));
+    return ((b < 128) || (b >= 192));
 }
 
 pub fn String::pop(self: &mut String) -> Option<char> {
     if (self.used == 0) {
-        return null;
+        return %1;
     }
     let mut pos: i32 = (self.used - 1);
     loop {
@@ -11350,29 +11350,29 @@ pub fn String::pop(self: &mut String) -> Option<char> {
             break;
         }
         let b: u8 = core::builtin::array_get_u8(&self.repr, pos);
-        if ((b >= 0x80) && (b < 0xC0)) {
+        if ((b >= 128) && (b < 192)) {
             pos = (pos - 1);
         } else {
             break;
         }
     }
     let b0: u32 = core::builtin::array_get_u8(&self.repr, pos) as u32;
-    let code: u32 = if (b0 < 0x80) {
+    let code: u32 = if (b0 < 128) {
         b0;
     } else {
-        if (b0 < 0xE0) {
+        if (b0 < 224) {
             let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-            (((b0 & 0x1F) << 6) | (b1 & 0x3F));
+            (((b0 & 31) << 6) | (b1 & 63));
         } else {
-            if (b0 < 0xF0) {
+            if (b0 < 240) {
                 let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
                 let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
-                ((((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+                ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
             } else {
                 let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
                 let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
                 let b3: u32 = core::builtin::array_get_u8(&self.repr, (pos + 3)) as u32;
-                (((((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+                (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
             };
         };
     };
@@ -11471,29 +11471,29 @@ pub fn String::trim_end(self: &String) -> String {
                 break;
             }
             let b: u8 = core::builtin::array_get_u8(&self.repr, pos);
-            if ((b >= 0x80) && (b < 0xC0)) {
+            if ((b >= 128) && (b < 192)) {
                 pos = (pos - 1);
             } else {
                 break;
             }
         }
         let b0: u32 = core::builtin::array_get_u8(&self.repr, pos) as u32;
-        let code: u32 = if (b0 < 0x80) {
+        let code: u32 = if (b0 < 128) {
             b0;
         } else {
-            if (b0 < 0xE0) {
+            if (b0 < 224) {
                 let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
-                (((b0 & 0x1F) << 6) | (b1 & 0x3F));
+                (((b0 & 31) << 6) | (b1 & 63));
             } else {
-                if (b0 < 0xF0) {
+                if (b0 < 240) {
                     let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
                     let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
-                    ((((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+                    ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
                 } else {
                     let b1: u32 = core::builtin::array_get_u8(&self.repr, (pos + 1)) as u32;
                     let b2: u32 = core::builtin::array_get_u8(&self.repr, (pos + 2)) as u32;
                     let b3: u32 = core::builtin::array_get_u8(&self.repr, (pos + 3)) as u32;
-                    (((((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+                    (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
                 };
             };
         };
@@ -11708,7 +11708,7 @@ pub fn String::find(self: &String, pat: String) -> Option<i32> {
         return Option<i32>::Some(0);
     }
     if (pat_len > self.used) {
-        return null;
+        return %2;
     }
     let pat_repr: Array<u8> = pat.String::internal_raw_bytes();
     let limit: i32 = (self.used - pat_len);
@@ -11738,7 +11738,7 @@ pub fn String::find(self: &String, pat: String) -> Option<i32> {
         }
         i = (i + 1);
     }
-    return null;
+    return %9;
 }
 
 pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
@@ -11747,7 +11747,7 @@ pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
         return Option<i32>::Some(self.used);
     }
     if (pat_len > self.used) {
-        return null;
+        return %1;
     }
     let pat_repr: Array<u8> = pat.String::internal_raw_bytes();
     let mut i: i32 = (self.used - pat_len);
@@ -11774,7 +11774,7 @@ pub fn String::rfind(self: &String, pat: String) -> Option<i32> {
         }
         i = (i - 1);
     }
-    return null;
+    return %8;
 }
 
 pub fn String::contains_char(self: &String, ch: char) -> bool {
@@ -11816,7 +11816,7 @@ pub fn String::find_char(self: &String, pred: fn mut(char) -> bool) -> Option<i3
             },
         };
     }
-    return null;
+    return %1;
 }
 
 pub fn String::insert(self: &mut String, byte_index: i32, ch: char) {
@@ -11856,22 +11856,22 @@ pub fn String::insert_unchecked(self: &mut String, byte_index: i32, ch: char) {
         self.String::grow(new_used);
     }
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr, (byte_index + char_len), &self.repr, byte_index, (self.used - byte_index));
-    if (code < 0x80) {
+    if (code < 128) {
         core::builtin::array_set_u8(&mut self.repr, byte_index, code as u8);
     } else {
-        if (code < 0x800) {
-            core::builtin::array_set_u8(&mut self.repr, byte_index, (0xC0 | (code >> 6)) as u8);
-            core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (0x80 | (code & 0x3F)) as u8);
+        if (code < 2048) {
+            core::builtin::array_set_u8(&mut self.repr, byte_index, (192 | (code >> 6)) as u8);
+            core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | (code & 63)) as u8);
         } else {
-            if (code < 0x10000) {
-                core::builtin::array_set_u8(&mut self.repr, byte_index, (0xE0 | (code >> 12)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (0x80 | ((code >> 6) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (0x80 | (code & 0x3F)) as u8);
+            if (code < 65536) {
+                core::builtin::array_set_u8(&mut self.repr, byte_index, (224 | (code >> 12)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | ((code >> 6) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (128 | (code & 63)) as u8);
             } else {
-                core::builtin::array_set_u8(&mut self.repr, byte_index, (0xF0 | (code >> 18)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (0x80 | ((code >> 12) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (0x80 | ((code >> 6) & 0x3F)) as u8);
-                core::builtin::array_set_u8(&mut self.repr, (byte_index + 3), (0x80 | (code & 0x3F)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, byte_index, (240 | (code >> 18)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (byte_index + 1), (128 | ((code >> 12) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (byte_index + 2), (128 | ((code >> 6) & 63)) as u8);
+                core::builtin::array_set_u8(&mut self.repr, (byte_index + 3), (128 | (code & 63)) as u8);
             }
         }
     }
@@ -11997,35 +11997,35 @@ pub fn String::remove(self: &mut String, byte_index: i32) -> char {
 
 pub fn String::remove_unchecked(self: &mut String, byte_index: i32) -> char {
     let b0: u32 = core::builtin::array_get_u8(&self.repr, byte_index) as u32;
-    let char_len: i32 = if (b0 < 0x80) {
+    let char_len: i32 = if (b0 < 128) {
         1;
     } else {
-        if (b0 < 0xE0) {
+        if (b0 < 224) {
             2;
         } else {
-            if (b0 < 0xF0) {
+            if (b0 < 240) {
                 3;
             } else {
                 4;
             };
         };
     };
-    let code: u32 = if (b0 < 0x80) {
+    let code: u32 = if (b0 < 128) {
         b0;
     } else {
-        if (b0 < 0xE0) {
+        if (b0 < 224) {
             let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
-            (((b0 & 0x1F) << 6) | (b1 & 0x3F));
+            (((b0 & 31) << 6) | (b1 & 63));
         } else {
-            if (b0 < 0xF0) {
+            if (b0 < 240) {
                 let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
                 let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
-                ((((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+                ((((b0 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
             } else {
                 let b1: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 1)) as u32;
                 let b2: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 2)) as u32;
                 let b3: u32 = core::builtin::array_get_u8(&self.repr, (byte_index + 3)) as u32;
-                (((((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+                (((((b0 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
             };
         };
     };
@@ -12153,7 +12153,7 @@ pub fn "String^From<char>::from"(value: char) -> String {
 
 pub fn "StrSplitIter^Iterator::next"(self: &mut StrSplitIter) -> Option<String> {
     if self.finished {
-        return null;
+        return %0;
     }
     let limit: i32 = (self.used - self.sep_len);
     let mut i: i32 = self.pos;
@@ -12254,7 +12254,7 @@ pub fn "StrSplitIter^Iterator::find"(self: &mut StrSplitIter, pred: fn mut(Strin
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrSplitIter^Iterator::any"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> bool {
@@ -12292,7 +12292,7 @@ pub fn "StrSplitIter^Iterator::all"(self: &mut StrSplitIter, pred: fn mut(String
 }
 
 pub fn "StrSplitIter^Iterator::last"(self: &mut StrSplitIter) -> Option<String> {
-    let mut result: Option<String> = null;
+    let mut result: Option<String> = %0;
     loop {
         let __match_3: Option<String> = self."StrSplitIter^Iterator::next"();
         match __match_3 {
@@ -12323,7 +12323,7 @@ pub fn "StrSplitIter^Iterator::nth"(self: &mut StrSplitIter, n: i32) -> Option<S
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -12342,7 +12342,7 @@ pub fn "StrSplitIter^Iterator::position"(self: &mut StrSplitIter, pred: fn mut(S
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -12365,7 +12365,7 @@ pub fn "StrSplitIter^Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrSplitIter^Iterator::filter"(self: &StrSplitIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
@@ -12386,7 +12386,7 @@ pub fn "StrSplitIter^Iterator::skip"(self: &StrSplitIter, n: i32) -> IterSkip<co
 
 pub fn "StrSplitNIter^Iterator::next"(self: &mut StrSplitNIter) -> Option<String> {
     if self.finished {
-        return null;
+        return %0;
     }
     if (self.remaining <= 1) {
         let len: i32 = (self.used - self.pos);
@@ -12495,7 +12495,7 @@ pub fn "StrSplitNIter^Iterator::find"(self: &mut StrSplitNIter, pred: fn mut(Str
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrSplitNIter^Iterator::any"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> bool {
@@ -12533,7 +12533,7 @@ pub fn "StrSplitNIter^Iterator::all"(self: &mut StrSplitNIter, pred: fn mut(Stri
 }
 
 pub fn "StrSplitNIter^Iterator::last"(self: &mut StrSplitNIter) -> Option<String> {
-    let mut result: Option<String> = null;
+    let mut result: Option<String> = %0;
     loop {
         let __match_3: Option<String> = self."StrSplitNIter^Iterator::next"();
         match __match_3 {
@@ -12564,7 +12564,7 @@ pub fn "StrSplitNIter^Iterator::nth"(self: &mut StrSplitNIter, n: i32) -> Option
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -12583,7 +12583,7 @@ pub fn "StrSplitNIter^Iterator::position"(self: &mut StrSplitNIter, pred: fn mut
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -12606,7 +12606,7 @@ pub fn "StrSplitNIter^Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(Stri
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrSplitNIter^Iterator::filter"(self: &StrSplitNIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
@@ -12637,7 +12637,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::next"(self: &mut StrSplitWhitespaceIter
         self.pos = (self.pos + 1);
     }
     if (self.pos >= self.used) {
-        return null;
+        return %1;
     }
     let start: i32 = self.pos;
     loop {
@@ -12715,7 +12715,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::find"(self: &mut StrSplitWhitespaceIter
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::any"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> bool {
@@ -12753,7 +12753,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::all"(self: &mut StrSplitWhitespaceIter,
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::last"(self: &mut StrSplitWhitespaceIter) -> Option<String> {
-    let mut result: Option<String> = null;
+    let mut result: Option<String> = %0;
     loop {
         let __match_3: Option<String> = self."StrSplitWhitespaceIter^Iterator::next"();
         match __match_3 {
@@ -12784,7 +12784,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::nth"(self: &mut StrSplitWhitespaceIter,
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -12803,7 +12803,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::position"(self: &mut StrSplitWhitespace
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -12826,7 +12826,7 @@ pub fn "StrSplitWhitespaceIter^Iterator::reduce"(self: &mut StrSplitWhitespaceIt
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrSplitWhitespaceIter^Iterator::filter"(self: &StrSplitWhitespaceIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
@@ -12847,11 +12847,11 @@ pub fn "StrSplitWhitespaceIter^Iterator::skip"(self: &StrSplitWhitespaceIter, n:
 
 pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> {
     if self.finished {
-        return null;
+        return %0;
     }
     if (self.pos >= self.used) {
         self.finished = true;
-        return null;
+        return %2;
     }
     let start: i32 = self.pos;
     loop {
@@ -12859,19 +12859,19 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
             break;
         }
         let b: u8 = core::builtin::array_get_u8(&self.repr, self.pos);
-        if (b == 0x0A) {
+        if (b == 10) {
             let len: i32 = (self.pos - start);
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
             "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, &self.repr, start, len);
             self.pos = (self.pos + 1);
             return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
         }
-        if (b == 0x0D) {
+        if (b == 13) {
             let len: i32 = (self.pos - start);
             let mut part: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(len);
             "core::builtin::core/builtin/array_copy<u8>"(&mut part, 0, &self.repr, start, len);
             self.pos = (self.pos + 1);
-            if ((self.pos < self.used) && (core::builtin::array_get_u8(&self.repr, self.pos) == 0x0A)) {
+            if ((self.pos < self.used) && (core::builtin::array_get_u8(&self.repr, self.pos) == 10)) {
                 self.pos = (self.pos + 1);
             }
             return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
@@ -12886,7 +12886,7 @@ pub fn "StrLinesIter^Iterator::next"(self: &mut StrLinesIter) -> Option<String> 
         return Option<String>::Some("core::prelude/string.wado::String::internal_from_utf8_raw"(part, len));
     }
     self.finished = true;
-    return null;
+    return %16;
 }
 
 pub fn "StrLinesIter^Iterator::collect"(self: &mut StrLinesIter) -> List<String> {
@@ -12952,7 +12952,7 @@ pub fn "StrLinesIter^Iterator::find"(self: &mut StrLinesIter, pred: fn mut(Strin
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrLinesIter^Iterator::any"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> bool {
@@ -12990,7 +12990,7 @@ pub fn "StrLinesIter^Iterator::all"(self: &mut StrLinesIter, pred: fn mut(String
 }
 
 pub fn "StrLinesIter^Iterator::last"(self: &mut StrLinesIter) -> Option<String> {
-    let mut result: Option<String> = null;
+    let mut result: Option<String> = %0;
     loop {
         let __match_3: Option<String> = self."StrLinesIter^Iterator::next"();
         match __match_3 {
@@ -13021,7 +13021,7 @@ pub fn "StrLinesIter^Iterator::nth"(self: &mut StrLinesIter, n: i32) -> Option<S
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(String) -> bool) -> Option<i32> {
@@ -13040,7 +13040,7 @@ pub fn "StrLinesIter^Iterator::position"(self: &mut StrLinesIter, pred: fn mut(S
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String, String) -> String) -> Option<String> {
@@ -13063,7 +13063,7 @@ pub fn "StrLinesIter^Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrLinesIter^Iterator::filter"(self: &StrLinesIter, pred: fn mut(String) -> bool) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
@@ -13084,32 +13084,32 @@ pub fn "StrLinesIter^Iterator::skip"(self: &StrLinesIter, n: i32) -> IterSkip<co
 
 pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
     if (self.byte_index >= self.used) {
-        return null;
+        return %0;
     }
     let idx: i32 = self.byte_index;
     let b0: u8 = core::builtin::array_get_u8(&self.repr, self.byte_index);
     self.byte_index = (self.byte_index + 1);
-    if (b0 < 0x80) {
+    if (b0 < 128) {
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(b0 as u32)]);
     }
-    if (b0 < 0xE0) {
+    if (b0 < 224) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
         self.byte_index = (self.byte_index + 1);
-        let code: u32 = (((b0 as u32 & 0x1F) << 6) | (b1 & 0x3F));
+        let code: u32 = (((b0 as u32 & 31) << 6) | (b1 & 63));
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
-    if (b0 < 0xF0) {
+    if (b0 < 240) {
         let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
         let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
         self.byte_index = (self.byte_index + 2);
-        let code: u32 = ((((b0 as u32 & 0x0F) << 12) | ((b1 & 0x3F) << 6)) | (b2 & 0x3F));
+        let code: u32 = ((((b0 as u32 & 15) << 12) | ((b1 & 63) << 6)) | (b2 & 63));
         return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
     }
     let b1: u32 = core::builtin::array_get_u8(&self.repr, self.byte_index) as u32;
     let b2: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 1)) as u32;
     let b3: u32 = core::builtin::array_get_u8(&self.repr, (self.byte_index + 2)) as u32;
     self.byte_index = (self.byte_index + 3);
-    let code: u32 = (((((b0 as u32 & 0x07) << 18) | ((b1 & 0x3F) << 12)) | ((b2 & 0x3F) << 6)) | (b3 & 0x3F));
+    let code: u32 = (((((b0 as u32 & 7) << 18) | ((b1 & 63) << 12)) | ((b2 & 63) << 6)) | (b3 & 63));
     return Option<[i32, char]>::Some([idx, "core::prelude/primitive.wado::char::from_u32_unchecked"(code)]);
 }
 
@@ -13176,7 +13176,7 @@ pub fn "StrCharIndicesIter^Iterator::find"(self: &mut StrCharIndicesIter, pred: 
             },
         };
     }
-    return null;
+    return %0;
 }
 
 pub fn "StrCharIndicesIter^Iterator::any"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> bool {
@@ -13214,7 +13214,7 @@ pub fn "StrCharIndicesIter^Iterator::all"(self: &mut StrCharIndicesIter, pred: f
 }
 
 pub fn "StrCharIndicesIter^Iterator::last"(self: &mut StrCharIndicesIter) -> Option<[i32, char]> {
-    let mut result: Option<[i32, char]> = null;
+    let mut result: Option<[i32, char]> = %0;
     loop {
         let __match_3: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_3 {
@@ -13245,7 +13245,7 @@ pub fn "StrCharIndicesIter^Iterator::nth"(self: &mut StrCharIndicesIter, n: i32)
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> Option<i32> {
@@ -13264,7 +13264,7 @@ pub fn "StrCharIndicesIter^Iterator::position"(self: &mut StrCharIndicesIter, pr
             },
         };
     }
-    return null;
+    return %2;
 }
 
 pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
@@ -13287,7 +13287,7 @@ pub fn "StrCharIndicesIter^Iterator::reduce"(self: &mut StrCharIndicesIter, f: f
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 pub fn "StrCharIndicesIter^Iterator::filter"(self: &StrCharIndicesIter, pred: fn mut([i32, char]) -> bool) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
@@ -17210,13 +17210,13 @@ pub fn "ErrorCode^Ord::cmp"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box
 }
 
 pub fn "ErrorCode^Inspect::inspect"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"ErrorCode::Io");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"ErrorCode::IllegalByteSequence");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"ErrorCode::Pipe");
             };
         };
@@ -17596,16 +17596,16 @@ pub fn "Shape^Eq::eq"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.w
 }
 
 pub fn "Color^Inspect::inspect"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.wado/Color>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"Color::Red");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"Color::Green");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"Color::Blue");
             } else {
-                if (self.value == 3) {
+                if (self.value == %9) {
                     f.Formatter::write_str(&"Color::Alpha");
                 };
             };
@@ -18422,7 +18422,7 @@ pub fn "String^Inspect::inspect"(self: &String, f: &mut Formatter) {
                                         f.Formatter::write_char('t');
                                     } else {
                                         let code: i32 = c as i32;
-                                        if ((code < 0x20) || (code == 0x7f)) {
+                                        if ((code < 32) || (code == 127)) {
                                             f.Formatter::write_str(&"\\u{");
                                             f.Formatter::write_str(&__tmpl: {
                                                 let mut __r: String = "core::prelude/string.wado::String::with_capacity"(16);
@@ -18514,13 +18514,13 @@ pub fn "Formatter^Ord::cmp"(self: &Formatter, other: &Formatter) -> Ordering {
 }
 
 pub fn "Alignment^Inspect::inspect"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"Alignment::Left");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"Alignment::Center");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"Alignment::Right");
             };
         };
@@ -18808,13 +18808,13 @@ pub fn "LenientParseError^Ord::cmp"(self: &LenientParseError, other: &LenientPar
 }
 
 pub fn "Ordering^Inspect::inspect"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
-    if (self.value == 0) {
+    if (self.value == %0) {
         f.Formatter::write_str(&"Ordering::Less");
     } else {
-        if (self.value == 1) {
+        if (self.value == %3) {
             f.Formatter::write_str(&"Ordering::Equal");
         } else {
-            if (self.value == 2) {
+            if (self.value == %6) {
                 f.Formatter::write_str(&"Ordering::Greater");
             };
         };
@@ -19611,7 +19611,7 @@ fn "IterMap<core:prelude/string.wado/StrCharIter,char>^Iterator::next"(self: &mu
         },
         _ => (),
     };
-    return null;
+    return %1;
 }
 
 fn "IterMap<core:prelude/string.wado/StrCharIter,char>^IntoIterator::into_iter"(self: &IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {

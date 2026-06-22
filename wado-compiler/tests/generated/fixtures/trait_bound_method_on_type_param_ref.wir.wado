@@ -69,7 +69,6 @@ fn "wado-compiler/tests/fixtures/trait_bound_method_on_type_param_ref.wado/__cm_
 }
 
 fn "wado-compiler/tests/fixtures/trait_bound_method_on_type_param_ref.wado/__cm_export__run"() {
-    let l: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -82,8 +81,7 @@ fn "wado-compiler/tests/fixtures/trait_bound_method_on_type_param_ref.wado/__cm_
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    l = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("widget"), used: 6 };
-    "core:cli/println"(l);
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("widget"), used: 6 });
     "wasi/task-return"(0);
 }
 

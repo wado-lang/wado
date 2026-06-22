@@ -120,8 +120,10 @@ fn "wado-compiler/tests/fixtures/default_arg_enum_variant.wado/run"() {
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
     let __local_7: ref "core:prelude/format.wado//Formatter";
+    let intensity_8: i32;
     let color_9: "wado-compiler/tests/fixtures/default_arg_enum_variant.wado//enum:Color";
     let shift_10: i32;
+    let intensity_11: i32;
     let color_12: "wado-compiler/tests/fixtures/default_arg_enum_variant.wado//enum:Color";
     let shift_13: i32;
     __inline___initialize_modules_0: block {
@@ -130,13 +132,13 @@ fn "wado-compiler/tests/fixtures/default_arg_enum_variant.wado/run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __cond_1 = local.tee __v0_0(color_9 = 0; shift_10 = (if color_9 == 0 -> i32 {
+    __cond_1 = local.tee __v0_0(intensity_8 = 1; color_9 = 0; shift_10 = (if color_9 == 0 -> i32 {
         100;
     } else if color_9 == 1 -> i32 {
         200;
     } else {
         300;
-    }); 1 + shift_10) == 101;
+    }); intensity_8 + shift_10) == 101;
     if @unlikely(__cond_1 == 0) {
         cold_path;
         "core:internal/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_4, 114); "core:prelude/string.wado/String::push"(__local_4, 117); "core:prelude/string.wado/String::push"(__local_4, 110); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_arg_enum_variant.wado"), used: 58 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -144,13 +146,13 @@ condition: paint(1) == 101
 "), used: 28 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("paint(1): "), used: 10 }); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_0 }, __local_5); "core:prelude/string.wado/String::push"(__local_4, 10); __local_4);
         unreachable;
     }
-    __cond_3 = local.tee __v0_2(color_12 = 2; shift_13 = (if color_12 == 0 -> i32 {
+    __cond_3 = local.tee __v0_2(intensity_11 = 1; color_12 = 2; shift_13 = (if color_12 == 0 -> i32 {
         100;
     } else if color_12 == 1 -> i32 {
         200;
     } else {
         300;
-    }); 1 + shift_13) == 301;
+    }); intensity_11 + shift_13) == 301;
     if @unlikely(__cond_3 == 0) {
         cold_path;
         "core:internal/panic"(__local_6 = "core:prelude/string.wado/String::with_capacity"(154); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_6, 114); "core:prelude/string.wado/String::push"(__local_6, 117); "core:prelude/string.wado/String::push"(__local_6, 110); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push"(__local_6, 97); "core:prelude/string.wado/String::push"(__local_6, 116); "core:prelude/string.wado/String::push"(__local_6, 32); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/default_arg_enum_variant.wado"), used: 58 }); "core:prelude/string.wado/String::push"(__local_6, 58); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 20 }, __local_7); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -275,6 +277,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -283,8 +286,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b14: block {
             l15: loop {
                 break_if b14 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l15;
             };
@@ -326,12 +329,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

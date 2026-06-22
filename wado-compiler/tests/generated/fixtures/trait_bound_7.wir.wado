@@ -349,6 +349,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -357,8 +358,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b12: block {
             l13: loop {
                 break_if b12 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l13;
             };
@@ -400,12 +401,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -598,9 +598,8 @@ fn "wado-compiler/tests/fixtures/trait_bound_7.wado/Holder<i32>::min"(self) {
     let __local_6_9: ref "core:prelude/format.wado//Formatter";
     let __sroa_other_value: i32;
     let __sroa_self_value: i32;
-    let __cse_29: bool;
-    let _licm_used_30: i32;
-    let _licm_repr_31: ref Array<i32>;
+    let _licm_used_29: i32;
+    let _licm_repr_30: ref Array<i32>;
     __v1_6 = self.used;
     __cond_7 = 0 < __v1_6;
     if @unlikely(__cond_7 == 0) {
@@ -612,14 +611,13 @@ condition: index < self.used
     }
     m = builtin::array_get<i32>(self.repr, 0);
     i = 1;
-    _licm_used_30 = self.used;
-    _licm_repr_31 = self.repr;
+    _licm_used_29 = self.used;
+    _licm_repr_30 = self.repr;
     b46: block {
         l47: loop {
-            __cse_29 = i < _licm_used_30;
-            break_if b46 __cse_29 == 0;
+            break_if b46 i >= _licm_used_29;
             if __inline_i32_Ord__cmp_3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                __sroa_self_value = builtin::array_get<i32>(_licm_repr_31, i);
+                __sroa_self_value = builtin::array_get<i32>(_licm_repr_30, i);
                 __sroa_other_value = m;
                 if __sroa_self_value < __sroa_other_value {
                     break __inline_i32_Ord__cmp_3: 0;
@@ -629,7 +627,7 @@ condition: index < self.used
                 }
                 break __inline_i32_Ord__cmp_3: 1;
             } == 0 {
-                m = builtin::array_get<i32>(_licm_repr_31, i);
+                m = builtin::array_get<i32>(_licm_repr_30, i);
             }
             i = i + 1;
             continue l47;

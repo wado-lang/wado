@@ -234,6 +234,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -242,8 +243,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b8: block {
             l9: loop {
                 break_if b8 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l9;
             };
@@ -271,12 +272,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -339,28 +339,21 @@ fn "core:prelude/string.wado/String::push"(self, c) {
 fn "wado-compiler/tests/fixtures/hfs_break_from_scalar_state_commits.wado/Actions::fill"(self) {
     let i: i32;
     let _licm_base_2: i32;
-    let _licm_arith_3: i32;
-    let _licm_arith_4: i32;
-    let _licm_arith_5: i32;
-    let _licm_arith_6: i32;
-    let __hfs_channel_7: i32;
+    let __hfs_channel_3: i32;
     i = 0;
-    _licm_arith_3 = local.tee _licm_base_2(self.base) + 9;
-    _licm_arith_4 = _licm_base_2 + 8;
-    _licm_arith_5 = _licm_base_2 + 7;
-    _licm_arith_6 = _licm_base_2 + 1;
-    __hfs_channel_7 = self.channel;
+    _licm_base_2 = self.base;
+    __hfs_channel_3 = self.channel;
     b18: block {
         l19: loop {
             if i == 0 {
-                __hfs_channel_7 = _licm_arith_3;
+                __hfs_channel_3 = _licm_base_2 + 9;
             } else if i == 1 {
-                __hfs_channel_7 = _licm_arith_4;
+                __hfs_channel_3 = _licm_base_2 + 8;
             } else if i == 2 {
-                __hfs_channel_7 = _licm_arith_5;
+                __hfs_channel_3 = _licm_base_2 + 7;
             } else if i == 3 {
-                __hfs_channel_7 = _licm_arith_6;
-                self.channel = __hfs_channel_7;
+                __hfs_channel_3 = _licm_base_2 + 1;
+                self.channel = __hfs_channel_3;
                 break b18;
             }
             i = i + 1;

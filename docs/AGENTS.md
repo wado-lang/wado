@@ -128,6 +128,7 @@ It may include TODOs on WIP.
 - [Library-Defined Derivation: `Reflect` Extensions and the `#[validate]` Attribute](./wep-2026-06-13-reflect-derivation.md)
 - [Compile-Time Data Providers (bundled ICU)](./wep-2026-06-13-compile-time-data-providers.md)
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
+- [The Live ValueGraph — ValueGraph as the Pure-Value IR](./wep-2026-06-15-live-value-graph.md)
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
 - [Command-Line Argument Parsing (`core:args`)](./wep-2026-06-22-core-args.md)
 - [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)

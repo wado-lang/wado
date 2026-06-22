@@ -96,7 +96,6 @@ use std::rc::Rc;
 
 use crate::const_eval::{
     eval_binary, eval_cast, eval_unary, is_f32_type, is_int_prim, is_signed_int, prim_of,
-    value_to_arena_kind,
 };
 // `Value` lives in `const_eval`; re-export it so `niri::Value` resolves for
 // the public API and tests.
@@ -106,9 +105,10 @@ use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirFunction, NirLiteralPattern, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, PatId, PatKind, StmtId,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, StmtId,
     StmtKind, StmtNode,
 };
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results.
@@ -357,6 +357,7 @@ pub struct AliasInfo {
 ///   participate in the CM async runtime; not CTFE-safe.
 /// - `stores.is_empty()` — `stores[...]` is moot for CTFE (we don't pass
 ///   refs), but bail conservatively.
+///
 /// Commit sink for niri's body rewrites. The rewrite logic reads through
 /// [`EditSink::body`] and commits every edit through the sink, so two backends
 /// can share it: [`BodySink`] mutates a `Body` in place — used for throwaway
@@ -369,6 +370,12 @@ pub(crate) trait EditSink {
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind);
+    /// Promote `e` to the folded pure scalar `value`, returning whether the edit
+    /// was applied (WEP: The Live `ValueGraph`). The engine backend swaps `e`'s
+    /// parent operand to an `Operand::Value`; the scratch CTFE backend is a no-op
+    /// (`false`) — its reads recompute the value through the value lattice, so it
+    /// needs no node write-back.
+    fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
@@ -390,6 +397,13 @@ impl EditSink for BodySink<'_> {
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
+    }
+    fn replace_with_value(&mut self, _e: ExprId, _value: Value) -> bool {
+        // Scratch CTFE has no parent map to promote a constant into and pure
+        // scalars no longer have a literal-node form; the value is recomputed on
+        // read (`reduce_to_lattice_a` → `try_fold_a` over operands + env), so the
+        // write-back is a no-op here.
+        false
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         // Clone src's whole node into dst (the original short-circuit rewrite
@@ -459,6 +473,13 @@ pub struct Interpreter<'a> {
     /// [`invalidate_local`]: Self::invalidate_local
     /// [`enter_function`]: Self::enter_function
     env: IndexMap<u32, Lattice>,
+    /// CTFE scratch-body fold memo: `expr → folded constant`. The scratch
+    /// [`BodySink`] cannot promote a fold to an `Operand::Value` (no parent map)
+    /// and pure scalars have no literal-node form, so a fold is recorded here and
+    /// read back by [`Self::expr_to_lattice_a`]. Scoped to one `try_call_fold_a`
+    /// call (saved/cleared around the scratch reduction); empty during real-body
+    /// folding, where rewrites promote through the engine instead.
+    scratch_folds: IndexMap<ExprId, Value>,
     /// Pre-built map of CTFE-eligible callees. When `None`, `Call` nodes
     /// stay [`Lattice::Unevaluated`]. The visitor populates this once
     /// per pass via [`with_callees`].
@@ -497,6 +518,7 @@ impl<'a> Interpreter<'a> {
         Self {
             type_table,
             env: IndexMap::default(),
+            scratch_folds: IndexMap::default(),
             callees: None,
             globals: None,
             global_fields: None,
@@ -558,6 +580,7 @@ impl<'a> Interpreter<'a> {
     /// pass, not per-function.
     pub fn enter_function(&mut self) {
         self.env.clear();
+        self.scratch_folds.clear();
         debug_assert!(
             self.call_stack.is_empty(),
             "niri call_stack leaked across function boundary",
@@ -583,14 +606,28 @@ impl<'a> Interpreter<'a> {
 
     /// Reads the bound env for locals and takes the SCCP join over
     /// `if` / `match` arms.
-    pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::BoolLiteral(b) => Lattice::Const(Value::Bool(*b)),
-            ExprKind::CharLiteral(c) => Lattice::Const(Value::Char(*c)),
-            ExprKind::IntLiteral { value, .. } => {
-                let Some(prim) = prim_of(node.type_id, self.type_table).filter(|p| is_int_prim(*p))
-                else {
+    /// Lattice value of an operand: the promoted constant for `Operand::Value`,
+    /// else the skeleton subtree's lattice. Promoted pure values live in
+    /// `body.values`, so a literal that left the skeleton still folds.
+    pub fn operand_to_lattice_a(&self, body: &Body, op: Operand) -> Lattice {
+        match op {
+            Operand::Expr(e) => self.expr_to_lattice_a(body, e),
+            Operand::Value(v) => self.value_to_lattice(body, v),
+        }
+    }
+
+    /// Convert a promoted pure value to a `Lattice::Const` when it is a constant
+    /// kind of a known primitive type; `Unevaluated` otherwise (a derived
+    /// `Binary` / `Opaque` / non-primitive value niri does not evaluate here).
+    fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
+        let Some(ty) = body.values.type_of(v) else {
+            return Lattice::Unevaluated;
+        };
+        match body.values.kind(v) {
+            ValueKind::Bool(b) => Lattice::Const(Value::Bool(*b)),
+            ValueKind::Char(c) => Lattice::Const(Value::Char(*c)),
+            ValueKind::Int(value, _) => {
+                let Some(prim) = prim_of(ty, self.type_table).filter(|p| is_int_prim(*p)) else {
                     return Lattice::Unevaluated;
                 };
                 Lattice::Const(Value::Int {
@@ -598,17 +635,28 @@ impl<'a> Interpreter<'a> {
                     prim,
                 })
             }
-            ExprKind::FloatLiteral { value, .. } => {
-                let prim = if is_f32_type(node.type_id, self.type_table) {
+            ValueKind::Float(bits, _) => {
+                let prim = if is_f32_type(ty, self.type_table) {
                     PrimitiveType::F32
                 } else {
                     PrimitiveType::F64
                 };
                 Lattice::Const(Value::Float {
-                    value: *value,
+                    value: f64::from_bits(*bits),
                     prim,
                 })
             }
+            _ => Lattice::Unevaluated,
+        }
+    }
+
+    pub fn expr_to_lattice_a(&self, body: &Body, e: ExprId) -> Lattice {
+        // A scratch-CTFE fold memoized for `e` (no node form for pure scalars).
+        if let Some(v) = self.scratch_folds.get(&e) {
+            return Lattice::Const(*v);
+        }
+        let node = &body.exprs[e];
+        match &node.kind {
             ExprKind::Local { index, .. } => {
                 self.env.get(index).copied().unwrap_or(Lattice::Unevaluated)
             }
@@ -616,11 +664,12 @@ impl<'a> Interpreter<'a> {
                 expr: inner,
                 field_name,
                 ..
-            } => match &body.exprs[*inner].kind {
-                ExprKind::GlobalVarGet {
+            } => match inner.as_expr().map(|e| &body.exprs[e].kind) {
+                // A promoted `Operand::Value` inner is no global field read.
+                Some(ExprKind::GlobalVarGet {
                     module_source,
                     name,
-                } => self
+                }) => self
                     .global_fields
                     .and_then(|m| m.get(&(module_source.clone(), name.clone())))
                     .and_then(|m| m.get(field_name.as_str()))
@@ -638,7 +687,7 @@ impl<'a> Interpreter<'a> {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.expr_to_lattice_a(body, *condition);
+                let cond = self.operand_to_lattice_a(body, *condition);
                 match cond {
                     Lattice::Const(Value::Bool(true)) => self.block_lattice_a(body, *then_branch),
                     Lattice::Const(Value::Bool(false)) => match else_branch {
@@ -661,7 +710,12 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match {
                 expr: scrutinee,
                 arms,
-            } => self.match_lattice_a(body, *scrutinee, arms),
+            } => match scrutinee.as_expr() {
+                Some(e) => self.match_lattice_a(body, e, arms),
+                // A promoted-constant scrutinee is not evaluated here; the
+                // flow-fold visitor collapses constant matches structurally.
+                None => Lattice::Unevaluated,
+            },
             _ => Lattice::Unevaluated,
         }
     }
@@ -672,18 +726,18 @@ impl<'a> Interpreter<'a> {
         let node = &body.exprs[e];
         match &node.kind {
             ExprKind::Binary { left, op, right } => {
-                let l = match self.expr_to_lattice_a(body, *left) {
+                let l = match self.operand_to_lattice_a(body, *left) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                let r = match self.expr_to_lattice_a(body, *right) {
+                let r = match self.operand_to_lattice_a(body, *right) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
                 option_to_lattice(eval_binary(l, *op, r))
             }
             ExprKind::Unary { op, expr: inner } => {
-                let v = match self.expr_to_lattice_a(body, *inner) {
+                let v = match self.operand_to_lattice_a(body, *inner) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
@@ -693,7 +747,7 @@ impl<'a> Interpreter<'a> {
                 let Some(target) = prim_of(node.type_id, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
-                match self.expr_to_lattice_a(body, *inner) {
+                match self.operand_to_lattice_a(body, *inner) {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
@@ -707,7 +761,7 @@ impl<'a> Interpreter<'a> {
         match body.blocks[b].stmts.as_slice() {
             [] => Lattice::Unevaluated,
             [single] => match &body.stmts[*single].kind {
-                StmtKind::Expr(e) => self.expr_to_lattice_a(body, *e),
+                StmtKind::Expr(e) => self.operand_to_lattice_a(body, *e),
                 _ => Lattice::Unevaluated,
             },
             _ => Lattice::Unevaluated,
@@ -731,12 +785,12 @@ impl<'a> Interpreter<'a> {
                     self.pattern_matches_a(body, &scrut_v, arm.pattern)
                 };
                 let body_lat =
-                    arm_lattice_for_feasible_join(self.expr_to_lattice_a(body, arm.body));
+                    arm_lattice_for_feasible_join(self.operand_to_lattice_a(body, arm.body));
                 match pm {
                     PatternMatch::No => {}
                     PatternMatch::Yes => {
                         if candidates.is_empty() {
-                            return self.expr_to_lattice_a(body, arm.body);
+                            return self.operand_to_lattice_a(body, arm.body);
                         }
                         candidates.push(body_lat);
                         yes_found = true;
@@ -756,7 +810,7 @@ impl<'a> Interpreter<'a> {
             let mut acc = Lattice::Unevaluated;
             for arm in arms {
                 acc = acc.join(arm_lattice_for_feasible_join(
-                    self.expr_to_lattice_a(body, arm.body),
+                    self.operand_to_lattice_a(body, arm.body),
                 ));
             }
             acc
@@ -826,7 +880,7 @@ impl<'a> Interpreter<'a> {
                 _ => PatternMatch::No,
             },
             PatKind::ConstantValue { expr } => {
-                match self.expr_to_lattice_a(body, *expr).as_const() {
+                match self.operand_to_lattice_a(body, *expr).as_const() {
                     Some(v) if &v == value => PatternMatch::Yes,
                     Some(_) => PatternMatch::No,
                     None => PatternMatch::Unknown,
@@ -857,7 +911,7 @@ impl<'a> Interpreter<'a> {
             matches!(
                 &body.stmts[*s].kind,
                 StmtKind::If { condition, .. }
-                    if matches!(body.exprs[*condition].kind, ExprKind::BoolLiteral(_))
+                    if operand_bool(body, *condition).is_some()
             )
         });
         if !has_constant_if {
@@ -873,11 +927,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } = &body.stmts[s].kind
             {
-                if let ExprKind::BoolLiteral(value) = body.exprs[*condition].kind {
-                    Some((value, *then_block, *else_block))
-                } else {
-                    None
-                }
+                operand_bool(body, *condition).map(|value| (value, *then_block, *else_block))
             } else {
                 None
             };
@@ -909,9 +959,15 @@ impl<'a> Interpreter<'a> {
     /// engine-routed visitor keeps the parent map / use index coherent and the
     /// scratch-body CTFE path mutates in place.
     pub(crate) fn reduce_local_via<S: EditSink>(&mut self, sink: &mut S, e: ExprId) -> bool {
-        if let Some(kind) = self.flow_fold_kind_a(sink.body(), e) {
-            sink.replace_kind(e, kind);
-            return true;
+        if let Some(value) = self.flow_fold_value_a(sink.body(), e) {
+            // Promote the folded scalar to an `Operand::Value` in `e`'s parent.
+            if sink.replace_with_value(e, value) {
+                return true;
+            }
+            // The scratch backend cannot promote (no parent map); memoize the
+            // fold so the scratch's later lattice reads see the constant. Falling
+            // through to the structural rewrites is a no-op for a pure constant.
+            self.scratch_folds.insert(e, value);
         }
         if rewrite_short_circuit_via(sink, e) {
             return true;
@@ -941,32 +997,38 @@ impl<'a> Interpreter<'a> {
     /// never `Local` mentions. That lets the rewrite engine apply the result
     /// through its coherent edit API without the use index going stale.
     ///
-    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine
-    /// rule installs the returned kind via `Engine::replace_expr_kind`.
-    pub fn const_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+    /// Unlike `reduce_local_a`, this does **not** mutate `body`: the engine rule
+    /// promotes the returned value to an `Operand::Value` via
+    /// `Engine::replace_expr_with_value`.
+    pub fn const_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         None
     }
 
-    /// The flow-sensitive constant value of `e`, as the literal [`ExprKind`]
-    /// that should replace it, or `None` when `e` does not fold to a constant.
-    ///
-    /// This is the value-substitution subset of
-    /// [`reduce_local_a`](Self::reduce_local_a) — `env`-bound locals,
-    /// immutable globals, literal arithmetic, and pure CTFE — returning the
-    /// new kind instead of mutating `body`. The structural
-    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included;
-    /// they reshape more than one node and are committed separately through the
-    /// engine edit API. The caller installs the returned kind via
-    /// `Engine::replace_expr_kind` so the parent map / use index stay coherent.
-    pub fn flow_fold_kind_a(&mut self, body: &Body, e: ExprId) -> Option<ExprKind> {
+    /// The flow-sensitive constant value of `e` — `env`-bound locals, immutable
+    /// globals, literal arithmetic, and pure CTFE — or `None`. The structural
+    /// rewrites (short-circuit / `if` / `match` collapse) are *not* included.
+    /// The sink promotes the result to an `Operand::Value` via
+    /// [`EditSink::replace_with_value`].
+    pub fn flow_fold_value_a(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         if let Lattice::Const(v) = self.try_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
+        }
+        // A bare `Local` read bound to a constant in the flow env (the "env-bound
+        // locals" this doc promises). `try_fold_a` only folds arith; consult the
+        // env here so a `let x = <const>; … x …` that store→load forwarding missed
+        // — a post-`inline` binding the build-once graph never valued — still
+        // folds. Mutable locals are recorded `NonConst` (sound by flow), so this
+        // is immutable-only and cannot stale.
+        if matches!(&body.exprs[e].kind, ExprKind::Local { .. })
+            && let Lattice::Const(v) = self.expr_to_lattice_a(body, e)
+        {
+            return Some(v);
         }
         if let ExprKind::GlobalVarGet {
             module_source,
@@ -974,10 +1036,10 @@ impl<'a> Interpreter<'a> {
         } = &body.exprs[e].kind
             && let Lattice::Const(v) = self.global_lattice(module_source, name)
         {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         if let Lattice::Const(v) = self.try_call_fold_a(body, e) {
-            return Some(value_to_arena_kind(v));
+            return Some(v);
         }
         None
     }
@@ -996,17 +1058,24 @@ impl<'a> Interpreter<'a> {
     /// [`Self::reduce_local_a`] at each node so a child fold is observable at
     /// its parent. Used by CTFE (`try_call_fold_a`) to evaluate a callee tail
     /// whose children no outer walk has pre-reduced.
+    /// Reduce an operand in place: a no-op (`false`) for a promoted pure value
+    /// (already reduced), else reduce the skeleton subtree.
+    fn reduce_in_place_operand_a(&mut self, body: &mut Body, op: Operand) -> bool {
+        op.as_expr()
+            .is_some_and(|e| self.reduce_in_place_a(body, e))
+    }
+
     pub fn reduce_in_place_a(&mut self, body: &mut Body, e: ExprId) -> bool {
         let mut changed = match &body.exprs[e].kind {
             ExprKind::Binary { left, right, .. } => {
                 let (l, r) = (*left, *right);
-                let a = self.reduce_in_place_a(body, l);
-                let b = self.reduce_in_place_a(body, r);
+                let a = self.reduce_in_place_operand_a(body, l);
+                let b = self.reduce_in_place_operand_a(body, r);
                 a || b
             }
             ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
                 let i = *inner;
-                self.reduce_in_place_a(body, i)
+                self.reduce_in_place_operand_a(body, i)
             }
             ExprKind::If {
                 condition,
@@ -1014,7 +1083,7 @@ impl<'a> Interpreter<'a> {
                 else_branch,
             } => {
                 let (c, t, e2) = (*condition, *then_branch, *else_branch);
-                let mut ch = self.reduce_in_place_a(body, c);
+                let mut ch = self.reduce_in_place_operand_a(body, c);
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1026,14 +1095,14 @@ impl<'a> Interpreter<'a> {
                 arms,
             } => {
                 let scrutinee = *scrutinee;
-                let arm_data: Vec<(Option<ExprId>, ExprId)> =
+                let arm_data: Vec<(Option<Operand>, Operand)> =
                     arms.iter().map(|a| (a.guard, a.body)).collect();
-                let mut ch = self.reduce_in_place_a(body, scrutinee);
+                let mut ch = self.reduce_in_place_operand_a(body, scrutinee);
                 for (guard, arm_body) in arm_data {
                     if let Some(g) = guard {
-                        ch |= self.reduce_in_place_a(body, g);
+                        ch |= self.reduce_in_place_operand_a(body, g);
                     }
-                    ch |= self.reduce_in_place_a(body, arm_body);
+                    ch |= self.reduce_in_place_operand_a(body, arm_body);
                 }
                 ch
             }
@@ -1059,14 +1128,14 @@ impl<'a> Interpreter<'a> {
         match &body.stmts[s].kind {
             StmtKind::Expr(e) => {
                 let e = *e;
-                self.reduce_in_place_a(body, e)
+                self.reduce_in_place_operand_a(body, e)
             }
             StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
                 let v = *value;
-                self.reduce_in_place_a(body, v)
+                self.reduce_in_place_operand_a(body, v)
             }
             StmtKind::Return { value } | StmtKind::Break { value, .. } => match *value {
-                Some(v) => self.reduce_in_place_a(body, v),
+                Some(v) => self.reduce_in_place_operand_a(body, v),
                 None => false,
             },
             StmtKind::If {
@@ -1075,7 +1144,7 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } => {
                 let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = self.reduce_in_place_a(body, c);
+                let mut ch = self.reduce_in_place_a(body, c.as_expr().expect("skeleton operand"));
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1122,16 +1191,19 @@ impl<'a> Interpreter<'a> {
             } => (*condition, *then_branch, *else_branch),
             _ => return false,
         };
-        let cond_lat = self.expr_to_lattice_a(sink.body(), condition);
+        let cond_lat = self.operand_to_lattice_a(sink.body(), condition);
 
         // (1) Constant condition → splice the chosen arm.
         if let Lattice::Const(Value::Bool(b)) = cond_lat {
+            let span = sink.body().exprs[e].span;
             let kind = if b {
                 ExprKind::Block(then_branch)
             } else if let Some(eb) = else_branch {
                 ExprKind::Block(eb)
             } else {
-                ExprKind::Unit
+                // `if false {}` with no else evaluates to unit; an empty block
+                // is the unit-typed skeleton form (the unit value has no node).
+                ExprKind::Block(sink.alloc_block(Vec::new(), span))
             };
             sink.replace_kind(e, kind);
             return true;
@@ -1153,7 +1225,9 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = sink.body().exprs[condition].kind.clone();
+                let cond_kind = sink.body().exprs[condition.as_expr().expect("skeleton operand")]
+                    .kind
+                    .clone();
                 sink.replace_kind(e, cond_kind);
             } else {
                 sink.replace_kind(
@@ -1171,11 +1245,12 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(sink.body(), condition) {
+        if !is_speculatable_a(sink.body(), condition.as_expr().expect("skeleton operand")) {
             return false;
         }
-        sink.replace_kind(e, value_to_arena_kind(t));
-        true
+        // Promote both-equal arms to the shared constant. The scratch backend
+        // declines (no parent map); its read path recomputes, so report no change.
+        sink.replace_with_value(e, t)
     }
 
     /// Collapse a `match` with a constant scrutinee or a bool-discriminator shape.
@@ -1185,7 +1260,7 @@ impl<'a> Interpreter<'a> {
             ExprKind::Match { expr, arms } if !arms.is_empty() => *expr,
             _ => return false,
         };
-        let arms_data: Vec<(Option<ExprId>, PatId, ExprId, crate::token::Span)> =
+        let arms_data: Vec<(Option<Operand>, PatId, Operand, crate::token::Span)> =
             match &body.exprs[e].kind {
                 ExprKind::Match { arms, .. } => arms
                     .iter()
@@ -1195,7 +1270,7 @@ impl<'a> Interpreter<'a> {
             };
 
         // Rule 1: const scrutinee → splice the chosen arm.
-        if let Lattice::Const(scrut_v) = self.expr_to_lattice_a(sink.body(), scrutinee) {
+        if let Lattice::Const(scrut_v) = self.operand_to_lattice_a(sink.body(), scrutinee) {
             let mut chosen: Option<usize> = None;
             for (i, (guard, pat, _, _)) in arms_data.iter().enumerate() {
                 if guard.is_some() {
@@ -1213,9 +1288,15 @@ impl<'a> Interpreter<'a> {
             let Some(idx) = chosen else {
                 return false;
             };
-            let body_e = arms_data[idx].2;
-            let span = sink.body().exprs[body_e].span;
-            let stmt = sink.alloc_stmt(StmtKind::Expr(body_e), span);
+            let (body_op, arm_span) = (arms_data[idx].2, arms_data[idx].3);
+            // The chosen arm's value becomes `e`'s value, wrapped in a block. A
+            // promoted constant arm flows straight into the `Operand` statement
+            // slot — no node materialization (WEP: The Live ValueGraph).
+            let span = match body_op {
+                Operand::Expr(ex) => sink.body().exprs[ex].span,
+                Operand::Value(_) => arm_span,
+            };
+            let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
             let block = sink.alloc_block(vec![stmt], span);
             sink.replace_kind(e, ExprKind::Block(block));
             return true;
@@ -1239,14 +1320,17 @@ impl<'a> Interpreter<'a> {
                 ExprKind::Binary {
                     left: scrutinee,
                     op: NirBinaryOp::Eq,
-                    right,
+                    right: right.into(),
                 },
             );
             return true;
         }
 
-        // Rule 3: non-const speculatable scrutinee, all-arms-equal.
-        if !is_speculatable_a(sink.body(), scrutinee) {
+        // Rule 3: non-const speculatable scrutinee, all-arms-equal. A promoted
+        // `Operand::Value` scrutinee is a constant — trivially speculatable.
+        if let Some(e) = scrutinee.as_expr()
+            && !is_speculatable_a(sink.body(), e)
+        {
             return false;
         }
         if arms_data.iter().any(|(g, _, _, _)| g.is_some()) {
@@ -1261,7 +1345,7 @@ impl<'a> Interpreter<'a> {
         }
         let mut common: Option<Value> = None;
         for (_, _, b, _) in &arms_data {
-            let Lattice::Const(v) = self.expr_to_lattice_a(sink.body(), *b) else {
+            let Lattice::Const(v) = self.operand_to_lattice_a(sink.body(), *b) else {
                 return false;
             };
             match common {
@@ -1271,8 +1355,9 @@ impl<'a> Interpreter<'a> {
             }
         }
         let v = common.expect("at least one arm");
-        sink.replace_kind(e, value_to_arena_kind(v));
-        true
+        // Promote all-equal arms to the shared constant; the scratch backend
+        // declines (recomputes on read), so report its no-change honestly.
+        sink.replace_with_value(e, v)
     }
 
     /// Fold a pure call whose args are all constant: bind the params, evaluate
@@ -1284,7 +1369,7 @@ impl<'a> Interpreter<'a> {
         let Some(callees) = self.callees else {
             return Lattice::Unevaluated;
         };
-        let (func, args): (crate::nir::FunctionRef, Vec<ExprId>) = match &body.exprs[e].kind {
+        let (func, args): (crate::nir::FunctionRef, Vec<Operand>) = match &body.exprs[e].kind {
             ExprKind::Call { func, args, .. } => {
                 (func.clone(), args.iter().map(|a| a.expr).collect())
             }
@@ -1302,7 +1387,7 @@ impl<'a> Interpreter<'a> {
         };
         let mut bound: Vec<Value> = Vec::with_capacity(args.len());
         for arg in &args {
-            match self.expr_to_lattice_a(body, *arg).as_const() {
+            match self.operand_to_lattice_a(body, *arg).as_const() {
                 Some(v) => bound.push(v),
                 None => return Lattice::Unevaluated,
             }
@@ -1322,6 +1407,9 @@ impl<'a> Interpreter<'a> {
         self.step_budget -= 1;
         self.call_stack.push(key);
         let saved_env = std::mem::take(&mut self.env);
+        // The scratch fold memo is scoped to this reduction; nested CTFE calls
+        // get a fresh map and ids never cross scratch bodies.
+        let saved_folds = std::mem::take(&mut self.scratch_folds);
         for (i, v) in bound.iter().enumerate() {
             #[allow(clippy::cast_possible_truncation)]
             self.env.insert(i as u32, Lattice::Const(*v));
@@ -1335,6 +1423,7 @@ impl<'a> Interpreter<'a> {
         self.reduce_in_place_a(&mut scratch, tail);
         let result = self.reduce_to_lattice_a(&scratch, tail);
         self.env = saved_env;
+        self.scratch_folds = saved_folds;
         self.call_stack.pop();
         match result {
             c @ Lattice::Const(_) => c,
@@ -1372,7 +1461,8 @@ fn single_tail_expression_a(body: &Body) -> Option<ExprId> {
         return None;
     };
     match body.stmts[*single].kind {
-        StmtKind::Return { value: Some(e) } | StmtKind::Expr(e) => Some(e),
+        StmtKind::Return { value: Some(e) } => e.as_expr(),
+        StmtKind::Expr(e) => e.as_expr(),
         _ => None,
     }
 }
@@ -1546,27 +1636,39 @@ fn pattern_is_catch_all_a(body: &Body, pat: PatId) -> bool {
 /// Simplify `false && x` / `true || x` and their mirror forms.
 fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
     let body = sink.body();
-    let keep = match &body.exprs[e].kind {
+    let keep: Operand = match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            match (&body.exprs[*left].kind, *op, &body.exprs[*right].kind) {
-                (ExprKind::BoolLiteral(false), NirBinaryOp::Or, _)
-                | (ExprKind::BoolLiteral(true), NirBinaryOp::And, _) => *right,
-                (_, NirBinaryOp::Or, ExprKind::BoolLiteral(false))
-                | (_, NirBinaryOp::And, ExprKind::BoolLiteral(true)) => *left,
+            let (left, op, right) = (*left, *op, *right);
+            match (operand_bool(body, left), op, operand_bool(body, right)) {
+                (Some(false), NirBinaryOp::Or, _) | (Some(true), NirBinaryOp::And, _) => right,
+                (_, NirBinaryOp::Or, Some(false)) | (_, NirBinaryOp::And, Some(true)) => left,
                 _ => return false,
             }
         }
         _ => return false,
     };
-    // Become the kept operand. The other operand is left orphaned.
-    sink.become_expr(e, keep);
+    // Become the kept operand. The other operand is left orphaned. A constant
+    // `keep` (a fully-constant short-circuit) is left to the const-fold path.
+    let Some(keep_e) = keep.as_expr() else {
+        return false;
+    };
+    sink.become_expr(e, keep_e);
     true
+}
+
+/// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.
+/// `None` for any other operand.
+fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
+    match body.values.kind(op.as_value()?) {
+        ValueKind::Bool(b) => Some(*b),
+        _ => None,
+    }
 }
 
 /// Recognize `match X { Case => true, _ => false }` as an equality test.
 fn try_match_bool_discriminator_a(
     body: &Body,
-    arms: &[(Option<ExprId>, PatId, ExprId, crate::token::Span)],
+    arms: &[(Option<Operand>, PatId, Operand, crate::token::Span)],
 ) -> Option<EnumEqReplacement> {
     let [yes_arm, no_arm] = arms else {
         return None;
@@ -1577,10 +1679,10 @@ fn try_match_bool_discriminator_a(
     if !matches!(body.pats[no_arm.1].kind, PatKind::Wildcard) {
         return None;
     }
-    if !matches!(body.exprs[yes_arm.2].kind, ExprKind::BoolLiteral(true)) {
+    if operand_bool(body, yes_arm.2) != Some(true) {
         return None;
     }
-    if !matches!(body.exprs[no_arm.2].kind, ExprKind::BoolLiteral(false)) {
+    if operand_bool(body, no_arm.2) != Some(false) {
         return None;
     }
     let PatKind::Enum {
@@ -1602,24 +1704,25 @@ fn try_match_bool_discriminator_a(
 /// Whether `e` can be evaluated out of order (side-effect-free, cannot trap).
 fn is_speculatable_a(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::Local { .. }
-        | ExprKind::Unit => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_speculatable_a(body, *left)
-                && is_speculatable_a(body, *right)
+                && is_speculatable_operand_a(body, *left)
+                && is_speculatable_operand_a(body, *right)
         }
         ExprKind::Unary { op, expr: inner } => {
-            !matches!(op, NirUnaryOp::Deref) && is_speculatable_a(body, *inner)
+            !matches!(op, NirUnaryOp::Deref) && is_speculatable_operand_a(body, *inner)
         }
-        ExprKind::Cast { expr: inner, .. } => is_speculatable_a(body, *inner),
-        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_a(body, *inner),
+        ExprKind::Cast { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => is_speculatable_operand_a(body, *inner),
         _ => false,
     }
+}
+
+/// Operand form of [`is_speculatable_a`]: a promoted pure value (constant)
+/// is always speculatable.
+fn is_speculatable_operand_a(body: &Body, op: crate::nir_arena::Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_speculatable_a(body, e))
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

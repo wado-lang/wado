@@ -6,7 +6,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 
 /// If `expr` is a place rooted at a local — `x`, `x.f`, `x[i]`, `*x`, and any
 /// chain thereof — return that root local index; otherwise `None`. Used by
@@ -16,12 +16,12 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            place_root_local(body, *inner)
+            place_root_local(body, inner.as_expr().expect("skeleton operand"))
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
-        } => place_root_local(body, *inner),
+        } => place_root_local(body, inner.as_expr().expect("skeleton operand")),
         _ => None,
     }
 }
@@ -37,7 +37,10 @@ pub(super) fn projection_root_local(body: &Body, expr: ExprId) -> Option<u32> {
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::Index { expr: inner, .. } => projection_root_local(body, *inner),
+        | ExprKind::Index { expr: inner, .. } => {
+            // A promoted `Operand::Value` inner has no skeleton root local.
+            projection_root_local(body, inner.as_expr()?)
+        }
         _ => None,
     }
 }
@@ -68,7 +71,9 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => strip_refs(body, *inner),
+            // A promoted `Operand::Value` inner cannot be stripped further; the
+            // wrapper id is the leaf.
+        } => inner.as_expr().map_or(id, |e| strip_refs(body, e)),
         _ => id,
     }
 }
@@ -96,7 +101,9 @@ fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
                 if !matches!(&body.exprs[target].kind, ExprKind::Local { .. }) {
                     collect_reads_node(body, NodeRef::Expr(target), out);
                 }
-                collect_reads_node(body, NodeRef::Expr(value), out);
+                if let Some(ve) = value.as_expr() {
+                    collect_reads_node(body, NodeRef::Expr(ve), out);
+                }
                 return;
             }
             _ => {}
@@ -112,6 +119,19 @@ fn collect_reads_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
 /// Whether `id` is a bare `Local(idx)` reference.
 pub(super) fn is_local(body: &Body, id: ExprId, idx: u32) -> bool {
     matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == idx)
+}
+
+/// Whether `op` is a bare `Local(idx)` reference. A promoted constant
+/// (`Operand::Value`) is never a local.
+pub(super) fn is_local_operand(body: &Body, op: Operand, idx: u32) -> bool {
+    op.as_expr().is_some_and(|e| is_local(body, e, idx))
+}
+
+/// Whether `idx` appears anywhere in the operand. A promoted constant mentions
+/// no local.
+pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+    op.as_expr()
+        .is_some_and(|e| expr_mentions_local(body, e, idx))
 }
 
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
@@ -141,39 +161,41 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     found
 }
 
+/// [`is_pure_expr`] for an operand: a promoted constant is pure.
+pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_pure_expr(body, e))
+}
+
 /// True when the expression at `id` and every sub-expression has no observable
 /// effect. The arena counterpart of `elide_local::is_pure_expr`; the two must
 /// agree, since both gate the same rewrites.
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
+        ExprKind::BytesLiteral(_)
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,
         ExprKind::Binary { left, right, .. } => {
-            is_pure_expr(body, *left) && is_pure_expr(body, *right)
+            is_pure_operand(body, *left) && is_pure_operand(body, *right)
         }
-        ExprKind::Unary { expr: inner, .. } => is_pure_expr(body, *inner),
+        ExprKind::Unary { expr: inner, .. } => is_pure_operand(body, *inner),
         ExprKind::Cast { expr: inner, .. }
         | ExprKind::FieldAccess { expr: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_expr(body, *inner),
-        ExprKind::Index { expr: e, index: i } => is_pure_expr(body, *e) && is_pure_expr(body, *i),
+        | ExprKind::VariantPayload { expr: inner, .. } => is_pure_operand(body, *inner),
+        ExprKind::Index { expr: e, index: i } => {
+            is_pure_operand(body, *e) && is_pure_operand(body, *i)
+        }
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().all(|f| is_pure_expr(body, f.value))
+            fields.iter().all(|f| is_pure_operand(body, f.value))
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().all(|e| is_pure_expr(body, *e))
+            elements.iter().all(|&e| is_pure_operand(body, e))
         }
-        ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(|p| is_pure_expr(body, p)),
+        ExprKind::VariantConstruct { payload, .. } => {
+            payload.is_none_or(|p| is_pure_operand(body, p))
+        }
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
             is_pure_block(body, *block)
         }
@@ -182,7 +204,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            is_pure_expr(body, *condition)
+            is_pure_expr(body, condition.as_expr().expect("skeleton operand"))
                 && is_pure_block(body, *then_branch)
                 && else_branch.is_none_or(|b| is_pure_block(body, b))
         }
@@ -197,7 +219,8 @@ fn is_pure_block(body: &Body, block: BlockId) -> bool {
         .stmts
         .iter()
         .all(|s| match &body.stmts[*s].kind {
-            StmtKind::Expr(e) | StmtKind::Let { value: e, .. } => is_pure_expr(body, *e),
+            StmtKind::Expr(e) => is_pure_operand(body, *e),
+            StmtKind::Let { value, .. } => is_pure_operand(body, *value),
             _ => false,
         })
 }

@@ -28,7 +28,7 @@
 //! flatten after the fixpoint converges).
 
 use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -59,11 +59,14 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     let rule = BranchPruneRule::new(mode);
     let mut changed = false;
     let mut buffers = EngineBuffers::default();
+    let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
             let mut engine = Engine::new(body, &mut buffers, locals);
+            // A pruned break value that is a promoted constant is re-materialized.
+            engine.set_value_graph_type_table(&type_table);
             changed |= engine.run(&[&rule]);
         }
     }
@@ -118,7 +121,7 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     if let ExprKind::Block(block) = &engine.body.exprs[id].kind {
         let block = *block;
         if engine.body.blocks[block].stmts.len() == 1
-            && let StmtKind::Expr(inner) =
+            && let StmtKind::Expr(Operand::Expr(inner)) =
                 engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
         {
             engine.become_expr(id, inner);
@@ -148,7 +151,9 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             };
             let n = engine.body.blocks[block].stmts.len();
             let prefix = &engine.body.blocks[block].stmts[..n - 1];
-            let prefix_clean = !expr_has_break_to(engine.body, brk_value, &label)
+            let prefix_clean = !brk_value
+                .as_expr()
+                .is_some_and(|e| expr_has_break_to(engine.body, e, &label))
                 && !prefix
                     .iter()
                     .any(|&s| stmt_has_break_to(engine.body, s, &label));
@@ -156,15 +161,24 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 // Drop the trailing break; the broken value becomes the tail.
                 let mut stmts = engine.body.blocks[block].stmts.clone();
                 stmts.pop();
+                let bv_span = engine.body.exprs[id].span;
                 if stmts.is_empty() {
-                    engine.become_expr(id, brk_value);
-                } else {
-                    let tail_span = engine.body.exprs[brk_value].span;
-                    let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), tail_span);
-                    stmts.push(tail);
-                    engine.set_block_stmts(block, stmts);
-                    engine.replace_expr_kind(id, ExprKind::Block(block));
+                    // `id` becomes the broken value directly. `become_expr`
+                    // changes `id`'s kind; `redirect_expr` leaves it a
+                    // `LabeledBlock`, so return its real change status — a
+                    // re-fire on the orphaned `id` is a no-op and must not spin.
+                    match brk_value {
+                        Operand::Expr(e) => {
+                            engine.become_expr(id, e);
+                            return true;
+                        }
+                        Operand::Value(_) => return engine.redirect_expr(id, brk_value),
+                    }
                 }
+                let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), bv_span);
+                stmts.push(tail);
+                engine.set_block_stmts(block, stmts);
+                engine.replace_expr_kind(id, ExprKind::Block(block));
                 return true;
             }
         }
@@ -190,26 +204,22 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             // value to promote, so leave it untouched (return `false` so the
             // engine does not spin on it).
             if let Some(inner) = value
-                && !expr_has_break_to(engine.body, inner, &label)
+                && !expr_has_break_to(
+                    engine.body,
+                    inner.as_expr().expect("skeleton operand"),
+                    &label,
+                )
             {
-                engine.become_expr(id, inner);
+                engine.become_expr(id, inner.as_expr().expect("skeleton operand"));
                 return true;
             }
         }
     }
 
-    // `[label:] { }` → `()` (empty block, with or without label)
-    let is_empty = match &engine.body.exprs[id].kind {
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            engine.body.blocks[*b].stmts.is_empty()
-        }
-        _ => false,
-    };
-    if is_empty {
-        engine.replace_expr_kind(id, ExprKind::Unit);
-        return true;
-    }
-
+    // An empty `[label:] { }` is left as an empty Block, not collapsed to the
+    // pooled unit value: downstream passes (notably heap-field-sync, which
+    // appends a convergence reread into each match arm's block) rely on it as
+    // an insertion point. Empty blocks are reclaimed by block-flattening / DCE.
     false
 }
 
@@ -266,9 +276,16 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
         StmtKind::LabeledBlock { label, block } => {
             unused_label_flattenable(body, label, *block, mode)
         }
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
-            ExprKind::Unit | ExprKind::Block(_) => true,
-            ExprKind::LabeledBlock { label, block, .. } => {
+        StmtKind::Expr(e)
+            if e.as_value().is_some_and(|v| {
+                matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)
+            }) =>
+        {
+            true
+        }
+        StmtKind::Expr(e) => match e.as_expr().map(|e| &body.exprs[e].kind) {
+            Some(ExprKind::Block(_)) => true,
+            Some(ExprKind::LabeledBlock { label, block, .. }) => {
                 unused_label_flattenable(body, label, *block, mode)
             }
             _ => false,
@@ -335,13 +352,18 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             continue;
         }
         // Unit expression statement → drop.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
-            && matches!(engine.body.exprs[*e].kind, ExprKind::Unit)
+        if let StmtKind::Expr(op) = &engine.body.stmts[stmt].kind
+            && op.as_value().is_some_and(|v| {
+                matches!(
+                    engine.body.values.kind(v),
+                    crate::nir_value_graph::ValueKind::Unit
+                )
+            })
         {
             continue;
         }
         // Void block expression statement → flatten.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
             && let ExprKind::Block(inner) = &engine.body.exprs[*e].kind
         {
             let inner = *inner;
@@ -354,7 +376,7 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             continue;
         }
         // Unused-label labeled-block expression statement → flatten.
-        if let StmtKind::Expr(e) = &engine.body.stmts[stmt].kind
+        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
             && let ExprKind::LabeledBlock {
                 label,
                 block: inner,

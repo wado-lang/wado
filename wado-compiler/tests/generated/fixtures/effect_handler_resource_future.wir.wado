@@ -206,13 +206,13 @@ type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_4::__call" = fn();  // TypeId(71)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call" = fn(i32);  // TypeId(72)
+type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_5", i32);  // TypeId(72)
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_6::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_6", i32, i32);  // TypeId(73)
 
 type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_7::__call" = fn();  // TypeId(74)
 
-type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call" = fn(i32);  // TypeId(75)
+type "functype//wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call" = fn(ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_8", i32);  // TypeId(75)
 
 type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(76)
 
@@ -604,6 +604,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -612,8 +613,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b22: block {
             l23: loop {
                 break_if b22 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l23;
             };
@@ -655,12 +656,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -838,7 +838,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_4
     unreachable;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call"(self_0, self_1) {
 }
 
 fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_6::__call"(self_0, self_1, value) {
@@ -849,7 +849,7 @@ fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_7
     unreachable;
 }
 
-fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call"(self) {
+fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call"(self_0, self_1) {
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__closure_wrapper_0"(__env) {
@@ -867,7 +867,9 @@ fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__c
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__closure_wrapper_3"(__env, __p0) {
-    "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_5";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_5"(__env);
+    "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_5::__call"(__typed_env, __p0);
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__closure_wrapper_4"(__env, __p0, __p1) {
@@ -881,7 +883,9 @@ fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__c
 }
 
 fn "closure/wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__closure_wrapper_6"(__env, __p0) {
-    "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call"(__p0);
+    let __typed_env: ref "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_8";
+    __typed_env = ref.cast "wado-compiler/tests/fixtures/effect_handler_resource_future.wado//__Closure_8"(__env);
+    "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__Closure_8::__call"(__typed_env, __p0);
 }
 
 export fn "wado-compiler/tests/fixtures/effect_handler_resource_future.wado/__cm_export__run" as "run"

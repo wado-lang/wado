@@ -160,18 +160,16 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_cont
     let self_11: ref "core:prelude//List<i32>";
     let repr: ref Array<i32>;
     let end: i32;
-    let __cse_22: bool;
-    let _licm_used_23: i32;
-    let _licm_repr_24: ref "Array<core:prelude/list.wado/List<i32>>";
+    let _licm_used_22: i32;
+    let _licm_repr_23: ref "Array<core:prelude/list.wado/List<i32>>";
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     k = 0;
-    _licm_used_23 = data.used;
-    _licm_repr_24 = data.repr;
+    _licm_used_22 = data.used;
+    _licm_repr_23 = data.repr;
     b0: block {
         l1: loop {
-            __cse_22 = k < _licm_used_23;
-            break_if b0 __cse_22 == 0;
-            self_11 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_24, k);
+            break_if b0 k >= _licm_used_22;
+            self_11 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_23, k);
             repr = self_11.repr;
             end = self_11.used;
             __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
@@ -203,18 +201,16 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/for_of_with_brea
     let self_11: ref "core:prelude//List<i32>";
     let repr: ref Array<i32>;
     let end: i32;
-    let __cse_22: bool;
-    let _licm_used_23: i32;
-    let _licm_repr_24: ref "Array<core:prelude/list.wado/List<i32>>";
+    let _licm_used_22: i32;
+    let _licm_repr_23: ref "Array<core:prelude/list.wado/List<i32>>";
     __b = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     k = 0;
-    _licm_used_23 = data.used;
-    _licm_repr_24 = data.repr;
+    _licm_used_22 = data.used;
+    _licm_repr_23 = data.repr;
     b5: block {
         l6: loop {
-            __cse_22 = k < _licm_used_23;
-            break_if b5 __cse_22 == 0;
-            self_11 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_24, k);
+            break_if b5 k >= _licm_used_22;
+            self_11 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_23, k);
             repr = self_11.repr;
             end = self_11.used;
             __iter_4 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
@@ -441,32 +437,28 @@ fn "wado-compiler/tests/fixtures/for_of_indexed_array_test.wado/__test_2_continu
     let __cond_103: bool;
     let __local_5_104: ref "core:prelude/string.wado//String";
     let __local_6_105: ref "core:prelude/format.wado//Formatter";
-    let __cse_106: bool;
-    let _licm_used_107: i32;
-    let _licm_repr_108: ref Array<i32>;
-    let _licm_used_109: i32;
-    let _licm_repr_110: ref "Array<core:prelude/list.wado/List<i32>>";
+    let _licm_repr_107: ref Array<i32>;
+    let _licm_repr_109: ref "Array<core:prelude/list.wado/List<i32>>";
     __b_0 = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(__b_1 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 }; __b_1, __b_2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(40, 50, 60), used: 3 }; __b_2), used: 2 };
     global:__const_obj_2 = __b_0;
     __b_6 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 };
     k = 0;
-    _licm_used_107 = global:__const_obj_3.used;
-    _licm_repr_108 = global:__const_obj_3.repr;
-    _licm_used_109 = global:__const_obj_2.used;
-    _licm_repr_110 = global:__const_obj_2.repr;
+    drop(global:__const_obj_3.used);
+    _licm_repr_107 = global:__const_obj_3.repr;
+    drop(global:__const_obj_2.used);
+    _licm_repr_109 = global:__const_obj_2.repr;
     b22: block {
         l23: loop {
-            __cse_106 = k < _licm_used_107;
-            break_if b22 __cse_106 == 0;
-            __cond_78 = local.tee index_75(builtin::array_get<i32>(_licm_repr_108, k)) < _licm_used_109;
+            break_if b22 k >= 2;
+            __cond_78 = local.tee index_75(builtin::array_get<i32>(_licm_repr_107, k)) < 2;
             if @unlikely(__cond_78 == 0) {
                 cold_path;
                 "core:internal/panic"(__local_5_79 = "core:prelude/string.wado/String::with_capacity"(173); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("List::index_value"), used: 17 }); "core:prelude/string.wado/String::push"(__local_5_79, 32); "core:prelude/string.wado/String::push"(__local_5_79, 97); "core:prelude/string.wado/String::push"(__local_5_79, 116); "core:prelude/string.wado/String::push"(__local_5_79, 32); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/list.wado"), used: 22 }); "core:prelude/string.wado/String::push"(__local_5_79, 58); __local_6_80 = "core:prelude/format.wado/Formatter::new"(__local_5_79); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 316 }, __local_6_80); "core:prelude/string.wado/String::push"(__local_5_79, 58); "core:prelude/string.wado/String::push"(__local_5_79, 32); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of bounds"), used: 19 }); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: index < self.used
-"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5_79, 105); "core:prelude/string.wado/String::push"(__local_5_79, 110); "core:prelude/string.wado/String::push"(__local_5_79, 100); "core:prelude/string.wado/String::push"(__local_5_79, 101); "core:prelude/string.wado/String::push"(__local_5_79, 120); "core:prelude/string.wado/String::push"(__local_5_79, 58); "core:prelude/string.wado/String::push"(__local_5_79, 32); __local_6_80 = "core:prelude/format.wado/Formatter::new"(__local_5_79); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index_75 }, __local_6_80); "core:prelude/string.wado/String::push"(__local_5_79, 10); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6_80 = "core:prelude/format.wado/Formatter::new"(__local_5_79); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: _licm_used_109 }, __local_6_80); "core:prelude/string.wado/String::push"(__local_5_79, 10); __local_5_79);
+"), used: 30 }); "core:prelude/string.wado/String::push"(__local_5_79, 105); "core:prelude/string.wado/String::push"(__local_5_79, 110); "core:prelude/string.wado/String::push"(__local_5_79, 100); "core:prelude/string.wado/String::push"(__local_5_79, 101); "core:prelude/string.wado/String::push"(__local_5_79, 120); "core:prelude/string.wado/String::push"(__local_5_79, 58); "core:prelude/string.wado/String::push"(__local_5_79, 32); __local_6_80 = "core:prelude/format.wado/Formatter::new"(__local_5_79); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: index_75 }, __local_6_80); "core:prelude/string.wado/String::push"(__local_5_79, 10); "core:prelude/string.wado/String::push_str"(__local_5_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6_80 = "core:prelude/format.wado/Formatter::new"(__local_5_79); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 2 }, __local_6_80); "core:prelude/string.wado/String::push"(__local_5_79, 10); __local_5_79);
                 unreachable;
             }
-            self_66 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_110, index_75);
+            self_66 = builtin::array_get<ref "core:prelude//List<i32>">(_licm_repr_109, index_75);
             repr = self_66.repr;
             end = self_66.used;
             __iter_9 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
@@ -677,6 +669,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -685,8 +678,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b43: block {
             l44: loop {
                 break_if b43 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l44;
             };
@@ -728,12 +721,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -921,9 +913,8 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
-    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

@@ -10,9 +10,11 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(2)
 
-type "functype//wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/__cm_export__run" = fn();  // TypeId(3)
+type "functype//wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/run" = fn();  // TypeId(3)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
+type "functype//wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/__cm_export__run" = fn();  // TypeId(4)
+
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -20,7 +22,7 @@ import memory (1) from "mem/memory";
 
 global mut global:__modules_initialized: bool = 0;
 
-fn "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/__cm_export__run"() {
+fn "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/run"() {
     let x: ref "core:prelude/types.wado//Box<i32>";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -28,14 +30,19 @@ fn "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/__cm
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __inline_run_0____inline___initialize_modules_0: block {
-        break_if __inline_run_0____inline___initialize_modules_0 @likely(global:__modules_initialized);
+    x = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
+    x.value = 7;
+    drop(x.value);
+}
+
+fn "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/__cm_export__run"() {
+    __inline___initialize_modules_0: block {
+        break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    x = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    x.value = 7;
+    "wado-compiler/tests/fixtures/field_forward_alias_group_invalidates.wado/run"();
     "wasi/task-return"(0);
 }
 

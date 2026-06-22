@@ -115,6 +115,7 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/run"() with Std
     let f_15: ref "core:prelude/format.wado//Formatter";
     let f_20: ref "core:prelude/format.wado//Formatter";
     let f_25: ref "core:prelude/format.wado//Formatter";
+    let __sroa_o_tag: i32;
     let __sroa___sroa_o_inner_x: i32;
     let __sroa___sroa_o_inner_y: i32;
     __inline___initialize_modules_0: block {
@@ -125,19 +126,23 @@ fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/run"() with Std
     };
     __sroa___sroa_o_inner_x = 0;
     __sroa___sroa_o_inner_y = 0;
+    __sroa_o_tag = 0;
     vx_4 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(3);
     vy_5 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(4);
     __sroa___sroa_o_inner_x = 0 + vx_4;
     __sroa___sroa_o_inner_y = 0 + vy_5;
+    __sroa_o_tag = 1;
     vx_7 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(5);
     vy_8 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(6);
     __sroa___sroa_o_inner_x = __sroa___sroa_o_inner_x + vx_7;
     __sroa___sroa_o_inner_y = __sroa___sroa_o_inner_y + vy_8;
+    __sroa_o_tag = __sroa_o_tag + 1;
     vx_10 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(7);
     vy_11 = "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/opaque"(8);
     __sroa___sroa_o_inner_x = __sroa___sroa_o_inner_x + vx_10;
     __sroa___sroa_o_inner_y = __sroa___sroa_o_inner_y + vy_11;
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_15 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___sroa_o_inner_x, f_15); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_20 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___sroa_o_inner_y, f_20); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_25 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(3, f_25); __local_1);
+    __sroa_o_tag = __sroa_o_tag + 1;
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_15 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___sroa_o_inner_x, f_15); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_20 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa___sroa_o_inner_y, f_20); "core:prelude/string.wado/String::push"(__local_1, 32); __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; f_25 = __local_2; "core:prelude/primitive.wado/i32::fmt_decimal"(__sroa_o_tag, f_25); __local_1);
 }
 
 fn "wado-compiler/tests/fixtures/opt_ref_elim_inline_shadow.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -254,6 +259,7 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
+    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -262,8 +268,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b8: block {
             l9: loop {
                 break_if b8 temp <= 0_i64;
-                pos = pos - 1;
-                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = local.tee __cse_6(pos - 1);
+                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l9;
             };
@@ -291,12 +297,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

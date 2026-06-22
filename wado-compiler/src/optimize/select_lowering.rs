@@ -16,7 +16,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, MonomorphInfo, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -90,11 +90,11 @@ impl Rule for SelectLoweringRule<'_> {
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: true_val,
+                        expr: true_val.into(),
                         is_mut: false,
                     },
                     ArenaCallArg {
-                        expr: false_val,
+                        expr: false_val.into(),
                         is_mut: false,
                     },
                 ],
@@ -111,7 +111,7 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
     if stmts.len() != 1 {
         return None;
     }
-    if let StmtKind::Expr(e) = &body.stmts[stmts[0]].kind {
+    if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmts[0]].kind {
         let e = *e;
         if is_select_eligible(body, e, type_table) {
             return Some(e);
@@ -124,28 +124,33 @@ fn arm_select_value(body: &Body, block: BlockId, type_table: &TypeTable) -> Opti
 /// duplicable leaf (`Local`, literal) or a single layer of pure leaf
 /// operators over leaf-pure operands, none of which traps. See the original
 /// pass doc for the full rationale.
+fn is_select_eligible_operand(body: &Body, op: Operand, type_table: &TypeTable) -> bool {
+    op.as_expr()
+        .is_some_and(|e| is_select_eligible(body, e, type_table))
+}
+
 fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::Local { .. } => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Unary { op, expr: inner } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_select_eligible(body, *inner, type_table)
+                && is_select_eligible_operand(body, *inner, type_table)
         }
         ExprKind::Binary { op, left, right } => {
             !matches!(op, NirBinaryOp::Div | NirBinaryOp::Mod)
-                && is_select_eligible(body, *left, type_table)
-                && is_select_eligible(body, *right, type_table)
+                && left
+                    .as_expr()
+                    .is_none_or(|e| is_select_eligible(body, e, type_table))
+                && right
+                    .as_expr()
+                    .is_none_or(|e| is_select_eligible(body, e, type_table))
         }
         ExprKind::Cast {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(body.exprs[*inner].type_id, *target_type, type_table)
-                && is_select_eligible(body, *inner, type_table)
+            !is_trapping_cast(body.operand_type(*inner), *target_type, type_table)
+                && is_select_eligible_operand(body, *inner, type_table)
         }
         _ => false,
     }

@@ -569,11 +569,11 @@ fn register_globals(ctx: &mut WirContext<'_>) {
 
         // Convert the initializer to a WIR constant instruction
         let init_body = global.initializer.body();
-        let init_id = global.initializer.expr();
+        let init_op = global.initializer.expr();
         let init = translate_global_init(
             init_body,
-            init_id,
-            init_body.exprs[init_id].type_id,
+            init_op,
+            init_body.operand_type(init_op),
             type_table,
         );
 
@@ -595,43 +595,50 @@ fn register_globals(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Convert a NIR global initializer expression (in arena form) to a WIR
-/// constant instruction. `type_id` is the type to interpret a literal as,
-/// propagated downward unchanged through enclosing casts (the outermost cast's
-/// type wins), matching the previous tree-shaped translator.
+/// Convert a NIR global initializer operand to a WIR constant instruction.
+/// `type_id` is the type to interpret a literal as, propagated downward unchanged
+/// through enclosing casts (the outermost cast's type wins).
 fn translate_global_init(
     body: &crate::nir_arena::Body,
-    id: crate::nir_arena::ExprId,
+    op: crate::nir_arena::Operand,
     type_id: crate::tir::TypeId,
     type_table: &TypeTable,
 ) -> crate::wir::WirInstr {
-    use crate::nir_arena::ExprKind;
+    use crate::nir_arena::{ExprKind, Operand};
+    use crate::nir_value_graph::ValueKind;
     use crate::tir::{PrimitiveType, ResolvedType};
     use crate::wir::WirInstr;
 
+    let int_const = |value: u64| match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+            WirInstr::I64Const(value as i64)
+        }
+        _ => WirInstr::I32Const(value as i32),
+    };
+    let float_const = |value: f64| match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(value as f32),
+        _ => WirInstr::F64Const(value),
+    };
+    let ref_null = || WirInstr::RefNull {
+        heap_type: crate::wir::WirAbstractHeapType::None,
+    };
+
+    // A pure scalar constant lives in the value pool (WEP: The Live ValueGraph);
+    // emit it per the target `type_id`.
+    if let Operand::Value(v) = op {
+        return match body.values.kind(v) {
+            ValueKind::Int(value, _) => int_const(*value),
+            ValueKind::Float(bits, _) => float_const(f64::from_bits(*bits)),
+            ValueKind::Bool(b) => WirInstr::I32Const(i32::from(*b)),
+            ValueKind::Char(c) => WirInstr::I32Const(*c as i32),
+            _ => ref_null(),
+        };
+    }
+    let Some(id) = op.as_expr() else {
+        return ref_null();
+    };
+
     match &body.exprs[id].kind {
-        ExprKind::IntLiteral { value, .. } => match type_table.get(type_id) {
-            ResolvedType::Primitive(prim) => match prim {
-                PrimitiveType::I8
-                | PrimitiveType::I16
-                | PrimitiveType::I32
-                | PrimitiveType::U8
-                | PrimitiveType::U16
-                | PrimitiveType::U32 => WirInstr::I32Const(*value as i32),
-                PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(*value as i64),
-                _ => WirInstr::I32Const(*value as i32),
-            },
-            _ => WirInstr::I32Const(*value as i32),
-        },
-        ExprKind::FloatLiteral { value, .. } => match type_table.get(type_id) {
-            ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-            _ => WirInstr::F64Const(*value),
-        },
-        ExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
-        ExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
-        ExprKind::Null | ExprKind::Unit => WirInstr::RefNull {
-            heap_type: crate::wir::WirAbstractHeapType::None,
-        },
         ExprKind::Cast { expr: inner, .. } => {
             // For casts, evaluate the inner expression with the cast's target
             // type (propagate the current `type_id` downward).
@@ -642,18 +649,16 @@ fn translate_global_init(
             expr: inner,
         } => {
             // Negation of constant (normally folded by elaborator, but handle
-            // for robustness). The inner literal uses its own type.
+            // for robustness). The inner constant uses its own type.
             let inner = *inner;
             let inner_wir =
-                translate_global_init(body, inner, body.exprs[inner].type_id, type_table);
+                translate_global_init(body, inner, body.operand_type(inner), type_table);
             match inner_wir {
                 WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
                 WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),
                 WirInstr::F32Const(v) => WirInstr::F32Const(-v),
                 WirInstr::F64Const(v) => WirInstr::F64Const(-v),
-                _ => WirInstr::RefNull {
-                    heap_type: crate::wir::WirAbstractHeapType::None,
-                },
+                _ => ref_null(),
             }
         }
         _ => {

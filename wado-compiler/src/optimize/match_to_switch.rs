@@ -23,7 +23,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, PatKind, StmtKind};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatKind, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
@@ -51,10 +51,12 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
-            changed |= Engine::new(body, &mut buffers, locals).run(&[&rule]);
+            let mut engine = Engine::new(body, &mut buffers, locals);
+            engine.set_value_graph_type_table(&type_table);
+            changed |= engine.run(&[&rule]);
         }
     }
-    changed | run_globals(&mut project.globals, &rule, &mut buffers)
+    changed | run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
 }
 
 /// Lower dense `Match` → `Switch` in global initializer bodies only. Functions
@@ -66,12 +68,13 @@ pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let rule = MatchToSwitchRule::new(&type_table);
     let mut buffers = EngineBuffers::default();
-    run_globals(&mut project.globals, &rule, &mut buffers)
+    run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
 }
 
 fn run_globals(
     globals: &mut [crate::nir::NirGlobal],
     rule: &MatchToSwitchRule,
+    type_table: &TypeTable,
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
@@ -82,6 +85,7 @@ fn run_globals(
     let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
     for global in globals {
         let mut engine = Engine::new(global.initializer.body_mut(), buffers, &mut no_locals);
+        engine.set_value_graph_type_table(type_table);
         changed |= engine.run(&[rule]);
     }
     changed
@@ -109,7 +113,7 @@ impl Rule for MatchToSwitchRule<'_> {
         let scrutinee = *scrutinee;
         let arms = arms.clone();
 
-        let scrut_type = engine.body.exprs[scrutinee].type_id;
+        let scrut_type = engine.body.operand_type(scrutinee);
         let scrut_resolved = self.type_table.get(scrut_type);
         let Some(analysis) = analyze(scrut_resolved, &arms, &*engine.body) else {
             return false;
@@ -218,7 +222,7 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
 /// holes fall back to arm 0, which is unreachable for those values).
 fn build_switch(
     engine: &mut Engine,
-    scrutinee: ExprId,
+    scrutinee: Operand,
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
@@ -235,12 +239,12 @@ fn build_switch(
         .iter()
         .map(|maybe_arm_idx| {
             let arm_idx = maybe_arm_idx.unwrap_or_else(|| analysis.default_arm.unwrap_or(0));
-            arm_body_block(engine, arms[arm_idx].body)
+            arm_body_block(engine, arms[arm_idx].body, arms[arm_idx].span)
         })
         .collect();
 
     let default_block = if let Some(default_idx) = analysis.default_arm {
-        arm_body_block(engine, arms[default_idx].body)
+        arm_body_block(engine, arms[default_idx].body, arms[default_idx].span)
     } else {
         // The default of an exhaustive match is the unreachable arm. Mark it
         // `cold_path()` so the inliner skips it and codegen hints it unlikely,
@@ -259,7 +263,7 @@ fn build_switch(
             TypeTable::UNIT,
             span,
         );
-        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call), span);
+        let cold_stmt = engine.alloc_stmt(StmtKind::Expr(cold_call.into()), span);
         // Call `builtin::unreachable` rather than
         // `core:internal/unreachable`: the former lowers to
         // `WirInstr::Unreachable` directly in `wir_build::calls.rs`
@@ -280,7 +284,7 @@ fn build_switch(
             TypeTable::NEVER,
             span,
         );
-        let stmt = engine.alloc_stmt(StmtKind::Expr(call), span);
+        let stmt = engine.alloc_stmt(StmtKind::Expr(call.into()), span);
         engine.alloc_block(vec![cold_stmt, stmt], span)
     };
 
@@ -292,11 +296,18 @@ fn build_switch(
     }
 }
 
-/// Deep-clone an arm body expression and wrap it in a fresh block holding a
-/// single `Expr` statement.
-fn arm_body_block(engine: &mut Engine, body: ExprId) -> BlockId {
-    let clone = engine.clone_expr(body);
-    let span = engine.body.exprs[clone].span;
-    let stmt = engine.alloc_stmt(StmtKind::Expr(clone), span);
+/// Wrap an arm body in a fresh block holding a single `Expr` statement. A
+/// skeleton body is deep-cloned (each arm needs its own copy); a promoted
+/// constant operand is immutable and shareable, so it flows straight into the
+/// statement slot.
+fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
+    let (op, span) = match body {
+        Operand::Expr(e) => (
+            Operand::Expr(engine.clone_expr(e)),
+            engine.body.exprs[e].span,
+        ),
+        Operand::Value(_) => (body, arm_span),
+    };
+    let stmt = engine.alloc_stmt(StmtKind::Expr(op), span);
     engine.alloc_block(vec![stmt], span)
 }

@@ -25,7 +25,9 @@ use std::cell::Cell;
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, PatKind, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
@@ -166,6 +168,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let _vg_scope = super::vg_measure::BuildScope::enter(fid.index(), "licm");
         let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
@@ -180,7 +183,14 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
-        engine.run(&[&rule])
+        let licm_changed = engine.run(&[&rule]);
+        // Condition implication shares licm's session: licm hoists only
+        // loop-invariant, move-safe code, so values are preserved and the
+        // ValueGraph stays valid. cond-impl runs after licm here — the same
+        // document order as the standalone passes — so it still sees the hoisted
+        // body.
+        let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
+        licm_changed || cond_changed
     })
 }
 
@@ -230,7 +240,7 @@ fn licm_block(
             Loop(BlockId),
             If(BlockId, Option<BlockId>),
             Labeled(BlockId),
-            Let(u32, ExprId),
+            Let(u32, Operand),
             Other,
         }
         let shape = match &engine.body.stmts[s].kind {
@@ -273,8 +283,9 @@ fn licm_block(
             }
             Shape::Let(local_index, value) => {
                 // Track outer-scope aliases so a subsequent loop's LICM can see them.
-                if let Some(src_idx) = extract_alias_source(engine.body, value)
-                    && is_gc_heap_type(engine.body.exprs[value].type_id, type_table)
+                if let Some(ve) = value.as_expr()
+                    && let Some(src_idx) = extract_alias_source(engine.body, ve)
+                    && is_gc_heap_type(engine.body.exprs[ve].type_id, type_table)
                 {
                     outer_aliases.push((local_index, src_idx));
                 }
@@ -389,7 +400,7 @@ fn licm_loop(
             );
             let field_access_expr = engine.alloc_expr(
                 ExprKind::FieldAccess {
-                    expr: local_expr,
+                    expr: local_expr.into(),
                     field_index: candidate.field_index,
                     field_name: candidate.field_name.clone(),
                 },
@@ -403,7 +414,7 @@ fn licm_loop(
                     is_mut: false,
                     is_reactive: false,
                     type_id: candidate.type_id,
-                    value: field_access_expr,
+                    value: field_access_expr.into(),
                     skip_value_copy: true,
                 },
                 Span::new(0, 0, 0, 0),
@@ -432,6 +443,10 @@ enum Child {
     Block(BlockId),
 }
 
+fn op_child(op: Operand) -> Option<Child> {
+    op.as_expr().map(Child::Expr)
+}
+
 /// The expression / block children of an expression, in walk order, *excluding*
 /// patterns. Mirrors the child set of the tree `find_hoist`/`replace_hoist`/
 /// `collect_licm_ref` walks (a `Match` yields its scrutinee plus each arm's
@@ -445,23 +460,27 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
         | ExprKind::GlobalVarSet { value: inner, .. }
         | ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. } => vec![Child::Expr(*inner)],
-        ExprKind::Binary { left, right, .. }
-        | ExprKind::Assign {
-            target: left,
-            value: right,
+        | ExprKind::VariantPayload { expr: inner, .. } => {
+            inner.as_expr().map(Child::Expr).into_iter().collect()
         }
+        ExprKind::Binary { left, right, .. }
         | ExprKind::Index {
             expr: left,
             index: right,
-        } => vec![Child::Expr(*left), Child::Expr(*right)],
-        ExprKind::Call { args, .. } => args.iter().map(|a| Child::Expr(a.expr)).collect(),
-        ExprKind::MethodCall { receiver, args, .. } => std::iter::once(Child::Expr(*receiver))
-            .chain(args.iter().map(|a| Child::Expr(a.expr)))
+        } => [*left, *right].into_iter().filter_map(op_child).collect(),
+        ExprKind::Assign { target, value } => [Some(Child::Expr(*target)), op_child(*value)]
+            .into_iter()
+            .flatten()
             .collect(),
-        ExprKind::CmRawCall { args, .. } => args.iter().map(|a| Child::Expr(*a)).collect(),
-        ExprKind::IndirectCall { callee, args } => std::iter::once(Child::Expr(*callee))
-            .chain(args.iter().map(|a| Child::Expr(*a)))
+        ExprKind::Call { args, .. } => args.iter().filter_map(|a| op_child(a.expr)).collect(),
+        ExprKind::MethodCall { receiver, args, .. } => op_child(*receiver)
+            .into_iter()
+            .chain(args.iter().filter_map(|a| op_child(a.expr)))
+            .collect(),
+        ExprKind::CmRawCall { args, .. } => args.iter().filter_map(|a| op_child(*a)).collect(),
+        ExprKind::IndirectCall { callee, args } => op_child(*callee)
+            .into_iter()
+            .chain(args.iter().filter_map(|a| op_child(*a)))
             .collect(),
         ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => vec![Child::Block(*b)],
         ExprKind::If {
@@ -469,49 +488,49 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             then_branch,
             else_branch,
         } => {
-            let mut v = vec![Child::Expr(*condition), Child::Block(*then_branch)];
+            let mut v: Vec<Child> = op_child(*condition)
+                .into_iter()
+                .chain(std::iter::once(Child::Block(*then_branch)))
+                .collect();
             if let Some(eb) = else_branch {
                 v.push(Child::Block(*eb));
             }
             v
         }
         ExprKind::StructLiteral { fields, .. } => {
-            fields.iter().map(|f| Child::Expr(f.value)).collect()
+            fields.iter().filter_map(|f| op_child(f.value)).collect()
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(|e| Child::Expr(*e)).collect()
+            elements.iter().filter_map(|e| op_child(*e)).collect()
         }
         ExprKind::VariantConstruct { payload, .. } => {
-            payload.iter().map(|p| Child::Expr(*p)).collect()
+            payload.iter().filter_map(|p| op_child(*p)).collect()
         }
         ExprKind::Switch {
             scrutinee,
             arms,
             default,
             ..
-        } => std::iter::once(Child::Expr(*scrutinee))
+        } => op_child(*scrutinee)
+            .into_iter()
             .chain(arms.iter().map(|a| Child::Block(*a)))
             .chain(std::iter::once(Child::Block(*default)))
             .collect(),
         ExprKind::Match { expr, arms } => {
-            let mut v = vec![Child::Expr(*expr)];
+            let mut v: Vec<Child> = op_child(*expr).into_iter().collect();
             for arm in arms {
-                v.push(Child::Expr(arm.body));
-                if let Some(g) = arm.guard {
-                    v.push(Child::Expr(g));
+                if let Some(c) = op_child(arm.body) {
+                    v.push(c);
+                }
+                if let Some(g) = arm.guard.and_then(op_child) {
+                    v.push(g);
                 }
             }
             v
         }
         // Leaves.
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
+        ExprKind::BytesLiteral(_)
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => vec![],
@@ -523,18 +542,27 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
 /// `collect_licm_ref` statement walks).
 fn stmt_child_nodes(body: &Body, s: StmtId) -> Vec<Child> {
     match &body.stmts[s].kind {
-        StmtKind::Let { value, .. }
-        | StmtKind::Expr(value)
-        | StmtKind::LetDestructure { value, .. } => vec![Child::Expr(*value)],
-        StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            value.iter().map(|v| Child::Expr(*v)).collect()
+        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+            value.as_expr().map(Child::Expr).into_iter().collect()
         }
+        StmtKind::Expr(value) => value.as_expr().map(Child::Expr).into_iter().collect(),
+        StmtKind::Return { value } | StmtKind::Break { value, .. } => value
+            .iter()
+            .filter_map(|v| v.as_expr().map(Child::Expr))
+            .collect(),
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            let mut v = vec![Child::Expr(*condition), Child::Block(*then_block)];
+            // A promoted (`Operand::Value`) condition has no skeleton child to
+            // traverse; only an `Expr` condition contributes a child node.
+            let mut v: Vec<Child> = condition
+                .as_expr()
+                .map(Child::Expr)
+                .into_iter()
+                .chain(std::iter::once(Child::Block(*then_block)))
+                .collect();
             if let Some(eb) = else_block {
                 v.push(Child::Block(*eb));
             }
@@ -559,6 +587,17 @@ fn collect_modified_vars_in_block(
 ) {
     for s in &body.blocks[block].stmts {
         collect_modified_vars_in_stmt(body, *s, modified, type_table);
+    }
+}
+
+fn mark_gc_local_as_fully_modified_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        mark_gc_local_as_fully_modified(body, e, modified, type_table);
     }
 }
 
@@ -592,10 +631,12 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => extract_alias_source(body, *inner),
+        } => inner
+            .as_expr()
+            .and_then(|ie| extract_alias_source(body, ie)),
         ExprKind::Block(block) => {
             let tail = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Expr(tail_expr) = &body.stmts[tail].kind else {
+            let StmtKind::Expr(Operand::Expr(tail_expr)) = &body.stmts[tail].kind else {
                 return None;
             };
             extract_alias_source(body, *tail_expr)
@@ -612,7 +653,9 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
             if brk_label != label {
                 return None;
             }
-            extract_alias_source(body, *brk_value)
+            brk_value
+                .as_expr()
+                .and_then(|e| extract_alias_source(body, e))
         }
         _ => None,
     }
@@ -629,6 +672,12 @@ fn is_gc_heap_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     }
 }
 
+fn mark_local_as_fully_modified_operand(body: &Body, op: Operand, modified: &mut ModifiedVars) {
+    if let Some(e) = op.as_expr() {
+        mark_local_as_fully_modified(body, e, modified);
+    }
+}
+
 /// Mark a local as fully modified, traversing through unary ops and nested
 /// field accesses to the root.
 fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedVars) {
@@ -637,7 +686,7 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
             modified.insert_full(*index);
         }
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, *inner, modified);
+            mark_local_as_fully_modified_operand(body, *inner, modified);
         }
         _ => {}
     }
@@ -648,7 +697,10 @@ fn mark_local_as_fully_modified(body: &Body, e: ExprId, modified: &mut ModifiedV
 fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_pure_field_chain(body, *inner),
+        // A promoted `Operand::Value` receiver is not a pure local-read chain.
+        ExprKind::FieldAccess { expr: inner, .. } => inner
+            .as_expr()
+            .is_some_and(|e| is_pure_field_chain(body, e)),
         _ => false,
     }
 }
@@ -660,6 +712,17 @@ fn strip_references(type_id: TypeId, type_table: &TypeTable) -> TypeId {
             strip_references(*inner, type_table)
         }
         _ => type_id,
+    }
+}
+
+fn record_mut_ref_clobber_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        record_mut_ref_clobber(body, e, modified, type_table);
     }
 }
 
@@ -701,8 +764,10 @@ fn record_written_field_type(
         field_index,
         ..
     } = &body.exprs[target].kind
+        // A write place's receiver is never a promoted `Operand::Value`.
+        && let Some(inner_e) = inner.as_expr()
     {
-        let pointee = strip_references(body.exprs[*inner].type_id, type_table);
+        let pointee = strip_references(body.exprs[inner_e].type_id, type_table);
         modified.insert_written_field_type(pointee, *field_index);
     }
 }
@@ -726,16 +791,23 @@ fn mark_assignment_target_as_modified(
             let inner = *inner;
             let field_index = *field_index;
             record_written_field_type(body, e, modified, type_table);
-            if let ExprKind::Local { index, .. } = &body.exprs[inner].kind {
+            if let Some(inner_e) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
+            {
                 modified.insert_field(*index, field_index);
-            } else if is_pure_field_chain(body, inner) {
+            } else if inner
+                .as_expr()
+                .is_some_and(|ie| is_pure_field_chain(body, ie))
+            {
                 // `a.b.c = x` mutates `*a.b`, not a field of the root `a`.
             } else {
-                mark_local_as_fully_modified(body, inner, modified);
+                // A promoted-value receiver (or other shape) falls back to the
+                // conservative whole-local invalidation.
+                mark_local_as_fully_modified_operand(body, inner, modified);
             }
         }
         ExprKind::Unary { expr: inner, .. } => {
-            mark_local_as_fully_modified(body, *inner, modified);
+            mark_local_as_fully_modified_operand(body, *inner, modified);
         }
         _ => {}
     }
@@ -754,19 +826,20 @@ fn collect_modified_vars_in_stmt(
             let local_index = *local_index;
             let value = *value;
             modified.insert_full(local_index);
-            if let Some(src_idx) = extract_alias_source(body, value)
-                && is_gc_heap_type(body.exprs[value].type_id, type_table)
+            if let Some(ve) = value.as_expr()
+                && let Some(src_idx) = extract_alias_source(body, ve)
+                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
             {
                 modified.add_alias(local_index, src_idx);
             }
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
         StmtKind::Expr(expr) => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         StmtKind::Return { value } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, *v, modified, type_table);
+                collect_modified_vars_in_operand(body, *v, modified, type_table);
             }
         }
         StmtKind::If {
@@ -777,7 +850,7 @@ fn collect_modified_vars_in_stmt(
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_operand(body, condition, modified, type_table);
             collect_modified_vars_in_block(body, then_block, modified, type_table);
             if let Some(eb) = else_block {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
@@ -791,7 +864,7 @@ fn collect_modified_vars_in_stmt(
         }
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                collect_modified_vars_in_expr(body, *v, modified, type_table);
+                collect_modified_vars_in_operand(body, *v, modified, type_table);
             }
         }
         StmtKind::Continue => {}
@@ -799,7 +872,7 @@ fn collect_modified_vars_in_stmt(
             let pattern = *pattern;
             let value = *value;
             collect_pattern_bindings(body, pattern, modified);
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
     }
 }
@@ -846,6 +919,17 @@ fn collect_pattern_bindings(
     }
 }
 
+fn collect_modified_vars_in_operand(
+    body: &Body,
+    op: Operand,
+    modified: &mut ModifiedVars,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        collect_modified_vars_in_expr(body, e, modified, type_table);
+    }
+}
+
 fn collect_modified_vars_in_expr(
     body: &Body,
     e: ExprId,
@@ -858,28 +942,29 @@ fn collect_modified_vars_in_expr(
             let value = *value;
             mark_assignment_target_as_modified(body, target, modified, type_table);
             collect_modified_vars_in_expr(body, target, modified, type_table);
-            collect_modified_vars_in_expr(body, value, modified, type_table);
+            collect_modified_vars_in_operand(body, value, modified, type_table);
         }
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_modified_vars_in_expr(body, left, modified, type_table);
-            collect_modified_vars_in_expr(body, right, modified, type_table);
+            collect_modified_vars_in_operand(body, left, modified, type_table);
+            collect_modified_vars_in_operand(body, right, modified, type_table);
         }
         ExprKind::Unary { op, expr: inner } => {
             let inner = *inner;
-            if matches!(op, NirUnaryOp::MutRef)
-                && matches!(body.exprs[inner].kind, ExprKind::Local { .. })
+            if let Some(ie) = inner.as_expr()
+                && matches!(op, NirUnaryOp::MutRef)
+                && matches!(body.exprs[ie].kind, ExprKind::Local { .. })
             {
-                mark_local_as_fully_modified(body, inner, modified);
+                mark_local_as_fully_modified(body, ie, modified);
             }
-            collect_modified_vars_in_expr(body, inner, modified, type_table);
+            collect_modified_vars_in_operand(body, inner, modified, type_table);
         }
         ExprKind::Cast { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, *inner, modified, type_table);
+            collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         ExprKind::Call { args, .. } => {
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -888,10 +973,10 @@ fn collect_modified_vars_in_expr(
         }
         ExprKind::MethodCall { receiver, args, .. } => {
             let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            mark_gc_local_as_fully_modified(body, receiver, modified, type_table);
-            record_mut_ref_clobber(body, receiver, modified, type_table);
-            collect_modified_vars_in_expr(body, receiver, modified, type_table);
+            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            mark_gc_local_as_fully_modified_operand(body, receiver, modified, type_table);
+            record_mut_ref_clobber_operand(body, receiver, modified, type_table);
+            collect_modified_vars_in_operand(body, receiver, modified, type_table);
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
                 record_mut_ref_clobber(body, a, modified, type_table);
@@ -901,17 +986,17 @@ fn collect_modified_vars_in_expr(
         ExprKind::CmRawCall { args, .. } => {
             let arg_ids = args.clone();
             for a in arg_ids {
-                collect_modified_vars_in_expr(body, a, modified, type_table);
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_modified_vars_in_expr(body, *inner, modified, type_table);
+            collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_modified_vars_in_expr(body, inner, modified, type_table);
-            collect_modified_vars_in_expr(body, index, modified, type_table);
+            collect_modified_vars_in_operand(body, inner, modified, type_table);
+            collect_modified_vars_in_operand(body, index, modified, type_table);
         }
         ExprKind::Block(block) => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
@@ -924,14 +1009,14 @@ fn collect_modified_vars_in_expr(
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_modified_vars_in_expr(body, condition, modified, type_table);
+            collect_modified_vars_in_operand(body, condition, modified, type_table);
             collect_modified_vars_in_block(body, then_branch, modified, type_table);
             if let Some(eb) = else_branch {
                 collect_modified_vars_in_block(body, eb, modified, type_table);
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let vals: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             for v in vals {
                 collect_modified_vars_in_expr(body, v, modified, type_table);
             }
@@ -939,37 +1024,37 @@ fn collect_modified_vars_in_expr(
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for el in elements {
-                collect_modified_vars_in_expr(body, el, modified, type_table);
+                collect_modified_vars_in_operand(body, el, modified, type_table);
             }
         }
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let arg_ids = args.clone();
-            collect_modified_vars_in_expr(body, callee, modified, type_table);
+            collect_modified_vars_in_operand(body, callee, modified, type_table);
             for a in arg_ids {
-                mark_gc_local_as_fully_modified(body, a, modified, type_table);
-                collect_modified_vars_in_expr(body, a, modified, type_table);
+                mark_gc_local_as_fully_modified_operand(body, a, modified, type_table);
+                collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }
         ExprKind::ClosureToCanonical { functor, .. } => {
-            collect_modified_vars_in_expr(body, *functor, modified, type_table);
+            collect_modified_vars_in_operand(body, *functor, modified, type_table);
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                collect_modified_vars_in_expr(body, *p, modified, type_table);
+                collect_modified_vars_in_operand(body, *p, modified, type_table);
             }
         }
         ExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(body, *block, modified, type_table);
         }
         ExprKind::GlobalVarSet { value, .. } => {
-            collect_modified_vars_in_expr(body, *value, modified, type_table);
+            collect_modified_vars_in_operand(body, *value, modified, type_table);
         }
         ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         ExprKind::VariantPayload { expr, .. } => {
-            collect_modified_vars_in_expr(body, *expr, modified, type_table);
+            collect_modified_vars_in_operand(body, *expr, modified, type_table);
         }
         ExprKind::Switch {
             scrutinee,
@@ -980,34 +1065,38 @@ fn collect_modified_vars_in_expr(
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_modified_vars_in_expr(body, scrutinee, modified, type_table);
+            collect_modified_vars_in_operand(body, scrutinee, modified, type_table);
             for arm in arms {
                 collect_modified_vars_in_block(body, arm, modified, type_table);
             }
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::StringLiteral(_)
-        | ExprKind::BytesLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
+        ExprKind::BytesLiteral(_)
+        | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
-            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, ExprId)> =
-                arms.iter().map(|a| (a.pattern, a.guard, a.body)).collect();
-            collect_modified_vars_in_expr(body, expr, modified, type_table);
+            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, Option<ExprId>)> = arms
+                .iter()
+                .map(|a| {
+                    (
+                        a.pattern,
+                        a.guard.and_then(Operand::as_expr),
+                        a.body.as_expr(),
+                    )
+                })
+                .collect();
+            collect_modified_vars_in_operand(body, expr, modified, type_table);
             for (pattern, guard, body_expr) in arm_data {
                 collect_pattern_bindings(body, pattern, modified);
                 if let Some(g) = guard {
                     collect_modified_vars_in_expr(body, g, modified, type_table);
                 }
-                collect_modified_vars_in_expr(body, body_expr, modified, type_table);
+                if let Some(be) = body_expr {
+                    collect_modified_vars_in_expr(body, be, modified, type_table);
+                }
             }
         }
     }
@@ -1062,14 +1151,16 @@ fn collect_licm_ref_bindings_in_stmt(
         let local_index = *local_index;
         let value = *value;
         if matches!(type_table.get(*type_id), ResolvedType::Ref(_))
+            && let Some(ve) = value.as_expr()
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
                 expr: source,
-            } = &body.exprs[value].kind
+            } = &body.exprs[ve].kind
+            && let Some(se) = source.as_expr()
             && let ExprKind::Local {
                 index: source_idx,
                 name: source_name,
-            } = &body.exprs[*source].kind
+            } = &body.exprs[se].kind
         {
             bindings.insert(
                 local_index,
@@ -1188,7 +1279,8 @@ fn find_hoist_candidates_in_expr(
         field_index,
         field_name,
     } = &body.exprs[e].kind
-        && let ExprKind::Local { index, name } = &body.exprs[*inner].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, name } = &body.exprs[inner_e].kind
     {
         let field_index = *field_index;
         // Case 1: direct access on a loop-invariant local.
@@ -1284,8 +1376,9 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
     )
 }
 
-/// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of
-/// pure, total ops over `Local` and numeric/bool/char literal leaves.
+/// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of pure,
+/// total ops over `Local` leaves. A promoted (`Operand::Value`) leaf has no
+/// skeleton expr and is treated as hoistable.
 ///
 /// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
 /// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
@@ -1293,19 +1386,21 @@ fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
 /// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
 fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
-        ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::Local { .. } => true,
+        ExprKind::Local { .. } => true,
         ExprKind::Binary { left, op, right } => {
             is_hoistable_binop(*op)
-                && is_hoistable_arith_shape(body, *left)
-                && is_hoistable_arith_shape(body, *right)
+                && left
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
+                && right
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
         ExprKind::Unary { op, expr } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
-                && is_hoistable_arith_shape(body, *expr)
+                && expr
+                    .as_expr()
+                    .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
         _ => false,
     }
@@ -1316,10 +1411,18 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => out.push((e, *index)),
         ExprKind::Binary { left, right, .. } => {
-            collect_arith_local_leaves(body, *left, out);
-            collect_arith_local_leaves(body, *right, out);
+            if let Some(le) = left.as_expr() {
+                collect_arith_local_leaves(body, le, out);
+            }
+            if let Some(re) = right.as_expr() {
+                collect_arith_local_leaves(body, re, out);
+            }
         }
-        ExprKind::Unary { expr, .. } => collect_arith_local_leaves(body, *expr, out),
+        ExprKind::Unary { expr, .. } => {
+            if let Some(ie) = expr.as_expr() {
+                collect_arith_local_leaves(body, ie, out);
+            }
+        }
         _ => {}
     }
 }
@@ -1425,9 +1528,12 @@ fn hoist_invariant_arith(
     loop_body: BlockId,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
-    // Earlier hoist rounds rewrote the body; rebuild so use-site values
-    // and the entry snapshot are current.
-    engine.invalidate_value_graph();
+    // Earlier hoist rounds may have changed which locals are address-taken;
+    // refresh that scan. The value graph is not rebuilt (build-once invariant):
+    // an arith hoist appends a pre-header `let t = <invariant>` and never
+    // reassigns an existing local, so every existing local's loop-entry value
+    // stays valid; the new `t` simply has no entry and is not a candidate.
+    engine.invalidate_address_taken();
 
     let mut pending_hoist_locals: IndexSet<u32> = IndexSet::default();
     for &s in all_hoist_stmts.iter() {
@@ -1445,7 +1551,12 @@ fn hoist_invariant_arith(
     let mut found: Vec<(ExprId, ValueId)> = Vec::new();
     walk.collect_in_block(engine, loop_body, &mut found);
     if found.is_empty() {
-        return false;
+        // No skeleton arith trees, but operand promotion may have left the
+        // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
+        // those.
+        let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+        c |= cse_loop_body(engine, loop_body);
+        return c;
     }
 
     // Group occurrences by (ValueId, type): equal values of equal type share
@@ -1478,7 +1589,7 @@ fn hoist_invariant_arith(
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value,
+                value: value.into(),
                 skip_value_copy: true,
             },
             Span::new(0, 0, 0, 0),
@@ -1496,7 +1607,474 @@ fn hoist_invariant_arith(
         }
     }
 
+    hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
+    cse_loop_body(engine, loop_body);
     true
+}
+
+/// Whether `idx` is in scope at the CSE insertion point (before `min_i`): it is
+/// a loop-entry local, or bound by a top-level `let` of the loop body earlier.
+fn cse_local_available(
+    engine: &mut Engine,
+    idx: u32,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    toplevel_lets.iter().any(|(i, l)| *i < min_i && *l == idx)
+        || engine.loop_entry_value(loop_body, idx).is_some()
+}
+
+/// Whether cloning skeleton `e` at the insertion point is sound: every `Local`
+/// leaf it reads is in scope there (see [`cse_local_available`]).
+fn cse_clone_in_scope(
+    engine: &mut Engine,
+    e: ExprId,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    enum K {
+        Local(u32),
+        Bin(Operand, Operand),
+        Un(Operand),
+        Lit,
+        No,
+    }
+    let k = match &engine.body.exprs[e].kind {
+        ExprKind::Local { index, .. } => K::Local(*index),
+        ExprKind::Binary { left, right, .. } => K::Bin(*left, *right),
+        ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => K::Un(*expr),
+        ExprKind::BytesLiteral(_) => K::Lit,
+        _ => K::No,
+    };
+    match k {
+        K::Local(idx) => cse_local_available(engine, idx, min_i, toplevel_lets, loop_body),
+        K::Bin(l, r) => {
+            cse_operand_in_scope(engine, l, min_i, toplevel_lets, loop_body)
+                && cse_operand_in_scope(engine, r, min_i, toplevel_lets, loop_body)
+        }
+        K::Un(o) => cse_operand_in_scope(engine, o, min_i, toplevel_lets, loop_body),
+        K::Lit => true,
+        K::No => false,
+    }
+}
+
+fn cse_operand_in_scope(
+    engine: &mut Engine,
+    op: Operand,
+    min_i: usize,
+    toplevel_lets: &[(usize, u32)],
+    loop_body: BlockId,
+) -> bool {
+    match op {
+        Operand::Expr(e) => cse_clone_in_scope(engine, e, min_i, toplevel_lets, loop_body),
+        Operand::Value(v) => {
+            let rep = engine.body.values.find_imm(v);
+            let mut leaves: IndexSet<u32> = IndexSet::default();
+            engine.body.values.collect_opaque_locals(rep, &mut leaves);
+            leaves
+                .iter()
+                .all(|&idx| cse_local_available(engine, idx, min_i, toplevel_lets, loop_body))
+        }
+    }
+}
+
+/// Common-subexpression elimination inside a loop body under operand promotion.
+///
+/// The value graph hash-conses a pure subexpression (`p * p` over a loop-carried
+/// `p`) to one `ValueId`, so the two occurrences in a guard and the body share
+/// an identity — but each is a distinct *skeleton* `Binary` expr the extractor
+/// can not promote to a bare `Operand::Value` (a loop-carried local's value is
+/// not reemittable at an arbitrary slot, so it stays a sourceless `Opaque`).
+/// Each is therefore re-emitted. This restores the one-computation `__cse_N`
+/// shape the standalone `cse` pass produced before hash-consing subsumed the
+/// *deduplication* (but not the materialisation): bind a clone of the
+/// subexpression to a temp placed before the earliest top-level statement that
+/// contains an occurrence, and redirect every occurrence to read the temp.
+///
+/// Soundness — placement and availability:
+/// - The temp lands before the earliest top-level statement of the loop body
+///   that holds an occurrence, so it dominates every (later or equal) occurrence
+///   in the body's linear statement list.
+/// - A value with ≥2 occurrences sharing one `ValueId` reads the *same* leaf
+///   values at each, so those leaves are in scope at all of them — hence bound
+///   before the earliest occurrence's statement (or loop-carried / a param),
+///   available where the temp is inserted. The clone re-emits the original
+///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
+///   value. Trap-prone ops are excluded, so computing it once up front (possibly
+///   on an iteration a conditional occurrence would have skipped) cannot trap.
+fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    // Occurrences of each materialisable value, as (top-level stmt index, expr),
+    // in first-seen order. Nested loops are not descended (their own bodies have
+    // their own dominance / `cse_loop_body` pass).
+    let mut occ: IndexMap<ValueId, Vec<(usize, ExprId)>> = IndexMap::default();
+    for (i, &s) in stmts.iter().enumerate() {
+        let mut exprs = Vec::new();
+        collect_stmt_exprs(engine.body, s, &mut exprs);
+        for e in exprs {
+            let Some(v) = engine.value(e) else { continue };
+            let rep = engine.body.values.find_imm(v);
+            if is_cse_candidate(&engine.body.values, rep) {
+                occ.entry(rep).or_default().push((i, e));
+            }
+        }
+    }
+
+    // Locals bound by a top-level `let` of the loop body, with their statement
+    // index — the in-scope set at the insertion point grows as these precede it.
+    let toplevel_lets: Vec<(usize, u32)> = stmts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &s)| match engine.body.stmts[s].kind {
+            StmtKind::Let { local_index, .. } => Some((i, local_index)),
+            _ => None,
+        })
+        .collect();
+
+    // (stmt index, let) inserts and per-expr redirects, computed before any
+    // mutation so indices stay stable.
+    let mut inserts: Vec<(usize, StmtId)> = Vec::new();
+    for (rep, occs) in occ {
+        if occs.len() < 2 {
+            continue;
+        }
+        let Some(ty) = engine.body.values.type_of(rep) else {
+            continue;
+        };
+        let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
+        // Clone an occurrence whose skeleton is in scope at the insertion point
+        // (before `min_i`): every `Local` leaf must be a loop-entry local or
+        // bound by a top-level `let` before `min_i`. The value graph already
+        // proved every occurrence equal, so any in-scope occurrence computes the
+        // right value; cloning a bare alias read of an inner-scope local (e.g.
+        // `let __cse = a` where `a` is bound inside a nested block) would read a
+        // stale loop-carried value. Skip the value if none qualifies.
+        let Some(&(_, src_expr)) = occs
+            .iter()
+            .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
+        else {
+            continue;
+        };
+        let span = engine.body.exprs[src_expr].span;
+        let name = format!("__cse_{}", engine.locals().len());
+        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+        // Clone the chosen occurrence's skeleton subtree for the temp's value
+        // (the value itself is a sourceless-Opaque tree the extractor can not
+        // re-emit; the skeleton can).
+        let cloned = engine.clone_expr(src_expr);
+        let let_stmt = engine.alloc_stmt(
+            StmtKind::Let {
+                name: name.clone(),
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value: Operand::Expr(cloned),
+                skip_value_copy: true,
+            },
+            span,
+        );
+        // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
+        // promoted value): the temp is reassigned every iteration, so a value
+        // operand `Opaque(Local(__cse))` would read as loop-invariant to the
+        // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
+        // correctly treated as loop-carried.
+        let mut any = false;
+        for (_, e) in &occs {
+            let lread = engine.alloc_expr(
+                ExprKind::Local {
+                    index: temp,
+                    name: name.clone(),
+                },
+                ty,
+                span,
+            );
+            any |= engine.redirect_expr(*e, Operand::Expr(lread));
+        }
+        if any {
+            inserts.push((min_i, let_stmt));
+        }
+    }
+    if inserts.is_empty() {
+        return false;
+    }
+    // Splice the temps in, each before its target statement.
+    let mut new_stmts: Vec<StmtId> = Vec::new();
+    for (i, &s) in stmts.iter().enumerate() {
+        for (_, let_stmt) in inserts.iter().filter(|(mi, _)| *mi == i) {
+            new_stmts.push(*let_stmt);
+        }
+        new_stmts.push(s);
+    }
+    engine.set_block_stmts(loop_body, new_stmts);
+    true
+}
+
+/// Collect every expression under statement `s`, descending through blocks but
+/// **not** into nested `Loop` bodies (keeping occurrences within one loop's
+/// dominance scope).
+fn collect_stmt_exprs(body: &Body, s: StmtId, out: &mut Vec<ExprId>) {
+    if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
+        return;
+    }
+    for child in stmt_child_nodes(body, s) {
+        match child {
+            Child::Expr(e) => collect_expr_exprs(body, e, out),
+            Child::Block(b) => {
+                for &s2 in &body.blocks[b].stmts {
+                    collect_stmt_exprs(body, s2, out);
+                }
+            }
+        }
+    }
+}
+
+fn collect_expr_exprs(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
+    out.push(e);
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => collect_expr_exprs(body, c, out),
+            Child::Block(b) => {
+                for &s2 in &body.blocks[b].stmts {
+                    collect_stmt_exprs(body, s2, out);
+                }
+            }
+        }
+    }
+}
+
+/// Whether `v` is a pure arithmetic compound worth CSE-materialising: a
+/// `Binary` / `Unary` with a non-trap-prone op. The leaves need no availability
+/// check here — see [`cse_loop_body`]'s soundness note (shared scope of ≥2
+/// occurrences) — only the root must be a compound, not a bare leaf.
+fn is_cse_candidate(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+    use crate::nir_value_graph::ValueKind;
+    match pool.kind(v) {
+        ValueKind::Binary { op, .. } => is_hoistable_binop(*op),
+        ValueKind::Unary { op, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+        }
+        _ => false,
+    }
+}
+
+/// Hoist loop-invariant promoted *value* operands into a pre-header
+/// `let _licm_arith_N`. Operand promotion can leave a loop-invariant compound
+/// (e.g. `hi - lo`, born as a value before the loop) as a bare `Operand::Value`
+/// slot with no skeleton expr, so [`ArithHoist`] (which scans skeleton trees)
+/// never sees it. Materialise each distinct invariant value once in the
+/// pre-header and redirect its in-loop slots to a read of the temp.
+fn hoist_invariant_value_operands(
+    engine: &mut Engine,
+    loop_body: BlockId,
+    all_hoist_stmts: &mut Vec<StmtId>,
+) -> bool {
+    use crate::nir_value_graph::OpaqueSource;
+
+    let (expr_ids, stmt_ids) = collect_loop_subtree(engine.body, loop_body);
+
+    // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
+    let mut ops: Vec<Operand> = Vec::new();
+    for &e in &expr_ids {
+        engine.body.map_expr_operands(e, &mut |op| {
+            ops.push(op);
+            op
+        });
+    }
+    for &s in &stmt_ids {
+        engine.body.map_stmt_operands(s, &mut |op| {
+            ops.push(op);
+            op
+        });
+    }
+
+    // Locals available at the loop pre-header (where the hoisted `let` lands):
+    // exactly those with a loop-entry value. A value whose `Opaque(Local)` leaf
+    // names a local *bound inside* the loop (a pattern / while-let / nested
+    // binding — the value graph gives it a fresh per-iteration Opaque, never a
+    // `LoopPhi`) has no entry value, so hoisting it would compute the wrong
+    // thing. Collect the candidate leaves first, then keep only the entry-live
+    // ones — soundness gate for the hoist.
+    let mut leaf_locals: IndexSet<u32> = IndexSet::default();
+    for op in &ops {
+        if let Operand::Value(v) = *op {
+            let rep = engine.body.values.find_imm(v);
+            engine
+                .body
+                .values
+                .collect_opaque_locals(rep, &mut leaf_locals);
+        }
+    }
+    let mut entry_locals: IndexSet<u32> = IndexSet::default();
+    for idx in leaf_locals {
+        if engine.loop_entry_value(loop_body, idx).is_some() {
+            entry_locals.insert(idx);
+        }
+    }
+
+    // Phase 2: pick the distinct invariant compound value reps, in first-seen
+    // order, and materialise a pre-header temp + read value for each.
+    let mut rep_read: IndexMap<ValueId, ValueId> = IndexMap::default();
+    for op in &ops {
+        let Operand::Value(v) = *op else { continue };
+        let rep = engine.body.values.find_imm(v);
+        if rep_read.contains_key(&rep)
+            || !is_hoistable_value(&engine.body.values, rep, &entry_locals)
+        {
+            continue;
+        }
+        let Some(ty) = engine.body.values.type_of(rep) else {
+            continue;
+        };
+        let name = format!("_licm_arith_{}", engine.locals().len());
+        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+        let read = engine
+            .body
+            .values
+            .fresh_opaque_with_source(OpaqueSource::Local(temp));
+        engine.body.values.set_type(read, ty);
+        let let_stmt = engine.alloc_stmt(
+            StmtKind::Let {
+                name,
+                local_index: temp,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value: Operand::Value(rep),
+                skip_value_copy: true,
+            },
+            Span::new(0, 0, 0, 0),
+        );
+        all_hoist_stmts.push(let_stmt);
+        rep_read.insert(rep, read);
+    }
+    if rep_read.is_empty() {
+        return false;
+    }
+
+    // Phase 3: precompute the new operand for each snapshot slot, then re-apply
+    // in the same order (the closure touches no `Body` field, so no borrow
+    // conflicts with the map).
+    let new_ops: Vec<Operand> = ops
+        .iter()
+        .map(|op| match *op {
+            Operand::Value(v) => match rep_read.get(&engine.body.values.find_imm(v)) {
+                Some(&read) => Operand::Value(read),
+                None => *op,
+            },
+            _ => *op,
+        })
+        .collect();
+    let mut i = 0;
+    for &e in &expr_ids {
+        engine.body.map_expr_operands(e, &mut |_| {
+            let r = new_ops[i];
+            i += 1;
+            r
+        });
+    }
+    for &s in &stmt_ids {
+        engine.body.map_stmt_operands(s, &mut |_| {
+            let r = new_ops[i];
+            i += 1;
+            r
+        });
+    }
+    true
+}
+
+/// Collect every expression and statement id reachable from `loop_body` (the
+/// whole loop subtree, including nested loops — a pre-header temp dominates
+/// them, so rewriting their slots stays sound).
+fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
+    let mut expr_ids = Vec::new();
+    let mut stmt_ids = Vec::new();
+    let mut block_work = vec![loop_body];
+    while let Some(b) = block_work.pop() {
+        for &s in &body.blocks[b].stmts {
+            stmt_ids.push(s);
+            for child in stmt_child_nodes(body, s) {
+                match child {
+                    Child::Block(nb) => block_work.push(nb),
+                    Child::Expr(e) => collect_expr_subtree(body, e, &mut expr_ids, &mut block_work),
+                }
+            }
+        }
+    }
+    (expr_ids, stmt_ids)
+}
+
+fn collect_expr_subtree(
+    body: &Body,
+    e: ExprId,
+    expr_ids: &mut Vec<ExprId>,
+    block_work: &mut Vec<BlockId>,
+) {
+    expr_ids.push(e);
+    for child in expr_child_nodes(body, e) {
+        match child {
+            Child::Expr(c) => collect_expr_subtree(body, c, expr_ids, block_work),
+            Child::Block(b) => block_work.push(b),
+        }
+    }
+}
+
+/// Whether `v` is a loop-invariant arithmetic compound worth hoisting: a
+/// `Binary` / `Unary` root over leaves that are constants or `Opaque(Local)`
+/// reads of pre-header-available locals (`entry_locals`), with at least one such
+/// local leaf (a constant-only tree is left to const folding). Trap-prone ops
+/// (`Div` / `Mod`) and flow-merge / heap kinds (`LoopPhi` / `Select` /
+/// `FieldAccess` / `Opaque(Expr)` / `Cast`) are excluded — the same shape
+/// `ArithHoist` admits.
+fn is_hoistable_value(
+    pool: &crate::nir_value_graph::ValuePool,
+    v: ValueId,
+    entry_locals: &IndexSet<u32>,
+) -> bool {
+    use crate::nir_value_graph::ValueKind;
+    let compound = matches!(
+        pool.kind(v),
+        ValueKind::Binary { .. } | ValueKind::Unary { .. }
+    );
+    if !compound || !value_is_invariant(pool, v, entry_locals) {
+        return false;
+    }
+    let mut leaves = IndexSet::default();
+    pool.collect_opaque_locals(v, &mut leaves);
+    !leaves.is_empty()
+}
+
+fn value_is_invariant(
+    pool: &crate::nir_value_graph::ValuePool,
+    v: ValueId,
+    entry_locals: &IndexSet<u32>,
+) -> bool {
+    use crate::nir_value_graph::{OpaqueSource, ValueKind};
+    match pool.kind(v) {
+        ValueKind::Int(..)
+        | ValueKind::Float(..)
+        | ValueKind::Bool(_)
+        | ValueKind::Char(_)
+        | ValueKind::String(_)
+        | ValueKind::Null
+        | ValueKind::Unit => true,
+        ValueKind::Opaque(oid) => match pool.opaque_source(*oid) {
+            Some(OpaqueSource::Local(idx)) => entry_locals.contains(&idx),
+            _ => false,
+        },
+        ValueKind::Binary { op, lhs, rhs, .. } => {
+            is_hoistable_binop(*op)
+                && value_is_invariant(pool, *lhs, entry_locals)
+                && value_is_invariant(pool, *rhs, entry_locals)
+        }
+        ValueKind::Unary { op, operand, .. } => {
+            matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
+                && value_is_invariant(pool, *operand, entry_locals)
+        }
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1540,7 +2118,8 @@ fn replace_hoisted_in_expr(
         field_index,
         ..
     } = &engine.body.exprs[e].kind
-        && let ExprKind::Local { index, .. } = &engine.body.exprs[*inner].kind
+        && let Some(inner_e) = inner.as_expr()
+        && let ExprKind::Local { index, .. } = &engine.body.exprs[inner_e].kind
     {
         let index = *index;
         let field_index = *field_index;

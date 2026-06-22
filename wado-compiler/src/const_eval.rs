@@ -5,7 +5,7 @@
 //! value-graph builder can fold arithmetic without depending on `niri`.
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind};
+use crate::nir_arena::Body;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// A typed compile-time value produced by the interpreter.
@@ -71,54 +71,41 @@ impl Value {
         }
     }
 
-    /// Project an arena expression to a `Value` when it's a primitive literal
-    /// whose `type_id` resolves to a tracked primitive. Returns `None` for
-    /// non-literal shapes (`Local`, `Call`, `Binary`, …), for `String` /
-    /// `Bytes` / `Null` / `Unit` (no `Value` carrier), for the bignum
-    /// primitives `i128` / `u128` (out of scope for niri folding), and for any
-    /// literal whose `type_id` doesn't resolve to a primitive.
-    ///
-    /// Used by the const-fold visitor to turn struct-field literals
-    /// (`StructLiteral { f: 5, … }`) and direct field stores (`obj.f = 5`) into
-    /// `Interpreter::bind_field` / `field_env` entries.
+    /// Project an [`Operand`] to a `Value` when it is a pure scalar constant.
+    /// The constant lives in the function's `ValuePool` (the source of truth for
+    /// pure scalars; WEP: The Live `ValueGraph`) — only `Operand::Value` can be one,
+    /// since scalars no longer occupy skeleton `ExprId` slots. Only `Int` (tracked
+    /// int prims), `Float` (`f32`/`f64`), `Bool`, and `Char` project; `i128` /
+    /// `u128` and non-primitive types yield `None`.
     #[must_use]
-    pub fn from_arena_literal(body: &Body, e: ExprId, type_table: &TypeTable) -> Option<Self> {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::IntLiteral { value, .. } => {
-                let prim = prim_of(node.type_id, type_table).filter(|p| is_int_prim(*p))?;
+    pub fn from_operand(
+        body: &Body,
+        op: crate::nir_arena::Operand,
+        type_table: &TypeTable,
+    ) -> Option<Self> {
+        use crate::nir_value_graph::ValueKind;
+        let v = op.as_value()?;
+        let ty = body.values.type_of(v)?;
+        match body.values.kind(v) {
+            ValueKind::Int(value, _) => {
+                let prim = prim_of(ty, type_table).filter(|p| is_int_prim(*p))?;
                 Some(Self::Int {
                     value: *value,
                     prim,
                 })
             }
-            ExprKind::FloatLiteral { value, .. } => {
-                let prim = prim_of(node.type_id, type_table)
+            ValueKind::Float(bits, _) => {
+                let prim = prim_of(ty, type_table)
                     .filter(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))?;
                 Some(Self::Float {
-                    value: *value,
+                    value: f64::from_bits(*bits),
                     prim,
                 })
             }
-            ExprKind::BoolLiteral(b) => Some(Self::Bool(*b)),
-            ExprKind::CharLiteral(c) => Some(Self::Char(*c)),
+            ValueKind::Bool(b) => Some(Self::Bool(*b)),
+            ValueKind::Char(c) => Some(Self::Char(*c)),
             _ => None,
         }
-    }
-}
-
-pub(crate) fn value_to_arena_kind(v: Value) -> ExprKind {
-    match v {
-        Value::Int { value, prim } => ExprKind::IntLiteral {
-            repr: format_int_repr(value, prim),
-            value,
-        },
-        Value::Float { value, .. } => ExprKind::FloatLiteral {
-            repr: format_float_repr(value),
-            value,
-        },
-        Value::Bool(b) => ExprKind::BoolLiteral(b),
-        Value::Char(c) => ExprKind::CharLiteral(c),
     }
 }
 

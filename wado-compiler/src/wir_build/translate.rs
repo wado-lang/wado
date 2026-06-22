@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CanonicalIntrinsic, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 
 /// Recursively collect variable names from Let statements.
 ///
@@ -1107,12 +1107,10 @@ impl FunctionTranslator<'_, '_> {
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: crate::tir::TypeId,
-        elements: &[ExprId],
+        elements: &[Operand],
     ) -> (WirTypeId, Vec<WirInstr>) {
-        let elem_type_ids: Vec<crate::tir::TypeId> = elements
-            .iter()
-            .map(|e| self.body.exprs[*e].type_id)
-            .collect();
+        let elem_type_ids: Vec<crate::tir::TypeId> =
+            elements.iter().map(|e| self.operand_type_id(*e)).collect();
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, tuple_type_id);
         let wir_type_id = match &wir_type {
             WirType::Ref { type_id, .. } => Some(type_id.clone()),
@@ -1139,20 +1137,20 @@ impl FunctionTranslator<'_, '_> {
         // Filter out unit-typed elements before borrowing self mutably to
         // translate them; chaining the filter into the iterator below would
         // double-borrow self.
-        let non_unit: Vec<ExprId> = elements
+        let non_unit: Vec<Operand> = elements
             .iter()
             .copied()
             .filter(|e| {
                 !matches!(
                     self.ctx
-                        .type_id_to_wir_type(self.type_table, self.body.exprs[*e].type_id),
+                        .type_id_to_wir_type(self.type_table, self.operand_type_id(*e)),
                     WirType::Unit
                 )
             })
             .collect();
         let raw_fields: Vec<WirInstr> = non_unit
             .into_iter()
-            .map(|e| self.translate_expr(e))
+            .map(|e| self.translate_operand(e))
             .collect();
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, fields)
@@ -1171,7 +1169,7 @@ impl FunctionTranslator<'_, '_> {
     fn build_array_literal(
         &mut self,
         array_type_id: crate::tir::TypeId,
-        elements: &[ExprId],
+        elements: &[Operand],
     ) -> WirInstr {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
         let WirType::Ref { type_id, .. } = wir_type else {
@@ -1187,8 +1185,10 @@ impl FunctionTranslator<'_, '_> {
         else {
             panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
         };
-        let element_instrs: Vec<WirInstr> =
-            elements.iter().map(|e| self.translate_expr(*e)).collect();
+        let element_instrs: Vec<WirInstr> = elements
+            .iter()
+            .map(|e| self.translate_operand(*e))
+            .collect();
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1381,12 +1381,17 @@ impl FunctionTranslator<'_, '_> {
         for (i, stmt_id) in stmts.iter().enumerate() {
             let is_last = i + 1 == len;
             if is_last {
-                // Last statement: if it's an Expr, translate without drop
-                if let StmtKind::Expr(expr) = &arena.stmts[*stmt_id].kind {
-                    let expr = *expr;
-                    let instr = self.translate_expr_as_value(expr);
+                // Last statement: if it's an Expr, translate without drop. A
+                // promoted pure value (`Operand::Value`) is the block's value
+                // directly — extract it; it is never UNIT.
+                if let StmtKind::Expr(op) = &arena.stmts[*stmt_id].kind {
+                    let op = *op;
+                    let instr = match op {
+                        Operand::Expr(expr) => self.translate_expr_as_value(expr),
+                        Operand::Value(_) => self.translate_operand(op),
+                    };
                     instrs.push(instr);
-                    if arena.exprs[expr].type_id == TypeTable::UNIT
+                    if self.operand_type_id(op) == TypeTable::UNIT
                         && !instrs.last().is_some_and(WirInstr::ends_with_terminator)
                     {
                         instrs.push(WirInstr::Unreachable);
@@ -1405,7 +1410,7 @@ impl FunctionTranslator<'_, '_> {
                     let then_block = *then_block;
                     let else_block = *else_block;
                     if let Some(result_type) = self.infer_stmts_result_type(then_block) {
-                        let cond = self.translate_expr(condition);
+                        let cond = self.translate_operand(condition);
                         self.label_stack.push(LabelEntry {
                             label: None,
                             is_loop_break: false,
@@ -1446,8 +1451,8 @@ impl FunctionTranslator<'_, '_> {
             .stmts
             .last()
             .and_then(|stmt_id| match &arena.stmts[*stmt_id].kind {
-                StmtKind::Expr(expr) => {
-                    let ty = arena.exprs[*expr].type_id;
+                StmtKind::Expr(op) => {
+                    let ty = self.operand_type_id(*op);
                     if ty != TypeTable::UNIT && ty != TypeTable::NEVER {
                         Some(self.ctx.type_id_to_wir_type(self.type_table, ty))
                     } else {
@@ -1485,7 +1490,7 @@ impl FunctionTranslator<'_, '_> {
                 let then_branch = *then_branch;
                 let else_branch = *else_branch;
                 if let Some(result_type) = self.infer_stmts_result_type(then_branch) {
-                    let cond = self.translate_expr(condition);
+                    let cond = self.translate_operand(condition);
                     self.label_stack.push(LabelEntry {
                         label: None,
                         is_loop_break: false,
@@ -1540,17 +1545,19 @@ impl FunctionTranslator<'_, '_> {
                 // elements into N split locals via `MultiValueLocalBind`
                 // instead of trying to `LocalSet` the multi-value-Call
                 // result into a single local (which Wasm doesn't allow).
-                if let Some(instrs) = self.try_emit_multi_value_let(*local_index, *value) {
+                if let Some(e) = value.as_expr()
+                    && let Some(instrs) = self.try_emit_multi_value_let(*local_index, e)
+                {
                     return Some(instrs);
                 }
-                let value_instr = self.translate_expr(*value);
+                let value_instr = self.translate_operand(*value);
                 // If the initializer diverges (`never`), no value reaches the stack,
-                // so LocalSet would be invalid. `translate_expr` already appends
+                // so LocalSet would be invalid. `translate_operand` already appends
                 // `unreachable` for `never`-typed expressions, so just emit the
                 // diverging instruction; the local is declared but never assigned.
-                if arena.exprs[*value].type_id == TypeTable::NEVER {
+                if self.operand_type_id(*value) == TypeTable::NEVER {
                     Some(value_instr)
-                } else if arena.exprs[*value].type_id == TypeTable::UNIT {
+                } else if self.operand_type_id(*value) == TypeTable::UNIT {
                     // Unit-type locals have no Wasm representation; just emit
                     // the init expression for its side effects (usually Nop).
                     Some(value_instr)
@@ -1567,18 +1574,20 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             StmtKind::Expr(expr) => {
-                let instr = self.translate_expr(*expr);
+                let expr = *expr;
+                let ty = self.operand_type_id(expr);
+                let instr = self.translate_operand(expr);
                 // If the expression has a non-unit type, drop it.
                 // Exception: assignments and global-var-sets produce void WIR instructions
                 // (LocalSet/StructSet/ArraySet/GlobalSet), so don't wrap them in Drop.
-                let is_void_instr = matches!(
-                    &arena.exprs[*expr].kind,
-                    ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
-                );
-                if !is_void_instr
-                    && arena.exprs[*expr].type_id != TypeTable::UNIT
-                    && arena.exprs[*expr].type_id != TypeTable::NEVER
-                {
+                // A promoted pure value (`Operand::Value`) is never one of those.
+                let is_void_instr = expr.as_expr().is_some_and(|e| {
+                    matches!(
+                        &arena.exprs[e].kind,
+                        ExprKind::Assign { .. } | ExprKind::GlobalVarSet { .. }
+                    )
+                });
+                if !is_void_instr && ty != TypeTable::UNIT && ty != TypeTable::NEVER {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)
@@ -1586,7 +1595,7 @@ impl FunctionTranslator<'_, '_> {
             }
             StmtKind::Return { value } => {
                 if let Some(expr) = value {
-                    let value_instr = self.translate_expr(*expr);
+                    let value_instr = self.translate_operand(*expr);
                     // For multi-value-ABI functions, unwrap leaf
                     // `StructNew` aggregate-constructions inside the
                     // return value so the function pushes the N field
@@ -1659,7 +1668,7 @@ impl FunctionTranslator<'_, '_> {
             StmtKind::Break { label, value } => {
                 let depth = self.compute_break_depth(label.as_deref());
                 if let Some(val) = value {
-                    let val_instr = self.translate_expr(*val);
+                    let val_instr = self.translate_operand(*val);
                     Some(WirInstr::Seq(vec![val_instr, WirInstr::Br { depth }]))
                 } else {
                     Some(WirInstr::Br { depth })
@@ -1675,7 +1684,7 @@ impl FunctionTranslator<'_, '_> {
                 else_block,
                 ..
             } => {
-                let cond = self.translate_expr(*condition);
+                let cond = self.translate_operand(*condition);
                 // Push a label entry for the if block scope
                 self.label_stack.push(LabelEntry {
                     label: None,
@@ -1709,7 +1718,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
             StmtKind::LetDestructure { pattern, value, .. } => {
-                self.translate_let_pattern(*pattern, *value)
+                self.translate_let_pattern(*pattern, value.as_expr().expect("skeleton operand"))
             }
         }
     }
@@ -1754,58 +1763,276 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Lower an operand to WIR. This is the extraction seam (WEP: The Live
+    /// ValueGraph): Phase A operands are all `Expr` and delegate to
+    /// `translate_expr`; Phase B materialises a promoted `Operand::Value` from
+    /// the graph here.
+    pub(super) fn translate_operand(&mut self, op: Operand) -> WirInstr {
+        match op {
+            Operand::Expr(e) => self.translate_expr(e),
+            Operand::Value(v) => self.extract_value(v),
+        }
+    }
+
+    /// The NIR type of an operand — the `ExprNode` type for a skeleton subtree,
+    /// or the pool-recorded source type for a promoted pure value.
+    pub(super) fn operand_type_id(&self, op: Operand) -> crate::tir::TypeId {
+        match op {
+            Operand::Expr(e) => self.body.exprs[e].type_id,
+            Operand::Value(v) => self
+                .body
+                .values
+                .type_of(v)
+                .expect("promoted value has no recorded type"),
+        }
+    }
+
+    /// Emit a binary op from already-translated operand WIR. Shared by the
+    /// skeleton `ExprKind::Binary` path and the value-graph extractor so the
+    /// short-circuit / width-truncation behaviour cannot diverge. `left_ty` is
+    /// the (left) operand's source type, which selects the op width.
+    pub(super) fn emit_binary_wir(
+        &mut self,
+        op: NirBinaryOp,
+        l: WirInstr,
+        r: WirInstr,
+        left_ty: TypeId,
+    ) -> WirInstr {
+        // Short-circuit logical operators: `r`'s instruction tree sits in a
+        // conditional branch, so it runs only when reached.
+        if matches!(op, NirBinaryOp::And) {
+            return WirInstr::If {
+                condition: Box::new(l),
+                result: Some(WirType::I32),
+                then_body: vec![r],
+                else_body: Some(vec![WirInstr::I32Const(0)]),
+            };
+        }
+        if matches!(op, NirBinaryOp::Or) {
+            return WirInstr::If {
+                condition: Box::new(l),
+                result: Some(WirType::I32),
+                then_body: vec![WirInstr::I32Const(1)],
+                else_body: Some(vec![r]),
+            };
+        }
+        let result = self.translate_binary_op(&op, Box::new(l), Box::new(r), left_ty);
+        // Truncate sub-i32 arithmetic/bitwise results to the correct width;
+        // comparisons / logical ops already return a 0/1 i32.
+        if !matches!(
+            op,
+            NirBinaryOp::Eq
+                | NirBinaryOp::NotEq
+                | NirBinaryOp::Lt
+                | NirBinaryOp::LtEq
+                | NirBinaryOp::Gt
+                | NirBinaryOp::GtEq
+                | NirBinaryOp::And
+                | NirBinaryOp::Or
+                | NirBinaryOp::RefEq
+                | NirBinaryOp::RefNotEq
+        ) && let ResolvedType::Primitive(prim) = self.type_table.get(left_ty)
+        {
+            return Self::truncate_to_sub_i32(result, prim);
+        }
+        result
+    }
+
+    /// Emit a pure unary op (`Neg` / `Not` / `BitNot`) from already-translated
+    /// operand WIR. Shared by the skeleton path and the extractor.
+    pub(super) fn emit_unary_wir(
+        &mut self,
+        op: NirUnaryOp,
+        o: WirInstr,
+        inner_ty: TypeId,
+    ) -> WirInstr {
+        let result = self.translate_unary_op(&op, Box::new(o), inner_ty);
+        if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
+            && let ResolvedType::Primitive(prim) = self.type_table.get(inner_ty)
+        {
+            return Self::truncate_to_sub_i32(result, prim);
+        }
+        result
+    }
+
+    /// Materialise a promoted pure [`Operand::Value`] back to WIR (the extractor;
+    /// WEP: The Live `ValueGraph`). Each kind lowers from the pool using the source
+    /// type recorded by the builder; composite kinds (`Binary`, `Select`,
+    /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
+    pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
+        use crate::nir_value_graph::ValueKind;
+        use crate::wir::WirAbstractHeapType;
+        let kind = self.body.values.kind(v).clone();
+        let type_id = self
+            .body
+            .values
+            .type_of(v)
+            .expect("promoted value has no recorded type");
+        match kind {
+            // Width from the literal's own carried `TypeId` (the hash-cons key),
+            // not the shared `type_of(v)`: a constant is width-correct regardless
+            // of how many differently-typed uses share its `ValueId`. This is the
+            // prerequisite that makes a constant safe to promote *early* (before
+            // the passes can add a divergent-width use). Behavior-neutral today
+            // (late freeze sets `type_of` to the same type); load-bearing for
+            // early promotion.
+            ValueKind::Int(value, int_ty) => match self.type_table.get(int_ty) {
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                    WirInstr::I64Const(value as i64)
+                }
+                _ => WirInstr::I32Const(value as i32),
+            },
+            ValueKind::Float(bits, float_ty) => match self.type_table.get(float_ty) {
+                ResolvedType::Primitive(PrimitiveType::F32) => {
+                    WirInstr::F32Const(f64::from_bits(bits) as f32)
+                }
+                _ => WirInstr::F64Const(f64::from_bits(bits)),
+            },
+            ValueKind::Bool(b) => WirInstr::I32Const(i32::from(b)),
+            ValueKind::Char(c) => WirInstr::I32Const(c as i32),
+            ValueKind::String(s) => self.translate_string_literal(&s),
+            ValueKind::Null => {
+                if let Some(inner) = self.type_table.as_option(type_id) {
+                    assert!(
+                        !matches!(self.type_table.get(inner), ResolvedType::Unknown),
+                        "[WIR] promoted Null with unresolved Option inner type"
+                    );
+                    self.translate_variant_construct(type_id, 1, "None", None, type_id)
+                } else {
+                    WirInstr::RefNull {
+                        heap_type: WirAbstractHeapType::None,
+                    }
+                }
+            }
+            ValueKind::Unit => WirInstr::Nop,
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                let left_ty = self
+                    .body
+                    .values
+                    .type_of(lhs)
+                    .expect("promoted Binary lhs has no recorded type");
+                let l = self.extract_value(lhs);
+                let r = self.extract_value(rhs);
+                self.emit_binary_wir(op, l, r, left_ty)
+            }
+            ValueKind::Unary { op, operand, .. } => {
+                let inner_ty = self
+                    .body
+                    .values
+                    .type_of(operand)
+                    .expect("promoted Unary operand has no recorded type");
+                let o = self.extract_value(operand);
+                self.emit_unary_wir(op, o, inner_ty)
+            }
+            ValueKind::Cast { operand, target } => {
+                let from_ty = self
+                    .body
+                    .values
+                    .type_of(operand)
+                    .expect("promoted Cast operand has no recorded type");
+                self.translate_cast(crate::nir_arena::Operand::Value(operand), from_ty, target)
+            }
+            // An `Opaque` stands for a leaf the graph cannot reconstruct (a
+            // local read, a call result). It is re-emitted from the recorded
+            // source the builder/lower scheduled for it.
+            ValueKind::Opaque(id) => {
+                use crate::nir_value_graph::OpaqueSource;
+                match self
+                    .body
+                    .values
+                    .opaque_source(id)
+                    .expect("promoted Opaque has no recorded extraction source")
+                {
+                    OpaqueSource::Local(idx) => self.local_get(idx),
+                    OpaqueSource::Expr(e) => self.translate_expr_inner(e),
+                }
+            }
+            // A `Select` (control-merge of pure values) extracts as a
+            // value-producing `if`. Sound because the arms are pure values
+            // (the builder constructs `Select` only at merges of pure values);
+            // re-emitting the `if` recomputes them in the same dominance order.
+            ValueKind::Select { cond, then, else_ } => {
+                let c = self.extract_value(cond);
+                let t = self.extract_value(then);
+                let e = self.extract_value(else_);
+                let result_ty = self.ctx.type_id_to_wir_type(self.type_table, type_id);
+                WirInstr::If {
+                    condition: Box::new(c),
+                    result: Some(result_ty),
+                    then_body: vec![t],
+                    else_body: Some(vec![e]),
+                }
+            }
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => {
+                // Re-emit `receiver.field` as a `StructGet`. The value carries only
+                // `field_index` (the receiver `ValueId` pins the type), so derive
+                // the field name from the receiver value's recorded struct type
+                // (the builder stamped it from the receiver expr). Soundness of
+                // *where* this load runs is the materialiser's job (WEP P2): the
+                // shared `heap_ver` guarantees the field is unchanged across uses.
+                let recv_nir_ty = self
+                    .body
+                    .values
+                    .type_of(receiver)
+                    .expect("promoted FieldAccess receiver has no recorded type");
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, recv_nir_ty);
+                let WirType::Ref {
+                    type_id: struct_tid,
+                    ..
+                } = wir_type
+                else {
+                    panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
+                };
+                let field_name = match self.ctx.types.get(struct_tid.index() as usize) {
+                    Some(crate::wir::WirTypeDef::Struct(st)) => st
+                        .fields
+                        .get(field_index as usize)
+                        .map(|f| f.name.clone())
+                        .expect("FieldAccess field_index out of range"),
+                    _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
+                };
+                // Multi-value-return split: if the receiver is a local that was
+                // split into per-field scalars (the aggregate was never
+                // materialised), read the split local directly — a `StructGet`
+                // would read an uninitialised slot. Mirrors `translate_expr_inner`.
+                if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
+                    && let Some(crate::nir_value_graph::OpaqueSource::Local(idx)) =
+                        self.body.values.opaque_source(*oid)
+                    && let Some(splits) = self.multi_value_split_locals.get(&idx)
+                    && let Some((name, ty)) = splits.get(&field_name)
+                {
+                    return WirInstr::LocalGet {
+                        name: name.clone(),
+                        result_ty: ty.clone(),
+                    };
+                }
+                let recv = self.extract_value(receiver);
+                let result_ty = self.struct_field_wir_type(&struct_tid, &field_name);
+                WirInstr::StructGet {
+                    type_id: struct_tid,
+                    field_name,
+                    expr: Box::new(recv),
+                    result_ty,
+                }
+            }
+            other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
+        }
+    }
+
     fn translate_expr_inner(&mut self, expr_id: ExprId) -> WirInstr {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                    WirInstr::I64Const(*value as i64)
-                }
-                _ => WirInstr::I32Const(*value as i32),
-            },
-            ExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-                _ => WirInstr::F64Const(*value),
-            },
-            ExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
-            ExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
-            ExprKind::StringLiteral(s) => {
-                // String literals are constructed from data segments
-                self.translate_string_literal(s)
-            }
             ExprKind::BytesLiteral(b) => {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }
-            ExprKind::Null => {
-                // For Option types, construct a None variant struct.
-                if let Some(inner) = self.type_table.as_option(expr.type_id) {
-                    if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
-                        panic!(
-                            "[WIR] Null with unresolved Option inner type (type_id={:?})",
-                            expr.type_id
-                        );
-                    }
-                    self.translate_variant_construct(
-                        expr.type_id, // variant_type
-                        1,            // case_index: None is case 1
-                        "None",
-                        None, // no payload
-                        expr.type_id,
-                    )
-                } else {
-                    // Non-Option null: emit ref.null as a placeholder value.
-                    // Used by CM bindings for local initialization before conditional assignment.
-                    WirInstr::RefNull {
-                        heap_type: crate::wir::WirAbstractHeapType::None,
-                    }
-                }
-            }
-            ExprKind::Unit => {
-                // Unit has no value; use nop
-                WirInstr::Nop
-            }
+            // Orphaned tombstone: never materialised (DCE drops it first).
+            ExprKind::Dead => WirInstr::Nop,
 
             ExprKind::Local { index, .. } => {
                 // Unit and Never locals have no Wasm representation. For Unit
@@ -1835,7 +2062,7 @@ impl FunctionTranslator<'_, '_> {
                 value,
             } => {
                 let global_name = self.make_global_name(module_source, name);
-                let val = self.translate_expr(*value);
+                let val = self.translate_operand(*value);
                 WirInstr::GlobalSet {
                     name: WirName { fq: global_name },
                     value: Box::new(val),
@@ -1843,70 +2070,19 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Binary { op, left, right } => {
-                let (left, right) = (*left, *right);
-                // Short-circuit logical operators: defer right-side evaluation
-                if matches!(op, NirBinaryOp::And) {
-                    let l = self.translate_expr(left);
-                    let r = self.translate_expr(right);
-                    // if left { right } else { 0 }
-                    return WirInstr::If {
-                        condition: Box::new(l),
-                        result: Some(WirType::I32),
-                        then_body: vec![r],
-                        else_body: Some(vec![WirInstr::I32Const(0)]),
-                    };
-                }
-                if matches!(op, NirBinaryOp::Or) {
-                    let l = self.translate_expr(left);
-                    let r = self.translate_expr(right);
-                    // if left { 1 } else { right }
-                    return WirInstr::If {
-                        condition: Box::new(l),
-                        result: Some(WirType::I32),
-                        then_body: vec![WirInstr::I32Const(1)],
-                        else_body: Some(vec![r]),
-                    };
-                }
-                let l = Box::new(self.translate_expr(left));
-                let r = Box::new(self.translate_expr(right));
-                let result = self.translate_binary_op(op, l, r, arena.exprs[left].type_id);
-                // Truncate sub-i32 arithmetic/bitwise results to the correct width.
-                // Comparisons and logical ops return bool (i32 0/1), so skip those.
-                if !matches!(
-                    op,
-                    NirBinaryOp::Eq
-                        | NirBinaryOp::NotEq
-                        | NirBinaryOp::Lt
-                        | NirBinaryOp::LtEq
-                        | NirBinaryOp::Gt
-                        | NirBinaryOp::GtEq
-                        | NirBinaryOp::And
-                        | NirBinaryOp::Or
-                        | NirBinaryOp::RefEq
-                        | NirBinaryOp::RefNotEq
-                ) && let ResolvedType::Primitive(prim) =
-                    self.type_table.get(arena.exprs[left].type_id)
-                {
-                    return Self::truncate_to_sub_i32(result, prim);
-                }
-                result
+                let (op, left, right) = (*op, *left, *right);
+                let l = self.translate_operand(left);
+                let r = self.translate_operand(right);
+                self.emit_binary_wir(op, l, r, self.operand_type_id(left))
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_expr(*inner),
-                NirUnaryOp::Deref => self.translate_expr(*inner),
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_operand(*inner),
+                NirUnaryOp::Deref => self.translate_operand(*inner),
                 _ => {
                     let inner = *inner;
-                    let o = Box::new(self.translate_expr(inner));
-                    let result = self.translate_unary_op(op, o, arena.exprs[inner].type_id);
-                    // Truncate sub-i32 results for Neg and BitNot.
-                    if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
-                        && let ResolvedType::Primitive(prim) =
-                            self.type_table.get(arena.exprs[inner].type_id)
-                    {
-                        return Self::truncate_to_sub_i32(result, prim);
-                    }
-                    result
+                    let o = self.translate_operand(inner);
+                    self.emit_unary_wir(*op, o, self.operand_type_id(inner))
                 }
             },
 
@@ -1934,10 +2110,14 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                let translated_args: Vec<WirInstr> = args
+                let kept: Vec<Operand> = args
                     .iter()
-                    .filter(|a| arena.exprs[a.expr].type_id != TypeTable::UNIT)
-                    .map(|a| self.translate_expr(a.expr))
+                    .filter(|a| self.operand_type_id(a.expr) != TypeTable::UNIT)
+                    .map(|a| a.expr)
+                    .collect();
+                let translated_args: Vec<WirInstr> = kept
+                    .into_iter()
+                    .map(|op| self.translate_operand(op))
                     .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1961,8 +2141,9 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 // Canonical resource method dispatch: uses #[canonical("...")] from types.wado
-                if let Some(instr) =
-                    self.try_translate_canonical_method(*receiver, func, args, expr.type_id)
+                if let Some(re) = receiver.as_expr()
+                    && let Some(instr) =
+                        self.try_translate_canonical_method(re, func, args, expr.type_id)
                 {
                     return instr;
                 }
@@ -1970,11 +2151,11 @@ impl FunctionTranslator<'_, '_> {
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 // Receiver is always included (self/&self/&mut self is never unit).
                 // Receivers are always reference types — do not copy them.
-                translated_args.push(self.translate_expr(*receiver));
+                translated_args.push(self.translate_operand(*receiver));
                 // params[0] is self; args[i] corresponds to params[i+1]
                 for arg in args {
-                    if arena.exprs[arg.expr].type_id != TypeTable::UNIT {
-                        translated_args.push(self.translate_expr(arg.expr));
+                    if self.operand_type_id(arg.expr) != TypeTable::UNIT {
+                        translated_args.push(self.translate_operand(arg.expr));
                     }
                 }
 
@@ -2007,15 +2188,17 @@ impl FunctionTranslator<'_, '_> {
                     .iter()
                     .filter(|f| {
                         !matches!(
-                            self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[f.value].type_id),
+                            self.ctx.type_id_to_wir_type(
+                                self.type_table,
+                                self.operand_type_id(f.value)
+                            ),
                             WirType::Unit
                         )
                     })
                     .collect();
                 let field_instrs: Vec<WirInstr> = non_unit_fields
                     .iter()
-                    .map(|f| self.translate_expr(f.value))
+                    .map(|f| self.translate_operand(f.value))
                     .collect();
                 self.struct_new(type_id, field_instrs)
             }
@@ -2031,9 +2214,10 @@ impl FunctionTranslator<'_, '_> {
                 // as a struct ref — a `StructGet` here would read an
                 // uninitialised slot.
                 let receiver = *receiver;
-                if let ExprKind::Local {
-                    index: tir_local, ..
-                } = &arena.exprs[receiver].kind
+                if let Some(re) = receiver.as_expr()
+                    && let ExprKind::Local {
+                        index: tir_local, ..
+                    } = &arena.exprs[re].kind
                     && let Some(splits) = self.multi_value_split_locals.get(tir_local)
                     && let Some((name, ty)) = splits.get(field_name)
                 {
@@ -2045,17 +2229,17 @@ impl FunctionTranslator<'_, '_> {
                 // If the field's result type is unit, emit only the receiver
                 // for side effects and return Nop — unit has no Wasm representation.
                 if expr.type_id == TypeTable::UNIT {
-                    let recv = self.translate_expr(receiver);
+                    let recv = self.translate_operand(receiver);
                     return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
                 }
-                let recv = self.translate_expr(receiver);
+                let recv = self.translate_operand(receiver);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
                 let WirType::Ref { type_id, .. } = wir_type else {
                     panic!(
                         "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        arena.exprs[receiver].type_id
+                        self.operand_type_id(receiver)
                     );
                 };
                 let result_ty = self.struct_field_wir_type(&type_id, field_name);
@@ -2069,7 +2253,7 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::Assign { target, value } => {
                 let (target, value) = (*target, *value);
-                let val = self.translate_expr(value);
+                let val = self.translate_operand(value);
                 match &arena.exprs[target].kind {
                     ExprKind::Local { index, .. } => {
                         // Unit-type locals have no Wasm representation
@@ -2105,7 +2289,7 @@ impl FunctionTranslator<'_, '_> {
                         // representation. Emit the receiver for side effects (then
                         // drop the ref), and emit val for side effects (it produces
                         // nothing because unit has no Wasm representation).
-                        let recv = self.translate_expr(*receiver);
+                        let recv = self.translate_operand(*receiver);
                         WirInstr::Seq(vec![val, WirInstr::Drop(Box::new(recv))])
                     }
                     ExprKind::FieldAccess {
@@ -2114,14 +2298,14 @@ impl FunctionTranslator<'_, '_> {
                         ..
                     } => {
                         let receiver = *receiver;
-                        let recv = self.translate_expr(receiver);
+                        let recv = self.translate_operand(receiver);
                         let wir_type = self
                             .ctx
-                            .type_id_to_wir_type(self.type_table, arena.exprs[receiver].type_id);
+                            .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
                         let WirType::Ref { type_id, .. } = wir_type else {
                             panic!(
                                 "[WIR] FieldAccess assignment expected Ref receiver, got {wir_type:?} (field={field_name}, type_id={:?})",
-                                arena.exprs[receiver].type_id
+                                self.operand_type_id(receiver)
                             );
                         };
                         self.struct_set(type_id, field_name.clone(), recv, val)
@@ -2142,7 +2326,7 @@ impl FunctionTranslator<'_, '_> {
                 target_type,
             } => {
                 // Type casts become appropriate conversion instructions
-                self.translate_cast(*inner, arena.exprs[*inner].type_id, *target_type)
+                self.translate_cast(*inner, self.operand_type_id(*inner), *target_type)
             }
 
             ExprKind::Block(block) => {
@@ -2159,7 +2343,7 @@ impl FunctionTranslator<'_, '_> {
                 then_branch,
                 else_branch,
             } => {
-                let cond = self.translate_expr(*condition);
+                let cond = self.translate_operand(*condition);
                 let has_result = expr.type_id != TypeTable::UNIT;
                 self.label_stack.push(LabelEntry {
                     label: None,
@@ -2225,10 +2409,10 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let inner = *inner;
-                let val = self.translate_expr(inner);
+                let val = self.translate_operand(inner);
                 let wir_type = self
                     .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[inner].type_id);
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(inner));
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -2250,7 +2434,9 @@ impl FunctionTranslator<'_, '_> {
                 expr: inner,
                 case_index,
                 case_name: _,
-            } => self.translate_variant_test(*inner, *case_index),
+            } => {
+                self.translate_variant_test(inner.as_expr().expect("skeleton operand"), *case_index)
+            }
             ExprKind::VariantPayload {
                 expr: inner,
                 case_index,
@@ -2263,7 +2449,10 @@ impl FunctionTranslator<'_, '_> {
                 if matches!(self.type_table.get(*payload_type), ResolvedType::Unit) {
                     WirInstr::Nop
                 } else {
-                    self.translate_variant_payload(*inner, *case_index)
+                    self.translate_variant_payload(
+                        inner.as_expr().expect("skeleton operand"),
+                        *case_index,
+                    )
                 }
             }
             ExprKind::VariantConstruct {
@@ -2284,7 +2473,7 @@ impl FunctionTranslator<'_, '_> {
                 local_name, args, ..
             } => {
                 let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_expr(*a)).collect();
+                    args.iter().map(|a| self.translate_operand(*a)).collect();
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) =
                     self.ctx.func_map.get(&format!("wasi/{local_name}"))
@@ -2298,7 +2487,7 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| {
                             self.ctx
-                                .type_id_to_wir_type(self.type_table, arena.exprs[*a].type_id)
+                                .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
                         })
                         .collect();
                     let results =
@@ -2333,16 +2522,18 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
-            ExprKind::IndirectCall { callee, args } => {
-                self.translate_indirect_call(*callee, args, expr.type_id)
-            }
+            ExprKind::IndirectCall { callee, args } => self.translate_indirect_call(
+                callee.as_expr().expect("skeleton operand"),
+                args,
+                expr.type_id,
+            ),
             ExprKind::ClosureToCanonical {
                 functor,
                 functor_id,
                 target_fn_type,
                 closure_module,
             } => self.translate_closure_to_canonical(
-                *functor,
+                functor.as_expr().expect("skeleton operand"),
                 *functor_id,
                 *target_fn_type,
                 closure_module,

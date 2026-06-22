@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ExprId, ExprKind};
+use crate::nir_arena::Operand;
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
@@ -378,21 +378,23 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a type cast.
     pub(super) fn translate_cast(
         &mut self,
-        inner: ExprId,
+        inner: Operand,
         from_type: TypeId,
         to_type: TypeId,
     ) -> WirInstr {
-        // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
-        if let ExprKind::IntLiteral { value, .. } = &self.body.exprs[inner].kind
+        // Optimize: int-const cast to i64/u64 → emit I64Const directly to avoid
+        // i32 truncation. A pure scalar constant lives in the value pool.
+        let int_const = self.body.operand_const_int(inner);
+        if let Some(value) = int_const
             && matches!(
                 self.type_table.get(to_type),
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
             )
         {
-            return WirInstr::I64Const(*value as i64);
+            return WirInstr::I64Const(value as i64);
         }
 
-        let inner_instr = self.translate_expr(inner);
+        let inner_instr = self.translate_operand(inner);
         let from = self.type_table.get(from_type);
         let to = self.type_table.get(to_type);
 
@@ -604,12 +606,12 @@ impl FunctionTranslator<'_, '_> {
         }
     }
     /// Translate array index read: `arr[i]`
-    pub(super) fn translate_index(&mut self, array_expr: ExprId, index_expr: ExprId) -> WirInstr {
-        let arr = self.translate_expr(array_expr);
-        let idx = self.translate_expr(index_expr);
+    pub(super) fn translate_index(&mut self, array_op: Operand, index_op: Operand) -> WirInstr {
+        let arr = self.translate_operand(array_op);
+        let idx = self.translate_operand(index_op);
 
         // Unwrap reference types
-        let array_type_id = self.body.exprs[array_expr].type_id;
+        let array_type_id = self.operand_type_id(array_op);
         let base_type_id = match self.type_table.get(array_type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => array_type_id,
@@ -723,14 +725,14 @@ impl FunctionTranslator<'_, '_> {
     /// Translate array index assignment: `arr[i] = val`
     pub(super) fn translate_index_assign(
         &mut self,
-        array_expr: ExprId,
-        index_expr: ExprId,
+        array_op: Operand,
+        index_op: Operand,
         val: WirInstr,
     ) -> WirInstr {
-        let arr = self.translate_expr(array_expr);
-        let idx = self.translate_expr(index_expr);
+        let arr = self.translate_operand(array_op);
+        let idx = self.translate_operand(index_op);
 
-        let array_type_id = self.body.exprs[array_expr].type_id;
+        let array_type_id = self.operand_type_id(array_op);
         let base_type_id = match self.type_table.get(array_type_id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => array_type_id,

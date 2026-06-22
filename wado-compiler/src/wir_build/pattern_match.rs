@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, PatId, PatKind};
+use crate::nir_arena::{ArmData, BlockId, Body, ExprId, Operand, PatId, PatKind};
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
 /// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
@@ -58,7 +58,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate switch expression using `br_table`.
     pub(super) fn translate_switch(
         &mut self,
-        scrutinee: ExprId,
+        scrutinee: Operand,
         min_value: i64,
         arms: &[BlockId],
         default: BlockId,
@@ -73,9 +73,9 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Translate scrutinee and adjust for min_value
-        let scrut = self.translate_expr(scrutinee);
+        let scrut = self.translate_operand(scrutinee);
         let is_i64 = matches!(
-            self.type_table.get(arena.exprs[scrutinee].type_id),
+            self.type_table.get(self.operand_type_id(scrutinee)),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
 
@@ -288,7 +288,7 @@ impl FunctionTranslator<'_, '_> {
     /// Translate match expression as nested if-else chain.
     pub(super) fn translate_match(
         &mut self,
-        scrutinee: ExprId,
+        scrutinee: Operand,
         arms: &[ArmData],
         result_type: TypeId,
     ) -> WirInstr {
@@ -300,20 +300,20 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Store scrutinee in a local to avoid re-evaluation
-        let scrut = self.translate_expr(scrutinee);
+        let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
         let scrut_local_name = format!("__match_scrut_{match_id}");
         let scrut_wir_type = self
             .ctx
-            .type_id_to_wir_type(self.type_table, self.body.exprs[scrutinee].type_id);
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));
 
         // Precompute, per source-order arm, whether it will be lowered as
         // irrefutable (body only, no surrounding `If`). Both the `if_depths`
         // depth counter below and the emission loop that follows consume this
         // slice, so the two views cannot disagree.
         let emitted_as_irrefutable =
-            self.compute_emitted_as_irrefutable(self.body.exprs[scrutinee].type_id, arms);
+            self.compute_emitted_as_irrefutable(self.operand_type_id(scrutinee), arms);
 
         // Build the if-else chain from inside out (last arm first)
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
@@ -365,20 +365,23 @@ impl FunctionTranslator<'_, '_> {
                 self.emit_pattern_bindings(
                     arm.pattern,
                     &scrut_local_name,
-                    self.body.exprs[scrutinee].type_id,
+                    self.operand_type_id(scrutinee),
                     &mut bindings,
                 );
                 let body = if has_result {
-                    self.translate_expr_as_value(arm.body)
+                    match arm.body {
+                        Operand::Value(v) => self.extract_value(v),
+                        Operand::Expr(e) => self.translate_expr_as_value(e),
+                    }
                 } else {
-                    let instr = self.translate_expr(arm.body);
+                    let instr = self.translate_operand(arm.body);
                     // If the arm body produces a non-unit value (e.g. after inlining
                     // transforms a Block into a bare call), drop it to avoid leaving
                     // values on the Wasm stack. Guard with `produces_stack_value()` to
                     // avoid emitting `drop` after instructions that produce no value
                     // (e.g. `Block{result: None}` from LabeledBlock fusion).
-                    if self.body.exprs[arm.body].type_id != TypeTable::UNIT
-                        && self.body.exprs[arm.body].type_id != TypeTable::NEVER
+                    if self.operand_type_id(arm.body) != TypeTable::UNIT
+                        && self.operand_type_id(arm.body) != TypeTable::NEVER
                         && instr.produces_stack_value()
                     {
                         WirInstr::Drop(Box::new(instr))
@@ -402,7 +405,7 @@ impl FunctionTranslator<'_, '_> {
             let condition = self.translate_pattern_condition(
                 arm.pattern,
                 &scrut_local_name,
-                self.body.exprs[scrutinee].type_id,
+                self.operand_type_id(scrutinee),
             );
 
             // `emitted_as_irrefutable[source_idx]` already folds in both the
@@ -431,7 +434,7 @@ impl FunctionTranslator<'_, '_> {
                 // depth, producing invalid core Wasm (issue #1418). Collapsing to
                 // one `If` keeps `result` at a single depth and also avoids the
                 // 2^N clone explosion for many guarded arms.
-                let guard_expr = self.translate_expr(*guard);
+                let guard_expr = self.translate_operand(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
                 let folded_condition = if pattern_is_trivially_true {
                     // Pattern always matches: bindings are safe to emit
@@ -1409,7 +1412,7 @@ impl FunctionTranslator<'_, '_> {
         variant_type: TypeId,
         case_index: u32,
         case_name: &str,
-        payload: Option<ExprId>,
+        payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
         // Get the variant name and module source
@@ -1448,7 +1451,7 @@ impl FunctionTranslator<'_, '_> {
             // Build struct.new for the case type: (tag, payload?)
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
-                fields.push(self.translate_expr(payload_expr));
+                fields.push(self.translate_operand(payload_expr));
             }
             self.struct_new(case_type_id, fields)
         } else {
@@ -1461,7 +1464,7 @@ impl FunctionTranslator<'_, '_> {
             };
             let mut fields = vec![WirInstr::I32Const(case_index as i32)];
             if let Some(payload_expr) = payload {
-                fields.push(self.translate_expr(payload_expr));
+                fields.push(self.translate_operand(payload_expr));
             }
             self.struct_new(type_id, fields)
         }

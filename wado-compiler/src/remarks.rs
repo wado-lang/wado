@@ -105,9 +105,9 @@ impl Collector<'_> {
         match func.monomorphized_builtin_name().as_deref() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
-            Some("builtin::array_clone" | "builtin::array_clone_shallow") => {
-                args.first().map(|a| clone_source_type(body, a.expr))
-            }
+            Some("builtin::array_clone" | "builtin::array_clone_shallow") => args
+                .first()
+                .map(|a| clone_source_type(body, a.expr.as_expr().expect("skeleton operand"))),
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
             Some("builtin::copy_value") => Some(node.type_id),
@@ -188,10 +188,17 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr,
         } => *expr,
-        _ => arg,
+        _ => arg.into(),
     };
-    match &body.exprs[inner].kind {
-        ExprKind::FieldAccess { expr, .. } => body.exprs[*expr].type_id,
-        _ => body.exprs[inner].type_id,
+    // A promoted `Operand::Value` has no skeleton place; fall back to the
+    // argument's own type (this only feeds a diagnostic remark).
+    let Some(inner_e) = inner.as_expr() else {
+        return body.exprs[arg].type_id;
+    };
+    match &body.exprs[inner_e].kind {
+        ExprKind::FieldAccess { expr, .. } => expr
+            .as_expr()
+            .map_or(body.exprs[inner_e].type_id, |e| body.exprs[e].type_id),
+        _ => body.exprs[inner_e].type_id,
     }
 }

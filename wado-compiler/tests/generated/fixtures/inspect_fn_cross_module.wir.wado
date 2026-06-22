@@ -90,7 +90,6 @@ global global:./sub/inspect_fn_cross_module_helper.wado::__const_obj_0: ref null
 
 fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/run"() with Stdout {
     let __local_1: ref "core:prelude/string.wado//String";
-    let s: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -98,7 +97,7 @@ fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/run"() with Stdout
         global:__modules_initialized = 1;
     };
     "./sub/inspect_fn_cross_module_helper.wado/show_in_helper"();
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from main: "), used: 11 }); s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 }; "core:prelude/string.wado/String::push_str"(__local_1, s); __local_1);
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("from main: "), used: 11 }); "core:prelude/string.wado/String::push_str"(__local_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> i32"), used: 12 }); __local_1);
 }
 
 fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -207,12 +206,11 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
-    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -234,9 +232,7 @@ fn "core:prelude/string.wado/String::push_str"(self, other) {
 }
 
 fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__Closure_0^Inspect::inspect"(self, f) {
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> bool"), used: 13 };
-    "core:prelude/string.wado/String::push_str"(f.buf, s);
+    "core:prelude/string.wado/String::push_str"(f.buf, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("|i32| -> bool"), used: 13 });
 }
 
 export fn "wado-compiler/tests/fixtures/inspect_fn_cross_module.wado/__cm_export__run" as "run"

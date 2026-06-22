@@ -409,11 +409,11 @@ pub trait CompilerHost: Send + Sync {
 pub struct DependencyIndex {
     /// name → entry-module path (the dependency's `[package].lib`), relative
     /// to the host base.
-    pub resolved: std::collections::HashMap<String, String>,
+    pub resolved: crate::hashmap::IndexMap<String, String>,
     /// name → human-readable reason a *declared* dependency could not be
     /// resolved (e.g. its package declares no `[package].lib`). Surfaced at
     /// the `use` site instead of a generic "invalid module path".
-    pub unresolved: std::collections::HashMap<String, String>,
+    pub unresolved: crate::hashmap::IndexMap<String, String>,
 }
 
 /// Request handed to a Kiln generator by the compiler.

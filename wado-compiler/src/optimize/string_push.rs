@@ -33,7 +33,7 @@
 
 use crate::compiler_item::CompilerItem;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
@@ -118,7 +118,7 @@ impl Rule for ShortPushStrRule {
 /// receiver and a short ASCII literal, build the equivalent per-byte
 /// `place.push(ch)` statements and return them; otherwise `None`.
 fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
-    let StmtKind::Expr(expr_id) = engine.body.stmts[stmt].kind else {
+    let StmtKind::Expr(Operand::Expr(expr_id)) = engine.body.stmts[stmt].kind else {
         return None;
     };
 
@@ -138,23 +138,26 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         (*receiver, args[0].expr)
     };
 
-    if !is_duplicable_receiver(&*engine.body, receiver) {
+    let receiver_expr = receiver.as_expr()?;
+    if !is_duplicable_receiver(&*engine.body, receiver_expr) {
         return None;
     }
 
     // `push_str` takes `&String`, so every call site — source-level
     // `push_str(&"...")` and template lowering alike — passes the literal
-    // through an explicit `Ref`. Match through it to reach the
-    // `StringLiteral`.
+    // through an explicit `Ref`. Match through it to reach the promoted
+    // `ValueKind::String` in the pool.
     let s = {
+        let arg0_expr = arg0.as_expr()?;
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
-        } = &engine.body.exprs[arg0].kind
+        } = &engine.body.exprs[arg0_expr].kind
         else {
             return None;
         };
-        let ExprKind::StringLiteral(s) = &engine.body.exprs[*inner].kind else {
+        let vid = inner.as_value()?;
+        let crate::nir_value_graph::ValueKind::String(s) = engine.body.values.kind(vid) else {
             return None;
         };
         s.clone()
@@ -167,11 +170,12 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     let mut stmts = Vec::with_capacity(s.len());
     for byte in s.bytes() {
         let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver);
-        let char_arg = engine.alloc_expr(ExprKind::CharLiteral(ch), TypeTable::CHAR, span);
+        let recv_clone = engine.clone_expr(receiver.as_expr().expect("skeleton operand"));
+        let char_arg =
+            engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
-                receiver: recv_clone,
+                receiver: recv_clone.into(),
                 func: ctx.push_char.clone(),
                 type_args: Vec::new(),
                 args: vec![ArenaCallArg {
@@ -182,7 +186,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             TypeTable::UNIT,
             span,
         );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call), span));
+        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
     }
     Some(stmts)
 }
@@ -201,11 +205,13 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
-        ExprKind::FieldAccess { expr: inner, .. } => is_duplicable_receiver(body, *inner),
+        ExprKind::FieldAccess { expr: inner, .. } => {
+            is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand"))
+        }
         ExprKind::Unary {
             op: NirUnaryOp::Deref | NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => is_duplicable_receiver(body, *inner),
+        } => is_duplicable_receiver(body, inner.as_expr().expect("skeleton operand")),
         _ => false,
     }
 }

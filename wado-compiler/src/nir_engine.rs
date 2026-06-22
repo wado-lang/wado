@@ -22,8 +22,8 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::NirLocal;
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
+    PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -80,21 +80,6 @@ impl EngineBuffers {
     }
 }
 
-/// A parked engine analysis — the `ValueGraph` plus the alias-set inputs it was
-/// built from — that an unchanged function reuses across passes (see
-/// [`Engine::with_analysis`] / [`Engine::into_analysis`]). Owns its data (no
-/// body borrow), so it survives between the per-pass engine sessions. Only
-/// passes that configure the session identically may share one: same alias
-/// sets and the same (empty) `param_locals` seeding.
-pub struct CachedAnalysis {
-    value_graph: crate::nir_value_graph::builder::ValueGraphBuild,
-    aliased_locals: IndexSet<u32>,
-    untrackable_locals: IndexSet<u32>,
-    mut_escaped_locals: IndexSet<u32>,
-    body_address_taken: Option<IndexSet<u32>>,
-    param_locals: Vec<u32>,
-}
-
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.
@@ -107,16 +92,11 @@ pub struct Engine<'a> {
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
     locals: &'a mut Vec<NirLocal>,
-    /// Lazy per-session `ValueGraph` cache. `None` until the first
-    /// [`Engine::value`] / [`Engine::value_kind`] call; cleared by
-    /// [`Engine::invalidate_value_graph`]. See [`crate::nir_value_graph`]
-    /// for the data model.
-    value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
     /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
-    /// cleared with [`Engine::invalidate_value_graph`] so a rebuild after
-    /// edits rescans. Consumed by `Local`-read exclusions
-    /// (`store_load_forward`, licm's arithmetic hoist).
+    /// cleared with [`Engine::invalidate_address_taken`] so a rescan picks up
+    /// edits. Consumed by `Local`-read exclusions (`store_load_forward`, licm's
+    /// arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
     /// Reference-aliased locals (address-taken / `with stores[p]` /
     /// reference-typed). The `ValueGraph` builder invalidates these
@@ -137,10 +117,23 @@ pub struct Engine<'a> {
     /// passes consuming [`Engine::loop_entry_value`] must call
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
+    /// `ExprId` indices of calls that mutate no caller local
+    /// ([`crate::optimize::alias::pure_calls`]); the build skips their per-call
+    /// `mut_escaped` bump. Empty (conservative — every call bumps) unless a pass
+    /// supplies it via [`Engine::set_pure_calls`] before the first value query.
+    pure_calls: IndexSet<crate::nir_arena::ExprId>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
+    /// Set once a caller applies a deliberate [`Engine::value_union`] — a
+    /// semantic merge from an external proof (e.g. a guard implying `x ≡ y`),
+    /// not structural congruence. Such a union intentionally coarsens the graph
+    /// beyond what a context-free fresh build derives, so the `WADO_VERIFY_VG`
+    /// refinement oracle (which validates *structural* maintenance) no longer
+    /// applies and is skipped. No production pass unions, so this stays false
+    /// outside the union unit tests.
+    manual_union_applied: bool,
 }
 
 impl<'a> Engine<'a> {
@@ -159,72 +152,23 @@ impl<'a> Engine<'a> {
             body,
             buf,
             locals,
-            value_graph: None,
             body_address_taken: None,
             aliased_locals: IndexSet::default(),
             untrackable_locals: IndexSet::default(),
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
+            pure_calls: IndexSet::default(),
             vg_type_table: None,
+            manual_union_applied: false,
         };
+        // The value graph lives on `Body` and is built once, then maintained
+        // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
+        // structural-pass coarsening). A new session reuses it as-is — there is
+        // no session-start drop and no rebuild path (build-once is invariant).
         engine.build_parents();
         engine.build_uses();
         engine.seed_post_order();
         engine
-    }
-
-    /// Build a session over `body`, seeding it with a previously-parked
-    /// [`CachedAnalysis`] instead of recomputing the alias sets and the
-    /// `ValueGraph`. Sound only when `body` is unchanged since the analysis was
-    /// parked (the caller gates this on a body-version). The parent map and use
-    /// index are still rebuilt — they are cheap and the buffers are scratch.
-    pub fn with_analysis(
-        body: &'a mut Body,
-        buf: &'a mut EngineBuffers,
-        locals: &'a mut Vec<NirLocal>,
-        type_table: &'a crate::tir::TypeTable,
-        cached: CachedAnalysis,
-    ) -> Self {
-        buf.reset_for(body);
-        let mut engine = Self {
-            body,
-            buf,
-            locals,
-            value_graph: Some(cached.value_graph),
-            body_address_taken: cached.body_address_taken,
-            aliased_locals: cached.aliased_locals,
-            untrackable_locals: cached.untrackable_locals,
-            mut_escaped_locals: cached.mut_escaped_locals,
-            param_locals: cached.param_locals,
-            vg_type_table: Some(type_table),
-        };
-        engine.build_parents();
-        engine.build_uses();
-        engine.seed_post_order();
-        engine
-    }
-
-    /// Extract the session's `ValueGraph` + alias analysis for parking, or
-    /// `None` if an edit invalidated the value graph (then a reuse would be
-    /// stale, so the caller must not park it).
-    pub fn into_analysis(self) -> Option<CachedAnalysis> {
-        let Engine {
-            value_graph,
-            aliased_locals,
-            untrackable_locals,
-            mut_escaped_locals,
-            body_address_taken,
-            param_locals,
-            ..
-        } = self;
-        Some(CachedAnalysis {
-            value_graph: value_graph?,
-            aliased_locals,
-            untrackable_locals,
-            mut_escaped_locals,
-            body_address_taken,
-            param_locals,
-        })
     }
 
     /// Return the [`ValueId`] of `expr` if the per-function `ValueGraph`
@@ -232,16 +176,78 @@ impl<'a> Engine<'a> {
     /// control-flow expressions and for any `ExprId` allocated after the
     /// cache was built. Built lazily on first call.
     ///
-    /// # Invalidation contract
+    /// # Maintenance contract
     ///
-    /// Edits via `replace_expr_kind` / `set_block_stmts` / `alloc_*` do
-    /// **not** invalidate this cache — it keeps returning the VNs from
-    /// build time. Snapshot any VN results before editing, or call
-    /// [`Engine::invalidate_value_graph`] to force a rebuild. See
-    /// `optimize/cse.rs` and `optimize/store_load_forward.rs`.
+    /// The graph is built once and maintained in place — there is no rebuild.
+    /// Edits via the engine API (`replace_expr_kind` / `redirect_expr`) keep it
+    /// current through `maintain_value_after_edit`; a structural pass that edits
+    /// the arena directly (`inline`) coarsens the touched region, then regrows
+    /// each splice point's *constants* ([`crate::nir_value_graph::builder::build_scoped`]).
+    /// A query reflects the maintained state.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        self.value_graph.as_ref()?.value_of.get(&expr).copied()
+        if let Some(v) = self.body.value_graph.as_ref()?.value_of.get(&expr).copied() {
+            return Some(v);
+        }
+        // Build-once pure-node maintenance. After a structural pass (`inline`)
+        // clears `value_of`, a **pure** node's value is recomputable from its
+        // operands: a promoted `Operand::Value` survives the clear, and a skeleton
+        // operand resolves recursively. This re-derives only `Binary` / non-address
+        // `Unary` / `Cast` — never a leaf (`Local` / `FieldAccess`), whose value is
+        // flow-dependent and must come from promotion, not query-time guessing — so
+        // the maintained graph still refines a fresh build (an unpromoted leaf stays
+        // `None`, never a wrong identity). Caches the result.
+        self.maintain_pure_node(expr)
+    }
+
+    /// Re-derive `expr`'s value from its operands for the [`Engine::value`]
+    /// build-once fallback. Operand-determined kinds only (`Binary`, non-address
+    /// `Unary`, `Cast`); every other kind — and any node with an unresolved
+    /// operand — yields `None`. Recurses through [`Engine::operand_value`] so a
+    /// pure subtree over promoted leaves resolves whole; caches in `value_of`.
+    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.body.value_graph.as_ref()?;
+        let kind = self.body.exprs[expr].kind.clone();
+        let result_ty = self.body.exprs[expr].type_id;
+        let v = match kind {
+            ExprKind::Binary { left, op, right } => {
+                let lhs = self.operand_value(left)?;
+                let rhs = self.operand_value(right)?;
+                self.body.values.binary(op, lhs, rhs, result_ty)
+            }
+            ExprKind::Unary { op, expr: inner } => {
+                use crate::nir::NirUnaryOp;
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                    return None;
+                }
+                let operand = self.operand_value(inner)?;
+                self.body.values.unary(op, operand, result_ty)
+            }
+            ExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                let operand = self.operand_value(inner)?;
+                self.body.values.cast(operand, target_type)
+            }
+            _ => return None,
+        };
+        self.body
+            .value_graph
+            .as_mut()
+            .unwrap()
+            .value_of
+            .insert(expr, v);
+        Some(v)
+    }
+
+    /// The [`ValueId`] of an operand: the promoted value directly, or the
+    /// skeleton expr's value from the graph.
+    pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+        match op {
+            Operand::Value(v) => Some(v),
+            Operand::Expr(e) => self.value(e),
+        }
     }
 
     /// Read-only view of a value's kind. The returned reference borrows the
@@ -252,16 +258,7 @@ impl<'a> Engine<'a> {
         id: crate::nir_value_graph::ValueId,
     ) -> &crate::nir_value_graph::ValueKind {
         self.ensure_value_graph();
-        self.value_graph.as_ref().unwrap().pool.kind(id)
-    }
-
-    /// First `ExprId` observed producing the given literal `ValueId`. Returns
-    /// `None` if `id` is not a literal kind (or no expression produced it).
-    /// Lets a rewrite reuse the original literal `ExprKind` — including its
-    /// source `repr` — when substituting a literal at a use site.
-    pub fn literal_source(&mut self, id: crate::nir_value_graph::ValueId) -> Option<ExprId> {
-        self.ensure_value_graph();
-        self.value_graph.as_ref()?.literal_source.get(&id).copied()
+        self.body.values.kind(id)
     }
 
     /// The `ValueId` a read of `local` would produce in the pre-header of
@@ -277,20 +274,185 @@ impl<'a> Engine<'a> {
         local: u32,
     ) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        self.value_graph
-            .as_ref()
-            .unwrap()
+        self.body
+            .value_graph
+            .as_ref()?
             .loop_entry_values
             .get(&loop_body)?
             .get(&local)
             .copied()
     }
 
-    /// Drop the cached `ValueGraph` so the next [`Engine::value`] call
-    /// rebuilds. Used by rules that intend to query the value graph again
-    /// after a structural rewrite that would invalidate the prior build.
-    pub fn invalidate_value_graph(&mut self) {
-        self.value_graph = None;
+    /// Record `expr`'s value in the live graph, keeping it current after an
+    /// edit that introduced `expr` or re-pointed it to a known value (e.g. a
+    /// pass that creates a temp bound to an already-computed value). The next
+    /// graph query then resolves `expr` without a rebuild. No-op when the graph
+    /// is not built yet — the lazy build derives the value from the body.
+    pub fn set_value(&mut self, expr: ExprId, vid: crate::nir_value_graph::ValueId) {
+        if let Some(vg) = self.body.value_graph.as_mut() {
+            vg.value_of.insert(expr, vid);
+        }
+    }
+
+    /// Maintain the live graph after a value-preserving edit introduced the pure
+    /// expression `expr`: compute its `ValueId` from its operands' already-recorded
+    /// values, hash-cons it, and record it — no rebuild. Returns the value, or
+    /// `None` when the graph is not built, `expr` is impure, or an operand has no
+    /// recorded value (a flow-sensitive `Local` / `FieldAccess`, conservatively
+    /// skipped — a later query then sees no identity, never a wrong one).
+    ///
+    /// Sound exactly for the nodes whose value is fixed by their operands'
+    /// values — the operand-promotion slots: literals, `Binary`, `Unary` (not the
+    /// address-taking `Ref` / `MutRef` / `Deref`), `Cast`. It does not fold
+    /// (`2 + 3` stays a `Binary` rather than `5`), so the maintained graph is
+    /// never more precise than a fresh build, only equal or conservatively less —
+    /// never wrong. This is the primitive structural passes will call at a splice
+    /// point to grow the graph instead of forcing a rebuild.
+    pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+        self.body.value_graph.as_ref()?;
+        let kind = self.body.exprs[expr].kind.clone();
+        let result_ty = self.body.exprs[expr].type_id;
+        // The pool lives on the body, `value_of` on the cached graph — disjoint
+        // fields, borrowed separately so interning and operand lookups coexist.
+        let v = {
+            let pool = &mut self.body.values;
+            let value_of = &self.body.value_graph.as_ref().unwrap().value_of;
+            // A pure operand resolves to its promoted `ValueId` directly, or
+            // through `value_of` for a skeleton subtree.
+            let operand_value = |op: Operand| match op {
+                Operand::Value(v) => Some(v),
+                Operand::Expr(e) => value_of.get(&e).copied(),
+            };
+            match kind {
+                ExprKind::Binary { left, op, right } => {
+                    let lhs = operand_value(left)?;
+                    let rhs = operand_value(right)?;
+                    pool.binary(op, lhs, rhs, result_ty)
+                }
+                ExprKind::Unary { op, expr: inner } => {
+                    use crate::nir::NirUnaryOp;
+                    if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                        return None;
+                    }
+                    let operand = operand_value(inner)?;
+                    pool.unary(op, operand, result_ty)
+                }
+                ExprKind::Cast {
+                    expr: inner,
+                    target_type,
+                } => {
+                    let operand = operand_value(inner)?;
+                    pool.cast(operand, target_type)
+                }
+                _ => return None,
+            }
+        };
+        self.body
+            .value_graph
+            .as_mut()
+            .unwrap()
+            .value_of
+            .insert(expr, v);
+        Some(v)
+    }
+
+    /// Grow the live `ValueGraph` with the forwarded constant value of every read
+    /// of a bare scalar local in `scalars`, re-deriving them through a scratch
+    /// re-walk (the same splice-point growth `inline` uses — no live rebuild).
+    ///
+    /// A structural pass (SROA) that introduces bare scalar stores
+    /// (`__sroa_x = 99; … __sroa_x …`) leaves the build-once graph — built, and
+    /// by `inline` coarsened, before the pass — with no value for the new reads,
+    /// so store→load forwarding misses them. Bare-local forwarding is immune to
+    /// the call/heap bumps that defeat the pre-SROA *field* form, so a re-walk
+    /// recovers each read's reaching constant. Only constants are kept (a fresh
+    /// build forwards the identical store value, so the merge cannot over-merge);
+    /// non-constant scalar values are left for the next query to derive.
+    pub fn grow_bare_local_constants(&mut self, scalars: &IndexSet<u32>) {
+        use crate::nir_value_graph::builder;
+        // Only grow an already-built graph: building it here would use this
+        // session's alias config, which is sound only when the caller has set the
+        // real sets (`store_load_forward` does). A missing graph is left for the
+        // natural lazy build at the next query.
+        if scalars.is_empty() || self.body.value_graph.is_none() {
+            return;
+        }
+        let root = self.body.root;
+        let live_base = self.body.values.len() as u32;
+        let mut scratch = self.body.values.clone();
+        let empty = crate::hashmap::IndexMap::default();
+        // The real alias sets, not a maximally-conservative `all`: with `all` as
+        // `mut_escaped`, every call would bump every local to a fresh opaque
+        // (`bump_call_effects`), destroying a bare scalar's reaching constant
+        // across the calls between its store and a later read. A SROA scalar is
+        // non-escaping, so the real sets leave it untouched by calls — exactly
+        // the forwarding we need to recover. (`pure_calls` is left empty here:
+        // bumping at every call is conservative — it only forgoes a forward.)
+        let vo = builder::build_scoped(
+            self.body,
+            root,
+            0,
+            &empty,
+            &self.aliased_locals,
+            &self.untrackable_locals,
+            &self.mut_escaped_locals,
+            self.vg_type_table,
+            &mut scratch,
+            None,
+            live_base,
+        );
+        for (e, v) in vo {
+            if let ExprKind::Local { index, .. } = &self.body.exprs[e].kind
+                && scalars.contains(index)
+                && builder::is_const_value(&self.body.values, v)
+            {
+                let vg = self.body.value_graph.as_mut().unwrap();
+                vg.value_of.insert(e, v);
+                vg.analysis_only.insert(e);
+            }
+        }
+    }
+
+    /// The class representative of `id` in the session's value graph. Two ids
+    /// with the same representative denote the same value. See
+    /// [`crate::nir_value_graph::ValuePool::find`].
+    pub fn value_find(
+        &mut self,
+        id: crate::nir_value_graph::ValueId,
+    ) -> crate::nir_value_graph::ValueId {
+        self.ensure_value_graph();
+        self.body.values.find(id)
+    }
+
+    /// Prove `a ≡ b` in the session's value graph by merging their classes,
+    /// returning the surviving representative. Call
+    /// [`Engine::rebuild_value_congruence`] after a batch of unions to restore
+    /// congruence (so structurally-equal parents re-merge).
+    ///
+    /// Unions live in the build-once graph and persist with it (there is no
+    /// rebuild that would discard them).
+    pub fn value_union(
+        &mut self,
+        a: crate::nir_value_graph::ValueId,
+        b: crate::nir_value_graph::ValueId,
+    ) -> crate::nir_value_graph::ValueId {
+        self.ensure_value_graph();
+        self.manual_union_applied = true;
+        self.body.values.union(a, b)
+    }
+
+    /// Restore congruence after a batch of [`Engine::value_union`] calls. See
+    /// [`crate::nir_value_graph::ValuePool::rebuild`].
+    pub fn rebuild_value_congruence(&mut self) {
+        self.ensure_value_graph();
+        self.body.values.rebuild();
+    }
+
+    /// Drop the session's `&local` address-taken scan so the next
+    /// [`Engine::body_address_taken`] recomputes it. The value graph is
+    /// **never** dropped — it is built once and maintained in place (build-once
+    /// is a structural invariant; there is no rebuild path).
+    pub fn invalidate_address_taken(&mut self) {
         self.body_address_taken = None;
     }
 
@@ -306,48 +468,50 @@ impl<'a> Engine<'a> {
         self.body_address_taken.as_ref().unwrap()
     }
 
-    /// Record the owning function's parameter local indices so the
-    /// lazily-built `ValueGraph` seeds them up front (see the field doc on
-    /// `param_locals`). Must be called before the first value query; a later
-    /// change forces a rebuild on next query.
+    /// Locals that escape by mutable reference — `&mut v`, a `&mut`-arg / `&mut
+    /// self` call, or a `stores` stash — so a callee may mutate their fields.
+    /// Set by [`Engine::set_alias_sets`]; a pass treating a field read as
+    /// loop-/function-invariant must exclude these receivers.
+    pub fn mut_escaped(&self) -> &IndexSet<u32> {
+        &self.mut_escaped_locals
+    }
+
+    /// Record the owning function's parameter local indices so the value graph
+    /// seeds them up front (see the field doc on `param_locals`). Used by the
+    /// one build-once construction; the graph is never rebuilt on a later change.
     pub fn set_param_locals(&mut self, locals: Vec<u32>) {
-        if self.param_locals != locals {
-            self.param_locals = locals;
-            self.value_graph = None;
-        }
+        self.param_locals = locals;
+    }
+
+    /// Record the `ExprId` indices of calls that mutate no caller local, so the
+    /// one build-once construction skips their per-call `mut_escaped` bump. Supply
+    /// before the first value query (the build is lazy); the persisted config
+    /// carries it so the verify oracle rebuilds consistently.
+    pub fn set_pure_calls(&mut self, pure_calls: IndexSet<crate::nir_arena::ExprId>) {
+        self.pure_calls = pure_calls;
     }
 
     /// Record the function's reference-aliased and `stores`-aliased locals so
-    /// the lazily-built `ValueGraph` invalidates field forwarding for them at
-    /// the right granularity. Must be called before the first value query; a
-    /// later change forces a rebuild on next query. Without it the builder
-    /// treats every receiver as non-aliased — sound only when the function has
-    /// no reference aliasing, so passes that may see aliasing must supply it.
+    /// the value graph invalidates field forwarding for them at the right
+    /// granularity. Used by the one build-once construction. Without it the
+    /// builder treats every receiver as non-aliased — sound only when the
+    /// function has no reference aliasing, so passes that may see aliasing must
+    /// supply it before the first value query.
     pub fn set_alias_sets(
         &mut self,
         aliased: IndexSet<u32>,
         untrackable: IndexSet<u32>,
         mut_escaped: IndexSet<u32>,
     ) {
-        if self.aliased_locals != aliased
-            || self.untrackable_locals != untrackable
-            || self.mut_escaped_locals != mut_escaped
-        {
-            self.aliased_locals = aliased;
-            self.untrackable_locals = untrackable;
-            self.mut_escaped_locals = mut_escaped;
-            self.value_graph = None;
-        }
+        self.aliased_locals = aliased;
+        self.untrackable_locals = untrackable;
+        self.mut_escaped_locals = mut_escaped;
     }
 
-    /// Provide the type table so the lazily-built `ValueGraph` folds pure
-    /// arithmetic on literal operands (`2 + 3 → 5`). Must be called before the
-    /// first value query; a later change forces a rebuild on next query.
+    /// Provide the type table so the value graph folds pure arithmetic on
+    /// literal operands (`2 + 3 → 5`). Used by the one build-once construction.
     pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
-        if self.vg_type_table.map(std::ptr::from_ref) != Some(std::ptr::from_ref(type_table)) {
-            self.vg_type_table = Some(type_table);
-            self.value_graph = None;
-        }
+        self.vg_type_table = Some(type_table);
     }
 
     /// The type table supplied for value-graph folding, if any. Used by
@@ -358,18 +522,91 @@ impl<'a> Engine<'a> {
     }
 
     fn ensure_value_graph(&mut self) {
-        if self.value_graph.is_some() {
+        if self.body.value_graph.is_some() {
+            self.verify_maintained_graph();
             return;
         }
+        // Size-gate the persisted value graph: building it, plus the inline-time
+        // `build_scoped` scratch-pool clone, scales with function size — under
+        // `wado test`'s parallel compilation that OOMs on generated parsers
+        // (ANTLR4 drivers). Past the threshold, skip it: every consumer already
+        // guards `value_graph.is_none()`.
+        const VG_MAX_EXPRS: usize = 5000;
+        if self.body.exprs.len() > VG_MAX_EXPRS {
+            return;
+        }
+        crate::optimize::vg_measure::record_actual_build(&*self.body);
         let build = crate::nir_value_graph::builder::build(
-            &*self.body,
+            &mut *self.body,
             &self.param_locals,
             &self.aliased_locals,
             &self.untrackable_locals,
             &self.mut_escaped_locals,
+            &self.pure_calls,
             self.vg_type_table,
         );
-        self.value_graph = Some(build);
+        self.body.value_graph = Some(build);
+    }
+
+    /// Soundness net for per-edit maintenance (`WADO_VERIFY_VG`): rebuild a fresh
+    /// graph with the config the graph was built with and assert the maintained
+    /// partition *refines* it — the maintained graph may merge a pair only if a
+    /// fresh build also merges it. An over-merge is a value the optimizer could
+    /// miscompile through; fail loudly. Off (and free) unless `WADO_VERIFY_VG` is
+    /// set. The core instrument for the all-pass maintenance work.
+    fn verify_maintained_graph(&mut self) {
+        if !crate::optimize::vg_measure::verify_enabled()
+            || self.body.value_graph.is_none()
+            || self.manual_union_applied
+        {
+            return;
+        }
+        let cfg = self.body.value_graph.as_ref().unwrap().config.clone();
+        let fresh = crate::nir_value_graph::builder::build(
+            &mut *self.body,
+            &cfg.param_locals,
+            &cfg.aliased,
+            &cfg.untrackable,
+            &cfg.mut_escaped,
+            &cfg.pure_calls,
+            self.vg_type_table,
+        );
+        let maintained = self.body.value_graph.as_ref().unwrap();
+        // Live exprs only (a fresh build walks from the root); exclude
+        // splice-point const re-valuation results (seed-sourced, can be more
+        // precise than fresh — outside the refine relation).
+        let exprs: Vec<ExprId> = fresh
+            .value_of
+            .keys()
+            .copied()
+            .filter(|e| !maintained.analysis_only.contains(e))
+            .collect();
+        if let Err(msg) = crate::nir_value_graph::builder::partition_refines(
+            &mut self.body.values,
+            maintained,
+            &fresh,
+            &exprs,
+        ) {
+            let detail = crate::nir_value_graph::builder::first_overmerge_pair(
+                &mut self.body.values,
+                maintained,
+                &fresh,
+                &exprs,
+            )
+            .map(|(a, b)| {
+                format!(
+                    "\n  {a:?} = {:?}\n  {b:?} = {:?}\n  maintained: {a:?}->{:?} {b:?}->{:?}\n  fresh: {a:?}->{:?} {b:?}->{:?}",
+                    self.body.exprs[a].kind,
+                    self.body.exprs[b].kind,
+                    maintained.value_of.get(&a),
+                    maintained.value_of.get(&b),
+                    fresh.value_of.get(&a),
+                    fresh.value_of.get(&b),
+                )
+            })
+            .unwrap_or_default();
+            panic!("WADO_VERIFY_VG: maintained graph over-merges vs a fresh build: {msg}{detail}");
+        }
     }
 
     /// Read-only view of the owning function's local list. Some rules
@@ -555,6 +792,7 @@ impl<'a> Engine<'a> {
     /// kind's id children, and re-enqueues the affected neighbourhood — the
     /// node's parent (its context may now reduce) and the new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
+        crate::optimize::vg_measure::record_inplace_edit();
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
@@ -580,6 +818,192 @@ impl<'a> Engine<'a> {
         if let Some(p) = self.parent_of(NodeRef::Expr(id)) {
             self.enqueue(p);
         }
+        // Keep the value graph current through this edit (WEP: maintenance, not
+        // rebuild). Re-derive `id`'s value and propagate up its ancestors.
+        if self.body.value_graph.is_some() {
+            self.maintain_value_after_edit(id);
+        }
+    }
+
+    /// Maintain the value graph after `id`'s kind changed in place: re-derive
+    /// `id`'s value and propagate up its ancestor chain until a value is
+    /// unchanged. An expr whose value can no longer be derived (impure /
+    /// flow-dependent — e.g. a `FieldAccess`, a `Local`, a `Call`) has its
+    /// `value_of` entry *removed* rather than left stale: a later query then
+    /// sees no value identity (conservative), never a wrong one. This keeps the
+    /// graph a sound description of the edited body without a rebuild.
+    fn maintain_value_after_edit(&mut self, id: ExprId) {
+        let mut cur = id;
+        loop {
+            let old = self
+                .body
+                .value_graph
+                .as_ref()
+                .unwrap()
+                .value_of
+                .get(&cur)
+                .copied();
+            // `maintain_pure_value` re-interns a pure kind and updates `value_of`;
+            // for a kind it cannot derive it returns `None` and leaves the (now
+            // stale) entry, which we drop.
+            if self.maintain_pure_value(cur).is_none() {
+                self.body
+                    .value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .swap_remove(&cur);
+            }
+            let new = self
+                .body
+                .value_graph
+                .as_ref()
+                .unwrap()
+                .value_of
+                .get(&cur)
+                .copied();
+            let changed = new != old;
+            let parent = self.parent_of(NodeRef::Expr(cur));
+            // If `cur` is the value feeding a local binding (`let L = cur` or
+            // `L = cur`) and that value changed, every later read of `L` — and
+            // every value derived from one — may now be stale. The ancestor walk
+            // here never reaches those readers (a `Let`/`Assign` boundary breaks
+            // the chain), so drop them explicitly — otherwise a later read keeps
+            // a stale value and the maintained graph over-merges.
+            if changed && let Some(local) = self.local_bound_by(cur, parent) {
+                self.drop_local_readers(local);
+            }
+            if !changed {
+                break;
+            }
+            match parent {
+                Some(NodeRef::Expr(p)) => cur = p,
+                _ => break,
+            }
+        }
+    }
+
+    /// The local index bound by `cur` when `cur` is the value expression of a
+    /// `let L = cur` statement or an `L = cur` assignment; `None` otherwise.
+    fn local_bound_by(&self, cur: ExprId, parent: Option<NodeRef>) -> Option<u32> {
+        match parent {
+            Some(NodeRef::Stmt(s)) => match &self.body.stmts[s].kind {
+                StmtKind::Let {
+                    local_index,
+                    value: Operand::Expr(v),
+                    ..
+                } if *v == cur => Some(*local_index),
+                _ => None,
+            },
+            Some(NodeRef::Expr(p)) => match &self.body.exprs[p].kind {
+                ExprKind::Assign {
+                    target,
+                    value: Operand::Expr(v),
+                } if *v == cur => match &self.body.exprs[*target].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Drop the value-graph entry of every read of `local` and of every value
+    /// derived from such a read (each reader walked up to the root). Called when
+    /// `local`'s bound value changed: those entries were derived from the old
+    /// value and a fresh build would split them, so leaving them is an over-merge.
+    /// Conservatively over-drops (a read's pure ancestors that don't transitively
+    /// depend on it), which only costs a missed optimization — never a wrong merge.
+    fn drop_local_readers(&mut self, local: u32) {
+        let Some(readers) = self.buf.uses.get(&local).map(|u| u.reads.clone()) else {
+            return;
+        };
+        for r in readers {
+            let mut c = r;
+            loop {
+                self.body
+                    .value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .swap_remove(&c);
+                match self.parent_of(NodeRef::Expr(c)) {
+                    Some(NodeRef::Expr(p)) => c = p,
+                    _ => break,
+                }
+            }
+        }
+    }
+
+    /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
+    /// in its parent (WEP: The Live `ValueGraph`). Interns `value` width-preserving
+    /// (carrying `id`'s recorded type) and swaps the parent's `Operand::Expr(id)`
+    /// slot to the promoted value. `id`'s node is left orphaned (later DCE'd); its
+    /// own `Local` mention, if any, is dropped from the use index, matching
+    /// [`Self::replace_expr_kind`]. Returns `false` (a no-op) when `id` has no
+    /// parent, or the parent references it through a non-operand slot — the caller
+    /// then keeps the skeleton form.
+    pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
+        use crate::const_eval::Value;
+        use crate::nir_value_graph::ValueKind;
+        let type_id = self.body.exprs[id].type_id;
+        let kind = match value {
+            Value::Int { value, .. } => ValueKind::Int(value, type_id),
+            Value::Float { value, .. } => ValueKind::Float(value.to_bits(), type_id),
+            Value::Bool(b) => ValueKind::Bool(b),
+            Value::Char(c) => ValueKind::Char(c),
+        };
+        let vid = self.body.values.alloc_unshared(kind, type_id);
+        self.redirect_expr(id, Operand::Value(vid))
+    }
+
+    /// Edit API: redirect `id`'s parent operand slot to `new` (WEP: The Live
+    /// `ValueGraph`). Used to splice a promoted constant — or an existing
+    /// sub-expression — into the position `id` occupies, orphaning `id`'s node.
+    /// Returns `false` (a no-op) when `id` has no parent or the parent references
+    /// it through a non-operand slot.
+    pub fn redirect_expr(&mut self, id: ExprId, new: Operand) -> bool {
+        let Some(parent) = self.parent_of(NodeRef::Expr(id)) else {
+            return false;
+        };
+        if !self.body.replace_operand_to(parent, id, new) {
+            return false;
+        }
+        crate::optimize::vg_measure::record_inplace_edit();
+        if let Operand::Expr(e) = new {
+            self.set_parent(NodeRef::Expr(e), Some(parent));
+            self.enqueue(NodeRef::Expr(e));
+        }
+        // `id` is now orphaned. Drop its own `Local` read mention so a binding it
+        // named is not kept artificially live (the discarded subtree's deeper
+        // mentions stay — a stale read is conservative, never drops a live one).
+        if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
+            let index = *index;
+            if let Some(u) = self.buf.uses.get_mut(&index) {
+                u.reads.retain(|&r| r != id);
+            }
+        }
+        self.set_parent(NodeRef::Expr(id), None);
+        self.enqueue(parent);
+        // A promoted value feeds the parent's value derivation directly through
+        // the swapped operand; re-derive up the ancestor chain. `id` is now
+        // orphaned; its (dead) `value_of` entry is never emitted (the node has no
+        // parent slot, so no walk reaches it; DCE reclaims it).
+        if self.body.value_graph.is_some() {
+            if let Some(vid) = new.as_value() {
+                self.body
+                    .value_graph
+                    .as_mut()
+                    .unwrap()
+                    .value_of
+                    .insert(id, vid);
+            }
+            if let NodeRef::Expr(p) = parent {
+                self.maintain_value_after_edit(p);
+            }
+        }
+        true
     }
 
     /// Edit API: promote `src`'s node content (kind + type + span) into `dst`,
@@ -601,8 +1025,8 @@ impl<'a> Engine<'a> {
         }
         let type_id = self.body.exprs[src].type_id;
         let span = self.body.exprs[src].span;
-        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Unit);
-        // `src` is now `Unit`; if it named a local, that mention belongs at
+        let src_kind = std::mem::replace(&mut self.body.exprs[src].kind, ExprKind::Dead);
+        // `src` is now `Dead`; if it named a local, that mention belongs at
         // `dst` after the move, so drop it here — `replace_expr_kind` re-adds it
         // for `dst` when `src_kind` is itself a `Local`.
         if let ExprKind::Local { index, .. } = &src_kind {
@@ -623,13 +1047,14 @@ impl<'a> Engine<'a> {
     /// tree). Use index entries for any `Let` in a dropped statement are left
     /// in place — they name a now-dead def and are simply never consulted.
     pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
+        crate::optimize::vg_measure::record_inplace_edit();
         self.body.blocks[block].stmts = stmts;
         let kids = self.body.blocks[block].stmts.clone();
         for s in &kids {
             self.set_parent(NodeRef::Stmt(*s), Some(NodeRef::Block(block)));
         }
-        for s in kids {
-            self.enqueue(NodeRef::Stmt(s));
+        for s in &kids {
+            self.enqueue(NodeRef::Stmt(*s));
         }
         self.enqueue(NodeRef::Block(block));
         if let Some(p) = self.parent_of(NodeRef::Block(block)) {
@@ -641,6 +1066,7 @@ impl<'a> Engine<'a> {
     /// children, registers a `Local` mention, and enqueues it (and its
     /// children) so a freshly built subtree is visited.
     pub fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
+        crate::optimize::vg_measure::record_node_created();
         let id = self.body.exprs.push(ExprNode {
             kind,
             type_id,
@@ -661,8 +1087,21 @@ impl<'a> Engine<'a> {
         id
     }
 
+    /// Edit API: intern a fresh constant value into the function's pool and
+    /// return it as an `Operand::Value` (WEP: The Live `ValueGraph`). For passes
+    /// that synthesize a constant in an operand position (a method arg, an
+    /// assigned value) without a source node.
+    pub fn const_operand(
+        &mut self,
+        kind: crate::nir_value_graph::ValueKind,
+        type_id: crate::tir::TypeId,
+    ) -> Operand {
+        Operand::Value(self.body.values.alloc_unshared(kind, type_id))
+    }
+
     /// Edit API: allocate a fresh statement node.
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
+        crate::optimize::vg_measure::record_node_created();
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.stmt_parent.push(None);
         let mut children = Vec::new();
@@ -681,6 +1120,7 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh block node from a statement list.
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
+        crate::optimize::vg_measure::record_node_created();
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.block_parent.push(None);
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
@@ -693,6 +1133,7 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
+        crate::optimize::vg_measure::record_node_created();
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.pat_parent.push(None);
         let mut children = Vec::new();
@@ -713,6 +1154,16 @@ impl<'a> Engine<'a> {
         let node = self.body.exprs[id].clone();
         let kind = self.clone_expr_kind(node.kind);
         self.alloc_expr(kind, node.type_id, node.span)
+    }
+
+    /// Deep-copy an operand: a promoted pure value is shared (same pool); an
+    /// effectful subtree is cloned through the engine's use-index-maintaining
+    /// `clone_expr`.
+    fn clone_operand(&mut self, op: Operand) -> Operand {
+        match op {
+            Operand::Value(v) => Operand::Value(v),
+            Operand::Expr(e) => Operand::Expr(self.clone_expr(e)),
+        }
     }
 
     /// Deep-copy the block subtree rooted at `id` into fresh arena nodes,
@@ -748,23 +1199,23 @@ impl<'a> Engine<'a> {
             } => ExprKind::GlobalVarSet {
                 module_source,
                 name,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Binary { left, op, right } => ExprKind::Binary {
-                left: self.clone_expr(left),
+                left: self.clone_operand(left),
                 op,
-                right: self.clone_expr(right),
+                right: self.clone_operand(right),
             },
             ExprKind::Unary { op, expr } => ExprKind::Unary {
                 op,
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::Assign { target, value } => ExprKind::Assign {
                 target: self.clone_expr(target),
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
             ExprKind::Cast { expr, target_type } => ExprKind::Cast {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 target_type,
             },
             ExprKind::Call {
@@ -777,14 +1228,14 @@ impl<'a> Engine<'a> {
                 args: args
                     .into_iter()
                     .map(|a| crate::nir_arena::ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
             },
             ExprKind::CmRawCall { local_name, args } => ExprKind::CmRawCall {
                 local_name,
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::MethodCall {
                 receiver,
@@ -792,13 +1243,13 @@ impl<'a> Engine<'a> {
                 type_args,
                 args,
             } => ExprKind::MethodCall {
-                receiver: self.clone_expr(receiver),
+                receiver: self.clone_operand(receiver),
                 func,
                 type_args,
                 args: args
                     .into_iter()
                     .map(|a| crate::nir_arena::ArenaCallArg {
-                        expr: self.clone_expr(a.expr),
+                        expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
                     .collect(),
@@ -808,13 +1259,13 @@ impl<'a> Engine<'a> {
                 field_index,
                 field_name,
             } => ExprKind::FieldAccess {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 field_index,
                 field_name,
             },
             ExprKind::Index { expr, index } => ExprKind::Index {
-                expr: self.clone_expr(expr),
-                index: self.clone_expr(index),
+                expr: self.clone_operand(expr),
+                index: self.clone_operand(index),
             },
             ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
@@ -822,18 +1273,18 @@ impl<'a> Engine<'a> {
                 then_branch,
                 else_branch,
             } => ExprKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_branch: self.clone_block(then_branch),
                 else_branch: else_branch.map(|b| self.clone_block(b)),
             },
             ExprKind::Match { expr, arms } => ExprKind::Match {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 arms: arms
                     .into_iter()
                     .map(|a| ArmData {
                         pattern: self.clone_pat(a.pattern),
-                        guard: a.guard.map(|g| self.clone_expr(g)),
-                        body: self.clone_expr(a.body),
+                        guard: a.guard.map(|g| self.clone_operand(g)),
+                        body: self.clone_operand(a.body),
                         span: a.span,
                     })
                     .collect(),
@@ -849,20 +1300,26 @@ impl<'a> Engine<'a> {
                     .into_iter()
                     .map(|f| crate::nir_arena::ArenaStructField {
                         name: f.name,
-                        value: self.clone_expr(f.value),
+                        value: self.clone_operand(f.value),
                         field_index: f.field_index,
                     })
                     .collect(),
             },
             ExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
-                elements: elements.into_iter().map(|e| self.clone_expr(e)).collect(),
+                elements: elements
+                    .into_iter()
+                    .map(|e| self.clone_operand(e))
+                    .collect(),
             },
             ExprKind::IndirectCall { callee, args } => ExprKind::IndirectCall {
-                callee: self.clone_expr(callee),
-                args: args.into_iter().map(|a| self.clone_expr(a)).collect(),
+                callee: self.clone_operand(callee),
+                args: args.into_iter().map(|a| self.clone_operand(a)).collect(),
             },
             ExprKind::ClosureToCanonical {
                 functor,
@@ -870,7 +1327,7 @@ impl<'a> Engine<'a> {
                 target_fn_type,
                 closure_module,
             } => ExprKind::ClosureToCanonical {
-                functor: self.clone_expr(functor),
+                functor: self.clone_operand(functor),
                 functor_id,
                 target_fn_type,
                 closure_module,
@@ -884,7 +1341,7 @@ impl<'a> Engine<'a> {
                 variant_type,
                 case_index,
                 case_name,
-                payload: payload.map(|p| self.clone_expr(p)),
+                payload: payload.map(|p| self.clone_operand(p)),
             },
             ExprKind::LabeledBlock {
                 label,
@@ -896,14 +1353,14 @@ impl<'a> Engine<'a> {
                 result_type,
             },
             ExprKind::VariantTag { expr } => ExprKind::VariantTag {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             ExprKind::VariantTest {
                 expr,
                 case_index,
                 case_name,
             } => ExprKind::VariantTest {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 case_name,
             },
@@ -912,7 +1369,7 @@ impl<'a> Engine<'a> {
                 case_index,
                 payload_type,
             } => ExprKind::VariantPayload {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
                 case_index,
                 payload_type,
             },
@@ -922,7 +1379,7 @@ impl<'a> Engine<'a> {
                 arms,
                 default,
             } => ExprKind::Switch {
-                scrutinee: self.clone_expr(scrutinee),
+                scrutinee: self.clone_operand(scrutinee),
                 min_value,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
@@ -948,19 +1405,19 @@ impl<'a> Engine<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
                 skip_value_copy,
             },
-            StmtKind::Expr(e) => StmtKind::Expr(self.clone_expr(e)),
+            StmtKind::Expr(e) => StmtKind::Expr(self.clone_operand(e)),
             StmtKind::Return { value } => StmtKind::Return {
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|e| self.clone_operand(e)),
             },
             StmtKind::If {
                 condition,
                 then_block,
                 else_block,
             } => StmtKind::If {
-                condition: self.clone_expr(condition),
+                condition: self.clone_operand(condition),
                 then_block: self.clone_block(then_block),
                 else_block: else_block.map(|b| self.clone_block(b)),
             },
@@ -969,7 +1426,7 @@ impl<'a> Engine<'a> {
             },
             StmtKind::Break { label, value } => StmtKind::Break {
                 label,
-                value: value.map(|e| self.clone_expr(e)),
+                value: value.map(|e| self.clone_operand(e)),
             },
             StmtKind::Continue => StmtKind::Continue,
             StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
@@ -983,7 +1440,7 @@ impl<'a> Engine<'a> {
             } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),
                 is_mut,
-                value: self.clone_expr(value),
+                value: self.clone_operand(value),
             },
         }
     }
@@ -1022,7 +1479,7 @@ impl<'a> Engine<'a> {
                 has_rest,
             },
             PatKind::ConstantValue { expr } => PatKind::ConstantValue {
-                expr: self.clone_expr(expr),
+                expr: self.clone_operand(expr),
             },
             // Leaves carry no id children.
             leaf => leaf,
@@ -1107,17 +1564,26 @@ mod tests {
             span: Span::default(),
         })
     }
-    fn lit(body: &mut Body, n: u64) -> ExprId {
+    fn lit(body: &mut Body, n: u64) -> Operand {
+        Operand::Value(body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32),
+            TypeTable::I32,
+        ))
+    }
+    fn bin(
+        body: &mut Body,
+        left: impl Into<Operand>,
+        op: NirBinaryOp,
+        right: impl Into<Operand>,
+    ) -> ExprId {
         e(
             body,
-            ExprKind::IntLiteral {
-                value: n,
-                repr: n.to_string(),
+            ExprKind::Binary {
+                left: left.into(),
+                op,
+                right: right.into(),
             },
         )
-    }
-    fn bin(body: &mut Body, left: ExprId, op: NirBinaryOp, right: ExprId) -> ExprId {
-        e(body, ExprKind::Binary { left, op, right })
     }
     fn local0(body: &mut Body) -> ExprId {
         e(
@@ -1143,14 +1609,19 @@ mod tests {
                 is_mut,
                 is_reactive: false,
                 type_id: TypeTable::UNIT,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
         )
     }
     fn ret_x(body: &mut Body) -> StmtId {
         let xref = local0(body);
-        s(body, StmtKind::Return { value: Some(xref) })
+        s(
+            body,
+            StmtKind::Return {
+                value: Some(xref.into()),
+            },
+        )
     }
 
     /// `{ let x = 1 + 2; return x; }`
@@ -1163,6 +1634,167 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
+    }
+
+    #[test]
+    fn set_value_records_a_value_for_a_new_expr() {
+        // Build a graph, then introduce a fresh expr and pin its value, as a
+        // pass would when creating a temp bound to a known value.
+        let mut body = mk_body(|b| {
+            let seven = lit(b, 7);
+            let st = s(b, StmtKind::Expr(seven));
+            vec![st]
+        });
+        // The promoted constant carries its own pool value.
+        let v7 = {
+            let st = body.blocks[body.root].stmts[0];
+            let StmtKind::Expr(Operand::Value(v)) = body.stmts[st].kind else {
+                unreachable!()
+            };
+            v
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        // A fresh orphan expr has no value in the already-built graph.
+        let fresh = eng.alloc_expr(
+            ExprKind::Local {
+                index: 9,
+                name: "u".to_string(),
+            },
+            TypeTable::I32,
+            Span::default(),
+        );
+        assert_eq!(eng.value(fresh), None);
+        // Pinning it keeps it resolvable without a rebuild.
+        eng.set_value(fresh, v7);
+        assert_eq!(eng.value(fresh), Some(v7));
+    }
+
+    #[test]
+    fn maintain_pure_value_matches_the_built_value_without_rebuild() {
+        // { let x = 1 + 2; return x; } — build the graph, then introduce a fresh
+        // `1 + 2` as a structural pass would and maintain it pointwise. Hash-
+        // consing makes the maintained sum share the original's identity, exactly
+        // what a full rebuild would yield, with no rebuild.
+        let mut body = sample_body();
+        let add = {
+            let st = body.blocks[body.root].stmts[0];
+            let StmtKind::Let { value, .. } = body.stmts[st].kind else {
+                unreachable!()
+            };
+            value
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let add_e = add.as_expr().unwrap();
+        let v_add = eng.value(add_e).unwrap();
+        // Reuse the original sum's operands (pure-value pool ids): a freshly
+        // spliced `1 + 2` over the same operand values hash-conses to the same
+        // `ValueId` the build produced — pointwise maintenance, no rebuild.
+        let (one, two) = match &eng.body.exprs[add_e].kind {
+            ExprKind::Binary { left, right, .. } => (*left, *right),
+            other => panic!("expected Binary, got {other:?}"),
+        };
+        // The spliced `1 + 2` must carry the same result type as the original —
+        // the result type is part of the value's hash-cons key (width-intrinsic
+        // `Binary`), so an I32 sum and a same-operand sum of another type are
+        // distinct values.
+        let add_ty = eng.body.exprs[add_e].type_id;
+        let sum = eng.alloc_expr(
+            ExprKind::Binary {
+                left: one,
+                op: NirBinaryOp::Add,
+                right: two,
+            },
+            add_ty,
+            Span::default(),
+        );
+        let v_sum = eng.maintain_pure_value(sum).unwrap();
+        assert_eq!(v_sum, v_add);
+        assert_eq!(eng.value(sum), Some(v_add));
+
+        // A flow-sensitive operand (an un-valued `Local`) is conservatively
+        // skipped — no value, never a wrong one.
+        let lx = eng.alloc_expr(
+            ExprKind::Local {
+                index: 9,
+                name: "u".to_string(),
+            },
+            TypeTable::I32,
+            Span::default(),
+        );
+        let mixed = eng.alloc_expr(
+            ExprKind::Binary {
+                left: lx.into(),
+                op: NirBinaryOp::Add,
+                right: two,
+            },
+            TypeTable::I32,
+            Span::default(),
+        );
+        assert_eq!(eng.maintain_pure_value(mixed), None);
+    }
+
+    #[test]
+    fn value_union_and_congruence_through_engine() {
+        // { x + 5; y + 5; } where x,y are local 0,1. The two sums start in
+        // distinct classes; after unioning x≡y and rebuilding, they share one.
+        fn local(body: &mut Body, index: u32) -> ExprId {
+            e(
+                body,
+                ExprKind::Local {
+                    index,
+                    name: format!("v{index}"),
+                },
+            )
+        }
+        let mut body = mk_body(|b| {
+            // Share the `5` operand across both sums: the difference under union
+            // is only `x` vs `y`, isolating the congruence check.
+            let c5 = lit(b, 5);
+            let x = local(b, 0);
+            let f = bin(b, x, NirBinaryOp::Add, c5);
+            let y = local(b, 1);
+            let g = bin(b, y, NirBinaryOp::Add, c5);
+            let sf = s(b, StmtKind::Expr(f.into()));
+            let sg = s(b, StmtKind::Expr(g.into()));
+            vec![sf, sg]
+        });
+        // The two sum expressions are the second-and-third exprs after each
+        // local+literal pair: recover them by walking the root statements.
+        let (f_expr, g_expr, x_expr, y_expr) = {
+            let stmts = &body.blocks[body.root].stmts;
+            let StmtKind::Expr(Operand::Expr(f)) = body.stmts[stmts[0]].kind else {
+                unreachable!()
+            };
+            let StmtKind::Expr(Operand::Expr(g)) = body.stmts[stmts[1]].kind else {
+                unreachable!()
+            };
+            let ExprKind::Binary { left: xf, .. } = body.exprs[f].kind else {
+                unreachable!()
+            };
+            let ExprKind::Binary { left: yg, .. } = body.exprs[g].kind else {
+                unreachable!()
+            };
+            (f, g, xf, yg)
+        };
+        let mut buf = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let vf = eng.value(f_expr).unwrap();
+        let vg = eng.value(g_expr).unwrap();
+        let vx = eng.value(x_expr.as_expr().unwrap()).unwrap();
+        let vy = eng.value(y_expr.as_expr().unwrap()).unwrap();
+        // x and y are distinct opaques, so the sums start distinct.
+        assert_ne!(eng.value_find(vx), eng.value_find(vy));
+        assert_ne!(eng.value_find(vf), eng.value_find(vg));
+        // Prove x ≡ y; congruence must make the two sums equal.
+        eng.value_union(vx, vy);
+        eng.rebuild_value_congruence();
+        assert_eq!(eng.value_find(vx), eng.value_find(vy));
+        assert_eq!(eng.value_find(vf), eng.value_find(vg));
     }
 
     #[test]
@@ -1205,27 +1837,23 @@ mod tests {
                 ExprKind::Binary { left, op, right } => (*op, *left, *right),
                 _ => return false,
             };
-            let lv = match &e.body.exprs[l].kind {
-                ExprKind::IntLiteral { value, .. } => *value,
-                _ => return false,
-            };
-            let rv = match &e.body.exprs[r].kind {
-                ExprKind::IntLiteral { value, .. } => *value,
-                _ => return false,
+            let (Some(lv), Some(rv)) = (e.body.operand_const_int(l), e.body.operand_const_int(r))
+            else {
+                return false;
             };
             let v = match op {
                 NirBinaryOp::Add => lv.wrapping_add(rv),
                 NirBinaryOp::Mul => lv.wrapping_mul(rv),
                 _ => return false,
             };
-            e.replace_expr_kind(
+            // Promote the folded scalar into the parent operand slot.
+            e.replace_expr_with_value(
                 id,
-                ExprKind::IntLiteral {
+                crate::const_eval::Value::Int {
                     value: v,
-                    repr: v.to_string(),
+                    prim: crate::tir::PrimitiveType::I32,
                 },
-            );
-            true
+            )
         }
     }
 
@@ -1247,16 +1875,19 @@ mod tests {
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
-        // The let's value is now a single IntLiteral(12).
+        // The let's value is now the promoted constant 12.
         let root = body.root;
         let s0 = body.blocks[root].stmts[0];
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        match &body.exprs[*value].kind {
-            ExprKind::IntLiteral { value, .. } => assert_eq!(*value, 12),
-            other => panic!("expected folded IntLiteral(12), got {other:?}"),
-        }
+        let Operand::Value(v) = value else {
+            panic!("expected folded constant operand, got {value:?}");
+        };
+        assert!(matches!(
+            body.values.kind(*v),
+            crate::nir_value_graph::ValueKind::Int(12, _)
+        ));
     }
 
     #[test]
@@ -1268,7 +1899,7 @@ mod tests {
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
         };
-        let original = *value;
+        let original = value.as_expr().unwrap();
         let (orig_left, orig_right) = match &body.exprs[original].kind {
             ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected Binary, got {other:?}"),
@@ -1280,16 +1911,16 @@ mod tests {
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
-        // A Binary plus its two literal operands were allocated.
-        assert_eq!(body.exprs.len(), before + 3);
+        // Only the Binary node is copied: its `1` and `2` are pure-value operands
+        // (immutable pool values), shared by the clone, not deep-copied.
+        assert_eq!(body.exprs.len(), before + 1);
         assert_ne!(clone, original);
         let (new_left, new_right) = match &body.exprs[clone].kind {
             ExprKind::Binary { left, right, .. } => (*left, *right),
             other => panic!("expected cloned Binary, got {other:?}"),
         };
-        // Deep copy: the clone's operands are fresh ids, not shared.
-        assert_ne!(new_left, orig_left);
-        assert_ne!(new_right, orig_right);
+        assert_eq!(new_left, orig_left);
+        assert_eq!(new_right, orig_right);
     }
 
     /// Demo block rule: drop every `()`-valued expression statement from a
@@ -1303,7 +1934,7 @@ mod tests {
                 .copied()
                 .filter(|s| {
                     !matches!(&e.body.stmts[*s].kind,
-                        StmtKind::Expr(ex) if matches!(e.body.exprs[*ex].kind, ExprKind::Unit))
+                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
                 })
                 .collect();
             if kept.len() == stmts.len() {
@@ -1322,7 +1953,10 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = e(b, ExprKind::Unit);
+            let unit = Operand::Value(b.values.alloc_unshared(
+                crate::nir_value_graph::ValueKind::Unit,
+                crate::tir::TypeTable::UNIT,
+            ));
             let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]
@@ -1360,7 +1994,7 @@ mod tests {
                     value: seven,
                 },
             );
-            let assign_stmt = s(b, StmtKind::Expr(assign));
+            let assign_stmt = s(b, StmtKind::Expr(assign.into()));
             vec![let_stmt, assign_stmt]
         });
         let mut __buf_eng = EngineBuffers::default();
@@ -1388,18 +2022,18 @@ mod tests {
         // `{ x; 1 + 2; }` — promote the `x` local read into the `1 + 2` node.
         let mut body = mk_body(|b| {
             let lx = local0(b);
-            let s_x = s(b, StmtKind::Expr(lx));
+            let s_x = s(b, StmtKind::Expr(lx.into()));
             let one = lit(b, 1);
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
-            let s_add = s(b, StmtKind::Expr(add));
+            let s_add = s(b, StmtKind::Expr(add.into()));
             vec![s_x, s_add]
         });
         let root = body.root;
-        let StmtKind::Expr(lx) = body.stmts[body.blocks[root].stmts[0]].kind else {
+        let StmtKind::Expr(Operand::Expr(lx)) = body.stmts[body.blocks[root].stmts[0]].kind else {
             panic!("expected expr stmt");
         };
-        let StmtKind::Expr(add) = body.stmts[body.blocks[root].stmts[1]].kind else {
+        let StmtKind::Expr(Operand::Expr(add)) = body.stmts[body.blocks[root].stmts[1]].kind else {
             panic!("expected expr stmt");
         };
         {
@@ -1415,7 +2049,7 @@ mod tests {
                 eng.body.exprs[add].kind,
                 ExprKind::Local { index: 0, .. }
             ));
-            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Unit));
+            assert!(matches!(eng.body.exprs[lx].kind, ExprKind::Dead));
             assert_eq!(eng.local_reads(0), &[add]);
         }
     }

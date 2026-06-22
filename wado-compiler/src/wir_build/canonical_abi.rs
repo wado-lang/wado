@@ -6,7 +6,7 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::nir::FunctionRef;
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 use crate::wir::{
     CanonicalIntrinsic, CmFuturePayload, CmStreamPayload, WirFuncId, WirInstr, WirType,
@@ -123,7 +123,7 @@ impl FunctionTranslator<'_, '_> {
             // path instead of the hand-rolled lift that used to live here.
             "future-write" => {
                 let value_expr = args[0].expr;
-                let value_type_id = self.body.exprs[value_expr].type_id;
+                let value_type_id = self.operand_type_id(value_expr);
                 let payload = self.cm_future_payload(self.body.exprs[receiver].type_id);
                 // Variant-shaped futures (used for trailers): pattern-match on
                 // TIR because general variant→CM lowering is not yet implemented.
@@ -135,7 +135,7 @@ impl FunctionTranslator<'_, '_> {
                     return Some(self.emit_future_write_ok_none(handle));
                 }
                 // Scalar primitives are evaluated and lowered generically.
-                let value_arg = self.translate_expr(value_expr);
+                let value_arg = self.translate_operand(value_expr);
                 Some(self.emit_future_write(handle, value_arg, value_type_id, payload))
             }
             "future-cancel-read" => {
@@ -870,7 +870,8 @@ impl FunctionTranslator<'_, '_> {
 /// Used to special-case future writes that deliver a single resource handle
 /// (e.g. trailers) via the `Result<Option<own<R>>, _>` shape, since general
 /// variant→CM-buffer lowering is not yet implemented.
-fn match_ok_some_resource(body: &Body, expr_id: ExprId) -> Option<ExprId> {
+fn match_ok_some_resource(body: &Body, op: Operand) -> Option<ExprId> {
+    let expr_id = op.as_expr()?;
     let ExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
@@ -886,19 +887,23 @@ fn match_ok_some_resource(body: &Body, expr_id: ExprId) -> Option<ExprId> {
         case_name: inner,
         payload: Some(inner_payload),
         ..
-    } = &body.exprs[*outer_payload].kind
+    } = &body.exprs[outer_payload.as_expr()?].kind
     else {
         return None;
     };
     if inner != "Some" {
         return None;
     }
-    Some(*inner_payload)
+    inner_payload.as_expr()
 }
 
-/// Detect `Result::Ok(Option::None)` or `Result::Ok(null)` at TIR level.
-/// `null` stays as `ExprKind::Null` in TIR (coerced to `Option::None` later).
-fn match_ok_none(body: &Body, expr_id: ExprId) -> bool {
+/// Detect `Result::Ok(Option::None)` or `Result::Ok(null)`.
+/// A `null` is a promoted `ValueKind::Null` operand (coerced to `Option::None`
+/// later); a None is a `VariantConstruct`.
+fn match_ok_none(body: &Body, op: Operand) -> bool {
+    let Some(expr_id) = op.as_expr() else {
+        return false;
+    };
     let ExprKind::VariantConstruct {
         case_name: outer,
         payload: Some(outer_payload),
@@ -910,13 +915,16 @@ fn match_ok_none(body: &Body, expr_id: ExprId) -> bool {
     if outer != "Ok" {
         return false;
     }
-    match &body.exprs[*outer_payload].kind {
-        ExprKind::Null => true,
-        ExprKind::VariantConstruct {
-            case_name: inner,
-            payload,
-            ..
-        } => inner == "None" && payload.is_none(),
-        _ => false,
+    match *outer_payload {
+        // `null` promotes to a value; recognise it as the None/null payload.
+        Operand::Value(v) => matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Null),
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::VariantConstruct {
+                case_name: inner,
+                payload,
+                ..
+            } => inner == "None" && payload.is_none(),
+            _ => false,
+        },
     }
 }

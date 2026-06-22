@@ -44,12 +44,14 @@
 //! matching the old visitor's recurse-then-collapse order.
 
 use crate::compiler_item::{CompilerItem, SeqField};
-use crate::hashmap::IndexSet;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
-use super::arena_query::{expr_mentions_local, is_local, is_pure_expr, stmt_mentions_local};
+use super::arena_query::{
+    is_local_operand, is_pure_operand, operand_mentions_local, stmt_mentions_local,
+};
 
 /// The builtin generic name of the raw array allocation (`builtin::array_new`).
 const ARRAY_NEW: &str = "array_new";
@@ -129,7 +131,8 @@ impl Collapser<'_> {
         // bound local reaches it. `[]` path = the local itself is the array.
         let mut targets = Vec::new();
         if let Some(value) = init_value(body, stmts[start]) {
-            collect_array_targets(body, value, &mut Vec::new(), &mut targets);
+            let mut const_env = IndexMap::default();
+            collect_array_targets(body, value, &mut Vec::new(), &mut const_env, &mut targets);
         }
         if targets.is_empty() {
             return 0;
@@ -143,8 +146,8 @@ impl Collapser<'_> {
         // Collect each target's push elements *unresolved* (bare `Local(temp)`
         // for inlining's element temps); resolution happens after the window so
         // multi-use temps can be detected first.
-        let mut pushes_per_target: Vec<Vec<ExprId>> = vec![Vec::new(); targets.len()];
-        let mut bindings: Vec<(u32, ExprId)> = Vec::new();
+        let mut pushes_per_target: Vec<Vec<Operand>> = vec![Vec::new(); targets.len()];
+        let mut bindings: Vec<(u32, Operand)> = Vec::new();
         let mut consumed = 0;
         let mut all_done = false;
         // A single target keeps materialized elements in push order, so an
@@ -193,11 +196,11 @@ impl Collapser<'_> {
             let uses = pushes_per_target
                 .iter()
                 .flatten()
-                .filter(|e| is_local(body, **e, *idx))
+                .filter(|e| is_local_operand(body, **e, *idx))
                 .count();
             if uses == 1 {
                 for element in pushes_per_target.iter_mut().flatten() {
-                    if is_local(body, *element, *idx) {
+                    if is_local_operand(body, *element, *idx) {
                         *element = *value;
                     }
                 }
@@ -216,7 +219,7 @@ impl Collapser<'_> {
             pushes_per_target
                 .iter()
                 .flatten()
-                .any(|e| expr_mentions_local(body, *e, idx))
+                .any(|e| operand_mentions_local(body, *e, idx))
         };
         if bindings
             .iter()
@@ -238,8 +241,8 @@ impl Collapser<'_> {
 
     /// Match a `PLACE.push(elem)` statement where `PLACE` roots at `local`.
     /// Returns the field path from `local` to the array and the pushed element.
-    fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, ExprId)> {
-        let StmtKind::Expr(e) = &body.stmts[stmt].kind else {
+    fn match_push(&self, body: &Body, stmt: StmtId, local: u32) -> Option<(Vec<u32>, Operand)> {
+        let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind else {
             return None;
         };
         let ExprKind::MethodCall {
@@ -254,7 +257,7 @@ impl Collapser<'_> {
         if !self.push_names.contains(&func.name) || args.len() != 1 {
             return None;
         }
-        let path = place_path(body, *receiver, local)?;
+        let path = place_path_operand(body, *receiver, local)?;
         Some((path, args[0].expr))
     }
 }
@@ -270,11 +273,11 @@ impl Collapser<'_> {
 /// multiple interleaved targets (e.g. `Bag { keys, values }`) the per-field
 /// arrays materialize one after another, which would reorder side effects
 /// across fields, so only pure temps may be resolved there.
-fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, ExprId)> {
+fn temp_binding(body: &Body, stmt: StmtId, allow_impure: bool) -> Option<(u32, Operand)> {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
             local_index, value, ..
-        } if allow_impure || is_pure_expr(body, *value) => Some((*local_index, *value)),
+        } if allow_impure || is_pure_operand(body, *value) => Some((*local_index, *value)),
         _ => None,
     }
 }
@@ -292,7 +295,7 @@ struct ArrayTarget {
 fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
     match &body.stmts[stmt].kind {
         StmtKind::Let { local_index, .. } => Some(*local_index),
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
+        StmtKind::Expr(e) => match &body.exprs[e.as_expr()?].kind {
             ExprKind::Assign { target, .. } => match &body.exprs[*target].kind {
                 ExprKind::Local { index, .. } => Some(*index),
                 _ => None,
@@ -305,9 +308,9 @@ fn init_local(body: &Body, stmt: StmtId) -> Option<u32> {
 
 fn init_value(body: &Body, stmt: StmtId) -> Option<ExprId> {
     match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } => Some(*value),
-        StmtKind::Expr(e) => match &body.exprs[*e].kind {
-            ExprKind::Assign { value, .. } => Some(*value),
+        StmtKind::Let { value, .. } => value.as_expr(),
+        StmtKind::Expr(e) => match &body.exprs[e.as_expr()?].kind {
+            ExprKind::Assign { value, .. } => value.as_expr(),
             _ => None,
         },
         _ => None,
@@ -322,21 +325,38 @@ fn collect_array_targets(
     body: &Body,
     expr: ExprId,
     path: &mut Vec<u32>,
+    const_env: &mut IndexMap<u32, u64>,
     out: &mut Vec<ArrayTarget>,
 ) {
     match &body.exprs[expr].kind {
         ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            // The direct-literal block binds `__b` to the array and yields it
-            // via a `*__b` / `__b` tail; the array struct is the let value.
-            let value = body.blocks[*block]
-                .stmts
-                .iter()
-                .find_map(|s| match &body.stmts[*s].kind {
-                    StmtKind::Let { value, .. } => Some(*value),
-                    _ => None,
-                });
-            if let Some(value) = value {
-                collect_array_targets(body, value, path, out);
+            // The array struct may be a `let __b = <array>` binding (the `*__b`
+            // direct-literal shape) or the block's tail expression (e.g.
+            // `{ let capacity = 4; List { repr: array_new(capacity), used: 0 } }`,
+            // where a dead `let capacity` survives operand promotion). Record each
+            // immutable `let x = <const int>` into `const_env` first so a later
+            // `array_new(x)` resolves through it, then recurse into every
+            // statement's value — a non-struct candidate records no target, so
+            // trying all is safe.
+            for &s in &body.blocks[*block].stmts {
+                let cand = match &body.stmts[s].kind {
+                    StmtKind::Let {
+                        local_index,
+                        is_mut,
+                        value,
+                        ..
+                    } => {
+                        if !is_mut && let Some(n) = body.operand_const_int(*value) {
+                            const_env.insert(*local_index, n);
+                        }
+                        *value
+                    }
+                    StmtKind::Expr(op) => *op,
+                    _ => continue,
+                };
+                if let Some(e) = cand.as_expr() {
+                    collect_array_targets(body, e, path, const_env, out);
+                }
             }
         }
         ExprKind::StructLiteral { fields, .. } => {
@@ -344,7 +364,7 @@ fn collect_array_targets(
             // indistinguishable from a growable-array initialization (`let mut
             // v = []; v.push(…)`); collapsing it to a fixed 0-length
             // `array.new_fixed()` would break subsequent growth.
-            if let Some(capacity) = match_list_struct(body, expr).filter(|&n| n > 0) {
+            if let Some(capacity) = match_list_struct(body, expr, const_env).filter(|&n| n > 0) {
                 out.push(ArrayTarget {
                     struct_expr_id: expr,
                     path: path.clone(),
@@ -352,11 +372,13 @@ fn collect_array_targets(
                 });
             } else {
                 // A wrapper struct: recurse into each field, extending the path.
-                let fields: Vec<(u32, ExprId)> =
-                    fields.iter().map(|f| (f.field_index, f.value)).collect();
+                let fields: Vec<(u32, ExprId)> = fields
+                    .iter()
+                    .filter_map(|f| f.value.as_expr().map(|e| (f.field_index, e)))
+                    .collect();
                 for (field_index, value) in fields {
                     path.push(field_index);
-                    collect_array_targets(body, value, path, out);
+                    collect_array_targets(body, value, path, const_env, out);
                     path.pop();
                 }
             }
@@ -365,8 +387,22 @@ fn collect_array_targets(
     }
 }
 
+/// A constant `i32`/`u64` operand: a promoted `Operand::Value(Int)`, or a
+/// skeleton `Local` read resolved through an enclosing immutable `let x =
+/// <const>` recorded in `const_env`.
+fn const_int(body: &Body, op: Operand, const_env: &IndexMap<u32, u64>) -> Option<u64> {
+    if let Some(n) = body.operand_const_int(op) {
+        return Some(n);
+    }
+    let e = op.as_expr()?;
+    if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
+        return const_env.get(index).copied();
+    }
+    None
+}
+
 /// If `expr` is an `List<T> { repr: array_new(N), used: 0 }` struct, return N.
-fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
+fn match_list_struct(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
     let ExprKind::StructLiteral { fields, .. } = &body.exprs[expr].kind else {
         return None;
     };
@@ -375,14 +411,15 @@ fn match_list_struct(body: &Body, expr: ExprId) -> Option<usize> {
     }
     let repr = fields.iter().find(|f| f.name == REPR_FIELD)?;
     let used = fields.iter().find(|f| f.name == USED_FIELD)?;
-    if !is_zero_int(body, used.value) {
+    if const_int(body, used.value, const_env) != Some(0) {
         return None;
     }
-    array_new_capacity(body, repr.value)
+    let repr_expr = repr.value.as_expr()?;
+    array_new_capacity(body, repr_expr, const_env)
 }
 
 /// If `expr` is a `builtin::array_new(N)` call with a constant `N`, return N.
-fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
+fn array_new_capacity(body: &Body, expr: ExprId, const_env: &IndexMap<u32, u64>) -> Option<usize> {
     let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind else {
         return None;
     };
@@ -397,14 +434,11 @@ fn array_new_capacity(body: &Body, expr: ExprId) -> Option<usize> {
     if !is_array_new || args.len() != 1 {
         return None;
     }
-    match &body.exprs[args[0].expr].kind {
-        ExprKind::IntLiteral { value, .. } => usize::try_from(*value).ok(),
-        _ => None,
-    }
+    usize::try_from(const_int(body, args[0].expr, const_env)?).ok()
 }
 
-fn is_zero_int(body: &Body, expr: ExprId) -> bool {
-    matches!(&body.exprs[expr].kind, ExprKind::IntLiteral { value, .. } if *value == 0)
+fn place_path_operand(body: &Body, op: Operand, local: u32) -> Option<Vec<u32>> {
+    op.as_expr().and_then(|e| place_path(body, e, local))
 }
 
 /// If `receiver` is `local` reached through zero or more field accesses,
@@ -423,7 +457,7 @@ fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                cur = *expr;
+                cur = expr.as_expr().expect("skeleton operand");
             }
             _ => return None,
         }
@@ -435,7 +469,7 @@ fn peel_ref(body: &Body, expr: ExprId) -> ExprId {
         ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
             expr: inner,
-        } => peel_ref(body, *inner),
+        } => peel_ref(body, inner.as_expr().expect("skeleton operand")),
         _ => expr,
     }
 }

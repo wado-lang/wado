@@ -69,9 +69,6 @@ fn "wado-compiler/tests/fixtures/string_multiline.wado/__cm_binding__Stdout_writ
 }
 
 fn "wado-compiler/tests/fixtures/string_multiline.wado/__cm_export__run"() {
-    let poem: ref "core:prelude/string.wado//String";
-    let mixed: ref "core:prelude/string.wado//String";
-    let with_empty: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -84,18 +81,15 @@ fn "wado-compiler/tests/fixtures/string_multiline.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    poem = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Roses are red,
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Roses are red,
 Violets are blue,
 Wado is great,
-And so are you!"), used: 63 };
-    "core:cli/println"(poem);
-    mixed = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Line with tab:	here
-Next line"), used: 29 };
-    "core:cli/println"(mixed);
-    with_empty = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("First
+And so are you!"), used: 63 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Line with tab:	here
+Next line"), used: 29 });
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("First
 
-Third"), used: 12 };
-    "core:cli/println"(with_empty);
+Third"), used: 12 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
     "wasi/task-return"(0);
 }

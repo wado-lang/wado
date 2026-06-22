@@ -1,8 +1,8 @@
 //! Copy propagation optimization for Wado NIR.
 //!
-//! Eliminates trivial copy bindings like `let x = y`, `let x = 42`,
-//! `let x = &y`, or `let x = &mut y` by propagating the source value to all
-//! uses of the target variable. See `can_propagate_copy` for the safety gates.
+//! Eliminates trivial copy bindings like `let x = y`, `let x = &y`,
+//! `let x = &mut y`, or a copy of a promoted operand by propagating the source
+//! to all uses of the target. See `can_propagate_copy` for the safety gates.
 //!
 //! Runs on the worklist rewrite engine (combine migration; see
 //! `docs/wep-2026-06-05-nir-rewrite-engine-design.md`) as a [`Rule`]: a
@@ -19,7 +19,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -38,19 +38,19 @@ struct CopyBinding {
     /// after the binding. The target's uses are confined to that scope, so a
     /// stable source can be propagated even when the source is reassigned
     /// elsewhere in the function (e.g. a loop counter copied inside the loop
-    /// body). Always `true` for literal sources.
+    /// body). Always `true` for a promoted-value source.
     source_scope_stable: bool,
 }
 
 impl CopySource {
-    /// The source local index for the index-bearing sources; `None` for
-    /// literals (which are always stable).
+    /// The source local index for the index-bearing sources; `None` for a
+    /// promoted-value source (always stable — a pooled `ValueId` is immutable).
     fn local_index(&self) -> Option<u32> {
         match self {
             CopySource::Local { index, .. }
             | CopySource::Ref { index, .. }
             | CopySource::MutRef { index, .. } => Some(*index),
-            _ => None,
+            CopySource::Promoted(_) => None,
         }
     }
 }
@@ -61,16 +61,6 @@ enum CopySource {
         index: u32,
         name: String,
     },
-    IntLiteral {
-        value: u64,
-        repr: String,
-    },
-    FloatLiteral {
-        value: f64,
-        repr: String,
-    },
-    BoolLiteral(bool),
-    CharLiteral(char),
     Ref {
         index: u32,
         name: String,
@@ -81,6 +71,10 @@ enum CopySource {
         name: String,
         inner_type_id: TypeId,
     },
+    /// `let x = Operand::Value(v)` — a copy of a promoted operand. `x`'s reads
+    /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
+    /// the copy is unconditionally stable.
+    Promoted(crate::nir_value_graph::ValueId),
 }
 
 #[derive(Debug, Default)]
@@ -98,7 +92,7 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
         && func.name == "copy_value"
         && args.len() == 1
     {
-        return args[0].expr;
+        return args[0].expr.as_expr().expect("skeleton operand");
     }
     expr
 }
@@ -108,16 +102,29 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
         local_index,
         value,
         skip_value_copy,
+        type_id: let_type_id,
         ..
     } = &body.stmts[stmt].kind
     else {
         return None;
     };
-    let (local_index, value, skip_value_copy) = (*local_index, *value, *skip_value_copy);
+    let (local_index, value, skip_value_copy, let_type_id) =
+        (*local_index, *value, *skip_value_copy, *let_type_id);
+    // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
+    // reads to it (the value is pooled-immutable, so it is always stable). This
+    // is independent of `skip_value_copy` — the source is a value, not a place.
+    if let Operand::Value(v) = value {
+        return Some(CopyBinding {
+            target_local: local_index,
+            source: CopySource::Promoted(v),
+            type_id: let_type_id,
+            source_scope_stable: true,
+        });
+    }
     if skip_value_copy {
         return None;
     }
-    let value = unwrap_copy_value(body, value);
+    let value = unwrap_copy_value(body, value.as_expr()?);
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {
@@ -125,23 +132,15 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
             index: *index,
             name: name.clone(),
         },
-        ExprKind::IntLiteral { value, repr } => CopySource::IntLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::FloatLiteral { value, repr } => CopySource::FloatLiteral {
-            value: *value,
-            repr: repr.clone(),
-        },
-        ExprKind::BoolLiteral(b) => CopySource::BoolLiteral(*b),
-        ExprKind::CharLiteral(c) => CopySource::CharLiteral(*c),
         ExprKind::Unary { op, expr: inner }
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef) =>
         {
             let inner = *inner;
             let is_ref = matches!(op, NirUnaryOp::Ref);
-            if let ExprKind::Local { index, name } = &body.exprs[inner].kind {
-                let inner_type_id = body.exprs[inner].type_id;
+            if let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, name } = &body.exprs[ie].kind
+            {
+                let inner_type_id = body.exprs[ie].type_id;
                 if is_ref {
                     CopySource::Ref {
                         index: *index,
@@ -190,18 +189,22 @@ fn subtree_mutates_local(body: &Body, node: NodeRef, local: u32) -> bool {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
             } => {
-                if place_root_local(body, *inner) == Some(local) {
+                if let Some(ie) = inner.as_expr()
+                    && place_root_local(body, ie) == Some(local)
+                {
                     return true;
                 }
             }
             ExprKind::MethodCall { receiver, .. } => {
-                if place_root_local(body, *receiver) == Some(local) {
+                if receiver.as_expr().and_then(|e| place_root_local(body, e)) == Some(local) {
                     return true;
                 }
             }
             ExprKind::Call { args, .. } => {
                 for arg in args {
-                    if arg.is_mut && place_root_local(body, arg.expr) == Some(local) {
+                    if arg.is_mut
+                        && arg.expr.as_expr().and_then(|e| place_root_local(body, e)) == Some(local)
+                    {
                         return true;
                     }
                 }
@@ -235,7 +238,28 @@ fn analyze_function_body(
         usage: IndexMap::default(),
     };
     analyze_block(body, body.root, &mut result, type_table, first_param_types);
+    // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
+    // invisible to the skeleton walk above; count it so copy-prop does not treat
+    // the local as dead / single-use and eliminate it out from under the promoted
+    // read. Empty (behavior-neutral) until operand promotion runs.
+    for idx in promoted_reads_set(body) {
+        result.usage.entry(idx).or_default().read_count += 2;
+    }
     result
+}
+
+/// Locals read through a promoted `Operand::Value`. Under early promotion
+/// (`WADO_PROMOTE_EARLY`) the precise live-slot walk has a known gap (a still-read
+/// local whose `Opaque(Local)` source it doesn't reach — see WEP / `elide_local`),
+/// so use the over-conservative pool-wide set: sound (keeps more locals live,
+/// never propagates/eliminates a still-read one), at the cost of a few missed
+/// copies. Flag-off keeps the precise walk, so the default is unchanged.
+fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
+    if crate::optimize::promote_active() {
+        body.values.opaque_local_sources().collect()
+    } else {
+        body.locals_read_via_promotion()
+    }
 }
 
 fn analyze_block(
@@ -250,7 +274,7 @@ fn analyze_block(
         if let Some(mut binding) = analyze_copy_binding(body, stmt) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable for the propagation iff it is not mutated in
-            // those statements (literals are unconditionally stable).
+            // those statements (a promoted value is unconditionally stable).
             binding.source_scope_stable = match binding.source.local_index() {
                 Some(src) => !stmts[k + 1..]
                     .iter()
@@ -281,6 +305,18 @@ fn analyze_stmt(
     }
 }
 
+fn analyze_expr_operand(
+    body: &Body,
+    op: Operand,
+    result: &mut AnalysisResult,
+    type_table: &TypeTable,
+    fpt: &FirstParamTypes,
+) {
+    if let Some(e) = op.as_expr() {
+        analyze_expr(body, e, result, type_table, fpt);
+    }
+}
+
 fn analyze_expr(
     body: &Body,
     id: ExprId,
@@ -298,17 +334,21 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let ExprKind::Local { index, .. } = &body.exprs[*inner].kind
+                && let ExprKind::Local { index, .. } =
+                    &body.exprs[inner.as_expr().expect("skeleton operand")].kind
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
             analyze_expr(body, target, result, type_table, fpt);
-            analyze_expr(body, value, result, type_table, fpt);
+            if let Some(ve) = value.as_expr() {
+                analyze_expr(body, ve, result, type_table, fpt);
+            }
         }
         ExprKind::Unary { op, expr: inner } => {
             let (op, inner) = (*op, *inner);
             if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let ExprKind::Local { index, .. } = &body.exprs[inner].kind
+                && let Some(ie) = inner.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
                 let index = *index;
                 result.usage.entry(index).or_default().address_taken = true;
@@ -316,10 +356,13 @@ fn analyze_expr(
                     result.usage.entry(index).or_default().has_field_mutation = true;
                 }
             }
-            analyze_expr(body, inner, result, type_table, fpt);
+            analyze_expr_operand(body, inner, result, type_table, fpt);
         }
         ExprKind::Call { args, .. } => {
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> = args
+                .iter()
+                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
+                .collect();
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -334,14 +377,25 @@ fn analyze_expr(
             ..
         } => {
             let receiver = *receiver;
-            let arg_data: Vec<(ExprId, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+            let arg_data: Vec<(ExprId, bool)> = args
+                .iter()
+                .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
+                .collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
             // mutate the receiver (`conservative_on_unknown = false`); the
             // receiver-type guard below still protects value receivers.
-            if super::alias::method_mutates_receiver(body, receiver, func, fpt, type_table, false) {
-                mark_potentially_mutated_local(body, receiver, result);
+            if super::alias::method_mutates_receiver(
+                body,
+                receiver.as_expr().expect("skeleton operand"),
+                func,
+                fpt,
+                type_table,
+                false,
+                None,
+            ) {
+                mark_potentially_mutated_local_operand(body, receiver, result);
             }
-            analyze_expr(body, receiver, result, type_table, fpt);
+            analyze_expr_operand(body, receiver, result, type_table, fpt);
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
@@ -360,6 +414,12 @@ fn analyze_expr(
                 }
             }
         }
+    }
+}
+
+fn mark_potentially_mutated_local_operand(body: &Body, op: Operand, result: &mut AnalysisResult) {
+    if let Some(e) = op.as_expr() {
+        mark_potentially_mutated_local(body, e, result);
     }
 }
 
@@ -387,7 +447,15 @@ fn can_propagate_copy(
     binding: &CopyBinding,
     usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
+    promoted_reads: &IndexSet<u32>,
 ) -> bool {
+    // A target read through a promoted `Opaque(Local)` value cannot be
+    // propagated: `apply_in_expr` substitutes only skeleton reads, and the
+    // binding's `let` is then removed (`dead_locals`), so the promoted read
+    // would dangle on a deleted local. Leave the copy in place.
+    if promoted_reads.contains(&binding.target_local) {
+        return false;
+    }
     let Some(target_usage) = usage.get(&binding.target_local) else {
         return true;
     };
@@ -441,10 +509,6 @@ fn can_propagate_copy(
             }
             true
         }
-        CopySource::IntLiteral { .. }
-        | CopySource::FloatLiteral { .. }
-        | CopySource::BoolLiteral(_)
-        | CopySource::CharLiteral(_) => true,
         CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
             if target_usage.read_count != 1 {
                 return false;
@@ -456,6 +520,9 @@ fn can_propagate_copy(
             }
             true
         }
+        // A pooled value is immutable, so forwarding it to every read is always
+        // sound; the read becomes `Operand::Value(v)`, re-emitted by the extractor.
+        CopySource::Promoted(_) => true,
     }
 }
 
@@ -520,18 +587,6 @@ fn apply_in_expr(
             CopySource::Local { index, name } => {
                 engine.replace_expr_kind(id, ExprKind::Local { index, name });
             }
-            CopySource::IntLiteral { value, repr } => {
-                engine.replace_expr_kind(id, ExprKind::IntLiteral { value, repr });
-            }
-            CopySource::FloatLiteral { value, repr } => {
-                engine.replace_expr_kind(id, ExprKind::FloatLiteral { value, repr });
-            }
-            CopySource::BoolLiteral(b) => {
-                engine.replace_expr_kind(id, ExprKind::BoolLiteral(b));
-            }
-            CopySource::CharLiteral(c) => {
-                engine.replace_expr_kind(id, ExprKind::CharLiteral(c));
-            }
             CopySource::Ref {
                 index,
                 name,
@@ -542,6 +597,9 @@ fn apply_in_expr(
                 name,
                 inner_type_id,
             } => emit_ref(engine, id, NirUnaryOp::MutRef, index, name, inner_type_id),
+            CopySource::Promoted(v) => {
+                engine.redirect_expr(id, Operand::Value(v));
+            }
         }
         return;
     }
@@ -567,7 +625,13 @@ fn emit_ref(
 ) {
     let span = engine.body.exprs[id].span;
     let inner = engine.alloc_expr(ExprKind::Local { index, name }, inner_type_id, span);
-    engine.replace_expr_kind(id, ExprKind::Unary { op, expr: inner });
+    engine.replace_expr_kind(
+        id,
+        ExprKind::Unary {
+            op,
+            expr: inner.into(),
+        },
+    );
 }
 
 /// Whole-function copy-propagation fixpoint driven from the engine session
@@ -584,10 +648,11 @@ fn propagate_at_root(
         if analysis.bindings.is_empty() {
             break;
         }
+        let promoted_reads = promoted_reads_set(engine.body);
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
-            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table))
+            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table, &promoted_reads))
             .collect();
         if eliminable.is_empty() {
             break;
@@ -600,7 +665,8 @@ fn propagate_at_root(
                 CopySource::Local { index, .. }
                 | CopySource::Ref { index, .. }
                 | CopySource::MutRef { index, .. } => target_set.contains(index),
-                _ => false,
+                // A promoted value has no source local to conflict.
+                CopySource::Promoted(_) => false,
             };
             if source_conflicts {
                 has_deferred = true;

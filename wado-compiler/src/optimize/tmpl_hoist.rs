@@ -48,7 +48,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind,
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -212,15 +212,15 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
 fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>) {
     match &body.stmts[s].kind {
         StmtKind::Let { value, .. } => {
-            collect_escaping_in_expr(body, *value, escaping);
+            collect_escaping_in_operand(body, *value, escaping);
         }
         StmtKind::Expr(expr) => {
-            collect_escaping_in_expr(body, *expr, escaping);
+            collect_escaping_in_operand(body, *expr, escaping);
         }
         StmtKind::Return { value: Some(expr) } => {
             // Returning a value means it escapes the loop
-            collect_local_refs(body, *expr, escaping);
-            collect_escaping_in_expr(body, *expr, escaping);
+            collect_local_refs_operand(body, *expr, escaping);
+            collect_escaping_in_operand(body, *expr, escaping);
         }
         StmtKind::If {
             condition,
@@ -230,7 +230,7 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_block = *then_block;
             let else_block = *else_block;
-            collect_escaping_in_expr(body, condition, escaping);
+            collect_escaping_in_operand(body, condition, escaping);
             for s in &body.blocks[then_block].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -256,22 +256,28 @@ fn collect_escaping_in_stmt(body: &Body, s: StmtId, escaping: &mut IndexSet<u32>
         StmtKind::Break { value, .. } => {
             if let Some(v) = value {
                 let v = *v;
-                collect_local_refs(body, v, escaping);
-                collect_escaping_in_expr(body, v, escaping);
+                collect_local_refs_operand(body, v, escaping);
+                collect_escaping_in_operand(body, v, escaping);
             }
         }
         StmtKind::LetDestructure { value, .. } => {
-            collect_escaping_in_expr(body, *value, escaping);
+            collect_escaping_in_operand(body, *value, escaping);
         }
     }
 }
 
 /// Mark all locals that appear as non-receiver function arguments as escaping.
+fn collect_escaping_in_operand(body: &Body, op: Operand, escaping: &mut IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_escaping_in_expr(body, e, escaping);
+    }
+}
+
 fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         // Function call: args (not receiver) escape
         ExprKind::Call { args, .. } => {
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -280,8 +286,8 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::MethodCall { receiver, args, .. } => {
             // Receiver (self) doesn't escape — only non-self args escape
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-            collect_escaping_in_expr(body, receiver, escaping);
+            let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+            collect_escaping_in_operand(body, receiver, escaping);
             for arg in args {
                 collect_local_refs(body, arg, escaping);
                 collect_escaping_in_expr(body, arg, escaping);
@@ -290,23 +296,23 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::IndirectCall { callee, args } => {
             let callee = *callee;
             let args = args.clone();
-            collect_escaping_in_expr(body, callee, escaping);
+            collect_escaping_in_operand(body, callee, escaping);
             for arg in args {
-                collect_local_refs(body, arg, escaping);
-                collect_escaping_in_expr(body, arg, escaping);
+                collect_local_refs_operand(body, arg, escaping);
+                collect_escaping_in_operand(body, arg, escaping);
             }
         }
         // Assignment: the value escapes (stored in target location)
         ExprKind::Assign { target, value } => {
             let target = *target;
             let value = *value;
-            collect_local_refs(body, value, escaping);
+            collect_local_refs_operand(body, value, escaping);
             collect_escaping_in_expr(body, target, escaping);
-            collect_escaping_in_expr(body, value, escaping);
+            collect_escaping_in_operand(body, value, escaping);
         }
         // Struct literal fields: all field values escape
         ExprKind::StructLiteral { fields, .. } => {
-            let vals: Vec<ExprId> = fields.iter().map(|f| f.value).collect();
+            let vals: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();
             for v in vals {
                 collect_local_refs(body, v, escaping);
                 collect_escaping_in_expr(body, v, escaping);
@@ -316,21 +322,21 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::Index { expr: inner, index } => {
             let inner = *inner;
             let index = *index;
-            collect_escaping_in_expr(body, inner, escaping);
-            collect_escaping_in_expr(body, index, escaping);
+            collect_escaping_in_operand(body, inner, escaping);
+            collect_escaping_in_operand(body, index, escaping);
         }
         // Binary/unary: recurse
         ExprKind::Binary { left, right, .. } => {
             let left = *left;
             let right = *right;
-            collect_escaping_in_expr(body, left, escaping);
-            collect_escaping_in_expr(body, right, escaping);
+            collect_escaping_in_operand(body, left, escaping);
+            collect_escaping_in_operand(body, right, escaping);
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::FieldAccess { expr: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::If {
             condition,
@@ -340,7 +346,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let condition = *condition;
             let then_branch = *then_branch;
             let else_branch = *else_branch;
-            collect_escaping_in_expr(body, condition, escaping);
+            collect_escaping_in_operand(body, condition, escaping);
             for s in &body.blocks[then_branch].stmts {
                 collect_escaping_in_stmt(body, *s, escaping);
             }
@@ -366,9 +372,14 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let inner = *inner;
             let arm_exprs: Vec<ExprId> = arms
                 .iter()
-                .flat_map(|arm| arm.guard.into_iter().chain(std::iter::once(arm.body)))
+                .flat_map(|arm| {
+                    arm.guard
+                        .into_iter()
+                        .chain(std::iter::once(arm.body))
+                        .filter_map(Operand::as_expr)
+                })
                 .collect();
-            collect_escaping_in_expr(body, inner, escaping);
+            collect_escaping_in_operand(body, inner, escaping);
             for ae in arm_exprs {
                 collect_escaping_in_expr(body, ae, escaping);
             }
@@ -382,7 +393,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
             let scrutinee = *scrutinee;
             let arms = arms.clone();
             let default = *default;
-            collect_escaping_in_expr(body, scrutinee, escaping);
+            collect_escaping_in_operand(body, scrutinee, escaping);
             for arm in arms {
                 for s in &body.blocks[arm].stmts {
                     collect_escaping_in_stmt(body, *s, escaping);
@@ -395,46 +406,40 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         ExprKind::CmRawCall { args, .. } => {
             let args = args.clone();
             for arg in args {
-                collect_local_refs(body, arg, escaping);
-                collect_escaping_in_expr(body, arg, escaping);
+                collect_local_refs_operand(body, arg, escaping);
+                collect_escaping_in_operand(body, arg, escaping);
             }
         }
         ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
             let elements = elements.clone();
             for elem in elements {
-                collect_local_refs(body, elem, escaping);
-                collect_escaping_in_expr(body, elem, escaping);
+                collect_local_refs_operand(body, elem, escaping);
+                collect_escaping_in_operand(body, elem, escaping);
             }
         }
         ExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 let p = *p;
-                collect_local_refs(body, p, escaping);
-                collect_escaping_in_expr(body, p, escaping);
+                collect_local_refs_operand(body, p, escaping);
+                collect_escaping_in_operand(body, p, escaping);
             }
         }
         ExprKind::VariantTag { expr: inner }
         | ExprKind::VariantTest { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::ClosureToCanonical { functor: inner, .. } => {
-            collect_escaping_in_expr(body, *inner, escaping);
+            collect_escaping_in_operand(body, *inner, escaping);
         }
         ExprKind::GlobalVarSet { value, .. } => {
             let value = *value;
-            collect_local_refs(body, value, escaping);
-            collect_escaping_in_expr(body, value, escaping);
+            collect_local_refs_operand(body, value, escaping);
+            collect_escaping_in_operand(body, value, escaping);
         }
         // Leaf nodes
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
-        | ExprKind::IntLiteral { .. }
-        | ExprKind::FloatLiteral { .. }
-        | ExprKind::StringLiteral(_)
         | ExprKind::BytesLiteral(_)
-        | ExprKind::BoolLiteral(_)
-        | ExprKind::CharLiteral(_)
-        | ExprKind::Null
-        | ExprKind::Unit
+        | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => {}
     }
 }
@@ -443,6 +448,12 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
 /// Does NOT follow through `FieldAccess`: `s.repr` as a struct field value does
 /// not mark `s` as escaping, since field extraction is typically for temporary
 /// iterators/formatters consumed within the same scope.
+fn collect_local_refs_operand(body: &Body, op: Operand, locals: &mut IndexSet<u32>) {
+    if let Some(e) = op.as_expr() {
+        collect_local_refs(body, e, locals);
+    }
+}
+
 fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => {
@@ -457,7 +468,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
                 .filter_map(|s| match &body.stmts[*s].kind {
                     StmtKind::Break {
                         value: Some(val), ..
-                    } => Some(*val),
+                    } => val.as_expr(),
                     _ => None,
                 })
                 .collect();
@@ -466,7 +477,7 @@ fn collect_local_refs(body: &Body, e: ExprId, locals: &mut IndexSet<u32>) {
             }
         }
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            collect_local_refs(body, *inner, locals);
+            collect_local_refs_operand(body, *inner, locals);
         }
         // FieldAccess (e.g., s.repr) — accessing a subfield doesn't mean the whole
         // local escapes. Skip to avoid false positives with iterator construction.
@@ -503,8 +514,10 @@ fn transform_stmt(
     } else {
         None
     };
-    if let Some((local_index, value)) = let_info {
-        let tmpl_block = match &engine.body.exprs[value].kind {
+    if let Some((local_index, value)) = let_info
+        && let Some(ve) = value.as_expr()
+    {
+        let tmpl_block = match &engine.body.exprs[ve].kind {
             ExprKind::LabeledBlock { label, block, .. }
                 if label == crate::name::TEMPLATE_BLOCK_LABEL =>
             {
@@ -529,27 +542,33 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(engine, value, escaping_locals, hoist_stmts, type_table);
+        transform_expr(
+            engine,
+            value.as_expr().expect("skeleton operand"),
+            escaping_locals,
+            hoist_stmts,
+            type_table,
+        );
         return;
     }
 
     // Other statement shapes that carry transformable expressions / blocks.
     enum Shape {
         Expr(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Labeled(BlockId),
         Break(ExprId),
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Expr(e) => Shape::Expr(*e),
+        StmtKind::Expr(e) => e.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => Shape::If(*condition, *then_block, *else_block),
+        } => Shape::If(condition.as_expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Labeled(*block),
-        StmtKind::Break { value: Some(e), .. } => Shape::Break(*e),
+        StmtKind::Break { value: Some(e), .. } => e.as_expr().map_or(Shape::None, Shape::Break),
         // Don't recurse into nested loops.
         _ => Shape::None,
     };
@@ -558,7 +577,9 @@ fn transform_stmt(
             transform_expr(engine, e, escaping_locals, hoist_stmts, type_table);
         }
         Shape::If(cond, tb, eb) => {
-            transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            if let Some(cond) = cond {
+                transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            }
             transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table);
             if let Some(eb) = eb {
                 transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table);
@@ -587,22 +608,37 @@ fn transform_expr(
         None,
     }
     let walk = match &engine.body.exprs[e].kind {
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![*receiver];
-            v.extend(args.iter().map(|a| a.expr));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(
+            [*left, *right]
+                .into_iter()
+                .filter_map(Operand::as_expr)
+                .collect(),
+        ),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
+        | ExprKind::FieldAccess { expr: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
+        }
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        } => Walk::CondBlocks(
+            condition.as_expr().expect("skeleton operand"),
+            *then_branch,
+            *else_branch,
+        ),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -650,15 +686,21 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
-            let value_span = body.exprs[value].span;
+            let init_value = value.as_expr().expect("skeleton operand");
+            let value_span = body.exprs[init_value].span;
+            // Operand promotion wraps the inlined builder init in a block with a
+            // dead capacity binding (`{ let capacity = N; String { … } }`); the
+            // hoist reuses the whole block as the init value (self-contained), so
+            // verify against the block's tail struct but keep `init_value` whole.
+            let struct_view = unwrap_block_tail(body, init_value);
             // Try pre-lowered form: String::with_capacity(N)
-            if let ExprKind::Call { func, .. } = &body.exprs[value].kind
+            if let ExprKind::Call { func, .. } = &body.exprs[struct_view].kind
                 && func.method_info.is_some()
                 && func.name == "String::with_capacity"
             {
                 return Some(TmplCandidate {
                     buf_local_index: local_index,
-                    init_value: value,
+                    init_value,
                     string_type: type_id,
                     span: value_span,
                 });
@@ -668,24 +710,24 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                 struct_name,
                 fields,
                 ..
-            } = &body.exprs[value].kind
+            } = &body.exprs[struct_view].kind
             {
                 if struct_name == "String" {
                     // Verify the repr field contains an array_new call
                     let repr_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Backing.field_name())?;
-                    if !array_new_has_capacity(body, repr_field.value) {
+                    if !array_new_has_capacity(
+                        body,
+                        repr_field.value.as_expr().expect("skeleton operand"),
+                    ) {
                         return None;
                     }
                     // Verify used field is 0
                     let used_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Len.field_name())?;
-                    if !matches!(
-                        &body.exprs[used_field.value].kind,
-                        ExprKind::IntLiteral { value: 0, .. }
-                    ) {
+                    if body.operand_const_int(used_field.value) != Some(0) {
                         return None;
                     }
                     (local_index, type_id, value, value_span)
@@ -705,16 +747,18 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
         StmtKind::Break {
             label: Some(label),
             value: Some(val),
-        } if label == crate::name::TEMPLATE_BLOCK_LABEL => match &body.exprs[*val].kind {
-            ExprKind::Local { index, .. } if *index == buf_local_index => {}
-            _ => return None,
-        },
+        } if label == crate::name::TEMPLATE_BLOCK_LABEL => {
+            match &body.exprs[val.as_expr().expect("skeleton operand")].kind {
+                ExprKind::Local { index, .. } if *index == buf_local_index => {}
+                _ => return None,
+            }
+        }
         _ => return None,
     }
 
     Some(TmplCandidate {
         buf_local_index,
-        init_value,
+        init_value: init_value.as_expr().expect("skeleton operand"),
         string_type,
         span,
     })
@@ -724,7 +768,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
 /// arena so the candidacy decision needs no borrow held across construction.
 struct FmtFields {
     struct_name: String,
-    fields: Vec<(String, u32, ExprId)>,
+    fields: Vec<(String, u32, Operand)>,
     struct_type: TypeId,
     value_type_id: TypeId,
     value_span: Span,
@@ -763,18 +807,26 @@ fn extract_fmt_candidates(
 
             // Try to extract (local_index, value_expr_id) from the statement.
             let (fmt_local_index, value_expr): (u32, ExprId) = match &engine.body.stmts[*s].kind {
-                StmtKind::Expr(expr) => {
+                StmtKind::Expr(Operand::Expr(expr)) => {
                     let ExprKind::Assign { target, value } = &engine.body.exprs[*expr].kind else {
                         continue;
                     };
                     let ExprKind::Local { index, .. } = &engine.body.exprs[*target].kind else {
                         continue;
                     };
-                    (*index, *value)
+                    let Some(value_expr) = value.as_expr() else {
+                        continue;
+                    };
+                    (*index, value_expr)
                 }
                 StmtKind::Let {
                     local_index, value, ..
-                } => (*local_index, *value),
+                } => {
+                    let Some(value_expr) = value.as_expr() else {
+                        continue;
+                    };
+                    (*local_index, value_expr)
+                }
                 _ => continue,
             };
 
@@ -800,7 +852,7 @@ fn extract_fmt_candidates(
                 if name == "buf" {
                     return true;
                 }
-                is_constant_expr(engine.body, *value)
+                is_constant_operand(engine.body, *value)
             });
             if !all_const {
                 continue;
@@ -829,9 +881,9 @@ fn extract_fmt_candidates(
         let struct_type = raw.ff.struct_type;
         let mut init_fields: Vec<ArenaStructField> = Vec::new();
         for (name, field_index, value) in &raw.ff.fields {
-            let new_value = if name == "buf" {
+            let new_value: Operand = if name == "buf" {
                 // Normalize buf to &mut __tmpl_buf
-                let buf_ty = engine.body.exprs[*value].type_id;
+                let buf_ty = engine.body.operand_type(*value);
                 let local = engine.alloc_expr(
                     ExprKind::Local {
                         index: hoisted_buf_index,
@@ -840,18 +892,27 @@ fn extract_fmt_candidates(
                     buf_ty,
                     value_span,
                 );
-                engine.alloc_expr(
-                    ExprKind::Unary {
-                        op: NirUnaryOp::MutRef,
-                        expr: local,
-                    },
-                    buf_ty,
-                    value_span,
-                )
+                engine
+                    .alloc_expr(
+                        ExprKind::Unary {
+                            op: NirUnaryOp::MutRef,
+                            expr: local.into(),
+                        },
+                        buf_ty,
+                        value_span,
+                    )
+                    .into()
             } else {
-                // A verified constant leaf — a shallow node copy is a full copy.
-                let node = engine.body.exprs[*value].clone();
-                engine.alloc_expr(node.kind, node.type_id, node.span)
+                // A verified constant leaf. A promoted `Operand::Value` points
+                // into the shared pool and is reused directly; a skeleton literal
+                // is shallow-copied (a constant leaf has no children).
+                match value {
+                    Operand::Value(_) => *value,
+                    Operand::Expr(e) => {
+                        let node = engine.body.exprs[*e].clone();
+                        engine.alloc_expr(node.kind, node.type_id, node.span).into()
+                    }
+                }
             };
             init_fields.push(ArenaStructField {
                 name: name.clone(),
@@ -900,7 +961,7 @@ fn extract_formatter_fields(
             struct_type,
         } => {
             let buf_field = fields.iter().find(|f| f.name == "buf")?;
-            if !buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
+            if !buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index) {
                 return None;
             }
             Some(FmtFields {
@@ -926,7 +987,7 @@ fn extract_formatter_fields(
             extract_formatter_fields_from_block(
                 body,
                 block,
-                break_value,
+                break_value.as_expr().expect("skeleton operand"),
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
@@ -943,7 +1004,7 @@ fn extract_formatter_fields(
             // not silently disable Formatter hoisting.
             let block = *block;
             let tail_stmt = *body.blocks[block].stmts.last()?;
-            let StmtKind::Expr(tail) = &body.stmts[tail_stmt].kind else {
+            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[tail_stmt].kind else {
                 return None;
             };
             extract_formatter_fields_from_block(
@@ -994,12 +1055,13 @@ fn extract_formatter_fields_from_block(
 
     // Check if buf traces to hoisted buffer (directly or via intermediate local)
     let buf_field = fields.iter().find(|f| f.name == "buf")?;
-    if buf_field_references_local(body, buf_field.value, hoisted_buf_index) {
+    if buf_field_references_local_operand(body, buf_field.value, hoisted_buf_index) {
         return Some(make());
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local = extract_local_from_ref(body, buf_field.value)?;
+    let buf_inner_local =
+        extract_local_from_ref(body, buf_field.value.as_expr().expect("skeleton operand"))?;
     for s in &body.blocks[block].stmts {
         match &body.stmts[*s].kind {
             StmtKind::Let {
@@ -1007,15 +1069,15 @@ fn extract_formatter_fields_from_block(
                 value: let_value,
                 ..
             } if *local_index == buf_inner_local => {
-                if references_local(body, *let_value, hoisted_buf_index) {
+                if references_local_operand(body, *let_value, hoisted_buf_index) {
                     return Some(make());
                 }
             }
-            StmtKind::Expr(expr) => {
+            StmtKind::Expr(Operand::Expr(expr)) => {
                 if let ExprKind::Assign { target, value: av } = &body.exprs[*expr].kind
                     && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
                     && *index == buf_inner_local
-                    && references_local(body, *av, hoisted_buf_index)
+                    && references_local_operand(body, *av, hoisted_buf_index)
                 {
                     return Some(make());
                 }
@@ -1034,14 +1096,16 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
             expr: inner,
-        } => match &body.exprs[*inner].kind {
+        } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
         },
         ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
-            args.first().and_then(|a| match &body.exprs[a.expr].kind {
-                ExprKind::Local { index, .. } => Some(*index),
-                _ => None,
+            args.first().and_then(|a| {
+                match &body.exprs[a.expr.as_expr().expect("skeleton operand")].kind {
+                    ExprKind::Local { index, .. } => Some(*index),
+                    _ => None,
+                }
             })
         }
         _ => None,
@@ -1056,31 +1120,49 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
 /// miscompile — so this must not be widened to a "mentions anywhere" walk such
 /// as `expr_mentions_local`. Pinned by the `references_local_matches_only_aliases_not_mentions`
 /// unit test below.
+fn references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
+    op.as_expr()
+        .is_some_and(|e| references_local(body, e, local_index))
+}
+
 fn references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => *index == local_index,
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => references_local(body, *inner, local_index),
+        } => references_local_operand(body, *inner, local_index),
         _ => false,
     }
 }
 
 /// Check if a `buf` field expression references the given local (the hoisted String buffer).
 /// Handles both `&mut local` (NIR form) and `ref.as_non_null(local)` patterns.
+fn buf_field_references_local_operand(body: &Body, op: Operand, local_index: u32) -> bool {
+    op.as_expr()
+        .is_some_and(|e| buf_field_references_local(body, e, local_index))
+}
+
 fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool {
     match &body.exprs[e].kind {
         // &mut __tmpl_buf (NIR level)
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => is_local(body, *inner, local_index),
+        } => is_local(
+            body,
+            inner.as_expr().expect("skeleton operand"),
+            local_index,
+        ),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && is_local(body, args[0].expr, local_index)
+                && is_local(
+                    body,
+                    args[0].expr.as_expr().expect("skeleton operand"),
+                    local_index,
+                )
         }
         _ => false,
     }
@@ -1090,11 +1172,14 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
 fn is_constant_expr(body: &Body, e: ExprId) -> bool {
     matches!(
         &body.exprs[e].kind,
-        ExprKind::IntLiteral { .. }
-            | ExprKind::BoolLiteral(_)
-            | ExprKind::CharLiteral(_)
             | ExprKind::EnumConstruct { .. }
     )
+}
+
+/// Operand form of [`is_constant_expr`]: a promoted scalar (`Operand::Value`)
+/// is always a compile-time constant.
+fn is_constant_operand(body: &Body, op: Operand) -> bool {
+    op.as_expr().is_none_or(|e| is_constant_expr(body, e))
 }
 
 /// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.
@@ -1102,6 +1187,20 @@ fn array_new_has_capacity(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Call { func, args, .. } => func.name.contains("array_new") && !args.is_empty(),
         _ => false,
+    }
+}
+
+/// Unwrap a `{ let* …; <tail> }` block to its tail expression. Operand
+/// promotion wraps an inlined builder init in such a block (a dead `let
+/// capacity = N` binding plus the struct tail); the tail is the real
+/// constructor. Returns `e` unchanged when it is not a tail-yielding block.
+fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
+    let (ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. }) = &body.exprs[e].kind else {
+        return e;
+    };
+    match body.blocks[*b].stmts.last().map(|s| &body.stmts[*s].kind) {
+        Some(StmtKind::Expr(op)) => op.as_expr().map_or(e, |t| unwrap_block_tail(body, t)),
+        _ => e,
     }
 }
 
@@ -1136,7 +1235,7 @@ fn transform_tmpl_block(
             is_mut: true,
             is_reactive: false,
             type_id: string_type,
-            value: candidate.init_value,
+            value: candidate.init_value.into(),
             skip_value_copy: false,
         },
         span,
@@ -1195,20 +1294,16 @@ fn build_field_reset(
     );
     let field = engine.alloc_expr(
         ExprKind::FieldAccess {
-            expr: local,
+            expr: local.into(),
             field_index,
             field_name: field_name.to_string(),
         },
         TypeTable::I32,
         span,
     );
-    let zero = engine.alloc_expr(
-        ExprKind::IntLiteral {
-            value: 0,
-            repr: "0".to_string(),
-        },
+    let zero = engine.const_operand(
+        crate::nir_value_graph::ValueKind::Int(0, TypeTable::I32),
         TypeTable::I32,
-        span,
     );
     let assign = engine.alloc_expr(
         ExprKind::Assign {
@@ -1218,7 +1313,7 @@ fn build_field_reset(
         TypeTable::UNIT,
         span,
     );
-    engine.alloc_stmt(StmtKind::Expr(assign), span)
+    engine.alloc_stmt(StmtKind::Expr(assign.into()), span)
 }
 
 /// Hoist Formatter struct literals out of a `__tmpl` block.
@@ -1302,7 +1397,7 @@ fn transform_fmts_in_tmpl_block(
                 is_mut: true,
                 is_reactive: false,
                 type_id: info.formatter_type,
-                value: info.init_value,
+                value: info.init_value.into(),
                 skip_value_copy: false,
             },
             info.span,
@@ -1355,30 +1450,32 @@ fn rename_local_in_stmt(
 ) {
     enum Shape {
         Expr(ExprId),
-        If(ExprId, BlockId, Option<BlockId>),
+        If(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
     let shape = match &engine.body.stmts[s].kind {
-        StmtKind::Let { value, .. } => Shape::Expr(*value),
-        StmtKind::Expr(expr) => Shape::Expr(*expr),
-        StmtKind::Return { value: Some(expr) } => Shape::Expr(*expr),
+        StmtKind::Let { value, .. } => value.as_expr().map_or(Shape::None, Shape::Expr),
+        StmtKind::Expr(expr) => expr.as_expr().map_or(Shape::None, Shape::Expr),
+        StmtKind::Return { value: Some(expr) } => expr.as_expr().map_or(Shape::None, Shape::Expr),
         StmtKind::If {
             condition,
             then_block,
             else_block,
-        } => Shape::If(*condition, *then_block, *else_block),
+        } => Shape::If(condition.as_expr(), *then_block, *else_block),
         StmtKind::LabeledBlock { block, .. } => Shape::Block(*block),
         StmtKind::Loop { body } => Shape::Block(*body),
         StmtKind::Break {
             value: Some(expr), ..
-        } => Shape::Expr(*expr),
+        } => expr.as_expr().map_or(Shape::None, Shape::Expr),
         _ => Shape::None,
     };
     match shape {
         Shape::Expr(e) => rename_local_in_expr(engine, e, old_index, new_index, new_name),
         Shape::If(cond, tb, eb) => {
-            rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            if let Some(cond) = cond {
+                rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            }
             rename_local_in_block(engine, tb, old_index, new_index, new_name);
             if let Some(eb) = eb {
                 rename_local_in_block(engine, eb, old_index, new_index, new_name);
@@ -1417,31 +1514,48 @@ fn rename_local_in_expr(
     }
     let walk = match &engine.body.exprs[e].kind {
         ExprKind::Local { index, .. } if *index == old_index => Walk::Local,
-        ExprKind::Call { args, .. } => Walk::Exprs(args.iter().map(|a| a.expr).collect()),
+        ExprKind::Call { args, .. } => {
+            Walk::Exprs(args.iter().filter_map(|a| a.expr.as_expr()).collect())
+        }
         ExprKind::MethodCall { receiver, args, .. } => {
-            let mut v = vec![*receiver];
-            v.extend(args.iter().map(|a| a.expr));
+            let mut v: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+            v.extend(args.iter().filter_map(|a| a.expr.as_expr()));
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![*callee];
-            v.extend(args.iter().copied());
+            let mut v = vec![callee.as_expr().expect("skeleton operand")];
+            v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)
         }
-        ExprKind::Binary { left, right, .. } => Walk::Exprs(vec![*left, *right]),
+        ExprKind::Binary { left, right, .. } => Walk::Exprs(
+            [*left, *right]
+                .into_iter()
+                .filter_map(Operand::as_expr)
+                .collect(),
+        ),
         ExprKind::Unary { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. } => Walk::Exprs(vec![*inner]),
-        ExprKind::Assign { target, value } => Walk::Exprs(vec![*target, *value]),
-        ExprKind::StructLiteral { fields, .. } => {
-            Walk::Exprs(fields.iter().map(|f| f.value).collect())
+        | ExprKind::FieldAccess { expr: inner, .. } => {
+            Walk::Exprs(inner.as_expr().into_iter().collect())
         }
-        ExprKind::Index { expr: inner, index } => Walk::Exprs(vec![*inner, *index]),
+        ExprKind::Assign { target, value } => {
+            Walk::Exprs(std::iter::once(*target).chain(value.as_expr()).collect())
+        }
+        ExprKind::StructLiteral { fields, .. } => {
+            Walk::Exprs(fields.iter().filter_map(|f| f.value.as_expr()).collect())
+        }
+        ExprKind::Index { expr: inner, index } => {
+            Walk::Exprs(inner.as_expr().into_iter().chain(index.as_expr()).collect())
+        }
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(*condition, *then_branch, *else_branch),
+        } => Walk::CondBlocks(
+            condition.as_expr().expect("skeleton operand"),
+            *then_branch,
+            *else_branch,
+        ),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -1489,7 +1603,7 @@ mod tests {
         let mut body = Body::empty();
         let e = build(&mut body);
         let s = body.stmts.push(StmtNode {
-            kind: StmtKind::Expr(e),
+            kind: StmtKind::Expr(e.into()),
             span: Span::default(),
         });
         body.root = body.blocks.push(BlockNode {
@@ -1512,7 +1626,10 @@ mod tests {
 
     fn unary(body: &mut Body, op: NirUnaryOp, inner: ExprId) -> ExprId {
         body.exprs.push(ExprNode {
-            kind: ExprKind::Unary { op, expr: inner },
+            kind: ExprKind::Unary {
+                op,
+                expr: inner.into(),
+            },
             type_id: TypeId(0),
             span: Span::default(),
         })
@@ -1535,7 +1652,7 @@ mod tests {
                 },
                 type_args: vec![],
                 args: vec![ArenaCallArg {
-                    expr: arg,
+                    expr: arg.into(),
                     is_mut: false,
                 }],
             },

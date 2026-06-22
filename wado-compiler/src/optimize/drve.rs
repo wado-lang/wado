@@ -33,7 +33,7 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeTable};
 
@@ -155,7 +155,7 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body) -> bool {
             match &body.stmts[s].kind {
                 StmtKind::Return { value: None } => return false,
                 StmtKind::Return { value: Some(v) } => {
-                    if !arena_query::is_pure_expr(body, *v) {
+                    if !arena_query::is_pure_operand(body, *v) {
                         return false;
                     }
                 }
@@ -226,12 +226,12 @@ impl ValidateCtx<'_> {
     }
 
     fn stmt(&mut self, body: &Body, stmt: StmtId) {
-        if let StmtKind::Expr(e) = &body.stmts[stmt].kind {
+        if let StmtKind::Expr(Operand::Expr(e)) = &body.stmts[stmt].kind {
             let e = *e;
             let (call_key, scan): (Option<FnKey>, Vec<ExprId>) = match &body.exprs[e].kind {
                 ExprKind::Call { func, args, .. } => (
                     Some((func.module_source.clone(), func.name.clone())),
-                    args.iter().map(|a| a.expr).collect(),
+                    args.iter().filter_map(|a| a.expr.as_expr()).collect(),
                 ),
                 ExprKind::MethodCall {
                     func,
@@ -239,8 +239,8 @@ impl ValidateCtx<'_> {
                     args,
                     ..
                 } => {
-                    let mut scan = vec![*receiver];
-                    scan.extend(args.iter().map(|a| a.expr));
+                    let mut scan: Vec<ExprId> = receiver.as_expr().into_iter().collect();
+                    scan.extend(args.iter().filter_map(|a| a.expr.as_expr()));
                     (Some((func.module_source.clone(), func.name.clone())), scan)
                 }
                 // Not a top-level call: the whole expression is a use.

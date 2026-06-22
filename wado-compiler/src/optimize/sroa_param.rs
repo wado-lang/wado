@@ -30,7 +30,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef};
+use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -72,7 +72,7 @@ pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut Functio
     true
 }
 
-/// Move `src`'s node content into `id`; `src` is left as a dead `Unit`.
+/// Move `src`'s node content into `id`; `src` is left as a dead node.
 fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     if id == src {
         return;
@@ -82,7 +82,7 @@ fn become_expr(body: &mut Body, id: ExprId, src: ExprId) {
     let node = std::mem::replace(
         &mut body.exprs[src],
         ExprNode {
-            kind: ExprKind::Unit,
+            kind: ExprKind::Dead,
             type_id: ty,
             span,
         },
@@ -294,14 +294,16 @@ fn check_expr(
         ExprKind::Local { index, .. } if *index == idx => false,
         ExprKind::FieldAccess { expr: inner, .. } => {
             let inner = *inner;
-            if matches!(&body.exprs[inner].kind, ExprKind::Local { index, .. } if *index == idx) {
+            if inner.as_expr().is_some_and(
+                |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == idx),
+            ) {
                 return true;
             }
-            check_expr(body, inner, idx, candidates)
+            check_operand(body, inner, idx, candidates)
         }
         ExprKind::Call { func, args, .. } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             args.iter()
                 .enumerate()
                 .all(|(i, &a)| check_call_arg(body, &key, i, a, idx, candidates))
@@ -314,7 +316,7 @@ fn check_expr(
         } => {
             let key: FnKey = (func.module_source.clone(), func.name.clone());
             let receiver = *receiver;
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
             check_call_arg(body, &key, 0, receiver, idx, candidates)
                 && args
                     .iter()
@@ -326,7 +328,7 @@ fn check_expr(
             if place_root_local(body, target) == Some(idx) {
                 return false;
             }
-            check_expr(body, target, idx, candidates) && check_expr(body, value, idx, candidates)
+            check_expr(body, target, idx, candidates) && check_operand(body, value, idx, candidates)
         }
         _ => {
             let mut kids = Vec::new();
@@ -341,14 +343,30 @@ fn check_call_arg(
     body: &Body,
     callee: &FnKey,
     pos: usize,
-    arg: ExprId,
+    arg: Operand,
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
+    // A promoted constant arg never references the SROA candidate local.
+    let Some(arg) = arg.as_expr() else {
+        return true;
+    };
     if matches!(&body.exprs[arg].kind, ExprKind::Local { index, .. } if *index == idx) {
         return candidates.contains_key(&(callee.clone(), pos));
     }
     check_expr(body, arg, idx, candidates)
+}
+
+/// [`check_expr`] for an operand: a promoted constant never references the SROA
+/// candidate local, so it never blocks.
+fn check_operand(
+    body: &Body,
+    op: Operand,
+    idx: u32,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    op.as_expr()
+        .is_none_or(|e| check_expr(body, e, idx, candidates))
 }
 
 // -----------------------------------------------------------------------
@@ -395,7 +413,7 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             ..
         } = &body.exprs[id].kind
         {
-            matches!(&body.exprs[*inner].kind, ExprKind::Local { index, .. }
+            matches!(&body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. }
                 if affected.iter().any(|(li, fname)| li == index && fname == field_name))
         } else {
             false
@@ -407,7 +425,9 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             let inner = *inner;
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
-            body.exprs[id].kind = body.exprs[inner].kind.clone();
+            body.exprs[id].kind = body.exprs[inner.as_expr().expect("skeleton operand")]
+                .kind
+                .clone();
             return;
         }
     }
@@ -507,10 +527,10 @@ fn rewrite_call_expr(
             let Some(positions) = sroa_positions.get(&key).cloned() else {
                 return false;
             };
-            let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+            let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
             for (pi, info) in &positions {
-                if *pi < args.len() {
-                    rewrite_arg(body, args[*pi], info, scalar_param_struct, type_table);
+                if let Some(Some(arg)) = args.get(*pi).copied() {
+                    rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                 }
             }
             true
@@ -528,12 +548,12 @@ fn rewrite_call_expr(
                     type_args,
                     args,
                     ..
-                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Unit)
+                } = std::mem::replace(&mut body.exprs[id].kind, ExprKind::Dead)
                 else {
                     unreachable!();
                 };
                 if let Some(info) = positions.get(&0) {
-                    rewrite_arg(body, receiver, info, scalar_param_struct, type_table);
+                    rewrite_arg_operand(body, receiver, info, scalar_param_struct, type_table);
                 }
                 for (pi, info) in &positions {
                     if *pi == 0 {
@@ -543,7 +563,7 @@ fn rewrite_call_expr(
                     if arg_idx < args.len() {
                         rewrite_arg(
                             body,
-                            args[arg_idx].expr,
+                            args[arg_idx].expr.as_expr().expect("skeleton operand"),
                             info,
                             scalar_param_struct,
                             type_table,
@@ -565,17 +585,31 @@ fn rewrite_call_expr(
                 let ExprKind::MethodCall { args, .. } = &body.exprs[id].kind else {
                     unreachable!();
                 };
-                let args: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
+                let args: Vec<Option<ExprId>> = args.iter().map(|a| a.expr.as_expr()).collect();
                 for (pi, info) in &positions {
                     let arg_idx = pi.saturating_sub(1);
-                    if *pi >= 1 && arg_idx < args.len() {
-                        rewrite_arg(body, args[arg_idx], info, scalar_param_struct, type_table);
+                    if *pi >= 1
+                        && let Some(Some(arg)) = args.get(arg_idx).copied()
+                    {
+                        rewrite_arg(body, arg, info, scalar_param_struct, type_table);
                     }
                 }
             }
             true
         }
         _ => false,
+    }
+}
+
+fn rewrite_arg_operand(
+    body: &mut Body,
+    op: Operand,
+    info: &SroaInfo,
+    scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
+    type_table: &TypeTable,
+) {
+    if let Some(e) = op.as_expr() {
+        rewrite_arg(body, e, info, scalar_param_struct, type_table);
     }
 }
 
@@ -593,10 +627,13 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
     {
         let inner = *inner;
-        become_expr(body, arg, inner);
+        become_expr(body, arg, inner.as_expr().expect("skeleton operand"));
     }
 
-    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap.
+    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap to
+    // its single field. Only a skeleton field is lifted in place; a promoted
+    // constant field falls through to Case 3's `FieldAccess` (`(Wrapper{V}).f`,
+    // folded later) since it has no node to become (WEP: The Live ValueGraph).
     if let ExprKind::StructLiteral {
         struct_type,
         fields,
@@ -604,9 +641,9 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
         && struct_key_of(*struct_type, type_table).as_ref() == Some(&info.struct_key)
         && fields.len() == 1
+        && let Some(fe) = fields[0].value.as_expr()
     {
-        let field_value = fields[0].value;
-        become_expr(body, arg, field_value);
+        become_expr(body, arg, fe);
         return;
     }
 
@@ -621,14 +658,14 @@ fn rewrite_arg(
     // Case 3: general — extract the field via FieldAccess.
     let span = body.exprs[arg].span;
     let orig_ty = body.exprs[arg].type_id;
-    let orig_kind = std::mem::replace(&mut body.exprs[arg].kind, ExprKind::Unit);
+    let orig_kind = std::mem::replace(&mut body.exprs[arg].kind, ExprKind::Dead);
     let orig = body.exprs.push(ExprNode {
         kind: orig_kind,
         type_id: orig_ty,
         span,
     });
     body.exprs[arg].kind = ExprKind::FieldAccess {
-        expr: orig,
+        expr: orig.into(),
         field_index: 0,
         field_name: info.field_name.clone(),
     };

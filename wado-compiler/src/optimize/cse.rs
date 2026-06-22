@@ -37,7 +37,7 @@ use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::{NirBinaryOp, NirFunction};
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
@@ -50,10 +50,10 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    gate.run_gated_cached(GatedPass::Cse, len, |fid, cached| {
+    gate.run_gated(GatedPass::Cse, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            return (false, None);
+            return false;
         }
         let rule = CseRule {
             applied: Cell::new(false),
@@ -61,35 +61,36 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let NirFunction {
             body,
             locals,
+            params,
             address_taken_locals,
             stores_aliased_locals,
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let mut engine = if let Some(cached) = cached {
-            Engine::with_analysis(body, &mut buffers, locals, &type_table, cached)
-        } else {
-            let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
-                body,
-                locals,
-                address_taken_locals,
-                stores_aliased_locals,
-                &type_table,
-                &first_param_types,
-                &call_immutability,
-            );
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.set_alias_sets(aliased, untrackable, mut_escaped);
-            engine.set_value_graph_type_table(&type_table);
-            engine
-        };
-        let changed = engine.run(&[&rule]);
-        let parked = if changed {
-            None
-        } else {
-            engine.into_analysis()
-        };
-        (changed, parked)
+        let _vg_scope = super::vg_measure::BuildScope::enter(fid.index(), "cse");
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
+        engine.set_param_locals(param_locals);
+        let cse_changed = engine.run(&[&rule]);
+        // Store-load forwarding shares cse's session: cse replaces matching
+        // subexpressions in place, leaving `value_of` current, so forwarding
+        // runs on the same ValueGraph without a rebuild.
+        let mut unsafe_locals = address_taken_locals.clone();
+        unsafe_locals.extend(stores_aliased_locals.iter().copied());
+        unsafe_locals.extend(engine.body_address_taken().iter().copied());
+        let slf_changed = super::store_load_forward::forward_at_root(&mut engine, &unsafe_locals);
+        cse_changed || slf_changed
     })
 }
 
@@ -183,7 +184,12 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
     // ValueId. We intentionally restrict candidates to `Binary` so a single-
     // local read (whose VN is just an `Opaque` / `Local` reaching def) does
     // not get hoisted — there is no benefit in CSE'ing a single local read.
-    let candidates = collect_binary_candidates(engine, guard_expr);
+    // A promoted constant guard (`Operand::Value`) has no binary subexpression
+    // to hoist.
+    let Some(guard_e) = guard_expr.as_expr() else {
+        return false;
+    };
+    let candidates = collect_binary_candidates(engine, guard_e);
     if candidates.is_empty() {
         return false;
     }
@@ -214,7 +220,7 @@ fn cse_loop_body(engine: &mut Engine, loop_block: BlockId) -> bool {
                 is_mut: false,
                 is_reactive: false,
                 type_id,
-                value,
+                value: value.into(),
                 skip_value_copy: false,
             },
             span,
@@ -266,13 +272,19 @@ fn collect_binary_candidates(
             match &body.exprs[e].kind {
                 ExprKind::Binary { left, op, right } => {
                     binary_exprs.push((e, body.exprs[e].type_id, body.exprs[e].span));
-                    stack.push(*left);
-                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or) {
-                        stack.push(*right);
+                    if let Some(le) = left.as_expr() {
+                        stack.push(le);
+                    }
+                    if !matches!(op, NirBinaryOp::And | NirBinaryOp::Or)
+                        && let Some(re) = right.as_expr()
+                    {
+                        stack.push(re);
                     }
                 }
                 ExprKind::Unary { expr: inner, .. } => {
-                    stack.push(*inner);
+                    if let Some(ie) = inner.as_expr() {
+                        stack.push(ie);
+                    }
                 }
                 _ => {}
             }
@@ -339,16 +351,22 @@ fn replace_matching_in_stmt(
 /// computes different values per inner-loop iteration.
 fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
     match &body.stmts[stmt].kind {
-        StmtKind::Expr(e) => collect_exprs_in_expr(body, *e, out),
+        StmtKind::Expr(e) => {
+            if let Some(e) = e.as_expr() {
+                collect_exprs_in_expr(body, e, out);
+            }
+        }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            collect_exprs_in_expr(body, *value, out);
+            if let Some(ve) = value.as_expr() {
+                collect_exprs_in_expr(body, ve, out);
+            }
         }
         StmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            collect_exprs_in_expr(body, *condition, out);
+            collect_exprs_in_operand(body, *condition, out);
             collect_exprs_in_block(body, *then_block, out);
             if let Some(eb) = else_block {
                 collect_exprs_in_block(body, *eb, out);
@@ -358,8 +376,8 @@ fn collect_exprs_in_stmt(body: &Body, stmt: StmtId, out: &mut Vec<ExprId>) {
         StmtKind::Loop { .. } => {}
         StmtKind::LabeledBlock { block, .. } => collect_exprs_in_block(body, *block, out),
         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_exprs_in_expr(body, *v, out);
+            if let Some(ve) = value.and_then(Operand::as_expr) {
+                collect_exprs_in_expr(body, ve, out);
             }
         }
         StmtKind::Continue => {}
@@ -370,6 +388,12 @@ fn collect_exprs_in_block(body: &Body, block: BlockId, out: &mut Vec<ExprId>) {
     let stmts = body.blocks[block].stmts.clone();
     for s in stmts {
         collect_exprs_in_stmt(body, s, out);
+    }
+}
+
+fn collect_exprs_in_operand(body: &Body, op: Operand, out: &mut Vec<ExprId>) {
+    if let Some(e) = op.as_expr() {
+        collect_exprs_in_expr(body, e, out);
     }
 }
 

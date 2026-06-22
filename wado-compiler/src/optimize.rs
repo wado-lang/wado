@@ -70,6 +70,7 @@ pub mod dce;
 mod drve;
 mod elide_box_local;
 mod elide_local;
+mod extract;
 mod field_scalarize;
 mod gate;
 mod inline;
@@ -88,8 +89,8 @@ mod string_push;
 mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
+pub(crate) mod vg_measure;
 
-use condition_implication::eliminate_implied_conditions;
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
@@ -109,12 +110,26 @@ use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
-use store_load_forward::{forward_stores_to_loads, forward_stores_to_loads_all};
+use store_load_forward::forward_stores_to_loads_all;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
+
+/// Whether the operand-promotion keystone runs early (before the value passes).
+/// Unconditional: operand promotion is the production path (the live
+/// `ValueGraph`). See `docs/wep-2026-06-15-live-value-graph.md`.
+pub(crate) fn promote_early_enabled() -> bool {
+    true
+}
+
+/// Whether **any** operand promotion is active. Unconditional — the cse
+/// subsumption and the promotion-aware liveness in `elide_local` / `copy_prop`
+/// all key on it.
+pub(crate) fn promote_active() -> bool {
+    true
+}
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -286,6 +301,16 @@ pub fn optimize(
         }
     }
 
+    // FieldAccess promotion (WEP P2), gated by WADO_PROMOTE_FIELDS, runs here:
+    // after the optimization loop (so the struct shape is post-SROA) but BEFORE
+    // select_lowering / multi_value_return, which rewrite the body into
+    // WIR-shaped forms the value-graph build would misread.
+    if opt_level != OptLevel::O0 && std::env::var_os("WADO_PROMOTE_FIELDS").is_some() {
+        run_pass("nir/promote_fields", &mut project, profiler, |p| {
+            extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
+        });
+    }
+
     // Post-optimization rewrites: select lowering for branchless Wasm
     profiler.span_start("nir/select_lowering");
     select_lowering::select_lowering(&mut project);
@@ -305,6 +330,16 @@ pub fn optimize(
     profiler.span_start("nir/multi_value_return");
     multi_value_return::classify_multi_value_returns(&mut project);
     profiler.span_end("nir/multi_value_return");
+
+    // Freeze re-emittable pure arithmetic (constants / local reads composed by
+    // Binary/Unary/Cast) into operand values, materialised by the WIR
+    // extractor. Runs last so no binary-walking pass sees the promoted form;
+    // orphaned arith / local-read nodes become unreachable from the skeleton
+    // root and are simply not emitted. (Early arith promotion already ran before
+    // the loop; `FieldAccess` promotion ran above, after SROA.)
+    run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
+        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
+    });
 
     project
 }
@@ -498,6 +533,17 @@ fn run_optimization_passes(
     run_pass("nir/match_to_switch_globals", project, profiler, |p| {
         match_to_switch_globals(p)
     });
+    // Operand-promotion keystone (WEP: The Live ValueGraph). Pure values are
+    // frozen into `Operand::Value` before the value passes, so the passes read
+    // operands (`engine.operand_value`) instead of rebuilding the value graph.
+    if promote_early_enabled() {
+        // Arith only here (before the loop); `FieldAccess` promotion runs late
+        // (after the SROA passes), since SROA scalarizes the structs a promoted
+        // `FieldAccess` would reference. See the late call in `optimize`.
+        run_pass("nir/promote_pure_values_early", project, profiler, |p| {
+            extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
+        });
+    }
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
@@ -615,8 +661,14 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
-        gated!("nir/cse", eliminate_common_subexprs);
-        gated!("nir/store_load_forward", forward_stores_to_loads);
+        // Under operand promotion (WEP P3), pure-value CSE is subsumed by
+        // hash-consing (identical values already share a ValueId), so cse is
+        // skipped — removing its per-function `builder::build`. Store-load
+        // forwarding is likewise subsumed once FieldAccess promotes at its heap
+        // version.
+        if !crate::optimize::promote_active() {
+            gated!("nir/cse", eliminate_common_subexprs);
+        }
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —
@@ -640,7 +692,6 @@ fn run_optimization_passes(
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         gated!("nir/licm", apply_licm);
-        gated!("nir/condition_implication", eliminate_implied_conditions);
         gated!("nir/tmpl_hoist", hoist_template_buffers);
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         if trace_loop {
@@ -719,4 +770,5 @@ fn run_optimization_passes(
         }
         changed
     });
+    vg_measure::report();
 }
