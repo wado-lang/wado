@@ -1,6 +1,6 @@
 ---
 name: wado
-description: Use when writing, editing, or reviewing Wado source code (.wado files). Provides the Wado language cheatsheet.
+description: Wado is not Rust: value semantics (deep copy on assign/pass), variant/enum/flags instead of one enum, an effect system, and no lifetimes/borrow-checker/unsafe/macros. Read this cheatsheet before writing, editing, or reviewing Wado (.wado) source — guessing the syntax from general knowledge will be wrong.
 ---
 
 @../../../docs/cheatsheet.md

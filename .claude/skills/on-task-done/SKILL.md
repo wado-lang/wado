@@ -1,6 +1,6 @@
 ---
 name: on-task-done
-description: Completing the task in a branch
+description: Mandatory task-completion flow: self-review the branch, update docs (spec/cheatsheet/compiler/optimizer), then run `mise run on-task-done` (build, clippy-fix, golden + format fixtures, doc-stdlib, format, tests; 40+ min) and commit its generated changes. Run before committing a finished task or opening a PR.
 ---
 
 # Overview
