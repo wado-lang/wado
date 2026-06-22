@@ -46,7 +46,7 @@ It does not touch whitespace. `from_str_lenient` does not trim, so surrounding w
 
 - Integers and floats ignore `_` anywhere in the digit body (`1_000`, `0xFF_FF`). `,` is _not_ a separator — it collides with the locale decimal comma and with future list/tuple delimiters; `_` matches Wado's own numeric literals.
 - A leading zero is not octal: `010` is `10`, only `0o12` is octal.
-- Each impl preprocesses (strip `_`, split off sign / radix prefix) then delegates to `FromStr` / `from_str_radix`; `bool` and the float special words are handled directly. No impl alters whitespace.
+- Numeric impls preprocess (strip `_`, split off sign / radix prefix) then delegate to `from_str_radix` / `from_str` (the float `FromStr` already accepts `nan` / `inf` / `infinity`); `bool` and `char` are handled directly. No impl alters whitespace.
 
 Future WEPs may extend the set (e.g. `core:temporal` multi-format dates).
 
@@ -66,7 +66,7 @@ A user type implements `LenientFromStr` directly, independently of `FromStr` (ei
 ## Implementation Strategy
 
 - Define the trait in `core:prelude` (`lib/core/prelude/traits.wado`), auto-imported.
-- Add the built-in impls (preprocess + delegate; `bool` and float words direct), reusing `FromStr`'s error types (`ParseIntError`, `ParseFloatError`, `ParseBoolError`) as `Err`.
+- Add the built-in impls and a single shared `Err` type, `LenientParseError` (a short reason string). One unified error keeps the associated-type story simple and gives the infallible `String` impl a never-returned `Err`; numeric impls map `ParseIntError` / `ParseFloatError` into it.
 - Document in `docs/stdlib-core-prelude.md` and the cheatsheet.
 
 ## Consequences

@@ -1,0 +1,113 @@
+// Tests for the `LenientFromStr` trait and its built-in impls.
+
+test "String identity" {
+    assert String::from_str_lenient(&"hello") matches { Ok(v) && v == "hello" };
+    assert String::from_str_lenient(&"") matches { Ok(v) && v == "" };
+    // Surrounding spaces are preserved (no trimming).
+    assert String::from_str_lenient(&"  spaced  ") matches { Ok(v) && v == "  spaced  " };
+}
+
+test "char single scalar" {
+    assert char::from_str_lenient(&"a") matches { Ok(v) && v == 'a' };
+    // A single space is a valid char.
+    assert char::from_str_lenient(&" ") matches { Ok(v) && v == ' ' };
+    // Multibyte scalar.
+    assert char::from_str_lenient(&"あ") matches { Ok(v) && v == 'あ' };
+}
+
+test "char errors" {
+    assert char::from_str_lenient(&"") matches { Err(_) };
+    assert char::from_str_lenient(&"ab") matches { Err(_) };
+}
+
+test "int decimal and sign" {
+    assert i32::from_str_lenient(&"42") matches { Ok(v) && v == 42 };
+    assert i32::from_str_lenient(&"-42") matches { Ok(v) && v == -42 };
+    assert i32::from_str_lenient(&"+5") matches { Ok(v) && v == 5 };
+    // A leading zero is decimal, not octal.
+    assert i32::from_str_lenient(&"010") matches { Ok(v) && v == 10 };
+}
+
+test "int radix prefixes" {
+    assert i32::from_str_lenient(&"0x2A") matches { Ok(v) && v == 42 };
+    assert i32::from_str_lenient(&"0X2a") matches { Ok(v) && v == 42 };
+    assert i32::from_str_lenient(&"0o12") matches { Ok(v) && v == 10 };
+    assert i32::from_str_lenient(&"0b1010") matches { Ok(v) && v == 10 };
+    assert i32::from_str_lenient(&"-0x10") matches { Ok(v) && v == -16 };
+}
+
+test "int underscores" {
+    assert i32::from_str_lenient(&"1_000") matches { Ok(v) && v == 1000 };
+    assert u32::from_str_lenient(&"0xFF_FF") matches { Ok(v) && v == 65535 };
+    assert i64::from_str_lenient(&"1_000_000") matches { Ok(v) && v == 1000000 };
+}
+
+test "int various widths" {
+    assert i8::from_str_lenient(&"-128") matches { Ok(v) && v == -128 };
+    assert u8::from_str_lenient(&"255") matches { Ok(v) && v == 255 };
+    assert i16::from_str_lenient(&"-1000") matches { Ok(v) && v == -1000 };
+    assert u16::from_str_lenient(&"0x100") matches { Ok(v) && v == 256 };
+    assert i64::from_str_lenient(&"0o777") matches { Ok(v) && v == 511 };
+    assert u64::from_str_lenient(&"0b1111") matches { Ok(v) && v == 15 };
+}
+
+test "int128 widths" {
+    assert i128::from_str_lenient(&"0x10") matches { Ok(v) && v == 16 as i128 };
+    assert u128::from_str_lenient(&"1_000") matches { Ok(v) && v == 1000 as u128 };
+    assert i128::from_str_lenient(&"-42") matches { Ok(v) && v == -42 as i128 };
+}
+
+test "int errors" {
+    assert i32::from_str_lenient(&" 1 ") matches { Err(_) };
+    assert i32::from_str_lenient(&"eighty") matches { Err(_) };
+    assert i32::from_str_lenient(&"0xZZ") matches { Err(_) };
+    assert u8::from_str_lenient(&"-1") matches { Err(_) };
+    assert u8::from_str_lenient(&"256") matches { Err(_) };
+}
+
+test "float decimal and exponent" {
+    assert f64::from_str_lenient(&"3.14") matches { Ok(v) && v == 3.14 };
+    assert f64::from_str_lenient(&"1e9") matches { Ok(v) && v == 1000000000.0 };
+    assert f64::from_str_lenient(&"-1E-3") matches { Ok(v) && v == -0.001 };
+    assert f32::from_str_lenient(&"2.5") matches { Ok(v) && v == 2.5 };
+}
+
+test "float underscores" {
+    assert f64::from_str_lenient(&"3_000.5") matches { Ok(v) && v == 3000.5 };
+}
+
+test "float special words" {
+    assert f64::from_str_lenient(&"nan") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str_lenient(&"NaN") matches { Ok(v) && v.is_nan() };
+    assert f64::from_str_lenient(&"inf") matches { Ok(v) && v == f64::INFINITY };
+    assert f64::from_str_lenient(&"-inf") matches { Ok(v) && v == f64::NEG_INFINITY };
+    assert f64::from_str_lenient(&"infinity") matches { Ok(v) && v == f64::INFINITY };
+}
+
+test "float errors" {
+    assert f64::from_str_lenient(&" 1.0 ") matches { Err(_) };
+    assert f64::from_str_lenient(&"hello") matches { Err(_) };
+}
+
+test "bool forms" {
+    assert bool::from_str_lenient(&"true") matches { Ok(v) && v == true };
+    assert bool::from_str_lenient(&"TRUE") matches { Ok(v) && v == true };
+    assert bool::from_str_lenient(&"false") matches { Ok(v) && v == false };
+    assert bool::from_str_lenient(&"False") matches { Ok(v) && v == false };
+    assert bool::from_str_lenient(&"1") matches { Ok(v) && v == true };
+    assert bool::from_str_lenient(&"0") matches { Ok(v) && v == false };
+}
+
+test "bool errors" {
+    assert bool::from_str_lenient(&"yes") matches { Err(_) };
+    assert bool::from_str_lenient(&"") matches { Err(_) };
+    assert bool::from_str_lenient(&" true") matches { Err(_) };
+}
+
+test "LenientParseError reason" {
+    let r = i32::from_str_lenient(&"eighty");
+    assert r matches { Err(e) && e.reason().len() > 0 };
+}
+
+__DATA__
+{"test": {}}

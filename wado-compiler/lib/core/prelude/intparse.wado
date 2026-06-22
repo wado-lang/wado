@@ -10,9 +10,99 @@
 use { String } from "core:prelude/string.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { u128 } from "core:prelude/int128.wado";
+use { LenientParseError } from "core:prelude/traits.wado";
 
 
 use { parse_text_range } from "core:prelude/fpfmt.wado";
+
+/// Preprocess a human-supplied integer string for a lenient parse: split off
+/// an optional leading sign, detect an optional radix prefix (`0x`/`0X`,
+/// `0o`/`0O`, `0b`/`0B`; default radix 10), and strip `_` separators from the
+/// digit body. Returns the cleaned string (sign re-attached, prefix removed,
+/// underscores stripped) paired with the radix, ready for `from_str_radix`.
+///
+/// Whitespace is not touched. An empty input, a lone sign, a lone radix
+/// prefix, or a stray underscore-only body yields `Err`.
+pub fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseError> {
+    let len = s.len();
+    if len == 0 {
+        return Result::Err(LenientParseError::new("empty integer string"));
+    }
+    let first = s.get_byte_unchecked(0);
+    let is_negative = first == '-' as u8;
+    let has_sign = is_negative || first == '+' as u8;
+    let mut i = if has_sign { 1 } else { 0 };
+    if i >= len {
+        return Result::Err(LenientParseError::new("integer string has a sign but no digits"));
+    }
+    let mut radix: u32 = 10;
+    if s.get_byte_unchecked(i) == '0' as u8 && i + 2 <= len {
+        let marker = s.get_byte_unchecked(i + 1);
+        if marker == 'x' as u8 || marker == 'X' as u8 {
+            radix = 16;
+            i += 2;
+        } else if marker == 'o' as u8 || marker == 'O' as u8 {
+            radix = 8;
+            i += 2;
+        } else if marker == 'b' as u8 || marker == 'B' as u8 {
+            radix = 2;
+            i += 2;
+        }
+    }
+    let mut cleaned = String::with_capacity(len);
+    if is_negative {
+        cleaned.push('-');
+    }
+    let mut digit_count = 0;
+    for let mut j = i; j < len; j += 1 {
+        let b = s.get_byte_unchecked(j);
+        if b == '_' as u8 {
+            continue;
+        }
+        cleaned.push(char::from_u32_unchecked(b as u32));
+        digit_count += 1;
+    }
+    if digit_count == 0 {
+        return Result::Err(LenientParseError::new("integer string has no digits"));
+    }
+    return Result::Ok([cleaned, radix]);
+}
+
+/// Render a `ParseIntError` as a `LenientParseError` reason.
+pub fn lenient_int_error(e: ParseIntError) -> LenientParseError {
+    let reason = match e.kind() {
+        Empty => "empty integer string",
+        InvalidDigit => "invalid digit in integer string",
+        PosOverflow => "integer string overflows the target type",
+        NegOverflow => "integer string underflows the target type",
+    };
+    return LenientParseError::new(reason);
+}
+
+/// Render a `ParseFloatError` as a `LenientParseError` reason.
+pub fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
+    let reason = match e.kind() {
+        Empty => "empty float string",
+        Invalid => "invalid float string",
+    };
+    return LenientParseError::new(reason);
+}
+
+/// Strip `_` separators from a human-supplied float string for a lenient
+/// parse. Whitespace is not touched; the result is handed to the float
+/// `FromStr` (which already accepts `nan`/`inf`/`infinity` case-insensitively).
+pub fn lenient_float_preprocess(s: &String) -> String {
+    let len = s.len();
+    let mut cleaned = String::with_capacity(len);
+    for let mut j = 0; j < len; j += 1 {
+        let b = s.get_byte_unchecked(j);
+        if b == '_' as u8 {
+            continue;
+        }
+        cleaned.push(char::from_u32_unchecked(b as u32));
+    }
+    return cleaned;
+}
 
 /// Kind of failure returned by integer parsing.
 pub enum IntErrorKind {
