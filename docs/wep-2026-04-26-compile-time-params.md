@@ -80,9 +80,9 @@ Each `#[param]` declaration resolves independently. Sources are checked in this 
 
 If a higher-priority source produces a value, lower-priority sources are not consulted.
 
-CLI overrides and environment variables yield strings. They are converted to the global's declared type via the [`FromParam`](#fromparam-trait) trait. Conversion failure is a compile error.
+CLI overrides and environment variables yield strings. They are converted to the global's declared type via the [`FromParam`](#fromparam-trait) trait. `FromParam` is a _total_ conversion — it does not return an error. A value it cannot convert is handled by one of the strategies in [Failure Handling](#failure-handling); none of them is, by itself, a compile error.
 
-The initializer expression is type-checked as written; no `FromParam` is involved on that path.
+The initializer expression is type-checked as written; no `FromParam` is involved on that path. When a conversion is ignored (see [Failure Handling](#failure-handling)), the initializer expression is the value that takes effect.
 
 ### Unknown `-D` Names
 
@@ -102,12 +102,30 @@ CLI and environment variable values are strings. Conversion to the global's type
 
 ```wado
 pub trait FromParam {
-    type Err;
-    fn from_param(s: &String) -> Result<Self, Self::Err>;
+    fn from_param(s: &String) -> Self;
 }
 ```
 
-`FromParam` is intentionally separate from `FromStr` (the general string parsing trait introduced alongside this WEP). `FromParam` is permitted to be more lenient — for example, accepting both `"true"` and `"1"` for `bool` — without affecting the semantics of general string parsing in user code.
+`FromParam` is a _total_ conversion: it returns `Self` directly, with no `Result` and no `Err` associated type. This is the central difference from `FromStr` (the general string parsing trait this WEP builds on, already in `core:prelude`), whose `from_str` returns `Result<Self, Self::Err>` so user code can recover from a parse failure.
+
+A compile-time parameter has no caller to hand a `Result` to: the value is fixed before the program runs. Modeling it as a fallible conversion would force every read site, or the resolution pass, to invent an error policy. Making `FromParam` total pushes that policy into the conversion itself, which is where the per-type knowledge lives.
+
+`FromParam` is also permitted to be more lenient than `FromStr` — for example, accepting both `"true"` and `"1"` for `bool` — without affecting the semantics of general string parsing in user code.
+
+#### Failure Handling
+
+Because `from_param` is total, an implementation cannot signal "this string is not a valid value" through its return type. On input it cannot convert, an implementation does one of:
+
+1. Best-effort coercion — return a sensible value anyway (e.g. `String` is the trimmed input; `bool` treats `"1"`/`"0"` like `"true"`/`"false"`).
+2. `panic` — signal that the input is unusable.
+
+These two impl-level choices, combined with _where_ the conversion runs (see [Resolution Timing and Optimization](#resolution-timing-and-optimization)), produce the three observable outcomes:
+
+- Best-effort → the returned value is used.
+- A conversion the compiler performs at resolution time (every built-in impl) that fails is **not** a build error: the pass emits a warning, ignores the override, and falls back to the initializer expression. This is the "ignore with a warning" outcome.
+- A `panic` reached only at runtime — possible when a user `FromParam` impl runs during global initialization rather than at resolution time — surfaces as a runtime trap. This escapes compile-time detection, so it is discouraged, but not prohibited.
+
+Built-in implementations never reach the runtime-panic outcome: the resolution pass converts them itself, so an unconvertible value always becomes a compile-time warning plus the initializer fallback.
 
 #### Trimming
 
@@ -123,18 +141,23 @@ All built-in `FromParam` implementations trim leading and trailing ASCII whitesp
 | `f32`, `f64`                      | Standard floating-point literal (e.g., `3.14`, `-1e9`) |
 | `bool`                            | `"true"`, `"false"`, `"1"`, `"0"` (case-insensitive)   |
 
-Anything else — for example, a hex prefix on an integer, or `"yes"` for `bool` — is a parse error and therefore a compile error. The accepted set may be extended in future WEPs.
+Anything else — for example, a hex prefix on an integer, or `"yes"` for `bool` — is unconvertible. Per [Failure Handling](#failure-handling), the resolution pass converts these built-in types itself, so an unconvertible value becomes a compile warning and a fallback to the initializer rather than a build error. The accepted set may be extended in future WEPs.
 
-User-defined types may implement `FromParam` to be usable as `#[param]` types. This is supported but not exercised by the v1 implementation; the focus is the built-in set above.
+User-defined types may implement `FromParam` to be usable as `#[param]` types. This is supported but not exercised by the v1 implementation; the focus is the built-in set above. A user-typed conversion is left as a `from_param(...)` call in the initializer, so it risks the runtime-panic outcome; implementors should prefer best-effort coercion.
 
 ### Resolution Timing and Optimization
 
-A `#[param]` global is resolved during compilation, before any runtime initialization sequencing. After resolution the global behaves like any other `global` whose initializer happens to be a literal:
+When an override resolves, the param-resolution pass handles the conversion by the global's declared type:
 
-- Constant Global Promotion (CGP) folds it to an immutable Wasm constant when the resolved value is scalar (numeric, `bool`).
-- For object-typed parameters (currently only `String`), the value participates in the existing lazy-initialization path.
+- Built-in type: the pass converts the resolved string natively (the compiler owns the parsers for `String`, the integer types, the float types, and `bool`). Success replaces the initializer with a literal of the resolved value; failure emits a warning and leaves the original initializer in place. No interpreter is involved, so this works at the pass's position (after symbol resolution, before lowering).
+- User type: the pass rewrites the initializer to `<Type>::from_param("<resolved string>")`, an ordinary Wado expression, and leaves it to the rest of the pipeline.
 
-No new optimization is required. The naturally-arising constant folding is sufficient for the common cases.
+After the rewrite the global behaves like any other `global` whose initializer is an expression:
+
+- A literal scalar (numeric, `bool`) is eligible for Constant Global Promotion (CGP) to an immutable Wasm constant. `String` participates in the existing lazy-initialization path.
+- A `from_param(...)` call for a user type is constant-folded when its impl allows it; otherwise it stays a runtime call in the initializer, and that is the only path on which a `from_param` `panic` can surface at runtime.
+
+No new optimization is required. The only new behavior is the resolution pass converting built-in types and treating a failed conversion as a warning-and-fallback instead of a hard error.
 
 ### CLI Surface
 
@@ -167,9 +190,8 @@ No changes to `wado.toml`. `#[param]` is purely a source-level construct.
 3. **Param resolution pass** (new, runs after symbol resolution and before TIR lowering):
    - For each `-D NAME=value` from the CLI, look up `NAME` in the parameter table. Unknown names → compile error.
    - For each `#[param]` declaration, in priority order, find a string value from `-D`, then from the declared `from_env` environment variable, otherwise mark the global as using its initializer.
-   - For overridden globals, run the resolved string through `FromParam::from_param` for the declared type. Failure → compile error.
-   - Replace the global's initializer in the AST/TIR with a literal of the resolved value.
-4. **Existing optimizations** (CGP, etc.) operate on the rewritten globals without further changes.
+   - For overridden globals with a built-in declared type, convert the string natively: success → replace the initializer with the resolved literal; failure → warning, keep the initializer. For a user-typed global, rewrite the initializer to `<Type>::from_param("<resolved string>")`. No conversion outcome is a hard error (see [Failure Handling](#failure-handling)).
+4. **Existing optimizations** (constant folding, CGP, etc.) operate on the rewritten globals without further changes.
 
 ### `CompilerHost`
 
@@ -187,28 +209,32 @@ The CLI host implements these by reading `clap` arguments and `std::env::var` re
 
 ### `FromParam` and `FromStr`
 
-This WEP introduces both:
+`FromStr` already lives in `core:prelude` (Rust-compatible, returning `Result<Self, Self::Err>`, with `from_str_range` as the fundamental operation). This WEP adds:
 
-- `FromStr` — Rust-compatible. Implementations for `i*`, `u*`, `f*`, and `String` are retrofit on top of the existing `T::from_str` functions in `core:prelude`. `bool::from_str` is added with the strict `"true"` / `"false"` accepted set.
-- `FromParam` — separate trait, lenient where it makes sense (`bool` accepts `"1"` / `"0"`), trims unconditionally.
+- `FromParam` — a separate, total trait (`fn from_param(s: &String) -> Self`). Built-in impls in the prelude delegate to the corresponding `FromStr` impl, trim unconditionally, are lenient where it makes sense (`bool` accepts `"1"` / `"0"`), and `panic` on an unconvertible value. The resolution pass mirrors these impls natively so it can convert a built-in parameter without an interpreter; a conversion the native path rejects becomes a warning-and-fallback (see [Failure Handling](#failure-handling)) rather than the impl's runtime `panic`.
 
-Both traits live in `core:prelude` and are auto-imported.
+`FromParam` lives in `core:prelude` and is auto-imported.
 
 ### Errors
 
-| Condition                                           | Error                                                            |
-| --------------------------------------------------- | ---------------------------------------------------------------- |
-| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global`                 |
-| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`                              |
-| `name = ""` (empty string)                          | `#[param] name must not be empty`                                |
-| `-D NAME=value` for an undeclared parameter         | `unknown compile-time parameter: NAME`                           |
-| `FromParam::from_param` returns `Err`               | `cannot parse "<value>" as <Type> for parameter <NAME>`          |
-| `from_env` value present but not parseable          | same as above, with the env var name mentioned in the diagnostic |
+| Condition                                           | Error                                            |
+| --------------------------------------------------- | ------------------------------------------------ |
+| `#[param]` on `global mut`                          | `#[param] cannot be applied to a mutable global` |
+| `#[param]` argument other than `name` or `from_env` | `unknown #[param] argument: <name>`              |
+| `name = ""` (empty string)                          | `#[param] name must not be empty`                |
+| `-D NAME=value` for an undeclared parameter         | `unknown compile-time parameter: NAME` (error)   |
+
+`FromParam` conversion never produces an error. When a built-in conversion cannot convert the resolved string (e.g. `-D PORT=eighty`), the resolution pass emits a warning instead and keeps the initializer:
+
+| Condition                                       | Warning                                                                |
+| ----------------------------------------------- | ---------------------------------------------------------------------- |
+| built-in conversion fails on a `-D` value       | `cannot parse "<value>" as <Type> for parameter <NAME>; using default` |
+| built-in conversion fails on a `from_env` value | same as above, naming the env var instead of the parameter             |
 
 ### Documentation
 
 - Update `docs/cheatsheet.md` with a short Compile-Time Parameters section.
-- Update `core:prelude` reference (`docs/stdlib-core-prelude.md`) with `FromParam` and `FromStr`.
+- Update `core:prelude` reference (`docs/stdlib-core-prelude.md`) with `FromParam` (`FromStr` is already documented there).
 
 ## Consequences
 
@@ -218,13 +244,14 @@ Both traits live in `core:prelude` and are auto-imported.
 - No new literal syntax; `#[param]` slots into the existing attribute family alongside `#[inline]`, `#[expect_trap]`, etc.
 - Type and default come from the `global` itself, eliminating turbofish and avoiding redundant manifest schemas.
 - Bake-in semantics fall out of the existing global pipeline plus CGP — minimal new optimization work.
-- Build inputs are explicit: only declared parameters can be set, and `-D` typos are caught.
+- Build inputs are explicit: only declared parameters can be set, and a `-D` for an undeclared name is a hard error, catching typos in parameter _names_.
 - `from_env` makes the set of consumed environment variables a documented, opt-in subset, avoiding Rust `env!()`'s "any env var leaks in" failure mode.
 
 ### Trade-offs
 
 - Flat namespace pushes collision avoidance to library authors. Acceptable: the same constraint applies to OS environment variables, which library authors already deal with.
-- `FromParam` is a dedicated trait and not `FromStr`, so there is some duplication. The benefit — keeping lenient parameter parsing out of general string parsing semantics — is judged worth the cost.
+- A malformed parameter _value_ (e.g. `-D PORT=eighty`) is a warning, not an error, and the initializer's default silently takes effect. This trades strictness for build resilience; the warning is the signal that surfaces the misconfiguration. A future `required`/strict mode (see [Future Extensions](#future-extensions)) could promote it back to an error where a default is not acceptable.
+- `FromParam` is a dedicated trait and not `FromStr`, so there is some duplication. The benefits — lenient parameter parsing kept out of general string parsing semantics, and a total conversion that never fails the build — are judged worth the cost.
 - `String` parameters cannot carry meaningful surrounding whitespace because trim is unconditional. Acceptable for the target use cases (API URLs, identifiers, level names).
 
 ### Future Extensions
