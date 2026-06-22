@@ -1802,6 +1802,26 @@ pub global RK_RELOP: NodeKind = 11;
 
 global RULE_NAMES: List<String> = ["equation", "expression", "multiplyingExpression", "powExpression", "signedAtom", "atom", "scientific", "constant", "variable", "func_", "funcname", "relop"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,

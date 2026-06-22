@@ -4315,6 +4315,26 @@ pub global RK_QUALIFIEDIDENTIFIER: NodeKind = 66;
 
 global RULE_NAMES: List<String> = ["grammarSpec", "grammarDecl", "grammarType", "prequelConstruct", "optionsSpec", "option", "optionValue", "delegateGrammars", "delegateGrammar", "tokensSpec", "channelsSpec", "idList", "action_", "actionScopeName", "actionBlock", "argActionBlock", "modeSpec", "rules", "ruleSpec", "parserRuleSpec", "exceptionGroup", "exceptionHandler", "finallyClause", "rulePrequel", "ruleReturns", "throwsSpec", "localsSpec", "ruleAction", "ruleModifiers", "ruleModifier", "ruleBlock", "ruleAltList", "labeledAlt", "lexerRuleSpec", "lexerRuleBlock", "lexerAltList", "lexerAlt", "lexerElements", "lexerElement", "lexerBlock", "lexerCommands", "lexerCommand", "lexerCommandName", "lexerCommandExpr", "altList", "alternative", "element", "predicateOptions", "predicateOption", "labeledElement", "ebnf", "blockSuffix", "ebnfSuffix", "lexerAtom", "atom", "wildcard", "notSet", "blockSet", "setElement", "block", "ruleref", "characterRange", "terminalDef", "elementOptions", "elementOption", "identifier", "qualifiedIdentifier"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 struct Parser {
     tokens: TokenStream,
     kinds: Array<i32>,

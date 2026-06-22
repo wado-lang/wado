@@ -1194,6 +1194,26 @@ pub global RK_EXPR: NodeKind = 0;
 
 global RULE_NAMES: List<String> = ["expr"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 pub enum ExprAlt {
     Mul,
     Add,

@@ -6692,6 +6692,26 @@ pub global RK_SHR: NodeKind = 195;
 
 global RULE_NAMES: List<String> = ["crate", "macroInvocation", "delimTokenTree", "tokenTree", "tokenTreeToken", "macroInvocationSemi", "macroRulesDefinition", "macroRulesDef", "macroRules", "macroRule", "macroMatcher", "macroMatch", "macroMatchToken", "macroFragSpec", "macroRepSep", "macroRepOp", "macroTranscriber", "item", "visItem", "macroItem", "module", "externCrate", "crateRef", "asClause", "useDeclaration", "useTree", "function_", "functionQualifiers", "abi", "functionParameters", "selfParam", "shorthandSelf", "typedSelf", "functionParam", "functionParamPattern", "functionReturnType", "typeAlias", "struct_", "structStruct", "tupleStruct", "structFields", "structField", "tupleFields", "tupleField", "enumeration", "enumItems", "enumItem", "enumItemTuple", "enumItemStruct", "enumItemDiscriminant", "union_", "constantItem", "staticItem", "trait_", "implementation", "inherentImpl", "traitImpl", "externBlock", "externalItem", "genericParams", "genericParam", "lifetimeParam", "typeParam", "constParam", "whereClause", "whereClauseItem", "lifetimeWhereClauseItem", "typeBoundWhereClauseItem", "forLifetimes", "associatedItem", "innerAttribute", "outerAttribute", "attr", "attrInput", "statement", "letStatement", "expressionStatement", "expression", "comparisonOperator", "compoundAssignOperator", "expressionWithBlock", "literalExpression", "pathExpression", "blockExpression", "statements", "asyncBlockExpression", "unsafeBlockExpression", "arrayElements", "tupleElements", "tupleIndex", "structExpression", "structExprStruct", "structExprFields", "structExprField", "structBase", "structExprTuple", "structExprUnit", "enumerationVariantExpression", "enumExprStruct", "enumExprFields", "enumExprField", "enumExprTuple", "enumExprFieldless", "callParams", "closureExpression", "closureParameters", "closureParam", "loopExpression", "infiniteLoopExpression", "predicateLoopExpression", "predicatePatternLoopExpression", "iteratorLoopExpression", "loopLabel", "ifExpression", "ifLetExpression", "matchExpression", "matchArms", "matchArmExpression", "matchArm", "matchArmGuard", "pattern", "patternNoTopAlt", "patternWithoutRange", "literalPattern", "identifierPattern", "wildcardPattern", "restPattern", "rangePattern", "rangePatternBound", "referencePattern", "structPattern", "structPatternElements", "structPatternFields", "structPatternField", "structPatternEtCetera", "tupleStructPattern", "tupleStructItems", "tuplePattern", "tuplePatternItems", "groupedPattern", "slicePattern", "slicePatternItems", "pathPattern", "type_", "typeNoBounds", "parenthesizedType", "neverType", "tupleType", "arrayType", "sliceType", "referenceType", "rawPointerType", "bareFunctionType", "functionTypeQualifiers", "bareFunctionReturnType", "functionParametersMaybeNamedVariadic", "maybeNamedFunctionParameters", "maybeNamedParam", "maybeNamedFunctionParametersVariadic", "traitObjectType", "traitObjectTypeOneBound", "implTraitType", "implTraitTypeOneBound", "inferredType", "typeParamBounds", "typeParamBound", "traitBound", "lifetimeBounds", "lifetime", "simplePath", "simplePathSegment", "pathInExpression", "pathExprSegment", "pathIdentSegment", "genericArgs", "genericArg", "genericArgsConst", "genericArgsLifetimes", "genericArgsTypes", "genericArgsBindings", "genericArgsBinding", "qualifiedPathInExpression", "qualifiedPathType", "qualifiedPathInType", "typePath", "typePathSegment", "typePathFn", "typePathInputs", "visibility", "identifier", "keyword", "macroIdentifierLikeToken", "macroLiteralToken", "macroPunctuationToken", "shl", "shr"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 pub enum ExpressionAlt {
     AttributedExpression,
     LiteralExpression_,

@@ -5252,6 +5252,26 @@ pub global RK_EOS: NodeKind = 157;
 
 global RULE_NAMES: List<String> = ["initializer", "bindingPattern", "typeParameters", "typeParameterList", "typeParameter", "constraint", "typeArguments", "typeArgumentList", "typeArgument", "type_", "unionOrIntersectionOrPrimaryType", "primaryType", "predefinedType", "typeReference", "typeGeneric", "typeName", "objectType", "typeBody", "typeMemberList", "typeMember", "arrayType", "tupleType", "tupleElementTypes", "functionType", "constructorType", "typeQuery", "typeQueryExpression", "propertySignatur", "typeAnnotation", "callSignature", "parameterList", "requiredParameterList", "parameter", "optionalParameter", "restParameter", "requiredParameter", "accessibilityModifier", "identifierOrPattern", "constructSignature", "indexSignature", "methodSignature", "typeAliasDeclaration", "constructorDeclaration", "interfaceDeclaration", "interfaceExtendsClause", "classOrInterfaceTypeList", "enumDeclaration", "enumBody", "enumMemberList", "enumMember", "namespaceDeclaration", "namespaceName", "importAliasDeclaration", "decoratorList", "decorator", "decoratorMemberExpression", "decoratorCallExpression", "program", "sourceElement", "statement", "block", "statementList", "abstractDeclaration", "importStatement", "importFromBlock", "importModuleItems", "importAliasName", "moduleExportName", "importedBinding", "importDefault", "importNamespace", "importFrom", "aliasName", "exportStatement", "exportFromBlock", "exportModuleItems", "exportAliasName", "declaration", "variableStatement", "variableDeclarationList", "variableDeclaration", "emptyStatement_", "expressionStatement", "ifStatement", "iterationStatement", "varModifier", "continueStatement", "breakStatement", "returnStatement", "yieldStatement", "withStatement", "switchStatement", "caseBlock", "caseClauses", "caseClause", "defaultClause", "labelledStatement", "throwStatement", "tryStatement", "catchProduction", "finallyProduction", "debuggerStatement", "functionDeclaration", "classDeclaration", "classHeritage", "classTail", "classExtendsClause", "implementsClause", "classElement", "propertyMemberDeclaration", "propertyMemberBase", "indexMemberDeclaration", "generatorMethod", "generatorFunctionDeclaration", "generatorBlock", "generatorDefinition", "iteratorBlock", "iteratorDefinition", "classElementName", "privateIdentifier", "formalParameterList", "formalParameterArg", "lastFormalParameterArg", "functionBody", "sourceElements", "arrayLiteral", "elementList", "arrayElement", "objectLiteral", "propertyAssignment", "getAccessor", "setAccessor", "propertyName", "arguments", "argumentList", "argument", "expressionSequence", "singleExpression", "asExpression", "assignable", "anonymousFunction", "arrowFunctionDeclaration", "arrowFunctionParameters", "arrowFunctionBody", "assignmentOperator", "literal", "templateStringLiteral", "templateStringAtom", "numericLiteral", "bigintLiteral", "getter", "setter", "identifierName", "identifier", "identifierOrKeyWord", "reservedWord", "keyword", "eos"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 pub enum UnionOrIntersectionOrPrimaryTypeAlt {
     Union,
     Intersection,

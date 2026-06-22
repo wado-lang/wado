@@ -28206,6 +28206,26 @@ pub global RK_WS: NodeKind = 78;
 
 global RULE_NAMES: List<String> = ["stylesheet", "charset", "imports", "namespace_", "namespacePrefix", "media", "mediaQueryList", "mediaQuery", "mediaType", "mediaExpression", "mediaFeature", "page", "pseudoPage", "selectorGroup", "selector", "combinator", "simpleSelectorSequence", "typeSelector", "typeNamespacePrefix", "elementName", "universal", "className", "attrib", "pseudo", "functionalPseudo", "expression", "negation", "negationArg", "operator_", "property_", "ruleset", "declarationList", "declaration", "prio", "value", "expr", "term", "function_", "dxImageTransform", "hexcolor", "number", "percentage", "dimension", "unknownDimension", "any_", "atRule", "unused", "block", "nestedStatement", "groupRuleBody", "supportsRule", "supportsCondition", "supportsConditionInParens", "supportsNegation", "supportsConjunction", "supportsDisjunction", "supportsDeclarationCondition", "generalEnclosed", "url", "var_", "calc", "calcSum", "calcProduct", "calcValue", "fontFaceRule", "fontFaceDeclaration", "keyframesRule", "keyframeBlock", "keyframeSelector", "viewport", "counterStyle", "fontFeatureValuesRule", "fontFamilyNameList", "fontFamilyName", "featureValueBlock", "featureType", "featureValueDefinition", "ident", "ws"];
 
+impl Display for NodeKind {
+    fn fmt(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&"<error>");
+        } else {
+            f.write_str(&RULE_NAMES[*self as i32]);
+        }
+    }
+}
+
+impl Inspect for NodeKind {
+    fn inspect(&self, f: &mut Formatter) {
+        if *self == K_ERROR {
+            f.write_str(&`<error>({*self as i32})`);
+        } else {
+            f.write_str(&`{RULE_NAMES[*self as i32]}({*self as i32})`);
+        }
+    }
+}
+
 pub enum CharsetAlt {
     goodCharset,
     badCharset,
