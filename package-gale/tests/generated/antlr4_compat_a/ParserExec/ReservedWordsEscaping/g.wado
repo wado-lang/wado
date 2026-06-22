@@ -1360,8 +1360,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -1413,7 +1413,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1682,6 +1682,7 @@ fn _parse_root__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     let start = p.peek_start();
     let mut _plus_first = true;
     loop {
+        if p.recovering { break; }
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1739,9 +1740,10 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     if kind == TK_BREAK {
         p.b.set_alt(1);
-        let break_ = p.expect(TK_BREAK, [TK_BREAK]);
+        let break_ = p.expect(TK_BREAK, &SYNC_0);
         let mut _plus_first = true;
         loop {
+            if p.recovering { break; }
             if !_plus_first {
                 let mut rep_scan_pos: i32 = -1;
                 rep_scan: {
@@ -1755,20 +1757,21 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 if rep_scan_pos < 0 { break; }
             }
             _plus_first = false;
-            let break_ = p.expect(TK_BREAK, []);
+            let break_ = p.expect(TK_BREAK, &EMPTY_SYNC);
         }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_FOR {
             let for_ = _parse_for(p, follow);
         } else if grp_kind == TK_IF {
-            let if_ = p.expect(TK_IF, []);
+            let if_ = p.expect(TK_IF, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_IF {
         p.b.set_alt(2);
-        let if__item = p.expect(TK_IF, []);
+        let if__item = p.expect(TK_IF, &EMPTY_SYNC);
         loop {
+            if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
@@ -1780,7 +1783,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
-            let if_ = p.expect(TK_IF, []);
+            let if_ = p.expect(TK_IF, &EMPTY_SYNC);
         }
         return;
     }
@@ -1800,6 +1803,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     _parse_continue__inner_atom(p, follow);
     p.b.finish_node(p.last_end());
     loop {
+        if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_CONTINUE_ {
             if 1 >= min_prec {
@@ -1808,7 +1812,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
                 }
                 p.b.start_node_at(_cp, RK_CONTINUE, _start);
                 p.b.set_alt(3);
-                let continue__2 = p.expect(TK_CONTINUE_, []);
+                let continue__2 = p.expect(TK_CONTINUE_, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1847,7 +1851,7 @@ fn _parse_args(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 
 fn _parse_for__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let for_ = p.expect(TK_FOR, []);
+    let for_ = p.expect(TK_FOR, &EMPTY_SYNC);
     return;
 }
 
@@ -1863,6 +1867,7 @@ fn _parse_for(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -1931,6 +1936,9 @@ fn _kind_set_0(k: i32) -> bool {
 fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_FOR | TK_IF };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_BREAK];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_FOR]];
 

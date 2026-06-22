@@ -1195,8 +1195,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -1248,7 +1248,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1394,7 +1394,7 @@ fn scan_u(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_u__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lit_u = p.expect(TK_LIT_U, []);
+    let lit_u = p.expect(TK_LIT_U, &EMPTY_SYNC);
     return;
 }
 
@@ -1410,6 +1410,7 @@ fn _parse_u(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -1458,4 +1459,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
     }
     return String::new();
 }
+
+global EMPTY_SYNC: List<i32> = [];
 

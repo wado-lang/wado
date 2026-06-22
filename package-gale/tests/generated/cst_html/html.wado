@@ -2532,8 +2532,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -2585,7 +2585,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -3041,6 +3041,7 @@ fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
 fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -3069,9 +3070,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_XML) {
-        let xml = p.expect(TK_XML, []);
+        let xml = p.expect(TK_XML, &EMPTY_SYNC);
     }
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -3100,9 +3102,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_DTD) {
-        let dtd = p.expect(TK_DTD, []);
+        let dtd = p.expect(TK_DTD, &EMPTY_SYNC);
     }
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_3: i32 = -1;
         rep_scan_3: {
@@ -3131,6 +3134,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let scriptlet_or_sea_ws = _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
     }
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_4: i32 = -1;
         rep_scan_4: {
@@ -3176,7 +3180,7 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = 
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
-        let _ = p.expect(kind, []);
+        let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -3202,6 +3206,7 @@ fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     loop {
+        if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -3230,6 +3235,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     let html_element = _parse_html_element(p, &follow_prepend(&FOLLOW_MASK_0, follow));
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
@@ -3275,9 +3281,10 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
-        let tag_open = p.expect(TK_TAG_OPEN, [TK_TAG_NAME]);
-        let tag_name = p.expect(TK_TAG_NAME, [TK_TAG_NAME, TK_TAG_CLOSE, TK_TAG_SLASH_CLOSE]);
+        let tag_open = p.expect(TK_TAG_OPEN, &SYNC_0);
+        let tag_name = p.expect(TK_TAG_NAME, &SYNC_1);
         loop {
+            if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -3306,7 +3313,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_TAG_CLOSE {
-            let tag_close = p.expect(TK_TAG_CLOSE, []);
+            let tag_close = p.expect(TK_TAG_CLOSE, &EMPTY_SYNC);
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 let tokens = &p.kinds;
@@ -3325,18 +3332,18 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
             if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
                 let html_content = _parse_html_content(p, &FOLLOW_MASK_1);
-                let tag_open = p.expect(TK_TAG_OPEN, []);
-                let tag_slash = p.expect(TK_TAG_SLASH, []);
-                let tag_name = p.expect(TK_TAG_NAME, []);
-                let tag_close = p.expect(TK_TAG_CLOSE, []);
+                let tag_open = p.expect(TK_TAG_OPEN, &EMPTY_SYNC);
+                let tag_slash = p.expect(TK_TAG_SLASH, &EMPTY_SYNC);
+                let tag_name = p.expect(TK_TAG_NAME, &EMPTY_SYNC);
+                let tag_close = p.expect(TK_TAG_CLOSE, &EMPTY_SYNC);
             }
         } else if grp_kind == TK_TAG_SLASH_CLOSE {
-            let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE, []);
+            let tag_slash_close = p.expect(TK_TAG_SLASH_CLOSE, &EMPTY_SYNC);
         }
         return;
     }
     if kind == TK_SCRIPTLET {
-        let scriptlet = p.expect(TK_SCRIPTLET, []);
+        let scriptlet = p.expect(TK_SCRIPTLET, &EMPTY_SYNC);
         return;
     }
     if kind == TK_SCRIPT_OPEN {
@@ -3373,6 +3380,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let html_chardata = _parse_html_chardata(p, &EMPTY_FOLLOW);
     }
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -3422,7 +3430,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         if _kind_set_5(grp_kind) {
             let html_element = _parse_html_element(p, follow);
         } else if grp_kind == TK_CDATA {
-            let cdata = p.expect(TK_CDATA, []);
+            let cdata = p.expect(TK_CDATA, &EMPTY_SYNC);
         } else if _kind_set_6(grp_kind) {
             let html_comment = _parse_html_comment(p, follow);
         }
@@ -3446,10 +3454,10 @@ fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let tag_name = p.expect(TK_TAG_NAME, [TK_TAG_EQUALS]);
+    let tag_name = p.expect(TK_TAG_NAME, &SYNC_2);
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
-        let tag_equals = p.expect(TK_TAG_EQUALS, []);
-        let attvalue_value = p.expect(TK_ATTVALUE_VALUE, []);
+        let tag_equals = p.expect(TK_TAG_EQUALS, &EMPTY_SYNC);
+        let attvalue_value = p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC);
     }
     return;
 }
@@ -3469,7 +3477,7 @@ fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_8(kind) {
-        let _ = p.expect(kind, []);
+        let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -3500,7 +3508,7 @@ fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         return;
     }
     if kind == TK_SEA_WS {
-        let sea_ws = p.expect(TK_SEA_WS, []);
+        let sea_ws = p.expect(TK_SEA_WS, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -3527,7 +3535,7 @@ fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_6(kind) {
-        let _ = p.expect(kind, []);
+        let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -3552,7 +3560,7 @@ fn _parse_html_comment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_script__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let script_open = p.expect(TK_SCRIPT_OPEN, [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY]);
+    let script_open = p.expect(TK_SCRIPT_OPEN, &SYNC_3);
     let script_body_or_script_short_body = p.match_set([TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY]);
     return;
 }
@@ -3570,7 +3578,7 @@ fn _parse_script(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 
 fn _parse_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let style_open = p.expect(TK_STYLE_OPEN, [TK_STYLE_BODY, TK_STYLE_SHORT_BODY]);
+    let style_open = p.expect(TK_STYLE_OPEN, &SYNC_4);
     let style_body_or_style_short_body = p.match_set([TK_STYLE_BODY, TK_STYLE_SHORT_BODY]);
     return;
 }
@@ -3587,6 +3595,7 @@ fn _parse_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -3711,6 +3720,13 @@ fn _kind_set_7(k: i32) -> bool {
 fn _kind_set_8(k: i32) -> bool {
     return k matches { TK_HTML_TEXT | TK_SEA_WS };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_TAG_NAME];
+global SYNC_1: List<i32> = [TK_TAG_CLOSE, TK_TAG_NAME, TK_TAG_SLASH_CLOSE];
+global SYNC_2: List<i32> = [TK_TAG_EQUALS];
+global SYNC_3: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
+global SYNC_4: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_TAG_OPEN], [TK_TAG_SLASH], [TK_TAG_NAME], [TK_TAG_CLOSE]];

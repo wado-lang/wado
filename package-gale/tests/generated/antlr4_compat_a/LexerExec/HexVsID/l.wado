@@ -1510,8 +1510,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -1563,7 +1563,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {

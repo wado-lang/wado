@@ -1982,8 +1982,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -2035,7 +2035,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -3043,7 +3043,7 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let e = _parse_e(p, &FOLLOW_MASK_0);
-    let eof = p.expect(TK_EOF, []);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -3062,6 +3062,7 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
     let start = p.peek_start();
     let e = _parse_e(p, follow);
     loop {
+        if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
@@ -3081,7 +3082,7 @@ fn _parse_expression_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        let comma = p.expect(TK_LIT_COMMA, []);
+        let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
         let e = _parse_e(p, follow);
     }
     return;
@@ -3100,9 +3101,9 @@ fn _parse_expression_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_e__inner_alt_12(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, [TK_ID, TK_LIT_INT]);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
     let typespec = _parse_typespec(p, &FOLLOW_MASK_1);
-    let rparen = p.expect(TK_LIT_RPAREN, [TK_LIT_LPAREN, TK_LIT_THIS, TK_LIT_SUPER, TK_INT, TK_ID, TK_LIT_INT, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_MINUS, TK_LIT_PLUSPLUS, TK_LIT_MINUSMINUS, TK_LIT_TILDE, TK_LIT_BANG]);
+    let rparen = p.expect(TK_LIT_RPAREN, &SYNC_1);
     let e = _parse_e(p, follow, 16);
     return;
 }
@@ -3122,9 +3123,9 @@ fn _parse_e__inner_scan_12(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
 
 fn _parse_e__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LIT_LPAREN, [TK_LIT_LPAREN, TK_LIT_THIS, TK_LIT_SUPER, TK_INT, TK_ID, TK_LIT_INT, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_MINUS, TK_LIT_PLUSPLUS, TK_LIT_MINUSMINUS, TK_LIT_TILDE, TK_LIT_BANG]);
+    let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
     let e = _parse_e(p, &FOLLOW_MASK_1);
-    let rparen = p.expect(TK_LIT_RPAREN, []);
+    let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
     return;
 }
 
@@ -3142,8 +3143,8 @@ fn _parse_e__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 fn _parse_e__inner_alt_5(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
     let typespec = _parse_typespec(p, &FOLLOW_MASK_2);
-    let dot = p.expect(TK_LIT_DOT, [TK_LIT_CLASS]);
-    let lit_class = p.expect(TK_LIT_CLASS, []);
+    let dot = p.expect(TK_LIT_DOT, &SYNC_2);
+    let lit_class = p.expect(TK_LIT_CLASS, &EMPTY_SYNC);
     return;
 }
 
@@ -3160,7 +3161,7 @@ fn _parse_e__inner_scan_5(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
 
 fn _parse_e__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let id = p.expect(TK_ID, []);
+    let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
 
@@ -3198,15 +3199,15 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         return _parse_e__inner_alt_0(p, follow);
     }
     if kind == TK_LIT_THIS {
-        let lit_this = p.expect(TK_LIT_THIS, []);
+        let lit_this = p.expect(TK_LIT_THIS, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_SUPER {
-        let lit_super = p.expect(TK_LIT_SUPER, []);
+        let lit_super = p.expect(TK_LIT_SUPER, &EMPTY_SYNC);
         return;
     }
     if kind == TK_INT {
-        let int = p.expect(TK_INT, []);
+        let int = p.expect(TK_INT, &EMPTY_SYNC);
         return;
     }
     if _kind_set_11(kind) {
@@ -3237,18 +3238,19 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
     }
     if kind == TK_LIT_NEW {
-        let lit_new = p.expect(TK_LIT_NEW, [TK_ID, TK_LIT_INT]);
+        let lit_new = p.expect(TK_LIT_NEW, &SYNC_0);
         let typespec = _parse_typespec(p, &FOLLOW_MASK_3);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
-            let lparen = p.expect(TK_LIT_LPAREN, []);
+            let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
             if _kind_set_0(p.peek_kind()) {
                 let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW);
             }
-            let rparen = p.expect(TK_LIT_RPAREN, []);
+            let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         } else if grp_kind == TK_LIT_LBRACKET {
             let mut _plus_first = true;
             loop {
+                if p.recovering { break; }
                 if !_plus_first {
                     if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
                     let mut rep_scan_pos: i32 = -1;
@@ -3273,9 +3275,9 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                     if rep_scan_pos < 0 { break; }
                 }
                 _plus_first = false;
-                let lbracket = p.expect(TK_LIT_LBRACKET, []);
+                let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
                 let e = _parse_e(p, &FOLLOW_MASK_4);
-                let rbracket = p.expect(TK_LIT_RBRACKET, []);
+                let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
             }
         }
         return;
@@ -3306,6 +3308,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
     _parse_e__inner_atom(p, follow);
     p.b.finish_node(p.last_end());
     loop {
+        if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_DOT {
             if _sk == TK_LIT_DOT {
@@ -3315,8 +3318,8 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let dot = p.expect(TK_LIT_DOT, []);
-                        let id = p.expect(TK_ID, []);
+                        let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                        let id = p.expect(TK_ID, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -3327,8 +3330,8 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let dot = p.expect(TK_LIT_DOT, []);
-                        let lit_this = p.expect(TK_LIT_THIS, []);
+                        let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                        let lit_this = p.expect(TK_LIT_THIS, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -3339,13 +3342,13 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let dot = p.expect(TK_LIT_DOT, []);
-                        let lit_super = p.expect(TK_LIT_SUPER, []);
-                        let lparen = p.expect(TK_LIT_LPAREN, []);
+                        let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                        let lit_super = p.expect(TK_LIT_SUPER, &EMPTY_SYNC);
+                        let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
                         if _kind_set_0(p.peek_kind()) {
                             let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW);
                         }
-                        let rparen = p.expect(TK_LIT_RPAREN, []);
+                        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -3356,14 +3359,14 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                             break;
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
-                        let dot = p.expect(TK_LIT_DOT, []);
-                        let lit_new = p.expect(TK_LIT_NEW, []);
-                        let id = p.expect(TK_ID, []);
-                        let lparen = p.expect(TK_LIT_LPAREN, []);
+                        let dot = p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                        let lit_new = p.expect(TK_LIT_NEW, &EMPTY_SYNC);
+                        let id = p.expect(TK_ID, &EMPTY_SYNC);
+                        let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
                         if _kind_set_0(p.peek_kind()) {
                             let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW);
                         }
-                        let rparen = p.expect(TK_LIT_RPAREN, []);
+                        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {
                         break;
@@ -3376,9 +3379,9 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let lbracket = p.expect(TK_LIT_LBRACKET, []);
+                let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, &FOLLOW_MASK_4, 17);
-                let rbracket = p.expect(TK_LIT_RBRACKET, []);
+                let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -3400,11 +3403,11 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let lparen = p.expect(TK_LIT_LPAREN, []);
+                let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
                 if _kind_set_0(p.peek_kind()) {
                     let expression_list = _parse_expression_list(p, &EMPTY_FOLLOW);
                 }
-                let rparen = p.expect(TK_LIT_RPAREN, []);
+                let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -3463,7 +3466,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let lit_instanceof = p.expect(TK_LIT_INSTANCEOF, []);
+                let lit_instanceof = p.expect(TK_LIT_INSTANCEOF, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 10);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3487,7 +3490,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let amp = p.expect(TK_LIT_AMP, []);
+                let amp = p.expect(TK_LIT_AMP, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 8);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3499,7 +3502,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let caret = p.expect(TK_LIT_CARET, []);
+                let caret = p.expect(TK_LIT_CARET, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 6);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3511,7 +3514,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let pipe = p.expect(TK_LIT_PIPE, []);
+                let pipe = p.expect(TK_LIT_PIPE, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 6);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3523,7 +3526,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let lit_ampamp = p.expect(TK_LIT_AMPAMP, []);
+                let lit_ampamp = p.expect(TK_LIT_AMPAMP, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 5);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3535,7 +3538,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE, []);
+                let lit_pipepipe = p.expect(TK_LIT_PIPEPIPE, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, follow, 4);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3547,9 +3550,9 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                     break;
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
-                let question = p.expect(TK_LIT_QUESTION, []);
+                let question = p.expect(TK_LIT_QUESTION, &EMPTY_SYNC);
                 let e_2 = _parse_e(p, &FOLLOW_MASK_5, 0);
-                let colon = p.expect(TK_LIT_COLON, []);
+                let colon = p.expect(TK_LIT_COLON, &EMPTY_SYNC);
                 let e_3 = _parse_e(p, follow, 3);
                 p.b.finish_node(p.last_end());
             } else {
@@ -3584,9 +3587,9 @@ fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: 
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let id = p.expect(TK_ID, [TK_LIT_LBRACKET]);
-    let lbracket = p.expect(TK_LIT_LBRACKET, [TK_LIT_RBRACKET]);
-    let rbracket = p.expect(TK_LIT_RBRACKET, []);
+    let id = p.expect(TK_ID, &SYNC_3);
+    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_4);
+    let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
 
@@ -3603,7 +3606,7 @@ fn _parse_typespec__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<Li
 
 fn _parse_typespec__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let id = p.expect(TK_ID, []);
+    let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
 
@@ -3616,9 +3619,9 @@ fn _parse_typespec__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<Li
 
 fn _parse_typespec__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lit_int = p.expect(TK_LIT_INT, [TK_LIT_LBRACKET]);
-    let lbracket = p.expect(TK_LIT_LBRACKET, [TK_LIT_RBRACKET]);
-    let rbracket = p.expect(TK_LIT_RBRACKET, []);
+    let lit_int = p.expect(TK_LIT_INT, &SYNC_3);
+    let lbracket = p.expect(TK_LIT_LBRACKET, &SYNC_4);
+    let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
     return;
 }
 
@@ -3635,7 +3638,7 @@ fn _parse_typespec__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: &List<Li
 
 fn _parse_typespec__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let start = p.peek_start();
-    let lit_int = p.expect(TK_LIT_INT, []);
+    let lit_int = p.expect(TK_LIT_INT, &EMPTY_SYNC);
     return;
 }
 
@@ -3715,6 +3718,7 @@ fn _parse_typespec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -3823,6 +3827,13 @@ fn _kind_set_10(k: i32) -> bool {
 fn _kind_set_11(k: i32) -> bool {
     return k matches { TK_ID | TK_LIT_INT };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_ID, TK_LIT_INT];
+global SYNC_1: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_INT, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_NEW, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_SUPER, TK_LIT_THIS, TK_LIT_TILDE];
+global SYNC_2: List<i32> = [TK_LIT_CLASS];
+global SYNC_3: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_4: List<i32> = [TK_LIT_RBRACKET];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
 global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_RPAREN]];

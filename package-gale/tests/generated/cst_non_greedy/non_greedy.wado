@@ -1309,8 +1309,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -1362,7 +1362,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1551,6 +1551,7 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_start__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     loop {
+        if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -1577,7 +1578,7 @@ fn _parse_start__inner(p: &mut Parser) -> () {
         }
         let seg = _parse_seg(p);
     }
-    let eof = p.expect(TK_EOF, []);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1596,20 +1597,20 @@ fn _parse_seg__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
-        let lparen = p.expect(TK_LIT_LPAREN, [TK_LIT_RPAREN]);
+        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
         while !_kind_set_1(p.peek_kind()) {
             let wildcard = p.match_any();
         }
-        let rparen = p.expect(TK_LIT_RPAREN, []);
+        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_LBRACKET {
-        let lbracket = p.expect(TK_LIT_LBRACKET, []);
+        let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
         let wildcard = p.match_any();
-        while !_kind_set_2(p.peek_kind()) {
+        while !p.recovering && (!_kind_set_2(p.peek_kind())) {
             let wildcard = p.match_any();
         }
-        let rbracket = p.expect(TK_LIT_RBRACKET, []);
+        let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -1633,6 +1634,7 @@ fn _parse_seg(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -1697,4 +1699,7 @@ fn _kind_set_1(k: i32) -> bool {
 fn _kind_set_2(k: i32) -> bool {
     return k matches { TK_EOF | TK_LIT_RBRACKET };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_LIT_RPAREN];
 

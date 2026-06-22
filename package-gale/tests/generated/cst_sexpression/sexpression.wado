@@ -1609,8 +1609,8 @@ impl Parser {
         return String::from("");
     }
 
-    fn in_set(&self, k: i32, set: List<i32>) -> bool {
-        for let x of set { if x == k { return true; } }
+    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
+        for let x of set { if *x == k { return true; } }
         return false;
     }
 
@@ -1662,7 +1662,7 @@ impl Parser {
         return self.tokens.ends[self.pos - 1];
     }
 
-    fn expect(&mut self, kind: i32, sync: List<i32>) -> i32 {
+    fn expect(&mut self, kind: i32, sync: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         if self.kinds[self.pos] == kind {
             if kind == TK_EOF {
@@ -1881,6 +1881,7 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 fn _parse_sexpr__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     loop {
+        if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -1907,7 +1908,7 @@ fn _parse_sexpr__inner(p: &mut Parser) -> () {
         }
         let item = _parse_item(p);
     }
-    let eof = p.expect(TK_EOF, []);
+    let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
@@ -1924,11 +1925,11 @@ fn _parse_sexpr(p: &mut Parser) -> () {
 
 fn _parse_item__inner_alt_2(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN, [TK_STRING, TK_SYMBOL, TK_NUMBER, TK_DOT, TK_LPAREN]);
+    let lparen = p.expect(TK_LPAREN, &SYNC_0);
     let item = _parse_item(p);
-    let dot = p.expect(TK_DOT, [TK_STRING, TK_SYMBOL, TK_NUMBER, TK_DOT, TK_LPAREN]);
+    let dot = p.expect(TK_DOT, &SYNC_0);
     let item_2 = _parse_item(p);
-    let rparen = p.expect(TK_RPAREN, []);
+    let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
 
@@ -2014,8 +2015,9 @@ fn _parse_item(p: &mut Parser) -> () {
 
 fn _parse_list___inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let lparen = p.expect(TK_LPAREN, [TK_STRING, TK_SYMBOL, TK_NUMBER, TK_DOT, TK_LPAREN, TK_RPAREN]);
+    let lparen = p.expect(TK_LPAREN, &SYNC_1);
     loop {
+        if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -2042,7 +2044,7 @@ fn _parse_list___inner(p: &mut Parser) -> () {
         }
         let item = _parse_item(p);
     }
-    let rparen = p.expect(TK_RPAREN, []);
+    let rparen = p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
 
@@ -2061,7 +2063,7 @@ fn _parse_atom__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
-        let _ = p.expect(kind, []);
+        let _ = p.expect(kind, &EMPTY_SYNC);
         return;
     }
     p.fail(
@@ -2085,6 +2087,7 @@ fn _parse_atom(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+    assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
@@ -2153,4 +2156,8 @@ fn _kind_set_0(k: i32) -> bool {
 fn _kind_set_1(k: i32) -> bool {
     return k matches { TK_DOT | TK_NUMBER | TK_STRING | TK_SYMBOL };
 }
+
+global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [TK_DOT, TK_LPAREN, TK_NUMBER, TK_STRING, TK_SYMBOL];
+global SYNC_1: List<i32> = [TK_DOT, TK_LPAREN, TK_NUMBER, TK_RPAREN, TK_STRING, TK_SYMBOL];
 

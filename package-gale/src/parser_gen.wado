@@ -187,6 +187,10 @@ fn gen_run_parse_entry(w: &mut CodeWriter) {
     w.begin(
         &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
+    // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
+    // would suppress every diagnostic and let a broken parse report `ok()`, so
+    // reject it up front.
+    w.line(&"assert max_errors >= 1, `max_errors must be >= 1, got {max_errors}`;");
     w.line(&"let tokens = tokenize(input);");
     w.line(&"let mut p = Parser::new(tokens);");
     w.line(&"p.max_errors = max_errors;");
@@ -388,10 +392,10 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut iset = FnSpec::new("in_set");
     iset.set_receiver(&"&self");
     iset.add_param(&"k", &"i32");
-    iset.add_param(&"set", &"List<i32>");
+    iset.add_param(&"set", &"&List<i32>");
     iset.set_return_type(&"bool");
     iset.emit_begin(w);
-    w.line(&"for let x of set { if x == k { return true; } }");
+    w.line(&"for let x of set { if *x == k { return true; } }");
     w.line(&"return false;");
     w.end();
     w.blank();
@@ -504,7 +508,7 @@ fn gen_parser_struct(w: &mut CodeWriter, trace: bool, needs_atn: bool) {
     let mut f7 = FnSpec::new("expect");
     f7.set_receiver(&"&mut self");
     f7.add_param(&"kind", &"i32");
-    f7.add_param(&"sync", &"List<i32>");
+    f7.add_param(&"sync", &"&List<i32>");
     f7.set_return_type(&"i32");
     f7.emit_begin(w);
     w.line(&"if self.recovering { return self.pos; }");
@@ -2308,7 +2312,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
                 w.else_begin(&`else if {cond}`);
             }
             w.line(&`p.b.set_alt({i});`);
-            w.line(&"let _ = p.expect(kind, []);");
+            w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
             w.line(&"return;");
         }
         w.end();
@@ -2321,7 +2325,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     let check = ctx.kind_check_str(&firsts, &"kind");
     w.begin(&`if {check}`);
     // The token is appended by `expect`; no struct to build.
-    w.line(&"let _ = p.expect(kind, []);");
+    w.line(&"let _ = p.expect(kind, &EMPTY_SYNC);");
     w.line(&"return;");
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
@@ -2869,15 +2873,33 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// every emit path consumes `Op`.
 global EMPTY_SYNC: List<String> = [];
 
+/// Resolve a leaf's FIRST-of-rest to the by-reference `expect` sync argument:
+/// `&SYNC_<id>` for a distinct non-empty set (interned into a `global` once,
+/// never rebuilt per call), or `&EMPTY_SYNC` for the empty set. Mirrors the
+/// `FOLLOW_MASK_<id>` interning so the hot path copies nothing.
+fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
+    if let Some(id) = ctx.intern_sync_set(sync) {
+        return `&SYNC_{id}`;
+    }
+    return String::from("&EMPTY_SYNC");
+}
+
 pub fn gen_op_leaf(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, name_counts: &mut List<[String, i32]>, sync: &List<String> = &EMPTY_SYNC) {
     // The Parser's `expect` / `match_*` append the matched token to the builder
     // and return the token index. `sync` is the rule's FIRST-of-rest at this
-    // position — the set `expect` inserts a missing terminal against; `&[]`
-    // (the default) means callers outside a plain sequence only delete / panic.
+    // position — the set `expect` inserts a missing terminal against, passed by
+    // reference as an interned `&SYNC_<id>` global (`&EMPTY_SYNC` when empty, the
+    // default for callers outside a plain sequence — they only delete / panic).
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
-        Token(t) => w.line(&`let {t.field} = p.expect({t.kind}, [{join_kinds(sync)}]);`),
-        Literal(l) => w.line(&`let {l.field} = p.expect({l.kind}, [{join_kinds(sync)}]);`),
+        Token(t) => {
+            let sync_ref = sync_set_ref(ctx, sync);
+            w.line(&`let {t.field} = p.expect({t.kind}, {sync_ref});`)
+        },
+        Literal(l) => {
+            let sync_ref = sync_set_ref(ctx, sync);
+            w.line(&`let {l.field} = p.expect({l.kind}, {sync_ref});`)
+        },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
             // threaded at runtime via `follow_arg` rather than selecting a
@@ -3069,6 +3091,7 @@ fn gen_lr_fn(
     let scan_fn = `scan_{rule.snake_name}`;
     let labeled = rule_alts_labeled(&rule.alternatives);
     w.begin(&"loop");
+    w.line(&"if p.recovering { break; }");
     w.line(&"let _sk = p.peek_kind();");
     let mut nc: List<[String, i32]> = [];
     let mut first = true;
@@ -3127,6 +3150,7 @@ fn gen_lr_fn_atn(
     let labeled = rule_alts_labeled(&rule.alternatives);
     let mut nc: List<[String, i32]> = [];
     w.begin(&"loop");
+    w.line(&"if p.recovering { break; }");
     w.line(
         &`let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, {decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
@@ -3313,14 +3337,14 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
         Plus => {
             gen_op(w, &r.body, ctx, nc);
             if loops {
-                w.begin(&`while ({cond})`);
+                w.begin(&`while !p.recovering && ({cond})`);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
         },
         Star => {
             if loops {
-                w.begin(&`while ({cond})`);
+                w.begin(&`while !p.recovering && ({cond})`);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
@@ -3353,6 +3377,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 gen_op(w, &r.body, ctx, nc);
             }
             w.begin(&"loop");
+            w.line(&"if p.recovering { break; }");
             if ctx.emit_follow() && r.gate_caller_follow {
                 w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
             }
@@ -3378,13 +3403,13 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             w.end();
         },
         Star => {
-            w.begin(&`while {cond}`);
+            w.begin(&`while !p.recovering && ({cond})`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         },
         Plus => {
             gen_op(w, &r.body, ctx, nc);
-            w.begin(&`while {cond}`);
+            w.begin(&`while !p.recovering && ({cond})`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         },
@@ -4209,13 +4234,13 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     if let TokenRef(t) = elem {
         let const_name = `TK_{t.name}`;
         let field_name = dedup_name(&t.field_name, name_counts);
-        w.line(&`let {field_name} = p.expect({const_name}, []);`);
+        w.line(&`let {field_name} = p.expect({const_name}, &EMPTY_SYNC);`);
         return;
     }
     if let Literal(l) = elem {
         let const_name = literal_const_name(&l.text);
         let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-        w.line(&`let {field_name} = p.expect({const_name}, []);`);
+        w.line(&`let {field_name} = p.expect({const_name}, &EMPTY_SYNC);`);
         return;
     }
     if let RuleRef(r) = elem {
@@ -4399,7 +4424,7 @@ fn gen_op_repeat_non_greedy_storable(
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow);
         if *while_cond != "false" {
-            w.begin(&`while {*while_cond}`);
+            w.begin(&`while !p.recovering && ({*while_cond})`);
             let mut nc2: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc2, &empty_iter_follow);
             w.end();
@@ -4671,6 +4696,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
     if let Star = rep.kind {
         if rep_op.body_scannable {
             w.begin(&"loop");
+            w.line(&"if p.recovering { break; }");
             // Mirror `gen_op_repeat_star_plus_storable`'s Star arm: yield
             // to the caller on K-prefix match before the scan guard.
             // No-op for empty mask.
@@ -4681,7 +4707,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_op_group(w, g_op, inner, ctx, &mut nc);
             w.end();
         } else {
-            w.begin(&`while {ctx.first_check_str(&loop_first)}`);
+            w.begin(&`while !p.recovering && ({ctx.first_check_str(&loop_first)})`);
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
@@ -4694,6 +4720,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut {plus_flag} = true;`);
             w.begin(&"loop");
+            w.line(&"if p.recovering { break; }");
             w.begin(&`if !{plus_flag}`);
             // Mandatory first iter is unconditional; subsequent iters
             // get the K-prefix yield gate before the scan guard.
@@ -4711,7 +4738,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             // loop. The K-prefix gate goes inside the while loop (after
             // the mandatory first iter ran above).
             gen_op_group(w, g_op, inner, ctx, name_counts);
-            w.begin(&`while {ctx.first_check_str(&inner_first)}`);
+            w.begin(&`while !p.recovering && ({ctx.first_check_str(&inner_first)})`);
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc);
@@ -4842,6 +4869,7 @@ fn gen_op_repeat_star_plus_storable(
     if let Star = rep.kind {
         if rep_op.body_scannable {
             w.begin(&"loop");
+            w.line(&"if p.recovering { break; }");
             // Caller-FOLLOW yield gate: when the upcoming tokens match
             // the caller's continuation at iter entry, exit the loop so
             // the caller can consume them. Inert when the runtime
@@ -4853,7 +4881,7 @@ fn gen_op_repeat_star_plus_storable(
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow);
             w.end();
         } else {
-            w.begin(&`while {ctx.first_check_str(&loop_first)}`);
+            w.begin(&`while !p.recovering && ({ctx.first_check_str(&loop_first)})`);
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -4868,6 +4896,7 @@ fn gen_op_repeat_star_plus_storable(
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut {plus_flag} = true;`);
             w.begin(&"loop");
+            w.line(&"if p.recovering { break; }");
             w.begin(&`if !{plus_flag}`);
             // Yield to the caller when the upcoming tokens match its
             // continuation. Inert when the runtime `follow` is empty.
@@ -4882,7 +4911,7 @@ fn gen_op_repeat_star_plus_storable(
         } else {
             let plus_flag = dedup_name(&"_plus_first", name_counts);
             w.line(&`let mut {plus_flag} = true;`);
-            w.begin(&`while {plus_flag} || {ctx.first_check_str(&inner_first)}`);
+            w.begin(&`while !p.recovering && ({plus_flag} || {ctx.first_check_str(&inner_first)})`);
             // K-prefix yield gate fires AFTER the mandatory first iter:
             // skip emission while `plus_flag` is still true so the
             // mandatory iter cannot be suppressed. Empty mask emits
@@ -5858,6 +5887,43 @@ fn gen_prediction_code(
     gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
 }
 
+/// Emit the per-decision preamble for a save-and-rewind speculative alt
+/// dispatch: snapshot the cursor, the builder, and the pending error so a
+/// rejected alt can be rolled back completely.
+fn emit_spec_alt_preamble(w: &mut CodeWriter) {
+    w.line(&"let saved = p.pos;");
+    w.line(&"let _spec_cp = p.b.checkpoint();");
+    w.line(&"let _spec_pend = p.pending;");
+    w.line(&"let _spec_code = p.pending_code;");
+}
+
+/// Emit one speculative alt attempt. The alt runs under `speculating` so a
+/// deeper mismatch records no recovery edits and only sets `recovering`; on
+/// failure the cursor, builder, and pending error are rolled back to the
+/// `emit_spec_alt_preamble` snapshot and the next alt is tried, on success the
+/// rule returns. Mirrors the repeat probe in `gen_rep_break_with_recovery`.
+fn emit_spec_alt_try(w: &mut CodeWriter, call: &String, idx: i32, ctx: &GenContext, rule_display: &String) {
+    w.line(&"let _ss = p.speculating;");
+    w.line(&"p.speculating = true;");
+    w.line(&`{*call};`);
+    w.line(&"p.speculating = _ss;");
+    w.begin(&"if p.recovering");
+    if ctx.is_trace() {
+        w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, false);`);
+    }
+    w.line(&"p.pos = saved;");
+    w.line(&"p.b.truncate(_spec_cp);");
+    w.line(&"p.pending = _spec_pend;");
+    w.line(&"p.pending_code = _spec_code;");
+    w.line(&"p.recovering = false;");
+    w.else_begin(&"else");
+    if ctx.is_trace() {
+        w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
+    }
+    w.line(&"return;");
+    w.end();
+}
+
 fn gen_prediction_code_inner(
     w: &mut CodeWriter,
     node: &PredictionNode,
@@ -5978,7 +6044,7 @@ fn gen_prediction_code_inner(
                 } else {
                     // Some scans are partial — scan success is a hint,
                     // not a guarantee. Use save/restore with scan guards.
-                    w.line(&"let saved = p.pos;");
+                    emit_spec_alt_preamble(w);
                     for let mut i = 0; i < sorted_indices.len(); i += 1 {
                         let idx = sorted_indices[i];
                         let is_last = i == sorted_indices.len() - 1;
@@ -6001,42 +6067,18 @@ fn gen_prediction_code_inner(
                             } else if has_scan {
                                 // Partial scan: try parse, fall through on failure.
                                 w.begin(&`if {*fn_name}_scan_{idx}(&p.kinds, p.pos) >= 0`);
-                                w.line(&`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-                                w.begin(&"if p.recovering");
-                                if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, false);`);
-                                }
-                                w.line(&"p.pos = saved;");
-                                w.line(&"p.recovering = false;");
-                                w.else_begin(&"else");
-                                if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
-                                }
-                                w.line(&"return;");
-                                w.end();
+                                emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
                                 w.end();
                             } else {
                                 // No scan: save-and-rewind speculative parse.
-                                w.line(&`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-                                w.begin(&"if p.recovering");
-                                if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, false);`);
-                                }
-                                w.line(&"p.pos = saved;");
-                                w.line(&"p.recovering = false;");
-                                w.else_begin(&"else");
-                                if ctx.is_trace() {
-                                    w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
-                                }
-                                w.line(&"return;");
-                                w.end();
+                                emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
                             }
                         }
                     }
                 }
             } else {
                 // Fallback: save-and-rewind speculative parse pattern.
-                w.line(&"let saved = p.pos;");
+                emit_spec_alt_preamble(w);
                 for let mut i = 0; i < sorted_indices.len(); i += 1 {
                     let idx = sorted_indices[i];
                     let is_last = i == sorted_indices.len() - 1;
@@ -6046,19 +6088,7 @@ fn gen_prediction_code_inner(
                         }
                         w.line(&`return {*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
                     } else {
-                        w.line(&`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())});`);
-                        w.begin(&"if p.recovering");
-                        if ctx.is_trace() {
-                            w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, false);`);
-                        }
-                        w.line(&"p.pos = saved;");
-                        w.line(&"p.recovering = false;");
-                        w.else_begin(&"else");
-                        if ctx.is_trace() {
-                            w.line(&`trace_try(p, &{str_lit(*rule_display)}, {idx}, true);`);
-                        }
-                        w.line(&"return;");
-                        w.end();
+                        emit_spec_alt_try(w, &`{*fn_name}_alt_{idx}(p{follow_sep(ctx.emit_follow())})`, idx, ctx, rule_display);
                     }
                 }
             }
@@ -6301,6 +6331,21 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     if !entries.is_empty() {
         w.blank();
     }
+}
+
+/// Emit the recovery sync-set globals: `EMPTY_SYNC` (the empty default) plus
+/// one `SYNC_<id>: List<i32>` per interned non-empty set. `expect` takes its
+/// `sync` by reference to one of these, so a terminal on the valid hot path
+/// neither rebuilds nor copies the set.
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
+    if ctx.parser_rules.is_empty() {
+        return;
+    }
+    w.line(&"global EMPTY_SYNC: List<i32> = [];");
+    for let entry of &ctx.sync_sets() {
+        w.line(&`global SYNC_{entry.id}: List<i32> = [{join_kinds(&entry.tokens)}];`);
+    }
+    w.blank();
 }
 
 fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
