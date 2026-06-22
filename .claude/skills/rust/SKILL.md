@@ -1,6 +1,6 @@
 ---
 name: rust
-description: Conventions for writing Rust in this workspace (2024 edition, workspace dependencies, panic-over-dummy, no wildcard match arms, clippy-clean). Use when writing or editing Rust (.rs) code.
+description: Workspace-specific Rust rules that override common habits: panic instead of dummy or no-op fallbacks, no wildcard match arms, dependencies managed in the workspace Cargo.toml, 2024 edition, zero warnings and clippy lints. Read before writing or editing Rust (.rs) code.
 ---
 
 - Manage dependencies in the workspace `Cargo.toml`.

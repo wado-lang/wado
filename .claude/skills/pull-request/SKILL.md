@@ -1,6 +1,6 @@
 ---
 name: pull-request
-description: Conventions for PR titles (Conventional Commits) and descriptions. Use when creating, writing, or editing a pull request.
+description: Project rules for opening a PR: a Conventional Commits title, and a description scoped to origin/main...HEAD (three-dot) with no trial-and-error history and no test section. Read before creating or editing any pull request.
 ---
 
 ## Title
