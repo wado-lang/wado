@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782124205461,
+  "lastUpdate": 1782130764305,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34773,6 +34773,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e62b97ee132f065c8b299ace243dd5e448a095ed"
         },
         "date": 1782124204852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1881,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8417,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15329,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 308446,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9900a469e26c90f9aa64fb1663eed89ea647032a",
+          "message": "Merge pull request #1429 from wado-lang/claude/compile-time-param-spec-n9x42u\n\nfeat(prelude): add LenientFromStr lenient string parsing trait",
+          "timestamp": "2026-06-22T21:07:58+09:00",
+          "tree_id": "9f449e3634f029278792b1718f61d3270d9c1d3a",
+          "url": "https://github.com/wado-lang/wado/commit/9900a469e26c90f9aa64fb1663eed89ea647032a"
+        },
+        "date": 1782130763918,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
