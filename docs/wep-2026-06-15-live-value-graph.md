@@ -191,8 +191,37 @@ promoted straight into its operand slot; under the gate the walk is authoritativ
 the `engine.value` query is skipped. No revert maintenance is needed because the
 promoted value is invariant by construction.
 
-Remaining consumers, in dependency order (the gate stays off until all are migrated
-and the flip is proven):
+### Gates removed — single path, and the structural finding (this branch)
+
+The `WADO_BORN_OPERANDS` and `WADO_PROMOTE_EARLY` gates (and the dead
+`promote_early_enabled` / `grow_bare_local_constants`) are **deleted** (`ecc1a2320`):
+born-as-operands and the freeze materialisation are the **unconditional production
+path**, validated **e2e 3032/0**. This is the "flip" — it removes the gate-on/gate-off
+combinatorial validation space that was hiding the true state.
+
+With the path single, the `value_of` re-seed subsystem (~600 lines) was **removed**
+(`e482126f4`). Honest cost, now visible: **11 red BCE fixtures** (loop-guard,
+offset-chain, early-exit, short-circuit, bitmask, if-guard, ref-param,
+field-access-equiv, branchless-increment) — sound under-elimination, never a
+miscompile.
+
+Structural conclusion (confirmed exhaustively, do not re-litigate): `value_of` is
+**load-bearing flow-sensitive state**, not a removable cache. Its irreducible readers
+are (1) the **freeze**, which *is* the operand-promotion mechanism and reads `value()`
+to decide promotions — it cannot promote without the built graph; (2) the **BCE
+matching**, which needs a flow-sensitive per-expr identity (same across no write,
+different across a `pop()`) that an `Operand` (Expr **xor** Value) cannot carry while
+also staying a skeleton node for write-detection; (3) `inline` regrow, whose removal
+empties `value_of` post-inline (a large red, not bounded). So **deleting the `value_of`
+field is not "remove consumers" — it is born-at-build**: the build promotes
+flow-sensitive values into operand slots and a new **operand-slot maintenance** keeps
+them valid across `licm` / `inline` edits (the work `value_of` + the re-seed did).
+The easy half is already done (the early freeze promotes constants / pure-arith over
+stable leaves — invariant, no maintenance). The hard half — flow-sensitive guard/check
+reads with cross-edit operand maintenance — is the multi-session keystone; until it
+lands, the 11 BCE reds are the documented transient cost.
+
+Remaining consumers, in dependency order:
 
 - [ ] **condition_implication — the long pole.** Structure mapped (this branch): the
       BCE matching is **already operand-based** — `GuardFact::from_comparison` /

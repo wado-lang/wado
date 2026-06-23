@@ -527,9 +527,8 @@ pub(super) fn freeze_pure_arith(
             }
             let mut leaves = crate::hashmap::IndexSet::default();
             engine.body.values.collect_opaque_locals(rep, &mut leaves);
-            let materialize = ids.len() > 1
-                && !leaves.is_empty()
-                && leaves.iter().all(|l| param_set.contains(l));
+            let materialize =
+                ids.len() > 1 && !leaves.is_empty() && leaves.iter().all(|l| param_set.contains(l));
             if materialize {
                 let name = format!("_av_{}", engine.locals().len());
                 let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
