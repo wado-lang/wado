@@ -64,16 +64,38 @@ side-table** (criterion 3's other half) and the CPU win it yields (criterion 2):
 make the value passes read operands, then delete the map. Execute **Route B**
 (full plan + confirmed touchpoints at "Route B execution plan" below):
 
-- [ ] **1. Availability-aware extraction — the one new analysis.** Materialise a
-      shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
-      version, a value a later pass may drop) into a `let _av = <value>` at a point
-      **dominating all uses**, keeping its leaves live. The single-use
-      enclosing-statement materialiser is insufficient; placement is a dominance +
-      liveness obligation, not an emission-point choice. Two shortcuts were built and
-      reverted (see "ideal end state"): scalar-only is sound but recovers nothing, and
-      a pinned aggregate/reference field changes value-copy semantics and trapped
-      `array_index_1` (~165 fixtures). Build it gated/off-by-default; prove it on the
-      BCE + i128 + `array_index_1` cases (runtime + `WADO_VERIFY_VG`) before flipping.
+- [~] **1. Availability-aware extraction — the one new analysis.** Materialise a
+  shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
+  version, a value a later pass may drop) into a `let _av = <value>` at a point
+  **dominating all uses**, keeping its leaves live. The single-use
+  enclosing-statement materialiser is insufficient; placement is a dominance +
+  liveness obligation, not an emission-point choice. Two shortcuts were built and
+  reverted (see "ideal end state"): scalar-only is sound but recovers nothing, and
+  a pinned aggregate/reference field changes value-copy semantics and trapped
+  `array_index_1` (~165 fixtures). Build it gated/off-by-default; prove it on the
+  BCE + i128 + `array_index_1` cases (runtime + `WADO_VERIFY_VG`) before flipping.
+
+      Done — the placement analysis. `materialise_point` (`optimize/extract.rs`)
+      computes the nearest-common-dominator insertion point from each use's
+      structured-control path (`block_path`), replacing the single-block MVP
+      `shared_field_materialise_point`; cross-block uses (one per `if` arm) now
+      materialise before the common `if` rather than staying skeleton. Sound by
+      structured control flow (a block runs its statements in order, so the deepest
+      common enclosing block, taken at the earliest leading statement, dominates
+      every use) and the shared `ValueId` (one `heap_ver` ⇒ field invariant across
+      the span). Unit-tested (same-block / sibling-branch / outer-and-nested /
+      shared-branch). Reached only on the field-promotion path, so the default O2
+      pipeline is unchanged; the `WADO_PROMOTE_FIELDS` corpus is **net-neutral**
+      (3030/2 before and after — the 2 are pre-existing benign `wir_expect`
+      operand-spelling diffs, `arr.repr`→`_av`, validated on the default path).
+
+      Remaining: (a) the **receiver-stability predicate** (admit a non-param
+      *owned*, *non-`mut`*, *non-address-taken* local receiver — a single-assignment
+      leaf's def automatically dominates this placement, so only the alias gate is
+      new), which the `FieldAccess` half needs to fire beyond param receivers, plus
+      the `newtype_string_coercion` extraction fix the WEP flags; (b) extend the
+      materialiser to `Select` (at the merge) and shared `Binary` (once); (c) the
+      runtime + `WADO_VERIFY_VG` proof on BCE / i128 / `array_index_1` before flip.
 - [ ] **2. Migrate the value passes off `value_of`** (17 `engine.value(expr)` call
       sites in `const_fold` / `cse` / `copy_prop` / `licm` / `condition_implication` /
       `select_lowering`) to operand / pool queries, coordinated with a golden refresh
