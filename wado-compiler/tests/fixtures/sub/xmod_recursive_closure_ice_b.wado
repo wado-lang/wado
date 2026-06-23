@@ -1,0 +1,14 @@
+//! Helper for `xmod_recursive_type_closure_invalid_wasm`. A module with a
+//! recursive type (`Node` holds `List<Node>`) plus a function that takes a
+//! closure over a module-local struct (`fn(&mut Parser)`). Mirrors a Gale-
+//! generated parser's `_run_parse_entry(entry: fn(&mut Parser)) -> CstNode`.
+pub struct Node { pub kids: List<Node> }
+pub struct Parser { x: i32 }
+fn run_entry(entry: fn(&mut Parser)) -> Node {
+    let mut p = Parser { x: 0 };
+    entry(&mut p);
+    return Node { kids: [] };
+}
+pub fn parse() -> Node {
+    return run_entry(|p: &mut Parser| {});
+}
