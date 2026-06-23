@@ -89,33 +89,37 @@ make the value passes read operands, then delete the map. Execute **Route B**
       (3030/2 before and after — the 2 are pre-existing benign `wir_expect`
       operand-spelling diffs, `arr.repr`→`_av`, validated on the default path).
 
-      Remaining: (a) broaden the `FieldAccess` receiver beyond a **param** to a
-      non-param local. This needs **two** independent gates — both measured this
-      session, broadening reverted:
+      Done — sound non-param scalar `FieldAccess` promotion (two gates,
+      `e985b0535`). Broadening the receiver beyond a **param** to a non-param local
+      needed two independent gates, both now built:
 
-      - **Field-value-type gate (done, works).** Materialise only a **scalar**
+      - **Field-value-type gate.** Materialise only a **scalar**
         (`is_primitive_like`) field: a primitive copy is value-independent, so
         pinning + sharing it is sound; an aggregate / reference field (`List.repr`,
         a `ref Array` into a mutable backing, a nested struct) aliases storage the
         `heap_ver` does not pin — the `array_index_1` `null reference` trap.
-        Adding this gate **stopped every `array_*` trap** (`array_index_1` et al.
-        pass under `WADO_PROMOTE_FIELDS`).
 
-      - **Receiver-availability gate (not built — the remaining trap).** With the
-        scalar gate in place, broadening to non-param owned / non-`mut` /
-        non-address-taken / non-reference locals **still traps** 2 fixtures
-        (`http_base64_decode`, `newtype_operator_trait`, `null reference`). Root
-        cause: the value's receiver `Opaque(Local i)` may differ from the use's
-        syntactic local (copy-prop / value identity), so local `i`'s def does not
-        necessarily dominate the `materialise_point` — the `let _av = local i .f`
-        is emitted where `i` is not yet live. A **param** receiver is entry-defined
-        so it always dominates (why `recv_param` is safe); a non-param receiver
-        needs an explicit check that `i`'s def dominates the chosen placement.
+      - **Receiver-availability gate.** A non-param receiver is admitted only when
+        owned / non-`mut` / non-address-taken / non-reference **and** its def
+        dominates the `materialise_point` (`def_dominates` / `stmt_block_path` /
+        `receiver_available_at`). The value's receiver `Opaque(Local i)` can differ
+        from a use's syntactic local (copy-prop / value identity), so `i`'s def is
+        checked against the actual placement, not assumed; a **param** is
+        entry-defined. Without this, broadening trapped `http_base64_decode` /
+        `newtype_operator_trait` (`null reference`).
 
-      So sound non-param field promotion = scalar gate **and** receiver-def-dominance
-      check (against `materialise_point`), still to build. (b) extend the
-      materialiser to `Select` (at the merge) and shared `Binary` (once); (c) the
-      runtime + `WADO_VERIFY_VG` proof on BCE / i128 / `array_index_1` before flip.
+      Result under `WADO_PROMOTE_FIELDS`: **3029/3, zero traps / miscompiles** —
+      every `array_*` / receiver trap and the 2 prior `wir_expect` baseline
+      failures are gone; the 3 remaining are `niri_*` `wir_not_expect` DCE-misses
+      (materialisation across a prunable branch — a cost-model refinement, not a
+      bug). Reached only under the flag, so the default pipeline is unchanged.
+
+      Remaining: (a') a cost model so the materialiser does not span a prunable
+      branch (the 3 DCE-misses); (b) extend the materialiser to `Select` (at the
+      merge) and shared `Binary` (once); (c) the runtime + `WADO_VERIFY_VG` proof on
+      BCE / i128 / `array_index_1` before flipping field promotion on by default —
+      which is what makes scalar `FieldAccess` reads operands and lets
+      `store_load_forward` drop its `value(expr)`.
 - [~] **2. Migrate the value passes off `value_of`** to operand / pool queries.
   Survey of the live consumers (default pipeline): `cse` is **skipped** under
   `promote_active` (subsumed by hash-consing) — its sites are dead; `const_fold`
