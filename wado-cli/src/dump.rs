@@ -27,6 +27,8 @@ pub struct DumpOptions {
     pub codegen_flags: Vec<String>,
     /// `--world <name>`; `None` selects the default `wasi:cli/command`.
     pub target_world: Option<String>,
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 #[derive(Clone, Copy)]
@@ -201,6 +203,12 @@ fn format_usage() -> String {
         args::format_opts_help(&[Opt::World, Opt::Feature, Opt::Help], |o| o.spec())
     )
     .unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -227,9 +235,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut target_world: Option<String> = None;
     let mut any_phase = false;
+    let mut param_args = args::ParamArgs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            param_args.apply(p, &mut parser)?;
+        } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Tokens => {
                     show_tokens = true;
@@ -335,6 +346,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         opt_iterations,
         codegen_flags,
         target_world,
+        param_overrides: param_args.overrides,
+        param_policy: param_args.policy,
     })
 }
 
@@ -375,6 +388,8 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         opts.inline_threshold,
         opts.opt_iterations,
         &opts.codegen_flags,
+        &opts.param_overrides,
+        opts.param_policy,
     )
     .await
     .map_err(|_bail| CliExit::silent_failure(1))?;

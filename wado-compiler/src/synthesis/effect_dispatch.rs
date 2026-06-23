@@ -401,6 +401,7 @@ fn synthesize_dispatch_global(
         ty: plan.nullable_ref_type_id,
         initializer,
         mutable: true,
+        param: None,
         wado_mutable: true,
         is_pub: false,
         module_source: entry_source.clone(),

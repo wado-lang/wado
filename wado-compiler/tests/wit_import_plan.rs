@@ -33,6 +33,8 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
         None,
         None,
         &[],
+        &wado_compiler::hashmap::IndexMap::default(),
+        wado_compiler::param_resolution::ParamPolicy::default(),
     ))
     .expect("dump succeeds");
     let pkg = dump.wir_package.expect("wir package present after dump");
@@ -148,6 +150,8 @@ fn plan_matches_component_for_http_service_with_resources() {
             None,
             None,
             &[],
+            &wado_compiler::hashmap::IndexMap::default(),
+            wado_compiler::param_resolution::ParamPolicy::default(),
         ))
         .expect("dump succeeds");
         dump.wir_package

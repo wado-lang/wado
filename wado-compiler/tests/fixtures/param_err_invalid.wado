@@ -1,0 +1,14 @@
+use { println, Stdout } from "core:cli";
+
+#[param]
+global PORT: i32 = 8080;
+
+export fn run() with Stdout {
+    println(`PORT={PORT}`);
+}
+
+__DATA__
+{
+    "params": { "PORT": "not-a-number" },
+    "compile_error": "cannot parse \"not-a-number\" as i32 for parameter PORT"
+}

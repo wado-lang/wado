@@ -1249,6 +1249,29 @@ let icon = #include_bytes("./icon.png");   // include file as List<u8>
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
+## Compile-Time Parameters
+
+`#[param]` on a `global` makes it a build input fed by the `wado` invocation. The type annotation gives the type; the initializer is the fallback. Read sites are ordinary global references.
+
+```wado
+#[param]
+global API_URL: String = "http://localhost";          // -D API_URL=...
+
+#[param(from_env = "PORT")]
+global PORT: i32 = 8080;                               // env var at compile time
+
+#[param(name = "build.id")]
+global BUILD_ID: String = "dev";                       // -D build.id=...
+```
+
+```sh
+wado compile -D API_URL=https://prod.example.com -D PORT=80 app.wado
+```
+
+Each parameter resolves independently, highest priority first: `-D NAME=value` (alias `--define`), then `from_env`, then the initializer. Overrides are trimmed and converted to the declared type using the `LenientFromStr` spellings (radix prefixes, `_` separators, `nan`/`inf`, `1`/`0` for `bool`).
+
+v1 supports built-in scalar types only (`String`, `char`, the integer types, `f32`/`f64`, `bool`). `#[param]` on `global mut` is an error. Three diagnostic classes have CLI-set levels (`error`/`warn`/`ignore`): `--param-unknown` (a `-D` matching nothing, default `error`), `--param-invalid` (unconvertible value, default `error`), `--param-missing` (no override, default `ignore`). Names share one flat namespace across the whole build. See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+
 ## Attributes
 
 ```wado
@@ -1265,6 +1288,9 @@ struct Foo {
 #[inline]                  // hint: prefer inlining
 #[inline(always)]          // always inline
 #[inline(never)]           // never inline
+
+#[param]                   // compile-time parameter global (see above)
+global PORT: i32 = 8080;
 ```
 
 ## Serialization and Deserialization

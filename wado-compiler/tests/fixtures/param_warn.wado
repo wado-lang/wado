@@ -1,0 +1,29 @@
+use { println, Stdout } from "core:cli";
+
+// `--param-invalid=warn`: the bad value is diagnosed, the initializer kept.
+#[param]
+global PORT: i32 = 8080;
+
+// `--param-missing=warn`: no override supplied, diagnosed, initializer kept.
+#[param]
+global REGION: String = "local";
+
+// A stray `-D` tolerated by `--param-unknown=warn`.
+export fn run() with Stdout {
+    println(`PORT={PORT}`);
+    println(`REGION={REGION}`);
+}
+
+__DATA__
+{
+    "params": { "PORT": "eighty", "EXTRA": "1" },
+    "param_invalid": "warn",
+    "param_missing": "warn",
+    "param_unknown": "warn",
+    "stdout": "PORT=8080\nREGION=local\n",
+    "warnings_contains": [
+        "cannot parse \"eighty\" as i32 for parameter PORT",
+        "compile-time parameter REGION was not provided",
+        "unknown compile-time parameter: EXTRA"
+    ]
+}

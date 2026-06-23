@@ -1553,12 +1553,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
         let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
+        let param = self.reify_param_attr(global_decl);
 
         Some(TirGlobal {
             name: global_decl.name.clone(),
             ty,
             initializer,
             mutable: global_decl.mutable,
+            param,
             wado_mutable: global_decl.mutable,
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
@@ -1567,6 +1569,65 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             lazy_init: false,
             locals: ctx.locals.clone(),
         })
+    }
+
+    /// Extract and structurally validate a `#[param]` attribute on a global.
+    ///
+    /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
+    /// global has no `#[param]` or the attribute is malformed (in which case a
+    /// structural error is emitted; compilation bails at `ok_or_bail`). The
+    /// resolution itself (overrides, env, conversion) happens later in the
+    /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
+    fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
+        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+
+        let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
+        let emit = |message: String| {
+            let _ = self.logger.error(Diagnostic {
+                severity: Severity::Error,
+                code: Code::ParamAttr,
+                message,
+                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+            });
+        };
+
+        let mut ok = true;
+        if global_decl.mutable {
+            emit("#[param] cannot be applied to a mutable global".to_string());
+            ok = false;
+        }
+
+        // Only `name` / `from_env` key-value arguments are accepted.
+        for arg in &attr.args {
+            match arg {
+                ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
+                ast::AttrArg::KeyValue(k, _) | ast::AttrArg::KeyArray(k, _) => {
+                    emit(format!("unknown #[param] argument: {k}"));
+                    ok = false;
+                }
+                ast::AttrArg::Str(s) | ast::AttrArg::Ident(s) | ast::AttrArg::Number(s) => {
+                    emit(format!("unknown #[param] argument: {s}"));
+                    ok = false;
+                }
+            }
+        }
+
+        let name = match attr.kv_value("name") {
+            Some("") => {
+                emit("#[param] name must not be empty".to_string());
+                ok = false;
+                global_decl.name.clone()
+            }
+            Some(n) => n.to_string(),
+            None => global_decl.name.clone(),
+        };
+        let from_env = attr.kv_value("from_env").map(str::to_string);
+
+        if ok {
+            Some(tir::ParamSpec { name, from_env })
+        } else {
+            None
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

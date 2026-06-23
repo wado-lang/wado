@@ -34,6 +34,7 @@ pub mod nir_unparse;
 pub mod nir_value_graph;
 pub mod optimize;
 pub mod package;
+pub mod param_resolution;
 pub mod parser;
 pub mod path;
 pub mod remarks;
@@ -231,6 +232,13 @@ pub struct CompilerOptions {
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
+    /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
+    /// Consumed by the param-resolution pass against `#[param]` globals; an
+    /// entry matching no declaration is reported per `param_policy.unknown`.
+    pub param_overrides: crate::hashmap::IndexMap<String, String>,
+    /// Severity policy for the three param-resolution diagnostic classes
+    /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
+    pub param_policy: param_resolution::ParamPolicy,
 }
 
 impl Default for CompilerOptions {
@@ -249,6 +257,8 @@ impl Default for CompilerOptions {
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
             lib_world: None,
+            param_overrides: crate::hashmap::IndexMap::default(),
+            param_policy: param_resolution::ParamPolicy::default(),
         }
     }
 }
@@ -808,6 +818,21 @@ fn compile_after_load<H: CompilerHost>(
         link::link(package)
     };
 
+    // === Phase 8e: Resolve compile-time parameters (`#[param]`) ===
+    // After symbol resolution (so types are known and all globals are
+    // flattened for flat-namespace unknown-`-D` detection) and before
+    // monomorphize/lower (so a rewritten scalar initializer is eligible for
+    // Constant Global Promotion). See `wep-2026-04-26-compile-time-params.md`.
+    {
+        let _span = logger.span("param-resolution");
+        param_resolution::resolve_params(
+            &mut flat,
+            &options.param_overrides,
+            &options.param_policy,
+            logger,
+        )?;
+    }
+
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("monomorphize");
@@ -950,13 +975,26 @@ pub async fn dump_with_host<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
 ) -> Result<DumpResult, Bail> {
-    dump_with_host_and_world(source, host, filename, opt_level, None, None, None, &[]).await
+    dump_with_host_and_world(
+        source,
+        host,
+        filename,
+        opt_level,
+        None,
+        None,
+        None,
+        &[],
+        &crate::hashmap::IndexMap::default(),
+        param_resolution::ParamPolicy::default(),
+    )
+    .await
 }
 
 /// Dump compiler internal state with an explicit target world.
 ///
 /// Like [`dump_with_host`] but allows specifying the target world so that
 /// DCE and other world-aware passes produce the correct output.
+#[allow(clippy::too_many_arguments)]
 pub async fn dump_with_host_and_world<H: CompilerHost>(
     source: &str,
     host: &H,
@@ -966,6 +1004,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     inline_threshold: Option<usize>,
     opt_iterations: Option<u32>,
     codegen_flags: &[String],
+    param_overrides: &crate::hashmap::IndexMap<String, String>,
+    param_policy: param_resolution::ParamPolicy,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -1170,6 +1210,17 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
             // Link
             let mut flat = link::link(package);
+
+            // Resolve compile-time parameters (`#[param]`)
+            {
+                let _span = logger.span("param-resolution");
+                param_resolution::resolve_params(
+                    &mut flat,
+                    param_overrides,
+                    &param_policy,
+                    &logger,
+                )?;
+            }
 
             // Monomorphize
             {

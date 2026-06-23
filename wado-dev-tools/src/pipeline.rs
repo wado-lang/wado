@@ -506,6 +506,8 @@ async fn render_phases(
             None,
             None,
             &[],
+            &wado_compiler::hashmap::IndexMap::default(),
+            wado_compiler::param_resolution::ParamPolicy::default(),
         )
         .await;
 

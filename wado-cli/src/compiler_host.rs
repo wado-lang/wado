@@ -246,6 +246,10 @@ impl CompilerHost for FilesystemCompilerHost {
         }
     }
 
+    fn env_var(&self, name: &str) -> Option<String> {
+        std::env::var(name).ok()
+    }
+
     async fn run_generator(
         &self,
         component_wasm: &[u8],
