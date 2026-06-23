@@ -104,10 +104,31 @@ make the value passes read operands, then delete the map. Execute **Route B**
       extend the materialiser to `Select` (at the merge) and shared `Binary`
       (once); (c) the runtime + `WADO_VERIFY_VG` proof on BCE / i128 /
       `array_index_1` before flip.
-- [ ] **2. Migrate the value passes off `value_of`** (17 `engine.value(expr)` call
-      sites in `const_fold` / `cse` / `copy_prop` / `licm` / `condition_implication` /
-      `select_lowering`) to operand / pool queries, coordinated with a golden refresh
-      (born-as-operands churns ~40 `wir_expect`).
+- [~] **2. Migrate the value passes off `value_of`** to operand / pool queries.
+  Survey of the live consumers (default pipeline): `cse` is **skipped** under
+  `promote_active` (subsumed by hash-consing) — its sites are dead; `const_fold`
+  (own niri / `field_env`), `copy_prop` (skeleton `unwrap_copy_value`), and
+  `select_lowering` do **not** call `engine.value`. The real consumers are
+  `condition_implication`, `licm`, `store_load_forward`.
+
+      Done — `condition_implication`'s panic-elimination. `failure_ge_operands` /
+      `is_bitmask_bounded` / `GuardFact::implies_false` /
+      `ConditionEliminator::implied_false` take the if-condition `Operand` and read
+      `engine.operand_value` instead of `engine.value(ExprId)`; the four eliminators
+      (`GuardEliminator` / `ConditionEliminator` / `BitmaskEliminator`, over both
+      `StmtKind::If` and `ExprKind::If`) no longer gate the whole elimination on
+      `condition.as_expr()` — a promoted (`Operand::Value`) condition is read and, if
+      proven false, rewritten via `force_condition_false` (skeleton conditions keep
+      the graph-maintaining `set_false` redirect, so the default path is
+      byte-identical: full e2e 3032/0, no golden churn).
+
+      Remaining: the guard-*extraction* sites (`extract_dominating_guard` and the
+      `value(binding)` let-fact reads still match `ExprKind::Binary`, so they skip
+      promoted guards — migrate to value-kind matching). `licm` (leaf invariance over
+      mut loop locals) and `store_load_forward` (`FieldAccess` / `Local` reads) query
+      genuinely flow-sensitive values with **no promoted operand**, so they cannot be
+      re-routed to `operand_value`; they stay on `value_of` until loop-phi /
+      availability extraction (items 1 / 3) freezes those reads into operands.
 - [ ] **3. Fold `current_value` into `lower::translate`** so pure values are born
       as `Operand::Value`; then **delete `value_of` and `nir_value_graph::builder`**
       (criterion 3) and measure `optimize` CPU on package-gale (criterion 2).
