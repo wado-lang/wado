@@ -195,11 +195,13 @@ struct FuncSig {
     return_type: TypeId,
 }
 
-/// Identifies a specialised callee: original name plus the functor struct
-/// type bound at each fn-type parameter. Used as both a dedup key
-/// (Phase 2.5) and a lookup key at the call site (Phase 3).
+/// Identifies a specialised callee: its defining module and name plus the
+/// functor struct type bound at each fn-type parameter. Dedup key (Phase
+/// 2.5) and call-site lookup key (Phase 3). The module qualifies the name so
+/// same-named functions from different modules don't collide.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FnParamSpecKey {
+    callee_module: ModuleSource,
     callee_name: String,
     functor_types: Vec<(u32, TypeId)>,
 }
@@ -912,10 +914,14 @@ impl ClosureLowerer {
         func_refs: &[Rc<RefCell<TirFunction>>],
         type_table: &mut TypeTable,
     ) {
-        let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::default();
+        let mut func_by_name: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>> =
+            IndexMap::default();
         for func_rc in func_refs {
             let func = func_rc.borrow();
-            func_by_name.insert(func.name.clone(), Rc::clone(func_rc));
+            func_by_name.insert(
+                (func.module_source.clone(), func.name.clone()),
+                Rc::clone(func_rc),
+            );
         }
         let mut spec_requests: Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)> = Vec::new();
 
@@ -1464,6 +1470,7 @@ impl ClosureCallSiteLowerer<'_> {
         }
 
         let key = FnParamSpecKey {
+            callee_module: func.module_source.clone(),
             callee_name: func.name.clone(),
             functor_types: functor_types.clone(),
         };
@@ -1823,7 +1830,7 @@ impl TirMutVisitor for ClosureBodyTransformer<'_> {
 /// callee. Closures embed their `functor_id` from Phase 1, so the key
 /// is reconstructible without any traversal-order counter.
 struct FnParamSpecCollector<'a> {
-    func_by_name: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    func_by_name: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
     type_table: &'a TypeTable,
     functor_infos: &'a [ClosureFunctor],
     requests: &'a mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
@@ -1832,7 +1839,7 @@ struct FnParamSpecCollector<'a> {
 impl FnParamSpecCollector<'_> {
     fn create_key(
         &self,
-        callee_name: &str,
+        callee: &TirFunction,
         params: &[TirParam],
         args: &[CallArg],
     ) -> Option<FnParamSpecKey> {
@@ -1852,7 +1859,8 @@ impl FnParamSpecCollector<'_> {
             return None;
         }
         Some(FnParamSpecKey {
-            callee_name: callee_name.to_string(),
+            callee_module: callee.module_source.clone(),
+            callee_name: callee.name.clone(),
             functor_types,
         })
     }
@@ -1862,9 +1870,12 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Call { func, args, .. } => {
-                if let Some(callee_rc) = self.func_by_name.get(&func.name) {
+                if let Some(callee_rc) = self
+                    .func_by_name
+                    .get(&(func.module_source.clone(), func.name.clone()))
+                {
                     let callee = callee_rc.borrow();
-                    if let Some(key) = self.create_key(&callee.name, &callee.params, args) {
+                    if let Some(key) = self.create_key(&callee, &callee.params, args) {
                         self.requests.push((key, Rc::clone(callee_rc)));
                     }
                 }
@@ -1878,11 +1889,14 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                 args,
                 ..
             } => {
-                if let Some(callee_rc) = self.func_by_name.get(&func.name) {
+                if let Some(callee_rc) = self
+                    .func_by_name
+                    .get(&(func.module_source.clone(), func.name.clone()))
+                {
                     let callee = callee_rc.borrow();
                     let params_without_self: Vec<TirParam> =
                         callee.params.iter().skip(1).cloned().collect();
-                    if let Some(key) = self.create_key(&callee.name, &params_without_self, args) {
+                    if let Some(key) = self.create_key(&callee, &params_without_self, args) {
                         self.requests.push((key, Rc::clone(callee_rc)));
                     }
                 }
