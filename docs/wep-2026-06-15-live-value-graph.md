@@ -205,30 +205,36 @@ offset-chain, early-exit, short-circuit, bitmask, if-guard, ref-param,
 field-access-equiv, branchless-increment) — sound under-elimination, never a
 miscompile.
 
-Structural conclusion (confirmed exhaustively, do not re-litigate): `value_of` is
-**load-bearing flow-sensitive state**, not a removable cache. Its irreducible readers
-are (1) the **freeze**, which *is* the operand-promotion mechanism and reads `value()`
-to decide promotions — it cannot promote without the built graph; (2) the **BCE
-matching**, which needs a flow-sensitive per-expr identity (same across no write,
-different across a `pop()`) that an `Operand` (Expr **xor** Value) cannot carry while
-also staying a skeleton node for write-detection; (3) `inline` regrow, whose removal
-empties `value_of` post-inline (a large red, not bounded). So **deleting the `value_of`
-field is not "remove consumers" — it is born-at-build**: the build promotes
-flow-sensitive values into operand slots and a new **operand-slot maintenance** keeps
-them valid across `licm` / `inline` edits (the work `value_of` + the re-seed did).
-The easy half is already done (the early freeze promotes constants / pure-arith over
-stable leaves — invariant, no maintenance). The hard half — flow-sensitive guard/check
-reads with cross-edit operand maintenance — is the multi-session keystone; until it
-lands, the 11 BCE reds are the documented transient cost.
+Structural conclusion: `value_of` is **load-bearing flow-sensitive state**, not a removable
+cache, but it **is** retireable via born-at-build (an earlier claim here that BCE made it
+"irreducible" was a misdiagnosis — corrected below). Its readers are (1) the **freeze**,
+which *is* the operand-promotion mechanism and reads `value()` to decide promotions; (2) the
+**BCE matching**, which needs a flow-sensitive per-expr identity (same across no write,
+different across a `pop()`) — and that identity is the `FieldAccess` `ValueId`'s `heap_ver`,
+which **an `Operand::Value` carries fine** (the skeleton node is needed only for the codegen
+load, which the WIR extractor materialises); (3) `inline` regrow. So **deleting `value_of`
+is born-at-build**: the build promotes every value-position pure value into its operand slot
+carrying the correct `heap_ver` / `LoopPhi` identity. The key property: **operands survive
+`licm`** (a `ValueId` in a slot moves with its statement and `licm` only hoists invariant
+code), so the re-seed — which existed solely to restore `value_of` entries the maintenance
+**drops** after `licm` — is **eliminated**, and the 11 reds recover properly. Only `inline`
+(which introduces writes) re-promotes its region via the existing scoped re-valuation. This
+is *less* maintenance than today, IR not cache, build-once not rebuild — all three criteria
+with BCE intact. The easy half (constants / pure-arith over stable leaves) is already done
+via the early freeze; the remaining half (promote `FieldAccess` + induction reads at build
+with correct identities, plus `LoopPhi`→`local.get` materialisation) is the multi-session
+keystone, and the 11 BCE reds are its transient cost until it lands.
 
 Narrowing achieved (accurate footprint after de-hedging): every optimization **pass**
 is now off `value_of` — `licm`, `store_load_forward`, `condition_implication`, `cse`
 reference it only in comments. Actual `value_of` use is confined to the **engine core**:
 `builder` populates it (the source), `nir_engine` `value()` / `maintain_*` read+maintain
 it, and `inline` regrow re-values it. So the remaining deletion work is **localized to
-the engine core**, not scattered. The blocker is unchanged (born-at-build for the safe
-subset so `value()` resolves via operands; BCE's flow-sensitive field reads are the
-irreducible remainder), but the surface to change is now small and contained.
+the engine core**, not scattered. The path is born-at-build promotion of **every**
+value-position pure read — including BCE's flow-sensitive field / induction reads, which
+are **not** an irreducible remainder (correction below): their `heap_ver` / `LoopPhi`
+identity rides in the `Operand::Value` and survives `licm`, so BCE is preserved. The
+surface to change is small and contained.
 
 Remaining consumers, in dependency order:
 
@@ -247,28 +253,35 @@ Remaining consumers, in dependency order:
       guard/check read. Getting condition_implication off `value_of` therefore needs the
       guard/check reads to carry their identity **without** `value_of`.
 
-      Measured dead-end (this branch — do not retry): converting the re-seed's
-      `set_value(read, v)` to operand promotion (`redirect_expr(read, Operand::Value(v))`)
-      under the gate. The 3 straight-line fixtures pass, but the broader BCE suite
-      **regresses with P0 over-eliminations** (`array_bounds_elim_oob_*`,
-      `array_bounds_check_oob_*`). Root cause: `redirect_expr` **orphans** the skeleton
-      read, but BCE's heap-version / write-detection needs the `FieldAccess` read to stay
-      in the skeleton (it is how a mutation between guard and check is detected). The
-      re-seed's `set_value` adds an identity **while keeping the read**; an `Operand` is
-      `Expr` **xor** `Value`, so a promoted read cannot be both the value (for matching)
-      and the skeleton node (for write-detection). Promotion is the wrong tool here.
+      CORRECTION (an earlier "infeasible" conclusion on this branch was a **misdiagnosis** —
+      do not trust the prior version of this paragraph): promotion **is** the right tool;
+      write-detection is **not** lost by orphaning the skeleton read. The mutation between
+      guard and check is detected by the **`heap_ver` carried in the `FieldAccess`
+      `ValueId`** (`FieldAccess(arr, used, hv₁)` vs `(…, hv₂)`), not by the skeleton node —
+      and an `Operand::Value` carries that exact `ValueId`, `heap_ver` included. The skeleton
+      node was only needed for the codegen load, which the WIR extractor **materialises** from
+      a promoted `FieldAccess` operand. What actually caused the measured P0 over-eliminations
+      was the **re-seed's identity**, not orphaning: the re-seed synthesises a **version-free**
+      `field_access(recv, field, HeapVersion::INITIAL)` (sound only for invariant fields, gated
+      on `mut_escaped`); promoting *that* makes guard and check match even across a `pop()`.
+      Promoting the build's **real `heap_ver`-correct value** instead preserves write-detection
+      exactly (differs across a write, matches otherwise).
 
-      Implication for the resume approach: condition_implication's reads cannot simply be
-      promoted like store_load_forward's (whose reads fold to a final constant and need no
-      skeleton). The identity must live on the **value graph** attached to the surviving
-      skeleton read — which is what `value_of` is. So retiring `value_of` for this pass
-      requires the build itself to assign **stable, maintenance-surviving identities** to
-      these reads (the **LoopPhi induction-recognition** work — `body_iter` is an MVP
-      `Opaque`, `nir_value_graph.rs:176`), eliminating the re-seed's need to restore
-      dropped entries, rather than promoting reads into operands. **Resume here:** build
-      `LoopPhi` induction recognition so loop induction vars / hoisted bounds and invariant
-      fields keep one stable identity across the structural passes without re-seed;
-      validate against the array_bounds_elim + oob suite (P0).
+      Why operands beat `value_of` here (and kill the re-seed): the re-seed exists only because
+      the conservative maintenance **drops** `value_of` entries after `licm`'s structural edits
+      (`drop_local_readers`). Operands are **not** dropped — a `ValueId` in a skeleton operand
+      slot moves with its statement and stays valid, because `licm` hoists *invariant* code (the
+      value does not change). So promoting the guard/check reads at **build time** (clean,
+      pre-drop, `heap_ver`/`LoopPhi`-correct) makes them survive `licm` untouched → the re-seed
+      is unnecessary and the 11 reds recover properly. Only `inline` (which introduces writes)
+      can stale a promoted operand; its existing scoped re-valuation (`build_scoped`, no rebuild)
+      re-promotes the affected region. This is strictly *less* maintenance than today (`licm`
+      needs none), it is the IR not a cache, and it is build-once not rebuild — satisfying all
+      three criteria with BCE intact. **Resume here:** full born-at-build promotion of every
+      value-position pure read (`FieldAccess` + induction `Local`, `heap_ver`/`LoopPhi`-correct,
+      keeping the freeze's place / `let`-value exclusions); validate the array_bounds_elim + oob
+      suite stays green (P0 soundness gate). The `LoopPhi` (built, `walk_loop`) supplies the
+      induction identity; it needs a WIR-extractor materialisation (`LoopPhi` → `local.get i`).
 
       Implementation entry point: `Builder::walk_loop` (`nir_value_graph/builder.rs:1878`)
       currently assigns every written loop local a **fresh `Opaque`** (twice — pre-body and
