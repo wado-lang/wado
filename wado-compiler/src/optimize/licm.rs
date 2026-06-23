@@ -1867,57 +1867,57 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
             let ty = engine.body.exprs[occs[0].1].type_id;
             let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
             // Clone an occurrence whose skeleton is in scope at the insertion point
-        // (before `min_i`): every `Local` leaf must be a loop-entry local or
-        // bound by a top-level `let` before `min_i`. The value graph already
-        // proved every occurrence equal, so any in-scope occurrence computes the
-        // right value; cloning a bare alias read of an inner-scope local (e.g.
-        // `let __cse = a` where `a` is bound inside a nested block) would read a
-        // stale loop-carried value. Skip the value if none qualifies.
-        let Some(&(_, src_expr)) = occs
-            .iter()
-            .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
-        else {
-            continue;
-        };
-        let span = engine.body.exprs[src_expr].span;
-        let name = format!("__cse_{}", engine.locals().len());
-        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
-        // Clone the chosen occurrence's skeleton subtree for the temp's value
-        // (the value itself is a sourceless-Opaque tree the extractor can not
-        // re-emit; the skeleton can).
-        let cloned = engine.clone_expr(src_expr);
-        let let_stmt = engine.alloc_stmt(
-            StmtKind::Let {
-                name: name.clone(),
-                local_index: temp,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ty,
-                value: Operand::Expr(cloned),
-                skip_value_copy: true,
-            },
-            span,
-        );
-        // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
-        // promoted value): the temp is reassigned every iteration, so a value
-        // operand `Opaque(Local(__cse))` would read as loop-invariant to the
-        // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
-        // correctly treated as loop-carried.
-        let mut any = false;
-        for (_, e) in &occs {
-            let lread = engine.alloc_expr(
-                ExprKind::Local {
-                    index: temp,
+            // (before `min_i`): every `Local` leaf must be a loop-entry local or
+            // bound by a top-level `let` before `min_i`. The value graph already
+            // proved every occurrence equal, so any in-scope occurrence computes the
+            // right value; cloning a bare alias read of an inner-scope local (e.g.
+            // `let __cse = a` where `a` is bound inside a nested block) would read a
+            // stale loop-carried value. Skip the value if none qualifies.
+            let Some(&(_, src_expr)) = occs
+                .iter()
+                .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
+            else {
+                continue;
+            };
+            let span = engine.body.exprs[src_expr].span;
+            let name = format!("__cse_{}", engine.locals().len());
+            let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+            // Clone the chosen occurrence's skeleton subtree for the temp's value
+            // (the value itself is a sourceless-Opaque tree the extractor can not
+            // re-emit; the skeleton can).
+            let cloned = engine.clone_expr(src_expr);
+            let let_stmt = engine.alloc_stmt(
+                StmtKind::Let {
                     name: name.clone(),
+                    local_index: temp,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: ty,
+                    value: Operand::Expr(cloned),
+                    skip_value_copy: true,
                 },
-                ty,
                 span,
             );
-            any |= engine.redirect_expr(*e, Operand::Expr(lread));
-        }
-        if any {
-            inserts.push((min_i, let_stmt));
-        }
+            // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
+            // promoted value): the temp is reassigned every iteration, so a value
+            // operand `Opaque(Local(__cse))` would read as loop-invariant to the
+            // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
+            // correctly treated as loop-carried.
+            let mut any = false;
+            for (_, e) in &occs {
+                let lread = engine.alloc_expr(
+                    ExprKind::Local {
+                        index: temp,
+                        name: name.clone(),
+                    },
+                    ty,
+                    span,
+                );
+                any |= engine.redirect_expr(*e, Operand::Expr(lread));
+            }
+            if any {
+                inserts.push((min_i, let_stmt));
+            }
         }
     }
     if inserts.is_empty() {
@@ -1980,13 +1980,19 @@ fn collect_expr_exprs(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
 /// free of such assignments reads the same leaf value at every occurrence.
 fn local_assigned_in_stmt(body: &Body, s: StmtId, idx: u32) -> bool {
     match &body.stmts[s].kind {
-        StmtKind::Let { local_index, value, .. } => {
-            *local_index == idx || operand_assigns_local(body, *value, idx)
-        }
-        StmtKind::Expr(op) | StmtKind::Return { value: Some(op) } | StmtKind::Break { value: Some(op), .. } => {
-            operand_assigns_local(body, *op, idx)
-        }
-        StmtKind::If { condition, then_block, else_block } => {
+        StmtKind::Let {
+            local_index, value, ..
+        } => *local_index == idx || operand_assigns_local(body, *value, idx),
+        StmtKind::Expr(op)
+        | StmtKind::Return { value: Some(op) }
+        | StmtKind::Break {
+            value: Some(op), ..
+        } => operand_assigns_local(body, *op, idx),
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
             operand_assigns_local(body, *condition, idx)
                 || block_assigns_local(body, *then_block, idx)
                 || else_block.is_some_and(|b| block_assigns_local(body, b, idx))
@@ -2023,9 +2029,7 @@ fn expr_assigns_local(body: &Body, e: ExprId, idx: u32) -> bool {
     }
     let mut found = false;
     body.for_each_child(NodeRef::Expr(e), |c| {
-        if !found
-            && let NodeRef::Expr(ce) = c
-        {
+        if !found && let NodeRef::Expr(ce) = c {
             found = expr_assigns_local(body, ce, idx);
         }
     });

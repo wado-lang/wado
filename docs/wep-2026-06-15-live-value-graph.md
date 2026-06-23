@@ -120,24 +120,50 @@ forced by the dependencies above):
        **transient**. The builder and pool stay; born-at-lower is a separate later perf
        item, not a deletion prerequisite.
 
-3. [~] **licm off `value_of`**. Arith hoist **done** (`df80213d5`): invariance via
-   `!modified_vars.local_modified(leaf)` (exact — in-loop `let` counts as
-   modified) and dedup via a commutative-normalised **structural key** (exact
-   for invariant leaves). Removed 2 of licm's 3 `engine.value()` sites; default
-   e2e 3032/0, byte-compatible. Remaining: `cse_loop_body`'s `engine.value(e)`
-   — CSEs modified-leaf arith, so it needs the structural key plus a "no leaf
-   modified across the occurrence span" check (per-stmt modified sets). The
-   `find_imm` there reads the pool, fine.
+3. [x] **licm off `value_of`** (`df80213d5` + `fcebc7b3c`). Arith hoist: invariance via
+       `!modified_vars.local_modified(leaf)` (exact — in-loop `let` counts as
+       modified) and dedup via a commutative-normalised **structural key** (exact
+       for invariant leaves). `cse_loop_body`: same structural key plus a "no leaf
+       directly assigned across the occurrence span" run-split (`local_assigned_in_stmt`),
+       address-taken leaves require loop-invariance. licm now makes **zero**
+       `engine.value()` calls; default e2e 3032/0 (one minor `wir_optimize_brif_select`
+       comparison-CSE boundary loss). The `find_imm` there reads the pool, fine.
 4. [ ] **store_load_forward + the `condition_implication` re-seed band-aids off
-       `value_of`** — once field promotion runs before them (reorder) or their
-       constant-forwarding is recovered by the WIR const-prop, migrate / retire.
-5. [ ] **Make `value_of` transient, then delete it.** Once licm /
-       store_load_forward / re-seed no longer read `value_of`, the **only** remaining
-       user is the freeze (`extract.rs`) — which builds it. Build it into a
-       freeze-local graph (not persisted on `Body`), discard after promoting, and
-       **delete the persisted `Body::value_graph.value_of` side-table** (criterion 3).
-       Folding the freeze's build into `lower::translate` (born-at-lower) is a later
-       perf step, but the persisted side-table is gone at this step.
+       `value_of`** — **proven keystone-blocked, not independently achievable**
+       (experiment, this branch). Both passes run _before_ the freeze (the last
+       pass), so freeze-time extraction cannot feed them; their values must already
+       be operands. Retiring store_load_forward entirely (full default e2e with the
+       post-scalarize pass off) **regresses 2 fixtures**:
+       `field_forward_snapshot_after_mutation` and `store_to_load_forwarding` —
+       flow-sensitive field store→load forwards (`p2.a = 42; assert p2.a == 42`),
+       exactly `value_of`'s content, which WIR const-prop (step 1) does **not**
+       recover (those are `mut`-struct field stores, not SSA scalar-const locals).
+       store_load_forward's reads are `Local`/`FieldAccess` with **no promoted
+       operand**; `maintain_pure_node` only re-derives `Binary`/`Unary`/`Cast`, so
+       `engine.value(expr)` there resolves purely from `value_of`. Same for the
+       re-seed's leaf operands. Conclusion: steps 4 and 5 **collapse into the
+       born-as-operands keystone (item 3 below)** — there is no reorder/WIR-const-prop
+       route that removes these `value_of` reads without regression.
+5. [ ] **Make `value_of` transient, then delete it.** Reachable only **after** the
+       keystone (item 3): once every flow-sensitive read is born as an `Operand::Value`
+       (so store_load_forward / condition_implication / inline read operands, never
+       `value_of`), the map becomes a transient build byproduct and the persisted
+       `Body::value_graph.value_of` side-table is deleted (criterion 3). The reframe's
+       earlier "freeze-local transient, born-at-lower is a later perf step" was
+       **over-optimistic**: the experiment shows the freeze (last pass) cannot supply
+       the earlier passes, so born-as-operands is a **deletion prerequisite**, not a
+       later perf item.
+
+   Born-as-operands is a **post-lower** promotion (not a `lower::translate` fold):
+   neither `nir_value_graph::builder` nor `optimize::alias` imports `lower`, so there
+   is no Rust cycle — the only ordering constraint is that alias sets need
+   whole-package info (`first_param_types` / `call_immutability`), available after the
+   package is lowered. The hard part is the **correctness obligation**: a leaf promoted
+   early (`Local`/`FieldAccess` → `Operand::Value(reaching_def)`) goes stale when a
+   later structural pass (licm hoist, inline) changes its reaching def, so the
+   per-edit maintenance must keep **operand slots** valid (today it maintains
+   `value_of` + the re-seed band-aids). Making the operand slots the source of truth
+   and `value_of` a transient index is the irreducible keystone.
 
 - [~] **1. Availability-aware extraction — the one new analysis.** Materialise a
   shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
@@ -255,6 +281,13 @@ Lower-priority robustness, independent of the above:
   address-taken, non-`mut`), still to validate.
 - **`value()` query-time leaf re-derivation** (a `Local` / `FieldAccess`
   fallback in `maintain_pure_node`). A design smell that over-merges; removed.
+- **Retiring `store_load_forward` / migrating it off `value_of` without the
+  keystone.** Full default e2e with the post-scalarize pass disabled: **3030/2**,
+  regressing `field_forward_snapshot_after_mutation` and `store_to_load_forwarding`
+  (flow-sensitive `mut`-struct field store→load forwards). WIR const-prop (step 1)
+  does not recover them; the reads have no promoted operand and `maintain_pure_node`
+  re-derives only `Binary`/`Unary`/`Cast`. Do not retry as a reorder or const-prop
+  fix — it needs born-as-operands (item 3).
 - **Persisted/maintained side-table** as the build-once route. Cannot retire
   `value_of` and re-introduces over-merge mechanisms; only operand promotion
   retires it. (Detailed in the pivot sections below.)

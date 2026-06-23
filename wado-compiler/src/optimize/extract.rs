@@ -160,7 +160,10 @@ fn materialise_point(
 /// The structured-control path from the root down to `stmt`'s enclosing chain:
 /// an outermost-first list of `(block, stmt_index)`. Like [`block_path`] but
 /// rooted at a statement, for the def-dominance check.
-fn stmt_block_path(e: &Engine, stmt: crate::nir_arena::StmtId) -> Vec<(crate::nir_arena::BlockId, usize)> {
+fn stmt_block_path(
+    e: &Engine,
+    stmt: crate::nir_arena::StmtId,
+) -> Vec<(crate::nir_arena::BlockId, usize)> {
     let mut path = Vec::new();
     let mut last = stmt;
     let mut node = e.parent_of(NodeRef::Stmt(stmt));
@@ -189,7 +192,11 @@ fn stmt_block_path(e: &Engine, stmt: crate::nir_arena::StmtId) -> Vec<(crate::ni
 /// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
 /// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
 /// def is live at the materialisation point (WEP P2 receiver-availability gate).
-fn def_dominates(e: &Engine, def_stmt: crate::nir_arena::StmtId, before_stmt: crate::nir_arena::StmtId) -> bool {
+fn def_dominates(
+    e: &Engine,
+    def_stmt: crate::nir_arena::StmtId,
+    before_stmt: crate::nir_arena::StmtId,
+) -> bool {
     let dp = stmt_block_path(e, def_stmt);
     let mp = stmt_block_path(e, before_stmt);
     let mut l = 0;

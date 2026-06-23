@@ -1278,7 +1278,14 @@ fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bo
         return false;
     };
     let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-    fact_eliminates_panic(engine, condition, then_block, else_block, NodeRef::Stmt(s), fact)
+    fact_eliminates_panic(
+        engine,
+        condition,
+        then_block,
+        else_block,
+        NodeRef::Stmt(s),
+        fact,
+    )
 }
 
 /// NIR visitor that eliminates loop-guard-implied false bounds checks.
@@ -1373,8 +1380,13 @@ impl ArenaOptVisitor for ConditionEliminator {
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
             // A bounds check inlined into value position is an `ExprKind::If`.
-            if self.try_eliminate_panic(engine, condition, then_branch, else_branch, NodeRef::Expr(e))
-            {
+            if self.try_eliminate_panic(
+                engine,
+                condition,
+                then_branch,
+                else_branch,
+                NodeRef::Expr(e),
+            ) {
                 return true;
             }
             let mut changed = condition
