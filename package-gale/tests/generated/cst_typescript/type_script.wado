@@ -13545,7 +13545,7 @@ fn _parse_type_(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () 
     }
 }
 
-fn _parse_union_or_intersection_or_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_union_or_intersection_or_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
@@ -13565,7 +13565,7 @@ fn _parse_union_or_intersection_or_primary_type__inner(p: &mut Parser, follow: &
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_UNIONORINTERSECTIONORPRIMARYTYPE, _start);
-    _parse_union_or_intersection_or_primary_type__inner_atom(p, follow);
+    _parse_union_or_intersection_or_primary_type__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -13676,7 +13676,7 @@ fn _parse_primary_type__inner_scan_8(tokens: &Array<i32>, pos: i32, follow: &Lis
     return pos;
 }
 
-fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_primary_type__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
@@ -13807,7 +13807,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_PRIMARYTYPE, _start);
-    _parse_primary_type__inner_atom(p, follow);
+    _parse_primary_type__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -15517,7 +15517,7 @@ fn _parse_decorator(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     }
 }
 
-fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_decorator_member_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_20(kind) {
@@ -15542,7 +15542,7 @@ fn _parse_decorator_member_expression__inner(p: &mut Parser, follow: &List<List<
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_DECORATORMEMBEREXPRESSION, _start);
-    _parse_decorator_member_expression__inner_atom(p, follow);
+    _parse_decorator_member_expression__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -21089,7 +21089,7 @@ fn _parse_single_expression__inner_scan_48(tokens: &Array<i32>, pos: i32, follow
     return pos;
 }
 
-fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_single_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_90(kind) {
@@ -21614,7 +21614,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_SINGLEEXPRESSION, _start);
-    _parse_single_expression__inner_atom(p, follow);
+    _parse_single_expression__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }

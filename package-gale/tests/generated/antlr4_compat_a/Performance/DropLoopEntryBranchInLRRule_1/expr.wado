@@ -2119,6 +2119,7 @@ pub fn atn_ng_optional_enter(
     tokens: &Array<i32>,
     pos: i32,
     eof: i32,
+    min_prec: i32 = 0,
 ) -> bool {
     // `current_rule` is the rule the `??` lives in (a compile-time constant
     // the emitter passes): the caller stack now holds ATN return states, so
@@ -2143,7 +2144,11 @@ pub fn atn_ng_optional_enter(
     if found != 1 {
         return true;
     }
-    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Forward `min_prec` so a `??` inside a left-recursive rule predicts
+    // against the rule's current precedence — an enter edge that would climb
+    // an LR suffix below `min_prec` is pruned, so the simulator does not keep
+    // an impossible suffix and wrongly choose SKIP.
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof, min_prec);
     // Non-greedy optional edges are ordered [exit=0, enter=1].
     return alt == 1;
 }
@@ -2918,7 +2923,7 @@ fn _parse_stat(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2960,7 +2965,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p);
+    _parse_expr__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }

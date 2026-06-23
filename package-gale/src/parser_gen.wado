@@ -2552,6 +2552,14 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
+        // The atom carries `min_prec` so a non-greedy `??` inside it predicts
+        // against the rule's invocation precedence (`atn_optional_enter_cond`
+        // reads it). Defaulted, so non-precedence call sites are unaffected.
+        f.add_param_spec(ParamSpec {
+            name: "min_prec",
+            type_str: "i32",
+            default_value: Option::Some("0"),
+        });
         f.set_return_type(&rule_result_type());
         f.emit_begin(w);
         if needs_start {
@@ -3138,7 +3146,7 @@ fn gen_lr_fn(
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, _start);`);
-    w.line(&`{*fn_name}_atom(p{fsep});`);
+    w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
     w.line(&"p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
     // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
@@ -3782,15 +3790,16 @@ fn gen_op_storable_optional(
 /// needed.
 fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     let rule = ctx.current_rule_index();
-    // A non-greedy `??` inside a left-recursive rule predicts at min_prec 0,
-    // but the rule can be invoked with a raised precedence — so prediction may
-    // keep LR suffixes the parser will reject and choose SKIP on an impossible
-    // path. Threading the live precedence into `atn_ng_optional_enter` /
-    // `atn_predict_with_stack` is the fix; until then fail loudly at codegen
-    // rather than emit a parser that silently mispredicts. No corpus grammar
-    // has a `??` inside an LR rule.
-    assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
-    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
+    // A non-greedy `??` predicts enter-vs-skip with the rule's live
+    // precedence: inside a left-recursive rule the parser can be invoked with
+    // a raised `min_prec`, so the prediction must prune LR enter edges below
+    // it (otherwise it keeps an impossible suffix and wrongly SKIPs). The
+    // `min_prec` variable is only in scope in a left-recursive rule's bodies
+    // (atom, inlined suffix); a plain rule has no precedence climbing, so it is
+    // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
+    // literal `0` there.
+    let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
+    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg})`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW

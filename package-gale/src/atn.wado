@@ -348,11 +348,11 @@ fn build_lr_body(
         // The parse/scan dispatchers map the edge index onto
         // `LrDispatchData.valid_lr_alts`, which drops alts with an empty static
         // `suffix_first` (a `.` / `~X`-led suffix). For an ATN-class rule that
-        // would misalign the edge index against the suffix helpers and
-        // silently mis-dispatch. Aligning the dispatcher to this edge list is a
-        // real (but unimplemented) fix; until then, fail loudly at codegen
-        // rather than emit a parser that mis-parses such a grammar. No corpus
-        // grammar has a `.`/`~X`-led LR suffix.
+        // would misalign the edge index against the suffix helpers and silently
+        // mis-dispatch. A `.` / `~X`-led LR suffix is degenerate even in ANTLR4
+        // (the published jar errors on `e ~SEMI e` / `e .`: no operator token
+        // to climb), so fail loudly at codegen rather than emit a parser that
+        // mis-dispatches such a grammar. No corpus grammar has one.
         assert !(lr.atn_class && a.suffix_first.is_empty()), `Gale does not yet support an open-ended (\`.\`/\`~X\`-led) LR suffix in an ATN-class rule (\`{rule.name}\`)`;
         let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
