@@ -696,7 +696,20 @@ flag-on is fully sound (e2e green) and measured (`rebuilds = 0`). Phases:
         `Select`), insert the `let` at a point that **dominates all uses** and
         where every input is available — its source/definition point, not entry.
         Needs a dominance check (MVP: all uses in one block, insert before the
-        first; general: nearest common dominator).
+        first; general: nearest common dominator). Done: `materialise_point`
+        (`optimize/extract.rs`) computes the nearest-common-dominator placement
+        from each use's structured-control path (`block_path`: the outermost-first
+        `(block, stmt_index)` chain), generalising the former single-block
+        `shared_field_materialise_point`. In structured control flow a block runs
+        its statements in order, so the deepest enclosing block common to every
+        use, taken at the earliest leading statement, dominates them all; the
+        shared `ValueId` (one `heap_ver`) means the field is invariant across the
+        span. Unit-tested for same-block, sibling-branch (placed before the `if`),
+        outer-and-nested, and shared-branch cases. The `recv_param` gate still
+        bounds leaf availability (a param is defined at every point), so the
+        broadened cross-block firing is sound; the receiver-stability predicate
+        below is the next step to admit non-param leaves (which need the placement
+        after the leaf's def).
       - **`FieldAccess` extraction** (`extract_value` has no arm yet). Soundness:
         the value's `heap_ver` already guarantees the field is unchanged across all
         uses that share the value (same `(receiver, field, heap_ver)` key), so
