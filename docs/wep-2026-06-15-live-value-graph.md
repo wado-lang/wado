@@ -249,8 +249,23 @@ and the flip is proven):
       `collect_opaque_locals` (`nir_value_graph.rs:602`) recurses `body_iter →
       binary(phi, c) → phi → body_iter → …`. So induction recognition requires a
       self-reference guard (visited set / stop-at-phi) in **every** such traversal
-      (collect, reemittability, `is_const_value`, …), each a potential hang. This is why
-      it is a dedicated, full-budget task, not a session-end brick.
+      (collect, reemittability, `is_const_value`, …), each a potential hang.
+
+      Progress: `collect_opaque_locals` is now hang-proof (`31bfc58ed`, worklist + visited,
+      behavior-preserving) — the first of those guards. Remaining traversals to audit before
+      a self-referential phi can be built: `is_const_value`, `value_fully_reemittable_locally`,
+      `extraction_duplicates_work`, and the extractor.
+
+      Soundness subtlety surfaced (constrains the recognition, not just the plumbing): an
+      induction variable's value **differs before vs after** its in-loop increment — `… i …;
+      i = i + 1; … i …` reads two distinct values in one iteration. So a single `LoopPhi`
+      value cannot be promoted onto *all* reads of `i` (it would over-merge the pre- and
+      post-increment phases — the same flow-sensitivity that makes `cse_loop_body`
+      correctness-load-bearing). The phi denotes `i` at the loop head; only reads dominated
+      by the head and not preceded by the increment may take it. The recognition must
+      therefore pair the phi with a **phase/position check** (reads before the first in-body
+      write), or it miscompiles. This is why it is a dedicated, full-budget task with the
+      array_bounds_elim + oob suite as the P0 oracle, not a session-end brick.
 
 ### Open design question (surfaced by the condition_implication investigation)
 
