@@ -154,11 +154,12 @@ forced by the dependencies above):
        — and store_load_forward promotes them straight into operand slots. Under the gate
        that map is authoritative, so the `engine.value` fallback is skipped entirely; the
        default path is byte-unchanged (`grow_*` still seeds `value_of`, query still runs).
-       Validated: default e2e 3032/0; gate-on full e2e 3032/0 (brick 1, bare-scalar half);
-       both store_load_forward fixtures + every `field_forward*` pass under the gate. The
-       benign pre-existing `WADO_VERIFY_VG` `expr3/expr0` over-merge is reported identically
-       in both gate states (scoped-walk constant more precise than a fresh build, which is
-       why the default marks it `analysis_only`) — not a regression.
+       Validated: default e2e 3032/0; **gate-on full e2e 3032/0** (both bricks —
+       bare-scalar half `3439ad217`, field half + full retirement `2368e7a1f`);
+       both store_load_forward fixtures + every `field_forward*` pass under the gate.
+       The benign pre-existing `WADO_VERIFY_VG` `expr3/expr0` over-merge is reported
+       identically in both gate states (scoped-walk constant more precise than a fresh
+       build, which is why the default marks it `analysis_only`) — not a regression.
 5. [ ] **Make `value_of` transient, then delete it.** Reachable only **after** the
        keystone (item 3): once every flow-sensitive read is born as an `Operand::Value`
        (so store_load_forward / condition_implication / inline read operands, never
