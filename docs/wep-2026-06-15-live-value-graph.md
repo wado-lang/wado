@@ -251,10 +251,13 @@ and the flip is proven):
       self-reference guard (visited set / stop-at-phi) in **every** such traversal
       (collect, reemittability, `is_const_value`, …), each a potential hang.
 
-      Progress: `collect_opaque_locals` is now hang-proof (`31bfc58ed`, worklist + visited,
-      behavior-preserving) — the first of those guards. Remaining traversals to audit before
-      a self-referential phi can be built: `is_const_value`, `value_fully_reemittable_locally`,
-      `extraction_duplicates_work`, and the extractor.
+      Progress: self-reference safety **done** — audit complete. `collect_opaque_locals` was
+      the only traversal that recursed into `LoopPhi` children unguarded; it is now hang-proof
+      (`31bfc58ed`, worklist + visited, behavior-preserving). Every other traversal already
+      terminates on a self-referential phi: `value_fully_reemittable_locally` and `build_scoped`
+      stop at `LoopPhi` (→ `false` / `None`), `is_const_value` is a leaf check, and
+      `dup_work_walk` carries a `seen` set. So a self-referential induction phi can now be built
+      without hanging the compiler. Remaining is the recognition itself (below).
 
       Soundness subtlety surfaced (constrains the recognition, not just the plumbing): an
       induction variable's value **differs before vs after** its in-loop increment — `… i …;
