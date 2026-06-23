@@ -276,8 +276,21 @@ and the flip is proven):
       (store_load_forward off `value_of` + LoopPhi loop values) is runtime-sound across the whole
       suite, both gate-on and gate-off at 3032/0.
 
-      Milestone: the gated born-as-operands **maintenance is built and validated** (the "build
-      first" phase of the keystone). Flip decision — **hold the flip**, pair it with the deletion:
+      Known gate-on bug (found by `test-wado`/package-gale, **not** e2e): with the gate on,
+      `mise run test-wado` is 3412 passed / **1 failed** —
+      `stage_a_parse: Performance/DropLoopEntryBranchInLRRule_3` (a generated ANTLR4-compat
+      left-recursion parser). The name points at loop-entry-branch handling, i.e. the LoopPhi
+      loop-value change miscompiles this complex loop pattern (e2e's 3032/0 missed it; the gale
+      generated parsers exercise loop shapes the fixtures do not). Gated, so **default is
+      unaffected** (e2e 3032/0, test-wado clean gate-off). This must be fixed before any flip —
+      it strongly validates holding the flip. Likely cause to investigate: the post-loop
+      `current_value[idx] = phi` or the `body_iter` patch yielding a wrong value for a read after
+      the loop / across nested LR loop entry branches; `loop_entry_values` is snapshotted before
+      the phis so that part is unaffected.
+
+      Milestone: the gated born-as-operands **maintenance is built** and validated on the e2e
+      suite (the "build first" phase of the keystone), with one gate-on package-gale miscompile
+      outstanding (above). Flip decision — **hold the flip**, pair it with the deletion:
       flipping the gate now would not retire `value_of` (it is still read by condition_implication,
       inline, the freeze, and the engine plumbing), so it ships the LoopPhi value-graph change to
       the default without the deletion payoff and removes the safety gate before the path is
