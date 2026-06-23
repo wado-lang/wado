@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782178487731,
+  "lastUpdate": 1782218912893,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35013,6 +35013,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 289376,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd369a4c031a8b9d4b0b027430268ae31a06fbf0",
+          "message": "Merge pull request #1433 from wado-lang/claude/atn-bugs-inventory-j54iwp\n\nfeat(gale): complete ATN-class LR loop-entry handling, incl. `.`/`~X` suffixes",
+          "timestamp": "2026-06-23T21:38:45+09:00",
+          "tree_id": "09013c8006f1317a4e259070722545a8cf431e8a",
+          "url": "https://github.com/wado-lang/wado/commit/dd369a4c031a8b9d4b0b027430268ae31a06fbf0"
+        },
+        "date": 1782218912273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289392,
             "unit": "bytes"
           }
         ]
