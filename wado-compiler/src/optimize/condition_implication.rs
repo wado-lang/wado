@@ -413,31 +413,125 @@ fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
     cur
 }
 
-/// Parse an operand (through copy temps) as a value-position `Local` read.
-fn parse_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
-    match &engine.body.exprs[resolve(engine, binds, op).as_expr()?].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        _ => None,
+/// The `Local idx` an `Opaque` value sources from, if any (pool read — not
+/// `value_of`).
+fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<u32> {
+    if let ValueKind::Opaque(o) = engine.body.values.kind(v)
+        && let Some(crate::nir_value_graph::OpaqueSource::Local(i)) =
+            engine.body.values.opaque_source(*o)
+    {
+        Some(i)
+    } else {
+        None
     }
 }
 
 /// Parse an operand (through copy temps) as a structural bound: a bare local or
-/// a `local.field` read over a by-value local root.
+/// a `local.field` read over a by-value local root. Handles both the skeleton
+/// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
+/// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
 fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
-    let e = resolve(engine, binds, op).as_expr()?;
-    match &engine.body.exprs[e].kind {
-        ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
-        ExprKind::FieldAccess { field_index, .. } => {
-            let root = super::arena_query::projection_root_local(engine.body, e)?;
-            Some(BoundKey::Field(root, *field_index))
+    match resolve(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
+            ExprKind::FieldAccess { field_index, .. } => {
+                let root = super::arena_query::projection_root_local(engine.body, e)?;
+                Some(BoundKey::Field(root, *field_index))
+            }
+            _ => None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Opaque(_) => opaque_local(engine, v).map(BoundKey::Local),
+            ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } => Some(BoundKey::Field(opaque_local(engine, *receiver)?, *field_index)),
+            _ => None,
+        },
+    }
+}
+
+/// Parse an operand (through copy temps) as a constant `i64`. Constants live in
+/// the value **pool** as `Operand::Value(Int)` — that is `body.values` (the IR's
+/// value pool), **not** the `value_of` side-table, so reading it stays
+/// `value_of`-free.
+fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
+    if let Operand::Value(v) = resolve(engine, binds, op)
+        && let ValueKind::Int(val, _) = engine.body.values.kind(v)
+    {
+        return Some(*val as i64);
+    }
+    None
+}
+
+/// Parse an operand (through copy temps) as `var_local + const_offset`. A bare
+/// local is offset 0; `+ const` accumulates through `Binary(Add)` (either side).
+/// Bounded recursion via the copy-temp chain. Lets `arr[q]` where `q = p + 2`,
+/// `p = pos + 1` decompose to `(pos, 3)`.
+fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> Option<(u32, i64)> {
+    match resolve(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Local { index, .. } => Some((*index, 0)),
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Add,
+                right,
+            } => {
+                if let Some((v, o)) = parse_var_offset(engine, binds, *left)
+                    && let Some(c) = parse_const_i64(engine, binds, *right)
+                {
+                    return Some((v, o + c));
+                }
+                if let Some((v, o)) = parse_var_offset(engine, binds, *right)
+                    && let Some(c) = parse_const_i64(engine, binds, *left)
+                {
+                    return Some((v, o + c));
+                }
+                None
+            }
+            _ => None,
+        },
+        // A promoted (`Operand::Value`) `var + const` — the freeze promotes pure
+        // arith — decomposed through the value pool (not `value_of`).
+        Operand::Value(v) => parse_value_offset(engine, v),
+    }
+}
+
+/// Decompose a pooled value as `Opaque(Local) + const` (pool read, not `value_of`).
+fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<(u32, i64)> {
+    match engine.body.values.kind(v) {
+        ValueKind::Opaque(_) => opaque_local(engine, v).map(|i| (i, 0)),
+        ValueKind::Binary {
+            op: NirBinaryOp::Add,
+            lhs,
+            rhs,
+            ..
+        } => {
+            let (lhs, rhs) = (*lhs, *rhs);
+            if let Some((var, o)) = parse_value_offset(engine, lhs)
+                && let ValueKind::Int(c, _) = engine.body.values.kind(rhs)
+            {
+                return Some((var, o + *c as i64));
+            }
+            if let Some((var, o)) = parse_value_offset(engine, rhs)
+                && let ValueKind::Int(c, _) = engine.body.values.kind(lhs)
+            {
+                return Some((var, o + *c as i64));
+            }
+            None
         }
         _ => None,
     }
 }
 
-/// Parse a condition (through copy temps) as `Local OP bound`. Returns
-/// `(var_local, bound, op)`.
-fn parse_cmp(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, BoundKey, NirBinaryOp)> {
+/// Parse a condition (through copy temps) as `(var + off) OP bound`. Returns
+/// `(var_local, off, bound, op)`.
+fn parse_cmp(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
     let ce = resolve(engine, binds, cond).as_expr()?;
     if let ExprKind::Binary { left, op, right } = &engine.body.exprs[ce].kind {
         let op = *op;
@@ -445,25 +539,26 @@ fn parse_cmp(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, Boun
             op,
             NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
         ) {
-            let var = parse_local(engine, binds, *left)?;
+            let (var, off) = parse_var_offset(engine, binds, *left)?;
             let bound = parse_bound(engine, binds, *right)?;
-            return Some((var, bound, op));
+            return Some((var, off, bound, op));
         }
     }
     None
 }
 
 /// Parse a bounds-check condition (through copy temps) that **panics when the
-/// guard `var < bound` is violated**: `var >= bound` (`Binary(GtEq)`) or its
-/// lowered form `!(var < bound)` (`Unary(Not, Binary(Lt))`).
-fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, BoundKey)> {
+/// guard `var + K < bound` is violated**: `(var + off) >= bound`
+/// (`Binary(GtEq)`) or its lowered form `!((var + off) < bound)`. Returns
+/// `(var, off, bound)`.
+fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, i64, BoundKey)> {
     let ce = resolve(engine, binds, cond).as_expr()?;
-    match &engine.body.exprs[ce].kind {
+    let (left, right) = match &engine.body.exprs[ce].kind {
         ExprKind::Binary {
             left,
             op: NirBinaryOp::GtEq,
             right,
-        } => Some((parse_local(engine, binds, *left)?, parse_bound(engine, binds, *right)?)),
+        } => (*left, *right),
         ExprKind::Unary {
             op: NirUnaryOp::Not,
             expr: inner,
@@ -475,16 +570,16 @@ fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, Bo
                 right,
             } = &engine.body.exprs[ie].kind
             {
-                Some((
-                    parse_local(engine, binds, *left)?,
-                    parse_bound(engine, binds, *right)?,
-                ))
+                (*left, *right)
             } else {
-                None
+                return None;
             }
         }
-        _ => None,
-    }
+        _ => return None,
+    };
+    let (var, off) = parse_var_offset(engine, binds, left)?;
+    let bound = parse_bound(engine, binds, right)?;
+    Some((var, off, bound))
 }
 
 /// The local that `BoundKey` reads through, if any (for write-tracking).
@@ -594,28 +689,28 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
         return false;
     };
     let binds = build_copy_bindings(engine.body);
-    let Some((var, bound, gop)) = parse_cmp(engine, &binds, *inner) else {
+    let Some((var, goff, bound, gop)) = parse_cmp(engine, &binds, *inner) else {
         return false;
     };
-    // After `if !(var < bound) break`, the surviving body has `var < bound`.
-    // Strict guard only (the bounds check is `var >= bound`, which `var < bound`
-    // refutes; `<=` would need `var > bound` checks — out of scope for now).
+    // After `if !(var + goff < bound) break`, the surviving body has
+    // `var + goff < bound`. Strict guard only (a `var + j >= bound` check is
+    // refuted for `j <= goff`).
     if gop != NirBinaryOp::Lt {
         return false;
     }
     // Walk body statements after the guard, in order. While no statement has
     // modified `var` / `bound` since the guard, eliminate every dominated
-    // bounds-check `var >= bound { panic }` nested anywhere in the statement
-    // (the inlined `index_value` check is a `StmtKind::If` / `ExprKind::If`
-    // inside the statement's expression block, not a top-level statement). A
-    // statement that modifies `var` / `bound` (e.g. the `i += 1` induction
-    // update) stops the scan — the guard fact no longer holds past it.
+    // bounds-check `var + j >= bound` (`j <= goff`) nested anywhere in the
+    // statement (the inlined `index_value` check is a `StmtKind::If` /
+    // `ExprKind::If` inside the statement's expression block, not a top-level
+    // statement). A statement that modifies `var` / `bound` (e.g. the `i += 1`
+    // induction update) stops the scan — the guard fact no longer holds past it.
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, bound) {
             break;
         }
-        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, bound, &binds);
+        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, &binds);
     }
     changed
 }
@@ -628,6 +723,7 @@ fn eliminate_checks_in_node(
     engine: &mut Engine,
     node: NodeRef,
     var: u32,
+    k: i64,
     bound: BoundKey,
     binds: &Binds,
 ) -> bool {
@@ -655,11 +751,14 @@ fn eliminate_checks_in_node(
             },
             _ => None,
         };
+        // The guard gives `var + k < bound`; a check `var + j >= bound` is
+        // refuted for `0 <= j <= k` (`var + j <= var + k < bound`).
         if let Some((cond, then_b)) = cand
             && is_panic_block(engine, then_b)
-            && let Some((cvar, cbound)) = parse_check(engine, binds, cond)
+            && let Some((cvar, cj, cbound)) = parse_check(engine, binds, cond)
             && cvar == var
             && cbound == bound
+            && (0..=k).contains(&cj)
         {
             holders.push((n, cond));
         }
@@ -673,10 +772,10 @@ fn eliminate_checks_in_node(
     changed
 }
 
-/// A straight-line early-exit guard `if (var >= bound) { return/break }`: after
-/// it, the surviving path has `var < bound` (structural, value_of-free). Returns
-/// `(var, bound)`.
-fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u32, BoundKey)> {
+/// A straight-line early-exit guard `if (var + K >= bound) { return/break }`:
+/// after it, the surviving path has `var + K < bound` (structural,
+/// value_of-free). Returns `(var, K, bound)`.
+fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u32, i64, BoundKey)> {
     let StmtKind::If {
         condition,
         then_block,
@@ -702,21 +801,21 @@ fn process_block(engine: &mut Engine, block: BlockId) -> bool {
     // for a later statement's checks while no statement since the guard has
     // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
     let binds = build_copy_bindings(engine.body);
-    let mut seguards: Vec<(u32, BoundKey)> = Vec::new();
+    let mut seguards: Vec<(u32, i64, BoundKey)> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         for guard in &guards {
             changed |= GuardEliminator { fact: *guard }.visit_stmt(engine, s);
         }
-        for &(var, bound) in &seguards {
+        for &(var, k, bound) in &seguards {
             if !stmt_modifies(engine, s, var, bound) {
-                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, bound, &binds);
+                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, &binds);
             }
         }
         changed |= BitmaskEliminator.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator.visit_stmt(engine, s);
         changed |= process_stmt(engine, s);
-        seguards.retain(|&(var, bound)| !stmt_modifies(engine, s, var, bound));
+        seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(guard) = extract_early_exit_guard(engine, s) {
             guards.push(guard);
         }
