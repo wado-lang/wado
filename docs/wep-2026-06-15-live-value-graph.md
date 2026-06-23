@@ -244,6 +244,38 @@ and the flip is proven):
       (`nir_value_graph.rs:627`) — extraction must still treat it opaquely. Build-critical:
       `walk_loop` feeds every downstream pass, so gate it under `WADO_BORN_OPERANDS` and
       validate the **whole** e2e (not just BCE) plus `WADO_VERIFY_VG` before any flip.
+      Hazard verified at the code level: a self-referential `body_iter` makes every
+      recursive value-tree traversal that descends into it non-terminating —
+      `collect_opaque_locals` (`nir_value_graph.rs:602`) recurses `body_iter →
+      binary(phi, c) → phi → body_iter → …`. So induction recognition requires a
+      self-reference guard (visited set / stop-at-phi) in **every** such traversal
+      (collect, reemittability, `is_const_value`, …), each a potential hang. This is why
+      it is a dedicated, full-budget task, not a session-end brick.
+
+### Open design question (surfaced by the condition_implication investigation)
+
+The born-as-operands plan **does not, by itself, retire `value_of` for
+condition_implication**, and this is a genuine gap in the unified plan, not an
+implementation detail:
+
+- store_load_forward's reads fold to a **final constant** → promote to `Operand::Value`,
+  drop the skeleton read. Clean. Done.
+- condition_implication's guard/check reads must **keep their skeleton node** (BCE
+  heap-version / write-detection needs it — proven: promoting them caused P0
+  over-eliminations). So their identity must stay **attached to the surviving read** —
+  which is precisely what `value_of` (the `ExprId → ValueId` map) provides. Born-as-operands
+  cannot move it into an operand slot (`Operand` is `Expr` xor `Value`).
+
+So for these reads the `value_of` **side-table** can only be retired by **relocating** the
+identity onto the read node (an inline `ExprNode.value: Option<ValueId>`), not by promotion.
+That satisfies criterion 3 (no separate side-table) but **not** criterion 2's CPU win (an
+inline field is still maintained per-edit). LoopPhi induction recognition removes the
+_re-seed_ (the maintenance band-aid), but the build's per-read `value_of` entries — which
+the matching reads — remain. **Decision needed before the flip:** accept inline-identity
+relocation (criterion 3 only) for write-detection reads, or accept a BCE perf regression
+(let it under-eliminate when `value_of` is gone — sound, never a miscompile), or redesign
+BCE to not need per-read identities. The store_load_forward migration stands regardless.
+
 - [ ] **inline** clears + regrows `value_of` (`736` / `775`) as build-once
       maintenance; once no in-loop pass reads `value_of`, the regrow is unneeded.
 - [ ] **the freeze** (`extract.rs`, last pass) is the build site + final consumer:
