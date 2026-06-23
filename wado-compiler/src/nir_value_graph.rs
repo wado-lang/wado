@@ -580,30 +580,42 @@ impl ValuePool {
     /// extracted (a leaf `Opaque(Local)` is `local.get idx`). Recurses the pure
     /// value tree; a `FieldAccess` reads its receiver's locals.
     pub fn collect_opaque_locals(&self, v: ValueId, out: &mut IndexSet<u32>) {
-        match self.kind(self.find_imm(v)).clone() {
-            ValueKind::Opaque(oid) => {
-                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
-                    out.insert(idx);
+        // Worklist with a visited set, not recursion: an induction `LoopPhi` is
+        // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
+        // would not terminate. The visited set bounds the traversal at each value's
+        // canonical id.
+        let mut stack = vec![v];
+        let mut seen: IndexSet<ValueId> = IndexSet::default();
+        while let Some(v) = stack.pop() {
+            let rep = self.find_imm(v);
+            if !seen.insert(rep) {
+                continue;
+            }
+            match self.kind(rep).clone() {
+                ValueKind::Opaque(oid) => {
+                    if let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid) {
+                        out.insert(idx);
+                    }
                 }
+                ValueKind::Binary { lhs, rhs, .. } => {
+                    stack.push(lhs);
+                    stack.push(rhs);
+                }
+                ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                    stack.push(operand);
+                }
+                ValueKind::Select { cond, then, else_ } => {
+                    stack.push(cond);
+                    stack.push(then);
+                    stack.push(else_);
+                }
+                ValueKind::LoopPhi { entry, body_iter } => {
+                    stack.push(entry);
+                    stack.push(body_iter);
+                }
+                ValueKind::FieldAccess { receiver, .. } => stack.push(receiver),
+                _ => {}
             }
-            ValueKind::Binary { lhs, rhs, .. } => {
-                self.collect_opaque_locals(lhs, out);
-                self.collect_opaque_locals(rhs, out);
-            }
-            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
-                self.collect_opaque_locals(operand, out);
-            }
-            ValueKind::Select { cond, then, else_ } => {
-                self.collect_opaque_locals(cond, out);
-                self.collect_opaque_locals(then, out);
-                self.collect_opaque_locals(else_, out);
-            }
-            ValueKind::LoopPhi { entry, body_iter } => {
-                self.collect_opaque_locals(entry, out);
-                self.collect_opaque_locals(body_iter, out);
-            }
-            ValueKind::FieldAccess { receiver, .. } => self.collect_opaque_locals(receiver, out),
-            _ => {}
         }
     }
 
