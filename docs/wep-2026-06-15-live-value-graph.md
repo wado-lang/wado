@@ -90,20 +90,32 @@ make the value passes read operands, then delete the map. Execute **Route B**
       operand-spelling diffs, `arr.repr`→`_av`, validated on the default path).
 
       Remaining: (a) broaden the `FieldAccess` receiver beyond a **param** to a
-      non-param local — the **receiver-stability predicate** alone (owned /
-      non-`mut` / non-address-taken / non-reference, with the single-assignment
-      def automatically dominating the placement) is **necessary but not
-      sufficient**: implemented and measured this session, it re-traps
-      `array_index_1` (and ~13 other `array_*`, `wasm trap: null reference`) and
-      was reverted. The gate admits a `List`/array local whose materialised
-      `.repr` field is *itself* a reference into a mutable backing store, and
-      pinning that aggregate/reference field across uses changes value-copy
-      semantics — the ~165-fixture dead-end. Sound broadening additionally needs a
-      **field-value-type gate** (scalar-only is sound but recovers nothing;
-      aggregate / reference fields need value-copy-aware materialisation). (b)
-      extend the materialiser to `Select` (at the merge) and shared `Binary`
-      (once); (c) the runtime + `WADO_VERIFY_VG` proof on BCE / i128 /
-      `array_index_1` before flip.
+      non-param local. This needs **two** independent gates — both measured this
+      session, broadening reverted:
+
+      - **Field-value-type gate (done, works).** Materialise only a **scalar**
+        (`is_primitive_like`) field: a primitive copy is value-independent, so
+        pinning + sharing it is sound; an aggregate / reference field (`List.repr`,
+        a `ref Array` into a mutable backing, a nested struct) aliases storage the
+        `heap_ver` does not pin — the `array_index_1` `null reference` trap.
+        Adding this gate **stopped every `array_*` trap** (`array_index_1` et al.
+        pass under `WADO_PROMOTE_FIELDS`).
+
+      - **Receiver-availability gate (not built — the remaining trap).** With the
+        scalar gate in place, broadening to non-param owned / non-`mut` /
+        non-address-taken / non-reference locals **still traps** 2 fixtures
+        (`http_base64_decode`, `newtype_operator_trait`, `null reference`). Root
+        cause: the value's receiver `Opaque(Local i)` may differ from the use's
+        syntactic local (copy-prop / value identity), so local `i`'s def does not
+        necessarily dominate the `materialise_point` — the `let _av = local i .f`
+        is emitted where `i` is not yet live. A **param** receiver is entry-defined
+        so it always dominates (why `recv_param` is safe); a non-param receiver
+        needs an explicit check that `i`'s def dominates the chosen placement.
+
+      So sound non-param field promotion = scalar gate **and** receiver-def-dominance
+      check (against `materialise_point`), still to build. (b) extend the
+      materialiser to `Select` (at the merge) and shared `Binary` (once); (c) the
+      runtime + `WADO_VERIFY_VG` proof on BCE / i128 / `array_index_1` before flip.
 - [~] **2. Migrate the value passes off `value_of`** to operand / pool queries.
   Survey of the live consumers (default pipeline): `cse` is **skipped** under
   `promote_active` (subsumed by hash-consing) — its sites are dead; `const_fold`
