@@ -293,12 +293,30 @@ Remaining consumers, in dependency order:
       matching + materialisation). A `FieldAccess` read promotes to its `heap_ver`-correct value
       (re-emits as `StructGet`) — materialisation-correct by construction.
 
-      **Resume here:** full born-at-build promotion of every value-position pure read
-      (`FieldAccess` → its `heap_ver` value; induction `Local` → `canonical_local`, before-update
-      reads only; keeping the freeze's place / `let`-value exclusions); validate the
-      array_bounds_elim + oob suite stays green (P0 soundness gate). The `LoopPhi` (built,
-      `walk_loop`) supplies the
-      induction identity; it needs a WIR-extractor materialisation (`LoopPhi` → `local.get i`).
+      MEASURED LANDMINE (this branch — promotion is **not** the way for induction vars):
+      giving written loop locals a **source-bearing opaque** at the loop head (so induction
+      reads materialise as `local.get idx`) — whether memoised `canonical_local` or a fresh
+      `fresh_opaque_with_source(Local idx)` — is a **P0 miscompile**: `closure_for_loop_mutation`
+      **traps with an infinite loop** (`canonical_local` additionally broke http / filesystem via
+      cross-context over-merge). Root tension: an induction read needs a **shared** identity for
+      the guard/check match, but a `local.get idx` value re-emitted at a different point (CSE /
+      the increment's own `i`) reads a **different** storage value — the shared identity and the
+      per-position materialisation conflict, and CSE/promotion collapses the loop condition /
+      increment. So `FieldAccess` bounds promote cleanly (`StructGet`, no storage aliasing), but
+      **induction `Local` reads cannot be promoted to operands**.
+
+      CORRECTED PATH (the right one — mirrors the `licm` migration): retire `value_of` from
+      condition_implication by rebuilding its matcher on **structural comparison of skeleton
+      reads**, not value-graph identity — exactly how `licm` went off `value_of` (commutative
+      structural keys + `ModifiedVars`). The guard `var OP bound` and a check `var2 OP2 bound2`
+      match when `var`/`var2` are reads of the **same local with no reassignment between** and
+      `bound`/`bound2` are the **same field/value with no heap write between** (a
+      `ModifiedVars`-style scan over the span, which I already built for `licm`). This needs
+      neither `value_of` nor promotion, sidesteps the induction-materialisation landmine, and the
+      reads stay ordinary skeleton `local.get` / `StructGet` for codegen. **Resume here:** port
+      `GuardFact` matching from `ValueId` comparison to structural+`ModifiedVars` comparison;
+      validate array_bounds_elim + oob (P0). The `FieldAccess`→operand promotion can still retire
+      the *bound* half independently, but the structural matcher subsumes it.
 
       Implementation entry point: `Builder::walk_loop` (`nir_value_graph/builder.rs:1878`)
       currently assigns every written loop local a **fresh `Opaque`** (twice — pre-body and
