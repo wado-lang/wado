@@ -208,7 +208,7 @@ miscompile.
 Structural conclusion: `value_of` is **load-bearing flow-sensitive state**, not a removable
 cache, but it **is** retireable via born-at-build (an earlier claim here that BCE made it
 "irreducible" was a misdiagnosis — corrected below). Its readers are (1) the **freeze**,
-which *is* the operand-promotion mechanism and reads `value()` to decide promotions; (2) the
+which _is_ the operand-promotion mechanism and reads `value()` to decide promotions; (2) the
 **BCE matching**, which needs a flow-sensitive per-expr identity (same across no write,
 different across a `pop()`) — and that identity is the `FieldAccess` `ValueId`'s `heap_ver`,
 which **an `Operand::Value` carries fine** (the skeleton node is needed only for the codegen
@@ -219,7 +219,7 @@ carrying the correct `heap_ver` / `LoopPhi` identity. The key property: **operan
 code), so the re-seed — which existed solely to restore `value_of` entries the maintenance
 **drops** after `licm` — is **eliminated**, and the 11 reds recover properly. Only `inline`
 (which introduces writes) re-promotes its region via the existing scoped re-valuation. This
-is *less* maintenance than today, IR not cache, build-once not rebuild — all three criteria
+is _less_ maintenance than today, IR not cache, build-once not rebuild — all three criteria
 with BCE intact. The easy half (constants / pure-arith over stable leaves) is already done
 via the early freeze; the remaining half (promote `FieldAccess` + induction reads at build
 with correct identities, plus `LoopPhi`→`local.get` materialisation) is the multi-session
