@@ -1111,29 +1111,24 @@ fn extract_loop_guard(engine: &mut Engine, loop_body: BlockId) -> Option<(GuardF
     )
     .then_some(())?;
 
-    // condition must be `Not(<comparison>)`; the comparison may sit behind a
-    // CSE temporary.
-    let ExprKind::Unary {
-        op: NirUnaryOp::Not,
-        expr: inner,
-    } = &engine.body.exprs[condition.as_expr()?].kind
-    else {
-        return None;
+    // condition must resolve to `Not(<comparison>)`. Read its interned value so a
+    // promoted (`Operand::Value`) condition is handled, not only a skeleton `Not`;
+    // the comparison may sit behind a CSE / copy temporary the value graph resolves.
+    let cond_v = engine.operand_value(condition)?;
+    let inner_v = match engine.value_kind(cond_v) {
+        ValueKind::Unary {
+            op: NirUnaryOp::Not,
+            operand,
+            ..
+        } => *operand,
+        _ => return None,
     };
-    let inner = *inner;
-    let (lhs_vn, rhs_vn, is_strict) = lt_comparison(engine, inner.as_expr()?)?;
+    let (lhs_vn, rhs_vn, is_strict) = lt_of_value(engine, inner_v)?;
     // Loop guards keep the plain-variable shape: the induction variable is
     // compared directly (`i < bound`), so any `Add` decomposition would
     // describe a different program object. Restrict to offset 0.
     let fact = GuardFact::from_values(engine, lhs_vn, rhs_vn, is_strict);
     (fact.max_offset == 0).then_some((fact, guard_idx + 1))
-}
-
-/// The `(lhs, rhs, is_strict)` of the `<` / `<=` comparison `expr` resolves to,
-/// directly or through a `__cse` / `__cond` temporary the value graph resolves.
-fn lt_comparison(engine: &mut Engine, expr: ExprId) -> Option<(ValueId, ValueId, bool)> {
-    let value = engine.value(expr)?;
-    lt_of_value(engine, value)
 }
 
 /// Extract a guard from an early-exit if-statement: after
@@ -1153,16 +1148,19 @@ fn extract_early_exit_guard(engine: &mut Engine, s: StmtId) -> Option<GuardFact>
     if !block_always_exits(engine, then_block) {
         return None;
     }
-    let ExprKind::Binary {
-        left,
-        op: NirBinaryOp::GtEq,
-        right,
-    } = &engine.body.exprs[condition.as_expr()?].kind
-    else {
-        return None;
+    // Read the condition's interned value so a promoted (`Operand::Value`)
+    // `var + k >= bound` guard is handled, not only a skeleton `Binary`.
+    let cond_v = engine.operand_value(condition)?;
+    let (lhs_vn, rhs_vn) = match engine.value_kind(cond_v) {
+        ValueKind::Binary {
+            op: NirBinaryOp::GtEq,
+            lhs,
+            rhs,
+            ..
+        } => (*lhs, *rhs),
+        _ => return None,
     };
-    let (left, right) = (*left, *right);
-    GuardFact::from_comparison(engine, left, right, true)
+    Some(GuardFact::from_values(engine, lhs_vn, rhs_vn, true))
 }
 
 fn block_always_exits(engine: &Engine, block: BlockId) -> bool {
