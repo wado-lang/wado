@@ -181,6 +181,38 @@ forced by the dependencies above):
    `value_of` + the re-seed band-aids). Making the operand slots the source of truth
    and `value_of` a transient index is the irreducible keystone.
 
+### `value_of` deletion endgame — remaining consumers and resume point
+
+Done under `WADO_BORN_OPERANDS`: **store_load_forward** (bricks 1–2). The avoidance
+recipe that worked — and generalises — is _invariant promotion from a scratch
+re-walk_: a read whose value is **constant / pipeline-invariant** is recovered by a
+local scoped walk (`Engine::scoped_const_reads`, no rebuild, no `value_of` write) and
+promoted straight into its operand slot; under the gate the walk is authoritative and
+the `engine.value` query is skipped. No revert maintenance is needed because the
+promoted value is invariant by construction.
+
+Remaining consumers, in dependency order (the gate stays off until all are migrated
+and the flip is proven):
+
+- [ ] **condition_implication — the long pole.** Panic-elimination predicates already
+      read `engine.operand_value` (`66cc186a9` / `22e36581d`). What still needs
+      `value_of` is the **re-seed → BCE-matching** for the _loop-variant_ case:
+      `reseed_loop_stable_operands` / `derived_lets` rebuild the induction variable's
+      and hoisted bound's identities after licm's structural edits drop them, then the
+      bounds-check matching reads them back. This is the `ValueKind::LoopPhi` tier —
+      `body_iter` is still an MVP `Opaque` (no induction recognition,
+      `nir_value_graph.rs:176`). The straight-line `reseed_invariant_fields` case is
+      invariant and migratable with the store_load_forward recipe; the loop case needs
+      induction vars / hoisted bounds frozen as stable **LoopPhi operands** so a guard
+      copy and a check copy share one `ValueId` without the re-seed. **Resume here.**
+- [ ] **inline** clears + regrows `value_of` (`736` / `775`) as build-once
+      maintenance; once no in-loop pass reads `value_of`, the regrow is unneeded.
+- [ ] **the freeze** (`extract.rs`, last pass) is the build site + final consumer:
+      after every earlier consumer is off `value_of`, build it into a freeze-local
+      graph, promote, discard — then **delete the persisted
+      `Body::value_graph.value_of`** (criterion 3). The engine `value()` / `maintain_*`
+      plumbing goes with it.
+
 - [~] **1. Availability-aware extraction — the one new analysis.** Materialise a
   shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
   version, a value a later pass may drop) into a `let _av = <value>` at a point
