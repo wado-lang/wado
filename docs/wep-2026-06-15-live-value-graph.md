@@ -89,13 +89,21 @@ make the value passes read operands, then delete the map. Execute **Route B**
       (3030/2 before and after — the 2 are pre-existing benign `wir_expect`
       operand-spelling diffs, `arr.repr`→`_av`, validated on the default path).
 
-      Remaining: (a) the **receiver-stability predicate** (admit a non-param
-      *owned*, *non-`mut`*, *non-address-taken* local receiver — a single-assignment
-      leaf's def automatically dominates this placement, so only the alias gate is
-      new), which the `FieldAccess` half needs to fire beyond param receivers, plus
-      the `newtype_string_coercion` extraction fix the WEP flags; (b) extend the
-      materialiser to `Select` (at the merge) and shared `Binary` (once); (c) the
-      runtime + `WADO_VERIFY_VG` proof on BCE / i128 / `array_index_1` before flip.
+      Remaining: (a) broaden the `FieldAccess` receiver beyond a **param** to a
+      non-param local — the **receiver-stability predicate** alone (owned /
+      non-`mut` / non-address-taken / non-reference, with the single-assignment
+      def automatically dominating the placement) is **necessary but not
+      sufficient**: implemented and measured this session, it re-traps
+      `array_index_1` (and ~13 other `array_*`, `wasm trap: null reference`) and
+      was reverted. The gate admits a `List`/array local whose materialised
+      `.repr` field is *itself* a reference into a mutable backing store, and
+      pinning that aggregate/reference field across uses changes value-copy
+      semantics — the ~165-fixture dead-end. Sound broadening additionally needs a
+      **field-value-type gate** (scalar-only is sound but recovers nothing;
+      aggregate / reference fields need value-copy-aware materialisation). (b)
+      extend the materialiser to `Select` (at the merge) and shared `Binary`
+      (once); (c) the runtime + `WADO_VERIFY_VG` proof on BCE / i128 /
+      `array_index_1` before flip.
 - [ ] **2. Migrate the value passes off `value_of`** (17 `engine.value(expr)` call
       sites in `const_fold` / `cse` / `copy_prop` / `licm` / `condition_implication` /
       `select_lowering`) to operand / pool queries, coordinated with a golden refresh

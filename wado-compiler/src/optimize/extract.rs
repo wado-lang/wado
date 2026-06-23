@@ -324,10 +324,21 @@ pub(super) fn freeze_pure_arith(
                         // Conservative placement soundness: only materialise over a
                         // **parameter** receiver. A param is valid (non-null,
                         // available) at every program point, so the hoisted
-                        // `let _av = param.field` at the use's enclosing statement
-                        // cannot deref a value control flow had not yet validated
-                        // (e.g. a loop/`if let` item). Broaden via a dominance check
-                        // in P3 to cover local receivers.
+                        // `let _av = param.field` at the dominating statement cannot
+                        // deref a value control flow had not yet validated (e.g. a
+                        // loop/`if let` item). Broadening to a non-param owned
+                        // receiver was implemented and measured, then **reverted**:
+                        // the receiver-stability gate
+                        // (owned / non-`mut` / non-address-taken / non-reference) is
+                        // necessary but not sufficient — it admits a `List`/array
+                        // local whose materialised `.repr` field is *itself* a
+                        // reference into a mutable backing store, and pinning that
+                        // aggregate/reference field across uses changes value-copy
+                        // semantics and re-traps `array_index_1` (`wasm trap: null
+                        // reference`, the ~165-fixture dead-end in the WEP). Sound
+                        // broadening additionally needs a field-*value*-type gate
+                        // (scalar-only is sound but recovers nothing; aggregate /
+                        // reference fields need value-copy-aware materialisation).
                         let recv_src = match engine.body.values.kind(recv) {
                             ValueKind::Opaque(o) => Some(*o),
                             _ => None,
