@@ -691,6 +691,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         ty: TypeTable::BOOL,
         initializer: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
         mutable: true,
+        param: None,
         wado_mutable: true,
         is_pub: false,
         module_source: entry_source.clone(),

@@ -87,6 +87,10 @@ pub struct CompileOptions {
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
+    /// `-D NAME=value` compile-time parameter overrides.
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    /// `--param-*` policy levels.
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -118,6 +122,11 @@ pub struct CompileFlags {
     pub codegen_flags: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
+    /// `-D NAME=value` compile-time parameter overrides. Forwarded to
+    /// `CompilerOptions::param_overrides`.
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    /// `--param-*` policy levels. Forwarded to `CompilerOptions::param_policy`.
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 impl CompileOptions {
@@ -135,6 +144,8 @@ impl CompileOptions {
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
             lib_world: self.lib_world.clone(),
+            param_overrides: self.param_overrides.clone(),
+            param_policy: self.param_policy,
         }
     }
 }
@@ -223,6 +234,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -246,8 +263,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
     let mut lib = false;
+    let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            param_args.apply(p, &mut parser)?;
+        } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
                 Opt::Format => {
@@ -323,6 +343,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         no_cache,
         codegen_flags,
         lib_world,
+        param_overrides: param_args.overrides,
+        param_policy: param_args.policy,
     })
 }
 
@@ -423,6 +445,8 @@ pub async fn try_compile_with_kiln_cache(
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
         lib_world: flags.lib_world.clone(),
+        param_overrides: flags.param_overrides.clone(),
+        param_policy: flags.param_policy,
         ..Default::default()
     };
 

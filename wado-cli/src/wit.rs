@@ -180,6 +180,8 @@ async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<St
         None,
         None,
         &[],
+        &wado_compiler::hashmap::IndexMap::default(),
+        wado_compiler::param_resolution::ParamPolicy::default(),
     )
     .await
     {

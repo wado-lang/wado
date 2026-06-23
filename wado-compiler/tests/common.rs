@@ -42,6 +42,8 @@ use wado_compiler::{
 pub struct FilesystemHost {
     base_path: PathBuf,
     diagnostics: Mutex<Vec<Diagnostic>>,
+    /// Stubbed environment for `#[param(from_env = ...)]` resolution.
+    env: indexmap::IndexMap<String, String>,
 }
 
 impl FilesystemHost {
@@ -49,7 +51,14 @@ impl FilesystemHost {
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
+            env: indexmap::IndexMap::new(),
         }
+    }
+
+    /// Seed the compile-time environment consulted by `env_var`.
+    pub fn with_env(mut self, env: indexmap::IndexMap<String, String>) -> Self {
+        self.env = env;
+        self
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
@@ -73,6 +82,10 @@ impl CompilerHost for FilesystemHost {
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.diagnostics.lock().unwrap().push(diagnostic);
+    }
+
+    fn env_var(&self, name: &str) -> Option<String> {
+        self.env.get(name).cloned()
     }
 }
 
@@ -766,7 +779,14 @@ pub fn compile_source_with_compiler_options_and_filename(
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    compile_capturing_warnings(path, source, options, display_filename).0
+    compile_capturing_warnings(
+        path,
+        source,
+        options,
+        display_filename,
+        indexmap::IndexMap::new(),
+    )
+    .0
 }
 
 /// Compile and return both the result and the captured compile-time *warning*
@@ -783,6 +803,7 @@ pub fn compile_capturing_warnings(
     source: &str,
     options: wado_compiler::CompilerOptions,
     display_filename: Option<&str>,
+    env: indexmap::IndexMap<String, String>,
 ) -> (
     Result<wado_compiler::CompileResult, CompileError>,
     Vec<String>,
@@ -792,7 +813,7 @@ pub fn compile_capturing_warnings(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemHost::new(base_path);
+    let host = FilesystemHost::new(base_path).with_env(env);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());

@@ -1249,6 +1249,27 @@ let icon = #include_bytes("./icon.png");   // include file as List<u8>
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
+## Compile-Time Parameters
+
+`#[param]` on a `global` makes it a build input fed by the `wado` invocation: the type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.
+
+```wado
+#[param]
+global API_URL: String = "http://localhost";   // -D API_URL=...
+
+#[param(from_env = "PORT")]
+global PORT: i32 = 8080;                        // read from an env var
+
+#[param(name = "build.id")]
+global BUILD_ID: String = "dev";                // -D build.id=...
+```
+
+```sh
+wado compile -D API_URL=https://prod.example.com -D PORT=80 app.wado
+```
+
+Each parameter resolves highest priority first: `-D NAME=value` (alias `--define`), then `from_env`, then the initializer. The override is trimmed and parsed into the declared type — a built-in scalar (`String`, `char`, the integer types, `f32`/`f64`, `bool`) — with the `LenientFromStr` spellings (radix prefixes, `_` separators, `nan`/`inf`, `1`/`0` for `bool`). Parameter names share one flat namespace across the build. `--param-unknown` / `--param-invalid` / `--param-missing` set what an unmatched `-D`, an unparseable value, or a missing override does (`error` / `warn` / `ignore`). See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+
 ## Attributes
 
 ```wado
@@ -1265,6 +1286,9 @@ struct Foo {
 #[inline]                  // hint: prefer inlining
 #[inline(always)]          // always inline
 #[inline(never)]           // never inline
+
+#[param]                   // compile-time parameter global (see above)
+global PORT: i32 = 8080;
 ```
 
 ## Serialization and Deserialization
