@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782230260267,
+  "lastUpdate": 1782234793076,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35081,6 +35081,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa734ef445e2e56f438eb8511cb96f3cbbd7d885"
         },
         "date": 1782230259641,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289392,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f6c2188c48ca571e9d5aeb8e1e78bdfa0ea07bda",
+          "message": "Merge pull request #1435 from wado-lang/claude/xmod-recursive-type-closure-bug-u90xii\n\nfix: keep cross-module fn-param closure specializations distinct",
+          "timestamp": "2026-06-24T02:03:18+09:00",
+          "tree_id": "3935e1c019a11a3891d27f00d567865e9e71a630",
+          "url": "https://github.com/wado-lang/wado/commit/f6c2188c48ca571e9d5aeb8e1e78bdfa0ea07bda"
+        },
+        "date": 1782234792428,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
