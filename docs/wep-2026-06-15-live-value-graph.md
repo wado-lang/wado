@@ -194,17 +194,29 @@ promoted value is invariant by construction.
 Remaining consumers, in dependency order (the gate stays off until all are migrated
 and the flip is proven):
 
-- [ ] **condition_implication — the long pole.** Panic-elimination predicates already
-      read `engine.operand_value` (`66cc186a9` / `22e36581d`). What still needs
-      `value_of` is the **re-seed → BCE-matching** for the _loop-variant_ case:
-      `reseed_loop_stable_operands` / `derived_lets` rebuild the induction variable's
-      and hoisted bound's identities after licm's structural edits drop them, then the
-      bounds-check matching reads them back. This is the `ValueKind::LoopPhi` tier —
-      `body_iter` is still an MVP `Opaque` (no induction recognition,
-      `nir_value_graph.rs:176`). The straight-line `reseed_invariant_fields` case is
-      invariant and migratable with the store_load_forward recipe; the loop case needs
-      induction vars / hoisted bounds frozen as stable **LoopPhi operands** so a guard
-      copy and a check copy share one `ValueId` without the re-seed. **Resume here.**
+- [ ] **condition_implication — the long pole.** Structure mapped (this branch): the
+      BCE matching is **already operand-based** — `GuardFact::from_comparison` /
+      `from_values`, the eliminator predicates, and the three extractors all read
+      `engine.operand_value` / `engine.value_kind` (the pool), not `engine.value(ExprId)`.
+      The pass's **only** `value_of` touch is the re-seed band-aids (`reseed_invariant_fields`,
+      `reseed_loop_stable_operands`, `derived_lets`) via `set_value` / `has_value`.
+
+      Decisive subtlety — why migrating the re-seed alone is **not** enough: a matched
+      condition operand is usually a **skeleton** `Operand::Expr`, so `operand_value` →
+      `value()` → `value_of`. That `value_of` entry comes from the **build** (populated for
+      every original read), not only the re-seed; the re-seed merely *restores* entries the
+      maintenance dropped. So the matching depends on `value_of` for **every** skeleton
+      guard/check read. Getting condition_implication off `value_of` therefore needs
+      **comprehensive promotion of all guard/check reads to `Operand::Value`**, not a
+      re-seed rewrite. For straight-line invariant fields the store_load_forward recipe
+      applies (promote both `recv.field` reads to one canonical
+      `field_access(recv, field, INITIAL)` value — load-bearing for exactly 3 fixtures:
+      `array_bounds_elim_offset_chain`, `tir_optimize_early_exit_guard`,
+      `tir_optimize_short_circuit_bounds`). The loop case (induction var / hoisted bound)
+      additionally needs those reads frozen as stable **LoopPhi operands** (`body_iter` is
+      still an MVP `Opaque`, `nir_value_graph.rs:176`) so a guard copy and a check copy
+      share one `ValueId` without the re-seed. **Resume here:** comprehensive guard/check
+      operand promotion, gated, validated against the array_bounds_elim + oob suite (P0).
 - [ ] **inline** clears + regrows `value_of` (`736` / `775`) as build-once
       maintenance; once no in-loop pass reads `value_of`, the regrow is unneeded.
 - [ ] **the freeze** (`extract.rs`, last pass) is the build site + final consumer:
