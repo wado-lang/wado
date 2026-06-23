@@ -2367,12 +2367,22 @@ The ideal removes the root cause rather than patching symptoms:
         block is pruned. Validated: `optimize_bitmask_bce` green, every
         `array_bounds_elim_oob_*` still green (no over-elimination), no `WADO_VERIFY_VG`
         mismatch. No `value_of`, no gate.
-  - [ ] **`le_guard`** (`array_bounds_elim_le_guard_wir`) is the last residue: a
-        `<=` loop guard (`i <= limit`) with a **symbolic** bound `arr.used == limit
-        + 1` (not a constant). Needs the structural loop-guard recogniser extended
-        to `<=` guards (surviving `i < bound + 1`) _and_ the bound related to
-        `limit + 1` — i.e. the symbolic invariant bound surfaced as an operand, the
-        harder sibling of the bitmask constant case.
+  - [x] **`le_guard`** (`array_bounds_elim_le_guard_wir`) recovered structurally —
+        the BCE suite is now **fully green (0 reds), entirely off `value_of`**. A
+        `<=` loop guard `i <= limit` survives as `i < limit + 1`; the check bound
+        `arr.used` relates to `limit + 1` because `arr = List { used: limit + 1 }`.
+        `structural_loop_guard` now handles `LtEq` guards via
+        `eliminate_le_checks_in_node`: a check `var + j >= B` is refuted when `B`
+        decomposes to `gbound + c` with `c >= j + 1` (`bound_offset_over`). The
+        symbolic bound is recovered by `struct_field_init` — projecting `arr.used`
+        through `arr`'s struct literal (peeling block-tail wrappers via
+        `block_tail_operand`) to its initialiser `limit + 1`. **Soundness** comes for
+        free from Wado value semantics: `arr` reaching its `let` binding through
+        [`Binds`] means it is never reassigned or `&mut`-escaped, so the field is
+        constant — no separate invariance scan. The `array_bounds_elim_oob_*` suite
+        stays green precisely because its mutated arrays (`pop()` / `index_assign`)
+        are excluded from `Binds`, so the projection refuses them. No `value_of`,
+        no gate.
 
 Build redness during the migration is accepted: the side-table's removal is the
 point, not its preservation. The persisted-snapshot seed is the next concrete

@@ -285,6 +285,98 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
     }
 }
 
+/// The tail value operand of a block expression: `{ …; tail }` (the last
+/// statement is `Expr(tail)`) or a labeled block whose last statement is
+/// `break label tail`.
+fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
+    match &body.exprs[e].kind {
+        ExprKind::Block(block) => {
+            let last = *body.blocks[*block].stmts.last()?;
+            match &body.stmts[last].kind {
+                StmtKind::Expr(op) => Some(*op),
+                _ => None,
+            }
+        }
+        ExprKind::LabeledBlock { label, block, .. } => {
+            let last = *body.blocks[*block].stmts.last()?;
+            let StmtKind::Break {
+                label: Some(bl),
+                value: Some(v),
+            } = &body.stmts[last].kind
+            else {
+                return None;
+            };
+            (bl == label).then_some(*v)
+        }
+        _ => None,
+    }
+}
+
+/// The initialiser operand of `recv.field`, when `recv` resolves (through copy
+/// temps and block tails) to a struct literal. Sound because `recv` reaching a
+/// `let` binding via [`Binds`] means it is never reassigned or `&mut`-escaped
+/// (Wado value semantics), so the field value is fixed at construction.
+fn struct_field_init(
+    engine: &Engine,
+    binds: &Binds,
+    recv: Operand,
+    field_name: &str,
+) -> Option<Operand> {
+    let mut cur = resolve(engine, binds, recv);
+    for _ in 0..8 {
+        let Operand::Expr(e) = cur else { break };
+        if matches!(&engine.body.exprs[e].kind, ExprKind::StructLiteral { .. }) {
+            break;
+        }
+        let tail = block_tail_operand(engine.body, e)?;
+        cur = resolve(engine, binds, tail);
+    }
+    let Operand::Expr(e) = cur else {
+        return None;
+    };
+    let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[e].kind else {
+        return None;
+    };
+    fields
+        .iter()
+        .find(|f| f.name == field_name)
+        .map(|f| f.value)
+}
+
+/// `c >= 0` such that `bound`'s value equals `guard_var + c`: either `bound` is
+/// `guard_var + c` directly, or it is an invariant struct-field read
+/// (`arr.used` over `List { used: guard_var + c }`) projected via
+/// [`struct_field_init`]. Lets a `<=` guard relate its bound to a check bound.
+fn bound_offset_over(
+    engine: &Engine,
+    binds: &Binds,
+    bound: Operand,
+    guard_var: u32,
+) -> Option<i64> {
+    if let Some((v, c)) = parse_var_offset(engine, binds, bound)
+        && v == guard_var
+    {
+        return Some(c);
+    }
+    let Operand::Expr(e) = resolve(engine, binds, bound) else {
+        return None;
+    };
+    let ExprKind::FieldAccess {
+        expr: recv,
+        field_name,
+        ..
+    } = &engine.body.exprs[e].kind
+    else {
+        return None;
+    };
+    let (recv, field_name) = (*recv, field_name.clone());
+    let init = struct_field_init(engine, binds, recv, &field_name)?;
+    match parse_var_offset(engine, binds, init) {
+        Some((v, c)) if v == guard_var => Some(c),
+        _ => None,
+    }
+}
+
 /// Parse a condition (through copy temps) as `(var + off) OP bound`. Returns
 /// `(var_local, off, bound, op)`.
 fn parse_cmp(
@@ -561,25 +653,38 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
     let Some((var, goff, bound, gop)) = parse_cmp(engine, &binds, *inner) else {
         return false;
     };
-    // After `if !(var + goff < bound) break`, the surviving body has
-    // `var + goff < bound`. Strict guard only (a `var + j >= bound` check is
-    // refuted for `j <= goff`).
-    if gop != NirBinaryOp::Lt {
-        return false;
-    }
     // Walk body statements after the guard, in order. While no statement has
-    // modified `var` / `bound` since the guard, eliminate every dominated
-    // bounds-check `var + j >= bound` (`j <= goff`) nested anywhere in the
-    // statement (the inlined `index_value` check is a `StmtKind::If` /
-    // `ExprKind::If` inside the statement's expression block, not a top-level
-    // statement). A statement that modifies `var` / `bound` (e.g. the `i += 1`
-    // induction update) stops the scan — the guard fact no longer holds past it.
+    // modified `var` / `bound` since the guard, eliminate the dominated checks
+    // nested anywhere in the statement (the inlined `index_value` check is a
+    // `StmtKind::If` / `ExprKind::If` inside the statement's expression block,
+    // not a top-level statement). A statement that modifies `var` / `bound`
+    // (e.g. the `i += 1` induction update) stops the scan — the guard fact no
+    // longer holds past it.
+    //
+    // - `<` guard: surviving `var + goff < bound`; a check `var + j >= bound` is
+    //   refuted for `j <= goff` (same bound, [`eliminate_checks_in_node`]).
+    // - `<=` guard (`goff == 0`, `bound` a local `gbl`): surviving `var <= gbl`,
+    //   i.e. `var < gbl + 1`; a check `var + j >= B` is refuted when `B` relates
+    //   to `gbl + c` with `c >= j + 1` ([`eliminate_le_checks_in_node`]). This is
+    //   the `arr.used == limit + 1` case.
+    // `<=` guards require a local bound; `<` accepts any. Reject other ops.
+    let le_gbl = match gop {
+        NirBinaryOp::Lt => None,
+        NirBinaryOp::LtEq if goff == 0 => match bound {
+            BoundKey::Local(gbl) => Some(gbl),
+            BoundKey::Field(..) => return false,
+        },
+        _ => return false,
+    };
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, bound) {
             break;
         }
-        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, &binds);
+        changed |= match le_gbl {
+            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, &binds),
+            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, &binds),
+        };
     }
     changed
 }
@@ -628,6 +733,60 @@ fn eliminate_checks_in_node(
             && cvar == var
             && cbound == bound
             && (0..=k).contains(&cj)
+        {
+            holders.push((n, cond));
+        }
+        engine.body.for_each_child(n, |c| stack.push(c));
+    }
+    let mut changed = false;
+    for (holder, cond) in holders {
+        eliminate_condition(engine, holder, cond);
+        changed = true;
+    }
+    changed
+}
+
+/// `<=` loop-guard elimination (`var <= gbound`, surviving `var < gbound + 1`):
+/// drive to `false` every dominated check `var + j >= B` whose bound `B` relates
+/// to `gbound + c` with `c >= j + 1` ([`bound_offset_over`]), since then
+/// `var + j <= gbound + j < gbound + c = B`. Recovers `arr.used == limit + 1`
+/// where the guard is `i <= limit` (structural, value_of-free).
+fn eliminate_le_checks_in_node(
+    engine: &mut Engine,
+    node: NodeRef,
+    var: u32,
+    gbound: u32,
+    binds: &Binds,
+) -> bool {
+    let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        let cand = match n {
+            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+                StmtKind::If {
+                    condition,
+                    then_block,
+                    else_block: None,
+                } => Some((*condition, *then_block)),
+                _ => None,
+            },
+            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+                ExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch: None,
+                } => Some((*condition, *then_branch)),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some((cond, then_b)) = cand
+            && is_panic_block(engine, then_b)
+            && let Some((left, right)) = ge_check_operands(engine, binds, cond)
+            && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
+            && cvar == var
+            && let Some(c) = bound_offset_over(engine, binds, right, gbound)
+            && c >= cj + 1
         {
             holders.push((n, cond));
         }
