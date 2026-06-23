@@ -629,7 +629,21 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
         lr_position += 1;
     }
 
-    let lr_dispatch = compute_lr_dispatch_data(&lr_alts);
+    // ATN-class detection: the static suffix-first dispatch mis-commits when
+    // an atom alt recursively references this rule with a trailing literal
+    // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
+    // shape), or when a suffix is `.` / `~X`-led (empty static suffix-first).
+    // Route such a rule's loop-entry through the runtime simulator.
+    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
+    if atn_class {
+        ctx.mark_needs_atn();
+        ctx.mark_needs_scan_atn();
+    }
+
+    // `valid_lr_alts` must line up with the ATN precedence-edge list (which
+    // covers every real suffix) when the rule dispatches via the simulator, so
+    // pass `atn_class` through.
+    let lr_dispatch = compute_lr_dispatch_data(&lr_alts, atn_class);
 
     // Bake `min_prec_arg` into every self-recursive `RuleCall` op
     // inside each LR suffix. Mirrors emit's
@@ -638,16 +652,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
     // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
     stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name);
-
-    // ATN-class detection: the static suffix-first dispatch mis-commits when
-    // an atom alt recursively references this rule with a trailing literal
-    // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
-    // shape). Route such a rule's loop-entry through the runtime simulator.
-    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
-    if atn_class {
-        ctx.mark_needs_atn();
-        ctx.mark_needs_scan_atn();
-    }
 
     return LeftRecursiveRule {
         header,
@@ -667,6 +671,16 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
 /// (`'between' expr 'and' expr` vs `expr 'and' expr`). The runtime simulator
 /// resolves it with full context.
 fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
+    // A `.` / `~X`-led LR suffix has a real suffix but an empty static
+    // `suffix_first`: the loop-entry can't be decided by a static first-token
+    // check, so the rule must run on the runtime simulator (which admits the
+    // wildcard/complement operator via `atn_first_admits`).
+    for let a of lr_alts {
+        if !a.suffix.ops.is_empty() && a.suffix_first.is_empty() {
+            return true;
+        }
+    }
+
     let mut suffix_first_tokens: List<String> = [];
     for let a of lr_alts {
         for let t of &a.suffix_first {
@@ -1482,12 +1496,20 @@ fn compute_lr_conflict_min_prec(
 ///
 /// Phase 2.4 only handles the disjoint case (each group is a
 /// singleton). Overlap groups land in Phase 2.3c.
-fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>) -> LrDispatchData {
+fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, atn_class: bool) -> LrDispatchData {
     let mut valid_lr_alts: List<i32> = [];
     let mut suffix_first_sets: List<List<String>> = [];
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let lr = &lr_alts[i];
-        if lr.suffix_first.is_empty() {
+        // Static dispatch gates on a non-empty `suffix_first`, so it drops a
+        // `.` / `~X`-led suffix (empty static first). An ATN-class rule
+        // dispatches via the simulator (`_atn_alt == i`, no static gate), so it
+        // keeps EVERY real suffix — the same set the ATN precedence-edge list
+        // builds, so the simulator's edge index lines up with these branches
+        // and their `scan_X_lr_N` helpers. The `groups` field below is consumed
+        // only by the static path, so an empty `suffix_first` there is inert.
+        let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
+        if skip {
             continue;
         }
         valid_lr_alts.push(i);

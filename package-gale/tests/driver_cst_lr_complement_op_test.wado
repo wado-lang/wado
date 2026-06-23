@@ -1,0 +1,34 @@
+//! `~X`-led LR suffix: a binary operator over an open operator set (`e ~';'
+//! e`). A canonical superset extension beyond ANTLR4 — the loop-entry admits
+//! any non-`;` token, decided by the runtime ATN simulator. Expected trees are
+//! defined by precedence climbing (no ANTLR4 oracle; ANTLR4 rejects this).
+
+use co from "./grammars/lr_complement_op.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_lr_complement_op",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = co::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {co::to_string_tree(&r)}`;
+    let a = co::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "complement-op: any non-';' token is the infix operator" {
+    chk(&"1 + 2", &"(prog (e (e 1) + (e 2)))");
+}
+test "complement-op: a higher-precedence '*' wins the overlap" {
+    chk(&"1 * 2", &"(prog (e (e 1) * (e 2)))");
+}
+test "complement-op: standard precedence ('*' binds tighter)" {
+    chk(&"1 + 2 * 3", &"(prog (e (e 1) + (e (e 2) * (e 3))))");
+}
+test "complement-op: the excluded ';' is not an operator" {
+    let r = co::parse(&"1 ; 2");
+    assert !r.ok(), `';' must not be consumed as an operator, got: {co::to_string_tree(&r)}`;
+}

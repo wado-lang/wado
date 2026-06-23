@@ -970,7 +970,7 @@ fn gen_scan_lr_functions(
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, lr_alts, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -1007,21 +1007,18 @@ fn gen_scan_lr_functions(
 fn gen_scan_lr_suffix_helpers(
     w: &mut CodeWriter,
     lr_alts: &List<LrAlt>,
+    valid_lr_alts: &List<i32>,
     ctx: &mut GenContext,
     fn_name: &String,
 ) {
-    for let lr_alt of lr_alts {
+    // Emit a helper for EXACTLY the alts the dispatch references — iterate
+    // `valid_lr_alts` directly rather than re-deriving the skip predicate, so
+    // the helper set and the dispatch's reference set cannot drift and emit a
+    // call to an undefined `scan_X_lr_N` (the static/ATN-class predicates for
+    // `valid_lr_alts` differ; this stays correct for both).
+    for let vi of valid_lr_alts {
+        let lr_alt = &lr_alts[*vi];
         let lr_idx = lr_alt.alt_index;
-        // Emit a helper for exactly the alts the dispatch references —
-        // `compute_lr_dispatch_data` builds `valid_lr_alts` by keeping
-        // every alt whose `suffix_first` is non-empty, so key the skip on
-        // the same predicate. (`suffix_first` empty implies no suffix to
-        // scan, which is the degenerate `expr : expr` / all-nullable-suffix
-        // case.) Keying on `elements.len() <= 1` instead would let the two
-        // sets drift and reference an undefined `scan_X_lr_N`.
-        if lr_alt.suffix_first.is_empty() {
-            continue;
-        }
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);

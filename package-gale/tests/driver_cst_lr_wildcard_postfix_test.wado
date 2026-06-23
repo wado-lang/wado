@@ -1,0 +1,31 @@
+//! `.`-led LR suffix: a catch-all postfix (`e .`). A canonical superset
+//! extension beyond ANTLR4 — `.` admits any token at its declared precedence,
+//! so a real operator wins the overlap and only an otherwise-unmatched token is
+//! absorbed. Expected trees are defined by precedence climbing (ANTLR4 rejects
+//! this).
+
+use wp from "./grammars/lr_wildcard_postfix.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "tests/generated/cst_lr_wildcard_postfix",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = wp::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {wp::to_string_tree(&r)}`;
+    let a = wp::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "wildcard-postfix: a real operator wins over the catch-all" {
+    chk(&"1 + 2", &"(prog (e (e 1) + (e 2)))");
+}
+test "wildcard-postfix: an otherwise-unmatched token is absorbed" {
+    chk(&"1 x", &"(prog (e (e 1) x))");
+}
+test "wildcard-postfix: the postfix applies to the whole expression" {
+    chk(&"1 + 2 x", &"(prog (e (e (e 1) + (e 2)) x))");
+}

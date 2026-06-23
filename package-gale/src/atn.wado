@@ -337,23 +337,19 @@ fn build_lr_body(
         }
     }
 
-    // One precedence-guarded enter edge per LR alt with a non-empty suffix
-    // (a degenerate `expr : expr` with no suffix is skipped). The edge index
-    // `atn_lr_loop_decision` returns is over THIS list.
+    // One precedence-guarded enter edge per LR alt with a real suffix (a
+    // degenerate `expr : expr` with no suffix is skipped). The edge index
+    // `atn_lr_loop_decision` returns is over THIS list; for an ATN-class rule
+    // `LrDispatchData.valid_lr_alts` is built over the SAME set (every real
+    // suffix, including a `.` / `~X`-led one), so the simulator's edge index
+    // lines up with the dispatch branches and `scan_X_lr_N` helpers. A
+    // wildcard/complement operator is admitted by `atn_first_admits`, so the
+    // loop-entry decision is well defined.
     for let a of &lr.lr_alts {
         let alt = &rule.alternatives[a.alt_index];
         if alt.elements.len() <= 1 {
             continue;
         }
-        // The parse/scan dispatchers map the edge index onto
-        // `LrDispatchData.valid_lr_alts`, which drops alts with an empty static
-        // `suffix_first` (a `.` / `~X`-led suffix). For an ATN-class rule that
-        // would misalign the edge index against the suffix helpers and silently
-        // mis-dispatch. A `.` / `~X`-led LR suffix is degenerate even in ANTLR4
-        // (the published jar errors on `e ~SEMI e` / `e .`: no operator token
-        // to climb), so fail loudly at codegen rather than emit a parser that
-        // mis-dispatches such a grammar. No corpus grammar has one.
-        assert !(lr.atn_class && a.suffix_first.is_empty()), `Gale does not yet support an open-ended (\`.\`/\`~X\`-led) LR suffix in an ATN-class rule (\`{rule.name}\`)`;
         let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
