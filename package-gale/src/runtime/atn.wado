@@ -17,7 +17,7 @@
 //! Clean-room: follows the published ALL(*) description, not ANTLR4 sources
 //! (License hygiene, AGENTS.md). The wire-format constants below are the
 //! single source of truth; the builder/serializer in `src/atn.wado` `use`s
-//! them. The blob carries a version word `atn_decode` asserts.
+//! them.
 //!
 //! Prediction reads token kinds only, so the simulator takes the flat
 //! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
@@ -27,14 +27,9 @@
 use { TreeMap } from "core:collections";
 
 // ATN wire-format constants — the single source of truth for the serialized
-// blob layout, shared by the builder/serializer in `src/atn.wado` (which
-// `use`s these) and the decoder/simulator below. They live here, not in
-// `atn.wado`, because this runtime is `#include_str`'d verbatim into every
-// generated parser and so cannot import from the compiler crate — whereas
-// the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
-// on any layout change so a stale committed blob fails loudly.
-pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-pub global ATN_BLOB_VERSION: i32 = 2;
+// blob layout, shared with the builder/serializer in `src/atn.wado`. They
+// live here, not in `atn.wado`, because this runtime is `#include_str`'d into
+// every generated parser and so cannot import from the compiler crate.
 
 // State kinds. `atn_decode` copies every state's kind through verbatim and
 // the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
@@ -322,12 +317,6 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
 #[allow(dead_code)]
 pub fn atn_decode(data: &List<i32>) -> AtnSim {
     let mut p = 0;
-    let magic = data[p];
-    p += 1;
-    let version = data[p];
-    p += 1;
-    assert magic == ATN_BLOB_MAGIC, `ATN blob magic mismatch: {magic}`;
-    assert version == ATN_BLOB_VERSION, `ATN blob version mismatch: {version}`;
     let num_tokens = data[p];
     p += 1;
 
