@@ -1597,7 +1597,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ok = false;
         }
 
-        // Only `name` / `from_env` key-value arguments are accepted.
         for arg in &attr.args {
             match arg {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}

@@ -8,12 +8,12 @@
 //! Global Promotion, `String` uses the existing lazy-init path — so no new
 //! optimization is needed.
 //!
-//! v1 converts override strings to the declared type natively in Rust, matching
-//! the built-in impls of `LenientFromStr` (radix prefixes, `_` separators,
-//! `nan`/`inf`, `1`/`0` for `bool`) plus a leading trim. v2 swaps this native
-//! path for evaluating the trait via wasm-CTFE, lifting the built-in-only
-//! restriction. The conversion is isolated in [`convert_builtin`] so only that
-//! boundary changes. See `wep-2026-04-26-compile-time-params.md`.
+//! v1 converts override strings to the declared type natively in Rust (after a
+//! trim), matching the built-in impls of `LenientFromStr` (radix prefixes, `_`
+//! separators, `nan`/`inf`, `1`/`0` for `bool`). v2 swaps this native path for
+//! evaluating the trait via wasm-CTFE, lifting the built-in-only restriction.
+//! The conversion is isolated in [`convert_builtin`] so only that boundary
+//! changes. See `wep-2026-04-26-compile-time-params.md`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -146,8 +146,7 @@ pub fn resolve_params<H: CompilerHost>(
             continue;
         }
 
-        // Resolve the override string: `-D` first, then `from_env`. A
-        // higher source short-circuits the lower one.
+        // `-D` takes precedence over `from_env`.
         let (raw, from_env_name) = match overrides.get(&spec.name) {
             Some(value) => (Some(value.clone()), None),
             None => match &spec.from_env {
@@ -186,7 +185,6 @@ pub fn resolve_params<H: CompilerHost>(
         }
     }
 
-    // Stray `-D NAME=value` matching no declaration.
     for name in overrides.keys() {
         if !declared.contains(name) {
             emit(
@@ -340,7 +338,6 @@ fn float_literal(value: f64, repr: &str, ty: TypeId, span: Span) -> TirExpr {
     )
 }
 
-/// Whether `v` fits the signed type `ty`.
 fn signed_fits(v: i128, ty: TypeId) -> bool {
     match ty {
         TypeTable::I8 => i8::try_from(v).is_ok(),
@@ -351,7 +348,6 @@ fn signed_fits(v: i128, ty: TypeId) -> bool {
     }
 }
 
-/// Whether `v` fits the unsigned type `ty`.
 fn unsigned_fits(v: u128, ty: TypeId) -> bool {
     match ty {
         TypeTable::U8 => u8::try_from(v).is_ok(),
