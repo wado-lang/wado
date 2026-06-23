@@ -122,13 +122,20 @@ make the value passes read operands, then delete the map. Execute **Route B**
       the graph-maintaining `set_false` redirect, so the default path is
       byte-identical: full e2e 3032/0, no golden churn).
 
-      Remaining: the guard-*extraction* sites (`extract_dominating_guard` and the
-      `value(binding)` let-fact reads still match `ExprKind::Binary`, so they skip
-      promoted guards — migrate to value-kind matching). `licm` (leaf invariance over
-      mut loop locals) and `store_load_forward` (`FieldAccess` / `Local` reads) query
-      genuinely flow-sensitive values with **no promoted operand**, so they cannot be
-      re-routed to `operand_value`; they stay on `value_of` until loop-phi /
-      availability extraction (items 1 / 3) freezes those reads into operands.
+      Done — the guard *extractors*. `extract_dominating_guard` (loop guard
+      `Not(<comparison>)`) and `extract_early_exit_guard` (`var + k >= bound`) now
+      value-kind-match the condition's `operand_value` instead of `as_expr()` +
+      `ExprKind::Binary`, so a promoted guard condition is recognised
+      (`from_comparison` / `from_values` already operate on values). Full default
+      e2e green (3032/0).
+
+      Remaining: the two `value(binding)` licm re-seed sites (derived-let reader
+      recovery — entangled with build-once maintenance, not a clean operand swap).
+      `licm` (leaf invariance over mut loop locals) and `store_load_forward`
+      (`FieldAccess` / `Local` reads) query genuinely flow-sensitive values with
+      **no promoted operand**, so they cannot be re-routed to `operand_value`; they
+      stay on `value_of` until loop-phi / availability extraction (items 1 / 3)
+      freezes those reads into operands.
 - [ ] **3. Fold `current_value` into `lower::translate`** so pure values are born
       as `Operand::Value`; then **delete `value_of` and `nir_value_graph::builder`**
       (criterion 3) and measure `optimize` CPU on package-gale (criterion 2).
