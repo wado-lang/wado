@@ -110,14 +110,24 @@ forced by the dependencies above):
        value-graph/const_fold field_env divergence at WIR. Default e2e 3032/0.
 2. [x] **Field-promotion-default** (`3a2eaffc2`) — scalar `FieldAccess` reads are
        born as operands in the default pipeline; default e2e 3032/0, no regressions.
-3. [ ] **licm off `value_of`** (perf-neutral, value-graph-free; no LoopPhi
-       needed): the invariance check is exactly `!modified_vars(leaf)` (an in-loop
-       `let` counts as modified, confirmed), and after that filter the leaves are
-       invariant so a **structural key** (kind / op / leaf-local / const) is exact
-       value-identity for the hoist dedup. `cse_loop_body` (which CSEs modified-leaf
-       arith) needs a position-aware "no leaf modified between the two occurrences"
-       check to stay exact. Touches `ArithHoist` (thread `&ModifiedVars`; key type
-       `ValueId` → structural key), `collect_in_block`, the grouping, `cse_loop_body`.
+       Reframe (decisive — makes deletion tractable): the deletion target is the
+       `value_of` `ExprId → ValueId` **map**, separable from the `ValuePool`
+       (`body.values`) and `loop_entry_values`. `find_imm` / `value_find` / `type_of` /
+       `kind` / `collect_opaque_locals` / `loop_entry_value` read the **pool** /
+       `loop_entry_values`, **not** `value_of`. So deleting `value_of` requires only
+       eliminating the **`engine.value(expr)`** calls (6 live: freeze ×2,
+       `cse_loop_body`, `store_load_forward`, re-seed ×2) and making the freeze's map
+       **transient**. The builder and pool stay; born-at-lower is a separate later perf
+       item, not a deletion prerequisite.
+
+3. [~] **licm off `value_of`**. Arith hoist **done** (`df80213d5`): invariance via
+   `!modified_vars.local_modified(leaf)` (exact — in-loop `let` counts as
+   modified) and dedup via a commutative-normalised **structural key** (exact
+   for invariant leaves). Removed 2 of licm's 3 `engine.value()` sites; default
+   e2e 3032/0, byte-compatible. Remaining: `cse_loop_body`'s `engine.value(e)`
+   — CSEs modified-leaf arith, so it needs the structural key plus a "no leaf
+   modified across the occurrence span" check (per-stmt modified sets). The
+   `find_imm` there reads the pool, fine.
 4. [ ] **store_load_forward + the `condition_implication` re-seed band-aids off
        `value_of`** — once field promotion runs before them (reorder) or their
        constant-forwarding is recovered by the WIR const-prop, migrate / retire.
