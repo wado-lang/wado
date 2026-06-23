@@ -339,6 +339,340 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     process_block(engine, root)
 }
 
+/// A structural bound: the right-hand side of a guard / check comparison,
+/// compared **syntactically** (no value graph). Two `BoundKey`s are equal iff
+/// they denote the same program object by structure.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BoundKey {
+    Local(u32),
+    /// `root_local . field_index` — a field read of a by-value local.
+    Field(u32, u32),
+}
+
+/// Copy/CSE temp bindings: a single-assignment local `t` bound by
+/// `let t = <op>` maps to `<op>`. Lets the structural matcher see through the
+/// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
+type Binds = crate::hashmap::IndexMap<u32, Operand>;
+
+/// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
+/// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,
+/// so resolving through it can never read a stale value.
+fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
+    let mut reassigned = crate::hashmap::IndexSet::default();
+    let mut record = |node: NodeRef| {
+        if let NodeRef::Expr(e) = node {
+            match &body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => {
+                    if let Some(r) = super::arena_query::projection_root_local(body, *target) {
+                        reassigned.insert(r);
+                    }
+                }
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => {
+                    if let Some(ie) = expr.as_expr()
+                        && let Some(r) = super::arena_query::projection_root_local(body, ie)
+                    {
+                        reassigned.insert(r);
+                    }
+                }
+                _ => {}
+            }
+        }
+    };
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(n) = stack.pop() {
+        record(n);
+        body.for_each_child(n, |c| stack.push(c));
+    }
+    let mut binds = Binds::default();
+    for (_, st) in &body.stmts {
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = &st.kind
+            && !reassigned.contains(local_index)
+        {
+            binds.insert(*local_index, *value);
+        }
+    }
+    binds
+}
+
+/// Resolve an operand through [`Binds`] (bounded depth).
+fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
+    let mut cur = op;
+    for _ in 0..8 {
+        let Some(e) = cur.as_expr() else { break };
+        let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind else {
+            break;
+        };
+        let Some(&b) = binds.get(index) else { break };
+        cur = b;
+    }
+    cur
+}
+
+/// Parse an operand (through copy temps) as a value-position `Local` read.
+fn parse_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
+    match &engine.body.exprs[resolve(engine, binds, op).as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    }
+}
+
+/// Parse an operand (through copy temps) as a structural bound: a bare local or
+/// a `local.field` read over a by-value local root.
+fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
+    let e = resolve(engine, binds, op).as_expr()?;
+    match &engine.body.exprs[e].kind {
+        ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
+        ExprKind::FieldAccess { field_index, .. } => {
+            let root = super::arena_query::projection_root_local(engine.body, e)?;
+            Some(BoundKey::Field(root, *field_index))
+        }
+        _ => None,
+    }
+}
+
+/// Parse a condition (through copy temps) as `Local OP bound`. Returns
+/// `(var_local, bound, op)`.
+fn parse_cmp(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, BoundKey, NirBinaryOp)> {
+    let ce = resolve(engine, binds, cond).as_expr()?;
+    if let ExprKind::Binary { left, op, right } = &engine.body.exprs[ce].kind {
+        let op = *op;
+        if matches!(
+            op,
+            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+        ) {
+            let var = parse_local(engine, binds, *left)?;
+            let bound = parse_bound(engine, binds, *right)?;
+            return Some((var, bound, op));
+        }
+    }
+    None
+}
+
+/// Parse a bounds-check condition (through copy temps) that **panics when the
+/// guard `var < bound` is violated**: `var >= bound` (`Binary(GtEq)`) or its
+/// lowered form `!(var < bound)` (`Unary(Not, Binary(Lt))`).
+fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, BoundKey)> {
+    let ce = resolve(engine, binds, cond).as_expr()?;
+    match &engine.body.exprs[ce].kind {
+        ExprKind::Binary {
+            left,
+            op: NirBinaryOp::GtEq,
+            right,
+        } => Some((parse_local(engine, binds, *left)?, parse_bound(engine, binds, *right)?)),
+        ExprKind::Unary {
+            op: NirUnaryOp::Not,
+            expr: inner,
+        } => {
+            let ie = resolve(engine, binds, *inner).as_expr()?;
+            if let ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Lt,
+                right,
+            } = &engine.body.exprs[ie].kind
+            {
+                Some((
+                    parse_local(engine, binds, *left)?,
+                    parse_bound(engine, binds, *right)?,
+                ))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The local that `BoundKey` reads through, if any (for write-tracking).
+fn bound_root(b: BoundKey) -> Option<u32> {
+    match b {
+        BoundKey::Local(l) | BoundKey::Field(l, _) => Some(l),
+    }
+}
+
+/// Conservatively, does statement `s` modify `var` or `bound`'s backing — an
+/// assignment to the local / its field, a `&mut` escape of either root, or a
+/// method call whose receiver is either root (may take `&mut self`)? Sound
+/// over-approximation: a false "modifies" only forgoes an elimination. The
+/// guard/check's own `panic(msg)` is a free call on neither root, so it does not
+/// trip this — keeping a clean check eliminable.
+fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool {
+    let roots = [Some(var), bound_root(bound)];
+    let is_root = |l: u32| roots.iter().any(|r| *r == Some(l));
+    let mut hit = false;
+    let mut visit = |node: NodeRef| {
+        if let NodeRef::Expr(e) = node {
+            match &engine.body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => {
+                    if let Some(root) =
+                        super::arena_query::projection_root_local(engine.body, *target)
+                        && is_root(root)
+                    {
+                        hit = true;
+                    }
+                }
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    if let Some(ie) = inner.as_expr()
+                        && let Some(root) =
+                            super::arena_query::projection_root_local(engine.body, ie)
+                        && is_root(root)
+                    {
+                        hit = true;
+                    }
+                }
+                ExprKind::MethodCall { receiver, .. } => {
+                    if let Some(re) = receiver.as_expr()
+                        && let Some(root) =
+                            super::arena_query::projection_root_local(engine.body, re)
+                        && is_root(root)
+                    {
+                        hit = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    };
+    let mut stack = vec![NodeRef::Stmt(s)];
+    while let Some(n) = stack.pop() {
+        visit(n);
+        engine.body.for_each_child(n, |c| stack.push(c));
+    }
+    hit
+}
+
+/// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
+/// the side-table). Recognises the loop guard `if !(var < bound) { break }` at
+/// the loop head and drives to `false` a dominated bounds-check
+/// `if (var >= bound) { panic }` in the body — by **structural** comparison of
+/// the skeleton reads plus a position-aware "no modification of `var`/`bound`
+/// between the guard and the check" scan. No value graph, no promotion.
+fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId) -> bool {
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    let guard_idx = stmts.iter().position(|s| {
+        !matches!(
+            engine.body.stmts[*s].kind,
+            StmtKind::Let { .. } | StmtKind::LetDestructure { .. }
+        )
+    });
+    let Some(guard_idx) = guard_idx else {
+        return false;
+    };
+    // Guard: `if !(var < bound) { break }` (single-stmt break then-block).
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &engine.body.stmts[stmts[guard_idx]].kind
+    else {
+        return false;
+    };
+    let (gcond, gthen) = (*condition, *then_block);
+    if engine.body.blocks[gthen].stmts.len() != 1
+        || !matches!(
+            engine.body.stmts[engine.body.blocks[gthen].stmts[0]].kind,
+            StmtKind::Break { .. }
+        )
+    {
+        return false;
+    }
+    let Some(ge) = gcond.as_expr() else {
+        return false;
+    };
+    let ExprKind::Unary {
+        op: NirUnaryOp::Not,
+        expr: inner,
+    } = &engine.body.exprs[ge].kind
+    else {
+        return false;
+    };
+    let binds = build_copy_bindings(engine.body);
+    let Some((var, bound, gop)) = parse_cmp(engine, &binds, *inner) else {
+        return false;
+    };
+    // After `if !(var < bound) break`, the surviving body has `var < bound`.
+    // Strict guard only (the bounds check is `var >= bound`, which `var < bound`
+    // refutes; `<=` would need `var > bound` checks — out of scope for now).
+    if gop != NirBinaryOp::Lt {
+        return false;
+    }
+    // Walk body statements after the guard, in order. While no statement has
+    // modified `var` / `bound` since the guard, eliminate every dominated
+    // bounds-check `var >= bound { panic }` nested anywhere in the statement
+    // (the inlined `index_value` check is a `StmtKind::If` / `ExprKind::If`
+    // inside the statement's expression block, not a top-level statement). A
+    // statement that modifies `var` / `bound` (e.g. the `i += 1` induction
+    // update) stops the scan — the guard fact no longer holds past it.
+    let mut changed = false;
+    for &s in stmts.iter().skip(guard_idx + 1) {
+        if stmt_modifies(engine, s, var, bound) {
+            break;
+        }
+        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, bound, &binds);
+    }
+    changed
+}
+
+/// Drive to `false` every `if (var >= bound) { panic }` (no else) nested in
+/// `node`, matching the loop guard's `var` / `bound` structurally. Both
+/// `StmtKind::If` and `ExprKind::If` holders are handled (an inlined bounds
+/// check sits in value position).
+fn eliminate_checks_in_node(
+    engine: &mut Engine,
+    node: NodeRef,
+    var: u32,
+    bound: BoundKey,
+    binds: &Binds,
+) -> bool {
+    // Collect candidate If holders first (the walk borrows the body immutably),
+    // then rewrite.
+    let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        let cand = match n {
+            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+                StmtKind::If {
+                    condition,
+                    then_block,
+                    else_block: None,
+                } => Some((*condition, *then_block)),
+                _ => None,
+            },
+            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+                ExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch: None,
+                } => Some((*condition, *then_branch)),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some((cond, then_b)) = cand
+            && is_panic_block(engine, then_b)
+            && let Some((cvar, cbound)) = parse_check(engine, binds, cond)
+            && cvar == var
+            && cbound == bound
+        {
+            holders.push((n, cond));
+        }
+        engine.body.for_each_child(n, |c| stack.push(c));
+    }
+    let mut changed = false;
+    for (holder, cond) in holders {
+        eliminate_condition(engine, holder, cond);
+        changed = true;
+    }
+    changed
+}
+
 fn process_block(engine: &mut Engine, block: BlockId) -> bool {
     let mut changed = false;
     // Guard facts from earlier early-exit statements. No staleness
@@ -393,7 +727,7 @@ enum StmtShape {
 }
 
 fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
-    let mut changed = false;
+    let mut changed = structural_loop_guard(engine, loop_body);
 
     if let Some((guard, body_start)) = extract_loop_guard(engine, loop_body) {
         // Eliminate implied conditions in the loop body. `body_start` is the
