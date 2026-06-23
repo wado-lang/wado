@@ -133,10 +133,10 @@ pub fn resolve_params<H: CompilerHost>(
         let Some(spec) = global.param.clone() else {
             continue;
         };
-        let type_name = type_table.borrow().type_name(global.ty);
 
         // v1 supports built-in scalar types only — regardless of any override.
         if !is_supported_type(global.ty, &builtins) {
+            let type_name = type_table.borrow().type_name(global.ty);
             emit(
                 ParamPolicyLevel::Error,
                 Code::ParamAttr,
@@ -172,6 +172,7 @@ pub fn resolve_params<H: CompilerHost>(
         {
             global.initializer = literal;
         } else {
+            let type_name = type_table.borrow().type_name(global.ty);
             let origin = match &from_env_name {
                 Some(env) => format!("environment variable {env}"),
                 None => format!("parameter {}", spec.name),
@@ -309,7 +310,11 @@ fn convert_builtin(
             }
             Some(int_literal(v as u64, raw, ty, span))
         }
-        _ => None,
+        // `TypeId` is not an enum, so the catch-all is unavoidable. The caller
+        // gates on `is_supported_type`, so any other type reaching here is a
+        // drift between the two lists — surface it rather than silently
+        // reporting every override as invalid.
+        _ => unreachable!("convert_builtin reached unsupported type id {ty:?}"),
     }
 }
 

@@ -1621,7 +1621,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(n) => n.to_string(),
             None => global_decl.name.clone(),
         };
-        let from_env = attr.kv_value("from_env").map(str::to_string);
+        let from_env = match attr.kv_value("from_env") {
+            Some("") => {
+                emit("#[param] from_env must not be empty".to_string());
+                ok = false;
+                None
+            }
+            Some(env) => Some(env.to_string()),
+            None => None,
+        };
 
         if ok {
             Some(tir::ParamSpec { name, from_env })
