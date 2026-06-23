@@ -277,10 +277,27 @@ Remaining consumers, in dependency order:
       can stale a promoted operand; its existing scoped re-valuation (`build_scoped`, no rebuild)
       re-promotes the affected region. This is strictly *less* maintenance than today (`licm`
       needs none), it is the IR not a cache, and it is build-once not rebuild — satisfying all
-      three criteria with BCE intact. **Resume here:** full born-at-build promotion of every
-      value-position pure read (`FieldAccess` + induction `Local`, `heap_ver`/`LoopPhi`-correct,
-      keeping the freeze's place / `let`-value exclusions); validate the array_bounds_elim + oob
-      suite stays green (P0 soundness gate). The `LoopPhi` (built, `walk_loop`) supplies the
+      three criteria with BCE intact.
+
+      Materialisation subtlety (decides which identity to promote to): a promoted operand is
+      re-emitted by the WIR extractor **from its value's structure**, so a `Local` read must
+      promote to a value that re-emits as `local.get idx`, **not** to a structural value. An
+      induction read's value is `phi`/`phi+1` (a recurrence/`Binary`) — materialising *that*
+      would wrongly emit `local.get i + 1`. The right primitive is **`canonical_local(idx)`**
+      (an `Opaque(Local idx)`, which already extracts as `local.get idx`): assign it at the loop
+      head so before-increment guard/check reads share it (match) and re-emit correctly; the
+      after-increment value (`Binary(canonical_local, k)`) is a different identity and is **not**
+      promoted (stays a skeleton `local.get`). So the loop change is `walk_loop` assigning
+      written loop locals `canonical_local(idx)` rather than a fresh source-less `Opaque` (the
+      `LoopPhi` is for `body_iter` precision, but `canonical_local` is what matters for BCE
+      matching + materialisation). A `FieldAccess` read promotes to its `heap_ver`-correct value
+      (re-emits as `StructGet`) — materialisation-correct by construction.
+
+      **Resume here:** full born-at-build promotion of every value-position pure read
+      (`FieldAccess` → its `heap_ver` value; induction `Local` → `canonical_local`, before-update
+      reads only; keeping the freeze's place / `let`-value exclusions); validate the
+      array_bounds_elim + oob suite stays green (P0 soundness gate). The `LoopPhi` (built,
+      `walk_loop`) supplies the
       induction identity; it needs a WIR-extractor materialisation (`LoopPhi` → `local.get i`).
 
       Implementation entry point: `Builder::walk_loop` (`nir_value_graph/builder.rs:1878`)
