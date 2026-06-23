@@ -104,7 +104,7 @@ impl GuardFact {
     ///   `bound + 1`, or
     /// - numeric: both bounds are integer constants and
     ///   `check >= bound - slack` (strict) / `check > bound` (non-strict).
-    fn implies_false(&self, engine: &mut Engine, condition: ExprId) -> bool {
+    fn implies_false(&self, engine: &mut Engine, condition: Operand) -> bool {
         let Some((lhs_vn, rhs_vn)) = failure_ge_operands(engine, condition) else {
             return false;
         };
@@ -146,8 +146,8 @@ impl GuardFact {
 /// spelled it — `lhs >= rhs`, `!(lhs < rhs)`, or the post-CSE `(lhs < rhs) ==
 /// false`. A new equivalent spelling only needs an arm there, not a new
 /// expr-shape matcher at every call site.
-fn failure_ge_operands(engine: &mut Engine, condition: ExprId) -> Option<(ValueId, ValueId)> {
-    let value = engine.value(condition)?;
+fn failure_ge_operands(engine: &mut Engine, condition: Operand) -> Option<(ValueId, ValueId)> {
+    let value = engine.operand_value(condition)?;
     ge_operands_of_value(engine, value)
 }
 
@@ -302,7 +302,7 @@ fn is_plus_one_of(engine: &mut Engine, v: ValueId, base: ValueId) -> bool {
 /// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`. The
 /// mask may appear on either side of the `&`; copy chains are already
 /// resolved by the `ValueGraph`.
-fn is_bitmask_bounded(engine: &mut Engine, condition: ExprId) -> bool {
+fn is_bitmask_bounded(engine: &mut Engine, condition: Operand) -> bool {
     let Some((lhs_vn, rhs_vn)) = failure_ge_operands(engine, condition) else {
         return false;
     };
@@ -1194,6 +1194,43 @@ fn set_false(engine: &mut Engine, cond: ExprId) {
     engine.replace_expr_with_value(cond, crate::const_eval::Value::Bool(false));
 }
 
+/// Set the `if` condition held by `holder` (a `StmtKind::If` or `ExprKind::If`)
+/// to a pooled `false`, for a **promoted** condition (`Operand::Value`) that has
+/// no skeleton expr to [`set_false`]. Mirrors `replace_expr_with_value`'s end
+/// state (the condition operand becomes `Operand::Value(false)`) for the operand
+/// case (WEP: operand promotion — the value passes read operands, not `value_of`).
+fn force_condition_false(engine: &mut Engine, holder: NodeRef) {
+    let false_v = engine
+        .body
+        .values
+        .alloc_unshared(ValueKind::Bool(false), crate::tir::TypeTable::BOOL);
+    match holder {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::If { condition, .. } = &mut engine.body.stmts[s].kind {
+                *condition = Operand::Value(false_v);
+            }
+        }
+        NodeRef::Expr(e) => {
+            if let ExprKind::If { condition, .. } = &mut engine.body.exprs[e].kind {
+                *condition = Operand::Value(false_v);
+            }
+        }
+        _ => {}
+    }
+    engine.enqueue(holder);
+}
+
+/// Drive the proven-false `if` condition held by `holder` to `false`: a skeleton
+/// condition through [`set_false`] (graph-maintaining redirect, keeping the
+/// default path byte-identical), a promoted condition through
+/// [`force_condition_false`].
+fn eliminate_condition(engine: &mut Engine, holder: NodeRef, condition: Operand) {
+    match condition {
+        Operand::Expr(ce) => set_false(engine, ce),
+        Operand::Value(_) => force_condition_false(engine, holder),
+    }
+}
+
 /// Check if a block traps (bounds check failure path): a `panic`, or the bare
 /// `unreachable` that `-f bare-asserts` lowers an assertion failure into.
 fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
@@ -1220,14 +1257,14 @@ fn fact_eliminates_panic(
     condition: Operand,
     then_block: BlockId,
     else_block: Option<BlockId>,
+    holder: NodeRef,
     fact: &GuardFact,
 ) -> bool {
-    if let Some(ce) = condition.as_expr()
-        && else_block.is_none()
+    if else_block.is_none()
         && is_panic_block(engine, then_block)
-        && fact.implies_false(engine, ce)
+        && fact.implies_false(engine, condition)
     {
-        set_false(engine, ce);
+        eliminate_condition(engine, holder, condition);
         return true;
     }
     false
@@ -1243,7 +1280,7 @@ fn eliminate_panic_check(engine: &mut Engine, s: StmtId, fact: &GuardFact) -> bo
         return false;
     };
     let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-    fact_eliminates_panic(engine, condition, then_block, else_block, fact)
+    fact_eliminates_panic(engine, condition, then_block, else_block, NodeRef::Stmt(s), fact)
 }
 
 /// NIR visitor that eliminates loop-guard-implied false bounds checks.
@@ -1257,7 +1294,7 @@ struct ConditionEliminator {
 }
 
 impl ConditionEliminator {
-    fn implied_false(&self, engine: &mut Engine, condition: ExprId) -> bool {
+    fn implied_false(&self, engine: &mut Engine, condition: Operand) -> bool {
         if self.guard.implies_false(engine, condition) {
             return true;
         }
@@ -1276,13 +1313,13 @@ impl ConditionEliminator {
         condition: Operand,
         then_block: BlockId,
         else_block: Option<BlockId>,
+        holder: NodeRef,
     ) -> bool {
-        if let Some(ce) = condition.as_expr()
-            && else_block.is_none()
+        if else_block.is_none()
             && is_panic_block(engine, then_block)
-            && self.implied_false(engine, ce)
+            && self.implied_false(engine, condition)
         {
-            set_false(engine, ce);
+            eliminate_condition(engine, holder, condition);
             return true;
         }
         false
@@ -1302,7 +1339,8 @@ impl ArenaOptVisitor for ConditionEliminator {
         if let Some((condition, then_block, else_block)) = if_ids {
             let condition_e = condition.as_expr();
             // Check if this statement is a bounds check that can be eliminated.
-            if self.try_eliminate_panic(engine, condition, then_block, else_block) {
+            if self.try_eliminate_panic(engine, condition, then_block, else_block, NodeRef::Stmt(s))
+            {
                 return true;
             }
 
@@ -1337,7 +1375,8 @@ impl ArenaOptVisitor for ConditionEliminator {
         };
         if let Some((condition, then_branch, else_branch)) = if_ids {
             // A bounds check inlined into value position is an `ExprKind::If`.
-            if self.try_eliminate_panic(engine, condition, then_branch, else_branch) {
+            if self.try_eliminate_panic(engine, condition, then_branch, else_branch, NodeRef::Expr(e))
+            {
                 return true;
             }
             let mut changed = condition
@@ -1384,7 +1423,14 @@ impl ArenaOptVisitor for GuardEliminator {
         } = &engine.body.exprs[e].kind
         {
             let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            if fact_eliminates_panic(engine, condition, then_branch, else_branch, &self.fact) {
+            if fact_eliminates_panic(
+                engine,
+                condition,
+                then_branch,
+                else_branch,
+                NodeRef::Expr(e),
+                &self.fact,
+            ) {
                 return true;
             }
         }
@@ -1407,11 +1453,10 @@ impl ArenaOptVisitor for BitmaskEliminator {
             _ => None,
         };
         if let Some((condition, then_block)) = if_ids
-            && let Some(ce) = condition.as_expr()
             && is_panic_block(engine, then_block)
-            && is_bitmask_bounded(engine, ce)
+            && is_bitmask_bounded(engine, condition)
         {
-            set_false(engine, ce);
+            eliminate_condition(engine, NodeRef::Stmt(s), condition);
             return true;
         }
         arena_opt_walk(self, engine, NodeRef::Stmt(s))
