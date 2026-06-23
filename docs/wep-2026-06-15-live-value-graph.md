@@ -313,10 +313,27 @@ Remaining consumers, in dependency order:
       `bound`/`bound2` are the **same field/value with no heap write between** (a
       `ModifiedVars`-style scan over the span, which I already built for `licm`). This needs
       neither `value_of` nor promotion, sidesteps the induction-materialisation landmine, and the
-      reads stay ordinary skeleton `local.get` / `StructGet` for codegen. **Resume here:** port
-      `GuardFact` matching from `ValueId` comparison to structural+`ModifiedVars` comparison;
-      validate array_bounds_elim + oob (P0). The `FieldAccess`→operand promotion can still retire
-      the *bound* half independently, but the structural matcher subsumes it.
+      reads stay ordinary skeleton `local.get` / `StructGet` for codegen.
+
+      STARTED + VALIDATED (`354460d09`): the structural **loop-guard** matcher
+      (`structural_loop_guard` in `condition_implication.rs`) — recognises `if !(var < bound)
+      { break }` and drives to `false` every nested bounds-check `if !(var < bound)/(var >=
+      bound) { panic }`, by structural comparison through copy/CSE temps (`build_copy_bindings`
+      + `resolve`) plus a position-aware no-write-between scan (`stmt_modifies`: stop at the
+      first stmt that assigns / `&mut`s / method-calls `var` or the bound's root — the `i += 1`
+      update stops it). Validated: **oob P0 suite green** (no over-elimination), full e2e
+      **3026/6** — recovered 5 of the 11 reds (loop_guard, loop_guard_wir, bce_field_access_equiv,
+      bce_ref_param, branchless_increment), zero new regressions. Proves the structural route
+      works in real code.
+
+      Remaining 6 reds = additional patterns (each its own port, oob-gated):
+      `offset_chain` / `early_exit` (early-exit guard with offset decomposition), `bce_if_guard`
+      (dominating-if), `short_circuit`, `bitmask`. And a genuine limit found:
+      `le_guard_wir` needs a **value-flow relation** (`arr.used == limit + 1`, established by
+      `List::filled(limit+1)`) that pure structural matching cannot derive — some BCE cases
+      need field-value flow, not just structure, so retiring `value_of` for *every* case needs a
+      small structural value-flow fact (construction-sets-field) or keeps the value-graph matcher
+      for that residue. `value_of` stays until all patterns are ported.
 
       Implementation entry point: `Builder::walk_loop` (`nir_value_graph/builder.rs:1878`)
       currently assigns every written loop local a **fresh `Opaque`** (twice — pre-body and
