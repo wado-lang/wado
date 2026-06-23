@@ -221,6 +221,15 @@ stable leaves — invariant, no maintenance). The hard half — flow-sensitive g
 reads with cross-edit operand maintenance — is the multi-session keystone; until it
 lands, the 11 BCE reds are the documented transient cost.
 
+Narrowing achieved (accurate footprint after de-hedging): every optimization **pass**
+is now off `value_of` — `licm`, `store_load_forward`, `condition_implication`, `cse`
+reference it only in comments. Actual `value_of` use is confined to the **engine core**:
+`builder` populates it (the source), `nir_engine` `value()` / `maintain_*` read+maintain
+it, and `inline` regrow re-values it. So the remaining deletion work is **localized to
+the engine core**, not scattered. The blocker is unchanged (born-at-build for the safe
+subset so `value()` resolves via operands; BCE's flow-sensitive field reads are the
+irreducible remainder), but the surface to change is now small and contained.
+
 Remaining consumers, in dependency order:
 
 - [ ] **condition_implication — the long pole.** Structure mapped (this branch): the
