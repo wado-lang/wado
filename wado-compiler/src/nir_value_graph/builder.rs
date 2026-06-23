@@ -1907,21 +1907,19 @@ impl<'a> Builder<'a> {
         self.apply_loop_heap_effects(&heap_effects);
         self.walk_block(body_block);
         // Patch each phi's `body_iter` to the body's exit value (which may
-        // reference the phi — a sound self-reference; traversals are guarded), and
-        // leave `current_value[idx] = phi` post-loop (its merge meaning: `entry` on
-        // zero iterations, `body_iter` after). Non-phi written locals (gate off, or
-        // no known entry type) re-opaque as before.
-        let phi_idxs: crate::hashmap::IndexSet<u32> = phis.iter().map(|(i, _)| *i).collect();
+        // reference the phi — a sound self-reference; traversals are guarded). The
+        // in-loop reads already took the phi (their stable identity — what
+        // condition_implication needs); post-loop, re-opaque every written local as
+        // the original did. Using the phi as the post-loop value is more precise
+        // but miscompiles nested LR loop-entry branches (package-gale
+        // `DropLoopEntryBranchInLRRule_3`), so keep the conservative post-loop value.
         for (idx, phi) in &phis {
             if let Some(&body_val) = self.current_value.get(idx) {
                 self.pool.set_loop_phi_body_iter(*phi, body_val);
             }
-            self.current_value.insert(*idx, *phi);
         }
-        // Every other written local (gate off, or no known entry type under the
-        // gate) re-opaques as before — the conservative post-loop value.
         for idx in &writes {
-            if !phi_idxs.contains(idx) && self.current_value.contains_key(idx) {
+            if self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
                 self.current_value.insert(*idx, opaque);
             }
