@@ -377,7 +377,16 @@ fn build_lr_suffix(
         // suffix. The LR loop can re-enter on an operator after the suffix,
         // so the suffix tail conservatively carries one (`tail_has = true`).
         let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
-        let seg = build_lr_suffix_element(b, &alt.elements[i], rule_name, lr_first, lr_alt.conflict_min, follow_has, r, rule_index);
+        let seg = build_lr_suffix_element(
+            b,
+            &alt.elements[i],
+            rule_name,
+            lr_first,
+            lr_alt.conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        );
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
@@ -408,8 +417,26 @@ fn build_lr_suffix_element(
         return build_element(b, elem, r, rule_index);
     }
     return match *elem {
-        Label(lab) => build_lr_suffix_element(b, &lab.element, rule_name, lr_first, conflict_min, follow_has, r, rule_index),
-        Group(g) => build_alternation_prec(b, &g.alternatives, rule_name, lr_first, conflict_min, follow_has, r, rule_index),
+        Label(lab) => build_lr_suffix_element(
+            b,
+            &lab.element,
+            rule_name,
+            lr_first,
+            conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        ),
+        Group(g) => build_alternation_prec(
+            b,
+            &g.alternatives,
+            rule_name,
+            lr_first,
+            conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        ),
         Repeat(rep) => {
             // For `*` / `+` the body can be followed by another iteration
             // (its own FIRST) or by the Repeat's follow; `?` never re-iterates.
@@ -418,7 +445,18 @@ fn build_lr_suffix_element(
                 RepeatKind::Star => element_first_has_lr(&rep.element, lr_first) || follow_has,
                 RepeatKind::Plus => element_first_has_lr(&rep.element, lr_first) || follow_has,
             };
-            build_repeat_prec(b, rep.kind, rep.non_greedy, &rep.element, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
+            build_repeat_prec(
+                b,
+                rep.kind,
+                rep.non_greedy,
+                &rep.element,
+                rule_name,
+                lr_first,
+                conflict_min,
+                iter_has,
+                r,
+                rule_index,
+            );
         },
         // A self-ref nested under `Not` is not a rule operand; build generically.
         _ => build_element(b, elem, r, rule_index),

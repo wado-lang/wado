@@ -783,13 +783,31 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
                 // deep clone.
                 if op_subtree_contains_self_ref(op_ref, rule_name) {
                     let op_follow = seq_first_has_lr(&lr_alts[i].suffix.ops, k + 1, &lr_suffix_first_tokens, true);
-                    new_ops.push(stamp_op_follow(*op_ref, rule_name, rule_snake, &lr_suffix_first_tokens, conflict_min, op_follow));
+                    new_ops.push(stamp_op_follow(
+                        *op_ref,
+                        rule_name,
+                        rule_snake,
+                        &lr_suffix_first_tokens,
+                        conflict_min,
+                        op_follow,
+                    ));
                 } else {
                     new_ops.push(*op_ref);
                 }
                 if scan_element_contains_self_ref(se_ref, rule_snake) {
-                    let scan_follow = scan_seq_first_has_lr(&lr_alts[i].scan_suffix.elements, k + 1, &lr_suffix_first_tokens, true);
-                    new_scan.push(stamp_scan_follow(*se_ref, rule_snake, &lr_suffix_first_tokens, conflict_min, scan_follow));
+                    let scan_follow = scan_seq_first_has_lr(
+                        &lr_alts[i].scan_suffix.elements,
+                        k + 1,
+                        &lr_suffix_first_tokens,
+                        true,
+                    );
+                    new_scan.push(stamp_scan_follow(
+                        *se_ref,
+                        rule_snake,
+                        &lr_suffix_first_tokens,
+                        conflict_min,
+                        scan_follow,
+                    ));
                 } else {
                     new_scan.push(*se_ref);
                 }
@@ -1142,7 +1160,13 @@ fn stamp_scan_follow(
                 let mut new_elements: List<ScanElement> = [];
                 for let mut j = 0; j < scan_alt.elements.len(); j += 1 {
                     let pos_follow = scan_seq_first_has_lr(&scan_alt.elements, j + 1, lr_first, follow_has);
-                    new_elements.push(stamp_scan_follow(scan_alt.elements[j], rule_snake, lr_first, conflict_min, pos_follow));
+                    new_elements.push(stamp_scan_follow(
+                        scan_alt.elements[j],
+                        rule_snake,
+                        lr_first,
+                        conflict_min,
+                        pos_follow,
+                    ));
                 }
                 new_alts.push(ScanBody { elements: new_elements });
             }
@@ -1155,7 +1179,13 @@ fn stamp_scan_follow(
                 let mut new_elements: List<ScanElement> = [];
                 for let mut j = 0; j < body.elements.len(); j += 1 {
                     let pos_follow = scan_seq_first_has_lr(&body.elements, j + 1, lr_first, follow_has);
-                    new_elements.push(stamp_scan_follow(body.elements[j], rule_snake, lr_first, conflict_min, pos_follow));
+                    new_elements.push(stamp_scan_follow(
+                        body.elements[j],
+                        rule_snake,
+                        lr_first,
+                        conflict_min,
+                        pos_follow,
+                    ));
                 }
                 new_bodies.push(ScanBody { elements: new_elements });
             }
