@@ -231,6 +231,19 @@ and the flip is proven):
       `LoopPhi` induction recognition so loop induction vars / hoisted bounds and invariant
       fields keep one stable identity across the structural passes without re-seed;
       validate against the array_bounds_elim + oob suite (P0).
+
+      Implementation entry point: `Builder::walk_loop` (`nir_value_graph/builder.rs:1878`)
+      currently assigns every written loop local a **fresh `Opaque`** (twice — pre-body and
+      post-body), which is exactly why an induction variable has no stable identity. Replace
+      that, for a local written exactly once in the body as `i = i + <const>` (the simple
+      induction), with a `LoopPhi { entry, body_iter }`: `entry` is the pre-loop
+      `current_value[i]` (already snapshotted into `loop_entry_values`), and `body_iter` is
+      `binary(Add, phi, const)` — a **recursive** reference, so allocate the phi id first
+      (placeholder), compute `body_iter` against it, then patch. Mind hash-consing and
+      `find`/`union` over the self-referential phi, and `extraction`-unsupported `LoopPhi`
+      (`nir_value_graph.rs:627`) — extraction must still treat it opaquely. Build-critical:
+      `walk_loop` feeds every downstream pass, so gate it under `WADO_BORN_OPERANDS` and
+      validate the **whole** e2e (not just BCE) plus `WADO_VERIFY_VG` before any flip.
 - [ ] **inline** clears + regrows `value_of` (`736` / `775`) as build-once
       maintenance; once no in-loop pass reads `value_of`, the regrow is unneeded.
 - [ ] **the freeze** (`extract.rs`, last pass) is the build site + final consumer:
