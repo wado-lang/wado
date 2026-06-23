@@ -20,7 +20,7 @@
 pub mod bare_asserts;
 pub mod plan;
 pub mod translate;
-mod wide_int_literal;
+pub(crate) mod wide_int_literal;
 
 use crate::flat_package::FlatPackage;
 use crate::nir_package::NirPackage;

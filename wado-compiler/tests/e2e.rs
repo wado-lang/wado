@@ -191,6 +191,26 @@ struct TestSpec {
     #[serde(default)]
     allocator: Option<String>,
 
+    /// Compile-time parameter overrides (`-D NAME=value`) for `#[param]` globals.
+    #[serde(default)]
+    params: indexmap::IndexMap<String, String>,
+
+    /// Stubbed compile-time environment for `#[param(from_env = ...)]`.
+    #[serde(default)]
+    param_env: indexmap::IndexMap<String, String>,
+
+    /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
+    #[serde(default)]
+    param_unknown: Option<String>,
+
+    /// Override the `--param-invalid` policy level (`error` / `warn` / `ignore`).
+    #[serde(default)]
+    param_invalid: Option<String>,
+
+    /// Override the `--param-missing` policy level (`error` / `warn` / `ignore`).
+    #[serde(default)]
+    param_missing: Option<String>,
+
     /// Mock responses for outgoing HTTP requests (keyed by URL or path).
     /// When present, any `wasi:http/client#send` from the guest will be
     /// intercepted and matched against these entries.
@@ -818,6 +838,23 @@ fn run_normal_test(
             .clone()
             .unwrap_or_else(|| "debug".to_string()),
     );
+    let mut param_policy = wado_compiler::param_resolution::ParamPolicy::default();
+    let parse_level = |s: &Option<String>, field: &str| {
+        s.as_ref().map(|v| {
+            wado_compiler::param_resolution::ParamPolicyLevel::parse(v)
+                .unwrap_or_else(|| panic!("[{test_id}] invalid {field} level: {v:?}"))
+        })
+    };
+    if let Some(level) = parse_level(&spec.param_unknown, "param_unknown") {
+        param_policy.unknown = level;
+    }
+    if let Some(level) = parse_level(&spec.param_invalid, "param_invalid") {
+        param_policy.invalid = level;
+    }
+    if let Some(level) = parse_level(&spec.param_missing, "param_missing") {
+        param_policy.missing = level;
+    }
+
     let options = CompilerOptions {
         opt_level,
         target_world,
@@ -826,12 +863,23 @@ fn run_normal_test(
         inline_threshold: None,
         opt_iterations: None,
         allocator,
+        param_overrides: spec
+            .params
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+        param_policy,
         ..Default::default()
     };
 
     // Try to compile the fixture, capturing compile-time warnings.
-    let (compile_result, warnings) =
-        common::compile_capturing_warnings(fixture_path, source, options, None);
+    let (compile_result, warnings) = common::compile_capturing_warnings(
+        fixture_path,
+        source,
+        options,
+        None,
+        spec.param_env.clone(),
+    );
 
     // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are
     // emitted during elaboration, so they are identical across optimization

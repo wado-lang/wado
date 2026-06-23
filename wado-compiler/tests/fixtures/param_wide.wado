@@ -1,0 +1,30 @@
+use { println, Stdout } from "core:cli";
+
+#[param]
+global SMALL_I128: i128 = 0;
+
+#[param]
+global BIG_U128: u128 = 0;
+
+#[param]
+global NEG_I128: i128 = 0;
+
+#[param]
+global DEFAULT_U128: u128 = 7;
+
+export fn run() with Stdout {
+    println(`SMALL_I128={SMALL_I128}`);
+    println(`BIG_U128={BIG_U128}`);
+    println(`NEG_I128={NEG_I128}`);
+    println(`DEFAULT_U128={DEFAULT_U128}`);
+}
+
+__DATA__
+{
+    "params": {
+        "SMALL_I128": "42",
+        "BIG_U128": "1208925819614629174706175",
+        "NEG_I128": "-123456789012345678901234567890"
+    },
+    "stdout": "SMALL_I128=42\nBIG_U128=1208925819614629174706175\nNEG_I128=-123456789012345678901234567890\nDEFAULT_U128=7\n"
+}

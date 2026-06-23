@@ -1,0 +1,55 @@
+use { println, Stdout } from "core:cli";
+
+#[param]
+global API_URL: String = "http://localhost";
+
+#[param(from_env = "PORT")]
+global PORT: i32 = 8080;
+
+#[param(name = "build.id")]
+global BUILD_ID: String = "dev";
+
+#[param]
+global ENABLED: bool = false;
+
+#[param]
+global RATIO: f64 = 1.0;
+
+#[param]
+global TAG: char = 'x';
+
+#[param]
+global MASK: u32 = 0;
+
+#[param]
+global DELTA: i64 = 0;
+
+#[param]
+global FALLBACK: String = "default-value";
+
+export fn run() with Stdout {
+    println(`API_URL={API_URL}`);
+    println(`PORT={PORT}`);
+    println(`BUILD_ID={BUILD_ID}`);
+    println(`ENABLED={ENABLED}`);
+    println(`RATIO={RATIO}`);
+    println(`TAG={TAG}`);
+    println(`MASK={MASK}`);
+    println(`DELTA={DELTA}`);
+    println(`FALLBACK={FALLBACK}`);
+}
+
+__DATA__
+{
+    "params": {
+        "API_URL": "https://prod.example.com",
+        "build.id": "42",
+        "ENABLED": "1",
+        "RATIO": "2.5",
+        "TAG": "Z",
+        "MASK": "0xFF",
+        "DELTA": "-7"
+    },
+    "param_env": { "PORT": "80" },
+    "stdout": "API_URL=https://prod.example.com\nPORT=80\nBUILD_ID=42\nENABLED=true\nRATIO=2.5\nTAG=Z\nMASK=255\nDELTA=-7\nFALLBACK=default-value\n"
+}

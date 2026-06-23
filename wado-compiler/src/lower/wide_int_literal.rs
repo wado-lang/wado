@@ -54,7 +54,7 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
 }
 
 /// Create an i128 literal TIR expression that evaluates to `value`.
-pub(super) fn create_i128_literal(
+pub(crate) fn create_i128_literal(
     value: i128,
     type_id: TypeId,
     type_table: &TypeTable,
@@ -70,7 +70,7 @@ pub(super) fn create_i128_literal(
 }
 
 /// Create a u128 literal TIR expression that evaluates to `value`.
-pub(super) fn create_u128_literal(
+pub(crate) fn create_u128_literal(
     value: u128,
     type_id: TypeId,
     type_table: &TypeTable,

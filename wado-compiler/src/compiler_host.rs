@@ -172,6 +172,17 @@ pub enum Code {
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
     CompilerItemAttr,
+
+    // Compile-time parameters (`#[param]`)
+    /// A `#[param]` attribute is malformed (on a mutable global, an unknown
+    /// argument, an empty `name`, or a non-built-in type in v1).
+    ParamAttr,
+    /// A `-D NAME=value` override matched no `#[param]` declaration.
+    ParamUnknown,
+    /// A resolved parameter override could not be converted to the declared type.
+    ParamInvalid,
+    /// A `#[param]` declaration received no override; the initializer is used.
+    ParamMissing,
 }
 
 impl std::fmt::Display for Code {
@@ -215,6 +226,10 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
+            Code::ParamAttr => "PARAM_ATTR",
+            Code::ParamUnknown => "PARAM_UNKNOWN",
+            Code::ParamInvalid => "PARAM_INVALID",
+            Code::ParamMissing => "PARAM_MISSING",
             Code::GenericFunctionRef => "GENERIC_FUNCTION_REF",
         };
         write!(f, "{name}")
@@ -401,6 +416,18 @@ pub trait CompilerHost: Send + Sync {
     /// (single-file and in-memory hosts have no manifest).
     fn dependency_index(&self) -> DependencyIndex {
         DependencyIndex::default()
+    }
+
+    /// Read an environment variable at compile time, for `#[param(from_env =
+    /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
+    ///
+    /// Kept on the host because reading process env is impure and unavailable
+    /// on `wasm32` targets; the CLI host forwards to `std::env::var`, while
+    /// pure hosts (LSP, in-memory) return `None`. The `-D` overrides travel
+    /// with `CompilerOptions`, not here, since the resolution pass enumerates
+    /// them to detect unknown names.
+    fn env_var(&self, _name: &str) -> Option<String> {
+        None
     }
 }
 
