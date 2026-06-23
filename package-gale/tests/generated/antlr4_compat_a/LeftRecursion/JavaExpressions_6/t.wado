@@ -2817,6 +2817,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_DOT {
             if suffix_kind == TK_LIT_DOT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
@@ -2983,6 +2984,9 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }

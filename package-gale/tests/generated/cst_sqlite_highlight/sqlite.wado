@@ -7459,6 +7459,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_PIPEPIPE {
             if 14 >= min_prec {
                 let lr_saved_pos = pos;
@@ -7641,6 +7642,9 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }

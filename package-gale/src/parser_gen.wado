@@ -970,7 +970,7 @@ fn gen_scan_lr_functions(
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, rule, lr_alts, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, lr_alts, ctx, fn_name);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -1006,15 +1006,20 @@ fn gen_scan_lr_functions(
 /// `ScanRuleCallElement.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
 fn gen_scan_lr_suffix_helpers(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
     ctx: &mut GenContext,
     fn_name: &String,
 ) {
     for let lr_alt of lr_alts {
         let lr_idx = lr_alt.alt_index;
-        let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 {
+        // Emit a helper for exactly the alts the dispatch references —
+        // `compute_lr_dispatch_data` builds `valid_lr_alts` by keeping
+        // every alt whose `suffix_first` is non-empty, so key the skip on
+        // the same predicate. (`suffix_first` empty implies no suffix to
+        // scan, which is the degenerate `expr : expr` / all-nullable-suffix
+        // case.) Keying on `elements.len() <= 1` instead would let the two
+        // sets drift and reference an undefined `scan_X_lr_N`.
+        if lr_alt.suffix_first.is_empty() {
             continue;
         }
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
@@ -1129,12 +1134,21 @@ fn gen_lr_suffix_dispatch(
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
+    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     w.begin(&"loop");
     if side.scan {
         w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     } else {
         w.line(&"let suffix_kind = p.peek_kind();");
     }
+    // No-progress guard, mirroring the ATN twins
+    // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
+    // suffix begins with a mandatory operator token, so a committed
+    // iteration always advances. The guard makes that termination
+    // structural rather than relying on each suffix consuming input — a
+    // suffix that yielded an empty `valid_lr_alts` member would otherwise
+    // spin here.
+    w.line(&`let _lr_pos0 = {pos_expr};`);
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -1178,6 +1192,9 @@ fn gen_lr_suffix_dispatch(
     } else {
         w.line(&"break;");
     }
+    w.begin(&`if {pos_expr} == _lr_pos0`);
+    w.line(&"break;");
+    w.end();
     w.end();  // loop
 }
 
@@ -1540,16 +1557,25 @@ fn i32_arrays_equal(a: &List<i32>, b: &List<i32>) -> bool {
 /// loop will consume the trailing tokens. Inner self-refs are
 /// bounded by surrounding tokens (e.g. `K_WHEN expr K_THEN expr`
 /// inside `case_expr`) and need a full scan.
-fn gen_alt_scan_op_elements(
+///
+/// The short-circuit only applies when `end == scan_elems.len()`,
+/// i.e. the walk covers the whole alternative so `end - 1` is the
+/// genuine alt tail. When `end` is a partial scannable prefix
+/// (`end < scan_elems.len()`), the element at `end - 1` is followed
+/// by more (unscannable) elements, so it is an inner self-ref bounded
+/// by that continuation and must scan its full LR climb — short-
+/// circuiting it would under-scan the tournament prefix.
+pub fn gen_alt_scan_op_elements(
     w: &mut CodeWriter,
     scan_elems: &List<ScanElement>,
     end: i32,
     rule_name: &String,
     ctx: &mut GenContext,
 ) {
+    let covers_whole_alt = end == scan_elems.len();
     for let mut i = 0; i < end; i += 1 {
         let se = &scan_elems[i];
-        let is_last_self_ref = i == end - 1 && is_self_ref_scan_call(se, rule_name);
+        let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
         let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
         gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
     }

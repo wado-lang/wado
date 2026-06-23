@@ -56,3 +56,78 @@ WS : (' '|'\\n') -> skip ;
         assert !body.contains("pos = scan_e(tokens, pos);"), `bare scan_e contains a self-call as its first step — infinite recursion: {body}`;
     }
 }
+
+fn scan_e_body(out: &String) -> String {
+    let idx = match out.find("fn scan_e(") {
+        Some(i) => i,
+        None => panic("generated parser has no `scan_e` function"),
+    };
+    let after = out.substr_bytes(idx, out.len());
+    let body_end = if let Some(e) = after.find("\nfn ") {
+        idx + e;
+    } else {
+        out.len();
+    };
+    return out.substr_bytes(idx, body_end);
+}
+
+// Regression: the static LR-suffix scan dispatch loop (`gen_lr_suffix_dispatch`)
+// lacked the no-progress guard its ATN twins (`gen_lr_suffix_dispatch_atn` /
+// `gen_lr_fn_atn`) carry. Every valid LR suffix begins with a mandatory
+// operator token, so a committed iteration always advances; the guard makes
+// that termination structural instead of relying on each suffix consuming
+// input. Pin its presence so the scan loop stays in lockstep with the ATN
+// path.
+test "static LR scan dispatch emits a no-progress guard" {
+    let g4 = "grammar T;
+e : e '*' e
+  | e '?' e ':' e
+  | '(' e ')'
+  | INT
+  ;
+INT : '0'..'9'+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(err) => panic(`parse_checked failed: {err.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
+    let body = scan_e_body(&out);
+
+    assert body.contains("let _lr_pos0 = pos;"), `scan_e loop is missing the no-progress snapshot: {body}`;
+    assert body.contains("if pos == _lr_pos0 {"), `scan_e loop is missing the no-progress break guard: {body}`;
+}
+
+// Regression: the scan-side LR suffix helpers (`scan_X_lr_N`) must be emitted
+// for exactly the alternatives the dispatch references. The dispatch walks
+// `valid_lr_alts` (alts with a non-empty `suffix_first`); the helper emitter
+// must key its skip on the same predicate so the two sets cannot drift and
+// reference an undefined `scan_X_lr_N`. Verify every referenced suffix helper
+// has a definition.
+test "every referenced scan_e_lr_N suffix helper is defined" {
+    let g4 = "grammar T;
+e : e '*' e
+  | e '?' e ':' e
+  | '(' e ')'
+  | INT
+  ;
+INT : '0'..'9'+ ;
+WS : (' '|'\\n') -> skip ;
+";
+    let mut grammar = match parse_checked(g4) {
+        Ok(g) => g,
+        Err(err) => panic(`parse_checked failed: {err.message}`),
+    };
+    let out = generate(&mut grammar, &GenerateOptions { highlight: false }).source;
+
+    // For each `scan_e_lr_N` reference, assert a matching `fn scan_e_lr_N(`
+    // definition exists. The atom and suffix indices stay small for this
+    // grammar, so a bounded scan over 0..8 covers every emitted helper.
+    for let mut n = 0; n < 8; n += 1 {
+        let referenced = out.contains(`scan_e_lr_{n}(tokens`);
+        if referenced {
+            assert out.contains(`fn scan_e_lr_{n}(`), `dispatch references scan_e_lr_{n} but no helper is defined`;
+        }
+    }
+}

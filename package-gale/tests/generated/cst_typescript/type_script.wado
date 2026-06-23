@@ -6041,6 +6041,7 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, fol
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_PIPE {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
@@ -6058,6 +6059,9 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, fol
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -6225,6 +6229,7 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_LBRACKET {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -6234,6 +6239,9 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -7517,6 +7525,7 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, follow: &List
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_DOT {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -7526,6 +7535,9 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, follow: &List
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -12069,6 +12081,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if _kind_set_67(suffix_kind) {
             if suffix_kind == TK_LIT_LBRACKET {
                 if 27 >= min_prec {
@@ -12363,6 +12376,9 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
