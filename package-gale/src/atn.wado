@@ -337,14 +337,12 @@ fn build_lr_body(
         }
     }
 
-    // One precedence-guarded enter edge per LR alt with a real suffix (a
-    // degenerate `expr : expr` with no suffix is skipped). The edge index
-    // `atn_lr_loop_decision` returns is over THIS list; for an ATN-class rule
-    // `LrDispatchData.valid_lr_alts` is built over the SAME set (every real
-    // suffix, including a `.` / `~X`-led one), so the simulator's edge index
-    // lines up with the dispatch branches and `scan_X_lr_N` helpers. A
-    // wildcard/complement operator is admitted by `atn_first_admits`, so the
-    // loop-entry decision is well defined.
+    // One precedence-guarded enter edge per LR alt with a real suffix
+    // (degenerate `expr : expr` skipped). `atn_lr_loop_decision` returns an
+    // index over this list, and an ATN-class rule's `valid_lr_alts` is built
+    // over the same set, so the index lines up with the dispatch branches and
+    // `scan_X_lr_N` helpers. A `.`/`~X` operator is admitted by
+    // `atn_first_admits`, so the loop entry stays well defined.
     for let a of &lr.lr_alts {
         let alt = &rule.alternatives[a.alt_index];
         if alt.elements.len() <= 1 {
@@ -361,12 +359,8 @@ fn build_lr_body(
 }
 
 /// Build the suffix of one LR alt (`alt.elements[1..]`, the leading self-ref
-/// stripped) as a sequence, returning `[entry, exit]`. Self-references — at
-/// the top level or nested inside a Group/Repeat — carry a precedence floor
-/// (`conflict_min`) when an LR operator can appear in their follow, else 0 (a
-/// primary reference, e.g. a bracketed call arg). This mirrors the static
-/// path's `stamp_lr_self_ref_min_prec`, so the ATN models the same language
-/// the generated parser does. Non-self-ref elements build via `build_element`.
+/// stripped) as a sequence, returning `[entry, exit]`. Each element's self-ref
+/// precedence is decided by `build_lr_suffix_element` from its own follow.
 fn build_lr_suffix(
     b: &mut AtnBuilder,
     alt: &Alternative,
@@ -390,11 +384,12 @@ fn build_lr_suffix(
     return [entry, cursor];
 }
 
-/// Build one LR-suffix element, threading the follow-aware self-ref
-/// precedence. A top-level self-ref takes `conflict_min` when `follow_has`
-/// (an LR operator can follow), else 0. A nested self-ref recurses through
-/// the container (Group/Repeat/Label) so each occurrence is decided from its
-/// own follow. Elements with no self-ref build via the generic `build_element`.
+/// Build one LR-suffix element. A self-ref carries a precedence floor
+/// (`conflict_min` when an LR operator can follow — `follow_has` — else 0, a
+/// primary reference like a bracketed call arg); a nested self-ref recurses
+/// through its container so each occurrence is decided from its own follow.
+/// Mirrors the static path's `stamp_lr_self_ref_min_prec`, so the ATN models
+/// the same language the parser does. Non-self-ref elements build generically.
 fn build_lr_suffix_element(
     b: &mut AtnBuilder,
     elem: &Element,

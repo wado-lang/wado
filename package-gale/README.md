@@ -8,7 +8,7 @@ with no runtime to install and no version to keep in sync.
 The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
 [documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale accepts
 every grammar ANTLR4 accepts — and a few it rejects, where the meaning is
-unambiguous (see [Compatibility](#compatibility-and-further-reading)).
+unambiguous (see [Design](#design)).
 
 ## Design
 
@@ -300,10 +300,8 @@ config.
 
 ## Compatibility and further reading
 
-Gale targets the full ANTLR4 `.g4` grammar syntax, and is a superset: it
-accepts every grammar ANTLR4 accepts, plus a few ANTLR4 rejects whose meaning
-precedence climbing makes unambiguous. It never invents behavior for genuinely
-ambiguous constructs — those are rejected loudly.
+Gale targets the full ANTLR4 `.g4` grammar syntax, plus the small superset
+described under [Design](#design).
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility
