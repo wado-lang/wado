@@ -1,0 +1,19 @@
+//! Regression: two modules each define a same-named `run_entry` taking a
+//! closure over a module-local recursive type. Closure fn-param
+//! specialization (`lower::plan::closure`) keyed on the bare callee name
+//! conflated them, leaking one module's `Node` / `Parser` types across the
+//! boundary and emitting invalid core Wasm. Reduced from compiling two
+//! Gale-generated parsers into one module.
+
+use a from "./sub/xmod_recursive_type_closure_a.wado";
+use b from "./sub/xmod_recursive_type_closure_b.wado";
+
+test "two modules with a recursive type behind a closure stay distinct" {
+    assert a::parse().kids.len() == 0;
+    assert b::parse().kids.len() == 0;
+}
+
+__DATA__
+{
+    "test": {}
+}
