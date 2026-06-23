@@ -2328,19 +2328,30 @@ The ideal removes the root cause rather than patching symptoms:
       loop-var wall dissolves too: with the graph never cleared, the induction
       variable keeps its `LoopPhi` identity across `cse`'s copies, so guard and
       check resolve to it without a materialiser.
-  - [x] `condition_implication` BCE recognisers ported to **structural matching**
-        (skeleton/pool reads + a position-aware no-write-between scan; no
-        `value_of`, no promotion). Migrated this session: loop-guard, straight-line
-        early-exit, offset-chain, **dominating-if** (`if (var+K) < bound { … }`
-        proves `var+j < bound` for `0 ≤ j ≤ K` in the then-block —
-        `apply_dominating_if` walks the then-block in order, stopping at the first
-        `stmt_modifies`), and **short-circuit** (`(var+K) >= bound || R` refutes the
-        dominated checks in `R`; `ShortCircuitEliminator` is now structural and bails
-        if `R` modifies `var`/`bound` via `node_modifies`). `optimize_bce_if_guard`
-        and `tir_optimize_short_circuit_bounds` recover; the `array_bounds_elim_oob_*`
-        suite stays green. The shared `>=`-check extractor (`ge_check_operands`) and
-        `<`-extractor (`lt_operands`) handle both skeleton `Operand::Expr` and a
-        promoted `Operand::Value` (pool decomposition).
+  - [x] `condition_implication` is **fully off `value_of`** — the first value
+        pass migrated. Every BCE recogniser is now **structural** (skeleton/pool
+        reads + a position-aware no-write-between scan; no `value_of`, no
+        promotion): loop-guard, straight-line early-exit, offset-chain,
+        **dominating-if** (`if (var+K) < bound { … }` proves `var+j < bound` for
+        `0 ≤ j ≤ K` in the then-block — `apply_dominating_if` walks the then-block
+        in order, stopping at the first `stmt_modifies`), **short-circuit**
+        (`(var+K) >= bound || R` refutes the dominated checks in `R`;
+        `ShortCircuitEliminator` is structural and bails if `R` modifies
+        `var`/`bound` via `node_modifies`), and **bitmask**. The shared
+        `>=`-check extractor (`ge_check_operands`) and `<`-extractor
+        (`lt_operands`) handle both skeleton `Operand::Expr` and a promoted
+        `Operand::Value` (pool decomposition). `optimize_bce_if_guard` and
+        `tir_optimize_short_circuit_bounds` recover; the `array_bounds_elim_oob_*`
+        suite stays green.
+  - [x] The **value-graph BCE path is deleted** (~626 lines): `GuardFact`,
+        `GuardEliminator`, `ConditionEliminator`, `extract_loop_guard` /
+        `extract_early_exit_guard` / `extract_dominating_guard`, and their
+        `value_of` plumbing (`failure_ge_operands`, `ge_operands_of_value`,
+        `decompose_add_const`, `int_const`, `is_plus_one_of`, …). Proven redundant
+        by a `WADO_NO_VG_BCE` ablation: disabling the value-graph path left the
+        full O0+O2 e2e at the same two residue reds, so the structural matchers
+        already subsume it. No gate retained — the structural path is the only
+        path.
   - [ ] **Bitmask** (`optimize_bitmask_bce`) is ported to a structural recogniser
         (`is_bitmask_bounded_structural`: `(x & MASK) >= BOUND`, `BOUND > MASK ≥ 0`,
         `MASK`/`BOUND` read as constants through copy temps / the pool) but does not
