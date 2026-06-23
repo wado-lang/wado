@@ -206,17 +206,31 @@ and the flip is proven):
       `value()` → `value_of`. That `value_of` entry comes from the **build** (populated for
       every original read), not only the re-seed; the re-seed merely *restores* entries the
       maintenance dropped. So the matching depends on `value_of` for **every** skeleton
-      guard/check read. Getting condition_implication off `value_of` therefore needs
-      **comprehensive promotion of all guard/check reads to `Operand::Value`**, not a
-      re-seed rewrite. For straight-line invariant fields the store_load_forward recipe
-      applies (promote both `recv.field` reads to one canonical
-      `field_access(recv, field, INITIAL)` value — load-bearing for exactly 3 fixtures:
-      `array_bounds_elim_offset_chain`, `tir_optimize_early_exit_guard`,
-      `tir_optimize_short_circuit_bounds`). The loop case (induction var / hoisted bound)
-      additionally needs those reads frozen as stable **LoopPhi operands** (`body_iter` is
-      still an MVP `Opaque`, `nir_value_graph.rs:176`) so a guard copy and a check copy
-      share one `ValueId` without the re-seed. **Resume here:** comprehensive guard/check
-      operand promotion, gated, validated against the array_bounds_elim + oob suite (P0).
+      guard/check read. Getting condition_implication off `value_of` therefore needs the
+      guard/check reads to carry their identity **without** `value_of`.
+
+      Measured dead-end (this branch — do not retry): converting the re-seed's
+      `set_value(read, v)` to operand promotion (`redirect_expr(read, Operand::Value(v))`)
+      under the gate. The 3 straight-line fixtures pass, but the broader BCE suite
+      **regresses with P0 over-eliminations** (`array_bounds_elim_oob_*`,
+      `array_bounds_check_oob_*`). Root cause: `redirect_expr` **orphans** the skeleton
+      read, but BCE's heap-version / write-detection needs the `FieldAccess` read to stay
+      in the skeleton (it is how a mutation between guard and check is detected). The
+      re-seed's `set_value` adds an identity **while keeping the read**; an `Operand` is
+      `Expr` **xor** `Value`, so a promoted read cannot be both the value (for matching)
+      and the skeleton node (for write-detection). Promotion is the wrong tool here.
+
+      Implication for the resume approach: condition_implication's reads cannot simply be
+      promoted like store_load_forward's (whose reads fold to a final constant and need no
+      skeleton). The identity must live on the **value graph** attached to the surviving
+      skeleton read — which is what `value_of` is. So retiring `value_of` for this pass
+      requires the build itself to assign **stable, maintenance-surviving identities** to
+      these reads (the **LoopPhi induction-recognition** work — `body_iter` is an MVP
+      `Opaque`, `nir_value_graph.rs:176`), eliminating the re-seed's need to restore
+      dropped entries, rather than promoting reads into operands. **Resume here:** build
+      `LoopPhi` induction recognition so loop induction vars / hoisted bounds and invariant
+      fields keep one stable identity across the structural passes without re-seed;
+      validate against the array_bounds_elim + oob suite (P0).
 - [ ] **inline** clears + regrows `value_of` (`736` / `775`) as build-once
       maintenance; once no in-loop pass reads `value_of`, the regrow is unneeded.
 - [ ] **the freeze** (`extract.rs`, last pass) is the build site + final consumer:
