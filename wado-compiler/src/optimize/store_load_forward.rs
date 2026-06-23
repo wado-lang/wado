@@ -106,8 +106,10 @@ fn forward_one(
     // `value_of` side-table. Default path: grow the graph and read it back.
     let bare_consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> =
         if super::born_operands_enabled() {
+            // Both bare-scalar and field constant reads, straight from the walk —
+            // no `value_of` consulted for any forwarded read under the gate.
             engine
-                .bare_local_constants(&safe_scalars)
+                .scoped_const_reads(&safe_scalars, /* include_fields */ true)
                 .into_iter()
                 .collect()
         } else {
@@ -171,14 +173,17 @@ pub(super) fn forward_at_root(
         if is_assign_target(engine, expr) {
             continue;
         }
-        // Born-as-operands: a bare-scalar read carries its reaching constant in
-        // `bare_consts` (from the scratch re-walk), promoted without touching
-        // `value_of`. Other reads (fields) fall back to the graph query.
-        let Some(vid) = bare_consts
-            .get(&expr)
-            .copied()
-            .or_else(|| engine.value(expr))
-        else {
+        // Born-as-operands: every forwardable read carries its reaching constant
+        // in `bare_consts` (from the scratch re-walk), promoted without touching
+        // `value_of`; under the gate that map is authoritative, so the graph query
+        // is skipped entirely. Default path: query the maintained graph.
+        let from_walk = bare_consts.get(&expr).copied();
+        let resolved = if super::born_operands_enabled() {
+            from_walk
+        } else {
+            from_walk.or_else(|| engine.value(expr))
+        };
+        let Some(vid) = resolved else {
             continue;
         };
         // Resolve through the e-class representative so a value proven equal to

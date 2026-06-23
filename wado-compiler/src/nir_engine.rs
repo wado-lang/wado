@@ -390,12 +390,28 @@ impl<'a> Engine<'a> {
         &mut self,
         scalars: &IndexSet<u32>,
     ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
+        self.scoped_const_reads(scalars, /* include_fields */ false)
+    }
+
+    /// Every constant read recovered by the scratch re-walk
+    /// [`Self::bare_local_constants`] uses, covering both bare scalar `Local`
+    /// reads (in `scalars`) and — when `include_fields` — `FieldAccess` reads.
+    /// A field read is admitted only when the walk gives it a constant `ValueId`;
+    /// under the conservative session alias sets an aliased / address-taken
+    /// receiver never carries one, so the same upstream safety
+    /// `store_load_forward` relies on holds here. Used by the born-as-operands
+    /// path to promote field constants without consulting `value_of` (WEP item 3).
+    pub fn scoped_const_reads(
+        &mut self,
+        scalars: &IndexSet<u32>,
+        include_fields: bool,
+    ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
         use crate::nir_value_graph::builder;
         // Only grow an already-built graph: building it here would use this
         // session's alias config, which is sound only when the caller has set the
         // real sets (`store_load_forward` does). A missing graph is left for the
         // natural lazy build at the next query.
-        if scalars.is_empty() || self.body.value_graph.is_none() {
+        if self.body.value_graph.is_none() || (scalars.is_empty() && !include_fields) {
             return Vec::new();
         }
         let root = self.body.root;
@@ -424,10 +440,15 @@ impl<'a> Engine<'a> {
         );
         let mut out = Vec::new();
         for (e, v) in vo {
-            if let ExprKind::Local { index, .. } = &self.body.exprs[e].kind
-                && scalars.contains(index)
-                && builder::is_const_value(&self.body.values, v)
-            {
+            if !builder::is_const_value(&self.body.values, v) {
+                continue;
+            }
+            let keep = match &self.body.exprs[e].kind {
+                ExprKind::Local { index, .. } => scalars.contains(index),
+                ExprKind::FieldAccess { .. } => include_fields,
+                _ => false,
+            };
+            if keep {
                 out.push((e, v));
             }
         }
