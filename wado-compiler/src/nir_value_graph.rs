@@ -843,7 +843,13 @@ impl ValuePool {
     /// another loop's phi by structure, and its kind is mutated after the body
     /// walk — both incompatible with the interned table.
     pub fn alloc_loop_phi(&mut self, entry: ValueId, type_id: TypeId) -> ValueId {
-        self.alloc_unshared(ValueKind::LoopPhi { entry, body_iter: entry }, type_id)
+        self.alloc_unshared(
+            ValueKind::LoopPhi {
+                entry,
+                body_iter: entry,
+            },
+            type_id,
+        )
     }
 
     /// Patch the `body_iter` of a phi made by [`ValuePool::alloc_loop_phi`] to the

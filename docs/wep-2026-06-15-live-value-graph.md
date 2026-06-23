@@ -257,7 +257,23 @@ and the flip is proven):
       terminates on a self-referential phi: `value_fully_reemittable_locally` and `build_scoped`
       stop at `LoopPhi` (→ `false` / `None`), `is_const_value` is a leaf check, and
       `dup_work_walk` carries a `seen` set. So a self-referential induction phi can now be built
-      without hanging the compiler. Remaining is the recognition itself (below).
+      without hanging the compiler.
+
+      LoopPhi loop-value construction **built and gated** (`7f62f4af8`): `walk_loop` gives each
+      written loop local a `LoopPhi { entry, body_iter }` (placeholder at head via
+      `alloc_loop_phi`, `body_iter` patched post-body via `set_loop_phi_body_iter`) instead of a
+      fresh `Opaque`. Validated: **gate-off full e2e 3032/0** (byte-identical — `phis` empty
+      when the gate is off), gate-on runtime-correct on the loop/bounds/oob subset (40/0, no
+      miscompiles).
+
+      Remaining issue for the gated path (precisely diagnosed, the next step): `WADO_VERIFY_VG`
+      flags a maintained-vs-fresh **over-merge** — two *distinct* licm-hoisted invariant bound
+      locals (`_licm_used_33`, `_licm_used_23`) collapse to one `ValueId` in the maintained graph
+      while a fresh build splits them. So the new phi values cascade through the per-edit
+      *maintenance* (which assigns licm's hoisted bounds their values) into invariant bounds, not
+      just induction vars. Fix direction: make the maintenance LoopPhi-aware (or the phis stable
+      across maintenance) so the maintained partition still refines a fresh build. Until then the
+      gate stays off; default is unaffected.
 
       Soundness subtlety surfaced (constrains the recognition, not just the plumbing): an
       induction variable's value **differs before vs after** its in-loop increment — `… i …;
