@@ -2485,7 +2485,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, 4);
+    pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
         let sp = pos;
@@ -2493,7 +2493,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
             sg_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, 4);
+                pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -3075,10 +3075,10 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.b.set_alt(17);
                 let k_in = p.expect(TK_K_IN, &EMPTY_SYNC);
                 let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-                let expression_2 = _parse_expression(p, 4);
+                let expression_2 = _parse_expression(p, 0);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                     let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                    let expression = _parse_expression(p, 4);
+                    let expression = _parse_expression(p, 0);
                 }
                 let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());

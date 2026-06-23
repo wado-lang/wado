@@ -6216,7 +6216,7 @@ fn scan_primary_type_lr_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     pos += 1;
     if pos < tokens.len() && _kind_set_4(tokens[pos]) {
         let sp = pos;
-        pos = scan_primary_type(tokens, pos, &EMPTY_FOLLOW, 2);
+        pos = scan_primary_type(tokens, pos, &EMPTY_FOLLOW, 0);
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
@@ -13821,7 +13821,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 p.b.set_alt(4);
                 let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
                 if _kind_set_4(p.peek_kind()) {
-                    let primary_type = _parse_primary_type(p, &EMPTY_FOLLOW, 2);
+                    let primary_type = _parse_primary_type(p, &EMPTY_FOLLOW, 0);
                 }
                 let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());

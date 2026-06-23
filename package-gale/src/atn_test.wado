@@ -344,8 +344,22 @@ ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ";
 
-#[expect_trap]
-test "build_atn traps on a nested self-reference in an LR suffix" {
+test "build_atn handles a nested self-reference in an LR suffix" {
+    // `e ('and' e)+` nests a self-ref inside the `+` repeat. The nested
+    // operand is followed by an LR operator (`and`), so it carries a
+    // precedence floor (`conflict_min`) — the follow-aware builder, not the
+    // old loud trap. A bracketed arg (no LR operator in follow) would get
+    // prec 0 instead.
     let g = parse(LR_NESTED_SELFREF_G4).unwrap();
-    let _ = build_atn(&g);
+    let atn = build_atn(&g);
+    // `e` is parser rule 0; find the self-recursive RULE transition.
+    let mut found_floored_self_ref = false;
+    for let st of &atn.states {
+        for let t of &st.transitions {
+            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] && t.prec > 0 {
+                found_floored_self_ref = true;
+            }
+        }
+    }
+    assert found_floored_self_ref, "nested self-ref in `('and' e)+` should carry a precedence floor";
 }

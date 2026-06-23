@@ -2481,7 +2481,7 @@ fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 17);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
     pos += 1;
@@ -3384,7 +3384,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                let e_2 = _parse_e(p, &FOLLOW_MASK_4, 17);
+                let e_2 = _parse_e(p, &FOLLOW_MASK_4, 0);
                 let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
