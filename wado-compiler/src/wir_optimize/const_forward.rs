@@ -113,6 +113,11 @@ fn f_stores_param(stores: &[String], param_name: &str) -> bool {
 struct FieldKnowledge<'a> {
     /// Known constant field values: `(local_name, field_name)` → constant value
     fields: IndexMap<(String, String), WirInstr>,
+    /// Single-assignment locals bound to a constant: `local_name` → const instr.
+    /// A `LocalGet` of one is replaced by the constant, so a materialised
+    /// `let _av = obj.f` whose field folds to a constant (`niri_*_preserves_fields`)
+    /// propagates into `1 >= _av` and the dead branch prunes.
+    local_const: IndexMap<String, WirInstr>,
     /// Type definitions for resolving field names by index
     types: &'a [WirTypeDef],
     /// Locals that are aliased and unsafe for field forwarding
@@ -123,6 +128,7 @@ impl<'a> FieldKnowledge<'a> {
     fn new(types: &'a [WirTypeDef], aliased: &'a IndexSet<String>) -> Self {
         Self {
             fields: IndexMap::default(),
+            local_const: IndexMap::default(),
             types,
             aliased,
         }
@@ -160,6 +166,7 @@ impl<'a> FieldKnowledge<'a> {
     /// Also invalidates entries whose stored value is a `LocalGet` referencing
     /// the reassigned local, since that value is no longer valid.
     fn invalidate_local(&mut self, local_name: &str) {
+        self.local_const.swap_remove(local_name);
         self.fields.retain(|(name, _), val| {
             if name == local_name {
                 return false;
@@ -253,6 +260,12 @@ fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>)
                 WirInstr::LocalGet { name: source, .. } => {
                     copy_field_knowledge(known, source, name);
                 }
+                // A constant binding `local = <const>`: record it so a later
+                // `LocalGet local` folds to the constant. Skip aliased locals
+                // (their value can be overwritten through a retained reference).
+                v if is_wir_constant(v) && !known.aliased.contains(name) => {
+                    known.local_const.insert(name.clone(), v.clone());
+                }
                 _ => {}
             }
         }
@@ -315,6 +328,7 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
             // Forward into branches with cloned knowledge
             let mut then_known = FieldKnowledge {
                 fields: known.fields.clone(),
+                local_const: known.local_const.clone(),
                 types: known.types,
                 aliased: known.aliased,
             };
@@ -322,6 +336,7 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
             if let Some(eb) = else_body {
                 let mut else_known = FieldKnowledge {
                     fields: known.fields.clone(),
+                    local_const: known.local_const.clone(),
                     types: known.types,
                     aliased: known.aliased,
                 };
@@ -332,6 +347,12 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
             if let Some(eb) = else_body {
                 invalidate_locals_modified_in_body(eb, known);
             }
+        }
+        // A read of a constant-bound single-assignment local folds to the constant.
+        WirInstr::LocalGet { name, .. } if known.local_const.contains_key(name.as_str()) => {
+            let c = known.local_const.get(name.as_str()).unwrap().clone();
+            *instr = c;
+            changed = true;
         }
         _ => {
             // For other instructions, try to forward StructGet(LocalGet(x), field)
