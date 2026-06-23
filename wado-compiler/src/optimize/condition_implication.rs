@@ -295,34 +295,6 @@ fn is_plus_one_of(engine: &mut Engine, v: ValueId, base: ValueId) -> bool {
     false
 }
 
-/// Whether `(lhs >= rhs)` is provably false because `lhs` is bitmask-bounded:
-/// `(x & MASK) >= BOUND` is false when `MASK >= 0` and `BOUND > MASK`. The
-/// mask may appear on either side of the `&`; copy chains are already
-/// resolved by the `ValueGraph`.
-fn is_bitmask_bounded(engine: &mut Engine, condition: Operand) -> bool {
-    let Some((lhs_vn, rhs_vn)) = failure_ge_operands(engine, condition) else {
-        return false;
-    };
-    let ValueKind::Binary {
-        op: NirBinaryOp::BitAnd,
-        lhs,
-        rhs,
-        ..
-    } = engine.value_kind(lhs_vn)
-    else {
-        return false;
-    };
-    let (and_l, and_r) = (*lhs, *rhs);
-    let mask = match (int_const(engine, and_l), int_const(engine, and_r)) {
-        (_, Some(m)) | (Some(m), None) => m,
-        _ => return false,
-    };
-    let Some(bound) = int_const(engine, rhs_vn) else {
-        return false;
-    };
-    mask >= 0 && bound > mask
-}
-
 /// Run condition implication at the body root on an existing engine session.
 /// The combined `licm` session reuses its (value-preserving) `ValueGraph`, so
 /// cond-impl needs no separate build; it runs after licm in document order, so
@@ -446,7 +418,10 @@ fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> 
                 receiver,
                 field_index,
                 ..
-            } => Some(BoundKey::Field(opaque_local(engine, *receiver)?, *field_index)),
+            } => Some(BoundKey::Field(
+                opaque_local(engine, *receiver)?,
+                *field_index,
+            )),
             _ => None,
         },
     }
@@ -552,34 +527,137 @@ fn parse_cmp(
 /// (`Binary(GtEq)`) or its lowered form `!((var + off) < bound)`. Returns
 /// `(var, off, bound)`.
 fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, i64, BoundKey)> {
-    let ce = resolve(engine, binds, cond).as_expr()?;
-    let (left, right) = match &engine.body.exprs[ce].kind {
-        ExprKind::Binary {
-            left,
-            op: NirBinaryOp::GtEq,
-            right,
-        } => (*left, *right),
-        ExprKind::Unary {
-            op: NirUnaryOp::Not,
-            expr: inner,
-        } => {
-            let ie = resolve(engine, binds, *inner).as_expr()?;
+    let (left, right) = ge_check_operands(engine, binds, cond)?;
+    let (var, off) = parse_var_offset(engine, binds, left)?;
+    let bound = parse_bound(engine, binds, right)?;
+    Some((var, off, bound))
+}
+
+/// The `(left, right)` of the failing `left >= right` predicate a bounds-check
+/// condition denotes: `(left >= right)` directly, or its lowered form
+/// `!(left < right)`. Handles both the skeleton (`Operand::Expr`) and a
+/// **promoted** comparison (`Operand::Value`, decomposed through the value
+/// **pool** — never `value_of`). Operands are returned raw (caller decides how
+/// to parse each side).
+fn ge_check_operands(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(Operand, Operand)> {
+    match resolve(engine, binds, cond) {
+        Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::GtEq,
+                right,
+            } => Some((*left, *right)),
+            ExprKind::Unary {
+                op: NirUnaryOp::Not,
+                expr: inner,
+            } => lt_operands(engine, binds, *inner),
+            _ => None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Binary {
+                op: NirBinaryOp::GtEq,
+                lhs,
+                rhs,
+                ..
+            } => Some((Operand::Value(*lhs), Operand::Value(*rhs))),
+            ValueKind::Unary {
+                op: NirUnaryOp::Not,
+                operand,
+                ..
+            } => lt_operands(engine, binds, Operand::Value(*operand)),
+            _ => None,
+        },
+    }
+}
+
+/// The `(left, right)` of a strict `left < right`, skeleton or promoted.
+fn lt_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, Operand)> {
+    match resolve(engine, binds, op) {
+        Operand::Expr(ie) => {
             if let ExprKind::Binary {
                 left,
                 op: NirBinaryOp::Lt,
                 right,
             } = &engine.body.exprs[ie].kind
             {
-                (*left, *right)
+                Some((*left, *right))
             } else {
-                return None;
+                None
             }
         }
-        _ => return None,
+        Operand::Value(v) => {
+            if let ValueKind::Binary {
+                op: NirBinaryOp::Lt,
+                lhs,
+                rhs,
+                ..
+            } = engine.body.values.kind(v)
+            {
+                Some((Operand::Value(*lhs), Operand::Value(*rhs)))
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// Structural bitmask-bounded check (value_of-free): the failing predicate is
+/// `(x & MASK) >= BOUND` with `MASK` and `BOUND` constants and `BOUND > MASK >=
+/// 0`, so `x & MASK ∈ [0, MASK]` can never reach `BOUND`. The masked value is
+/// read through copy temps (`let idx = i & MASK`) and decomposed via the value
+/// **pool** when promoted — never the `value_of` side-table.
+fn is_bitmask_bounded_structural(engine: &Engine, binds: &Binds, cond: Operand) -> bool {
+    let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
+        return false;
     };
-    let (var, off) = parse_var_offset(engine, binds, left)?;
-    let bound = parse_bound(engine, binds, right)?;
-    Some((var, off, bound))
+    let Some(bound) = parse_const_i64(engine, binds, right) else {
+        return false;
+    };
+    let Some(mask) = bitand_mask(engine, binds, left) else {
+        return false;
+    };
+    mask >= 0 && bound > mask
+}
+
+/// The constant `MASK` of a `value & MASK` (through copy temps / value pool), if
+/// either operand is a constant.
+fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
+    match resolve(engine, binds, op) {
+        Operand::Expr(e) => {
+            let ExprKind::Binary {
+                left,
+                op: NirBinaryOp::BitAnd,
+                right,
+            } = &engine.body.exprs[e].kind
+            else {
+                return None;
+            };
+            let (l, r) = (*left, *right);
+            parse_const_i64(engine, binds, r).or_else(|| parse_const_i64(engine, binds, l))
+        }
+        Operand::Value(v) => {
+            let ValueKind::Binary {
+                op: NirBinaryOp::BitAnd,
+                lhs,
+                rhs,
+                ..
+            } = engine.body.values.kind(v)
+            else {
+                return None;
+            };
+            let (l, r) = (*lhs, *rhs);
+            pool_int_const(engine, r).or_else(|| pool_int_const(engine, l))
+        }
+    }
+}
+
+/// A pooled value's constant `i64`, if it is an `Int` (pool read, not `value_of`).
+fn pool_int_const(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<i64> {
+    if let ValueKind::Int(val, _) = engine.body.values.kind(v) {
+        Some(*val as i64)
+    } else {
+        None
+    }
 }
 
 /// The local that `BoundKey` reads through, if any (for write-tracking).
@@ -596,6 +674,12 @@ fn bound_root(b: BoundKey) -> Option<u32> {
 /// guard/check's own `panic(msg)` is a free call on neither root, so it does not
 /// trip this — keeping a clean check eliminable.
 fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool {
+    node_modifies(engine, NodeRef::Stmt(s), var, bound)
+}
+
+/// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
+/// short-circuit `||`).
+fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
     let roots = [Some(var), bound_root(bound)];
     let is_root = |l: u32| roots.iter().any(|r| *r == Some(l));
     let mut hit = false;
@@ -635,7 +719,7 @@ fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool 
             }
         }
     };
-    let mut stack = vec![NodeRef::Stmt(s)];
+    let mut stack = vec![node];
     while let Some(n) = stack.pop() {
         visit(n);
         engine.body.for_each_child(n, |c| stack.push(c));
@@ -772,6 +856,39 @@ fn eliminate_checks_in_node(
     changed
 }
 
+/// A dominating `if (var + K) < bound { … }` proves `var + j < bound` for
+/// `0 <= j <= K` inside its then-block (structural, value_of-free). Drive to
+/// `false` every dominated bounds-check `var + j >= bound` nested in the
+/// then-block, walked in order and stopped once a statement modifies
+/// `var` / `bound` (so the fact no longer holds past it).
+fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
+    let StmtKind::If {
+        condition,
+        then_block,
+        ..
+    } = &engine.body.stmts[s].kind
+    else {
+        return false;
+    };
+    let (cond, then_b) = (*condition, *then_block);
+    let Some((var, k, bound, op)) = parse_cmp(engine, binds, cond) else {
+        return false;
+    };
+    // Only `<` proves `var + j < bound`; `var + j >= bound` is then refuted for
+    // `0 <= j <= k`.
+    if op != NirBinaryOp::Lt || k < 0 {
+        return false;
+    }
+    let mut changed = false;
+    for &ts in engine.body.blocks[then_b].stmts.clone().iter() {
+        if stmt_modifies(engine, ts, var, bound) {
+            break;
+        }
+        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(ts), var, k, bound, binds);
+    }
+    changed
+}
+
 /// A straight-line early-exit guard `if (var + K >= bound) { return/break }`:
 /// after it, the surviving path has `var + K < bound` (structural,
 /// value_of-free). Returns `(var, K, bound)`.
@@ -809,11 +926,13 @@ fn process_block(engine: &mut Engine, block: BlockId) -> bool {
         }
         for &(var, k, bound) in &seguards {
             if !stmt_modifies(engine, s, var, bound) {
-                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, &binds);
+                changed |=
+                    eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, &binds);
             }
         }
-        changed |= BitmaskEliminator.visit_stmt(engine, s);
-        changed |= ShortCircuitEliminator.visit_stmt(engine, s);
+        changed |= apply_dominating_if(engine, s, &binds);
+        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
+        changed |= ShortCircuitEliminator { binds: &binds }.visit_stmt(engine, s);
         changed |= process_stmt(engine, s);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(guard) = extract_early_exit_guard(engine, s) {
@@ -861,6 +980,13 @@ enum StmtShape {
 fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
     let mut changed = structural_loop_guard(engine, loop_body);
 
+    // Dominating `if (var + K) < bound { … }` in the loop body proves the
+    // dominated checks inside its then-block (value_of-free, structural).
+    let binds = build_copy_bindings(engine.body);
+    for s in engine.body.blocks[loop_body].stmts.clone() {
+        changed |= apply_dominating_if(engine, s, &binds);
+    }
+
     if let Some((guard, body_start)) = extract_loop_guard(engine, loop_body) {
         // Eliminate implied conditions in the loop body. `body_start` is the
         // index past the guard, so leading `let`s (e.g. a CSE-hoisted
@@ -882,7 +1008,7 @@ fn process_loop(engine: &mut Engine, loop_body: BlockId) -> bool {
 
     // Eliminate bitmask-bounded checks in the loop body.
     for s in engine.body.blocks[loop_body].stmts.clone() {
-        changed |= BitmaskEliminator.visit_stmt(engine, s);
+        changed |= BitmaskEliminator { binds: &binds }.visit_stmt(engine, s);
     }
 
     // Recurse into nested loops.
@@ -1310,9 +1436,11 @@ impl ArenaOptVisitor for GuardEliminator {
 
 /// Eliminates bitmask-bounded false bounds checks:
 /// `if (x & MASK) >= BOUND { panic(...) }` with `BOUND > MASK >= 0`.
-struct BitmaskEliminator;
+struct BitmaskEliminator<'a> {
+    binds: &'a Binds,
+}
 
-impl ArenaOptVisitor for BitmaskEliminator {
+impl ArenaOptVisitor for BitmaskEliminator<'_> {
     fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
         let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
@@ -1324,7 +1452,7 @@ impl ArenaOptVisitor for BitmaskEliminator {
         };
         if let Some((condition, then_block)) = if_ids
             && is_panic_block(engine, then_block)
-            && is_bitmask_bounded(engine, condition)
+            && is_bitmask_bounded_structural(engine, self.binds, condition)
         {
             eliminate_condition(engine, NodeRef::Stmt(s), condition);
             return true;
@@ -1333,12 +1461,16 @@ impl ArenaOptVisitor for BitmaskEliminator {
     }
 }
 
-/// Eliminates redundant bounds checks inside short-circuit `||` expressions:
-/// in `(start + k) >= bound || expr`, the right operand only executes when
-/// `(start + k) < bound`.
-struct ShortCircuitEliminator;
+/// Eliminates redundant bounds checks inside short-circuit `||` expressions
+/// (value_of-free, structural): in `(var + k) >= bound || expr`, the right
+/// operand only runs when `(var + k) < bound`, refuting every dominated check
+/// `var + j >= bound` (`0 <= j <= k`) nested in it. Skipped when the right
+/// operand modifies `var` / `bound` (the fact would no longer hold).
+struct ShortCircuitEliminator<'a> {
+    binds: &'a Binds,
+}
 
-impl ArenaOptVisitor for ShortCircuitEliminator {
+impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
     fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
         let or_ids = match &engine.body.exprs[e].kind {
             ExprKind::Binary {
@@ -1350,22 +1482,12 @@ impl ArenaOptVisitor for ShortCircuitEliminator {
         };
         if let Some((left, right)) = or_ids {
             let mut changed = left.as_expr().is_some_and(|le| self.visit_expr(engine, le));
-            let fact = if let Some(le) = left.as_expr()
-                && let ExprKind::Binary {
-                    left: cmp_l,
-                    op: NirBinaryOp::GtEq,
-                    right: cmp_r,
-                } = &engine.body.exprs[le].kind
-            {
-                let (cmp_l, cmp_r) = (*cmp_l, *cmp_r);
-                GuardFact::from_comparison(engine, cmp_l, cmp_r, true)
-            } else {
-                None
-            };
-            if let Some(fact) = fact
+            if let Some((var, k, bound)) = parse_check(engine, self.binds, left)
                 && let Some(re) = right.as_expr()
+                && !node_modifies(engine, NodeRef::Expr(re), var, bound)
             {
-                changed |= GuardEliminator { fact }.visit_expr(engine, re);
+                changed |=
+                    eliminate_checks_in_node(engine, NodeRef::Expr(re), var, k, bound, self.binds);
             }
             if let Some(re) = right.as_expr() {
                 changed |= self.visit_expr(engine, re);

@@ -2328,6 +2328,32 @@ The ideal removes the root cause rather than patching symptoms:
       loop-var wall dissolves too: with the graph never cleared, the induction
       variable keeps its `LoopPhi` identity across `cse`'s copies, so guard and
       check resolve to it without a materialiser.
+  - [x] `condition_implication` BCE recognisers ported to **structural matching**
+        (skeleton/pool reads + a position-aware no-write-between scan; no
+        `value_of`, no promotion). Migrated this session: loop-guard, straight-line
+        early-exit, offset-chain, **dominating-if** (`if (var+K) < bound { … }`
+        proves `var+j < bound` for `0 ≤ j ≤ K` in the then-block —
+        `apply_dominating_if` walks the then-block in order, stopping at the first
+        `stmt_modifies`), and **short-circuit** (`(var+K) >= bound || R` refutes the
+        dominated checks in `R`; `ShortCircuitEliminator` is now structural and bails
+        if `R` modifies `var`/`bound` via `node_modifies`). `optimize_bce_if_guard`
+        and `tir_optimize_short_circuit_bounds` recover; the `array_bounds_elim_oob_*`
+        suite stays green. The shared `>=`-check extractor (`ge_check_operands`) and
+        `<`-extractor (`lt_operands`) handle both skeleton `Operand::Expr` and a
+        promoted `Operand::Value` (pool decomposition).
+  - [ ] **Bitmask** (`optimize_bitmask_bce`) is ported to a structural recogniser
+        (`is_bitmask_bounded_structural`: `(x & MASK) >= BOUND`, `BOUND > MASK ≥ 0`,
+        `MASK`/`BOUND` read as constants through copy temps / the pool) but does not
+        yet recover the fixture: at the recogniser's program point the bound is still
+        the **un-promoted invariant field read** `arr.used`, not the literal `32768`.
+        Its constant value is known only via cross-statement propagation (the `List {
+        used: 32768 }` construction → the loop-body read, with `index_assign` not
+        touching `.used`) — exactly the born-as-operands / value-flow obligation, not
+        something a syntactic scan can establish soundly (a structural pass must
+        conservatively treat the whole `arr` as mutated by `index_assign`). So
+        bitmask and `array_bounds_elim_le_guard_wir` are the residue that lands when
+        the invariant bound is surfaced as an `Operand::Value` — the recogniser is
+        already value_of-free and fires the moment the bound is promoted/folded.
 
 Build redness during the migration is accepted: the side-table's removal is the
 point, not its preservation. The persisted-snapshot seed is the next concrete
