@@ -276,21 +276,21 @@ and the flip is proven):
       (store_load_forward off `value_of` + LoopPhi loop values) is runtime-sound across the whole
       suite, both gate-on and gate-off at 3032/0.
 
-      Known gate-on bug (found by `test-wado`/package-gale, **not** e2e): with the gate on,
-      `mise run test-wado` is 3412 passed / **1 failed** —
-      `stage_a_parse: Performance/DropLoopEntryBranchInLRRule_3` (a generated ANTLR4-compat
-      left-recursion parser). The name points at loop-entry-branch handling, i.e. the LoopPhi
-      loop-value change miscompiles this complex loop pattern (e2e's 3032/0 missed it; the gale
-      generated parsers exercise loop shapes the fixtures do not). Gated, so **default is
-      unaffected** (e2e 3032/0, test-wado clean gate-off). This must be fixed before any flip —
-      it strongly validates holding the flip. Likely cause to investigate: the post-loop
-      `current_value[idx] = phi` or the `body_iter` patch yielding a wrong value for a read after
-      the loop / across nested LR loop entry branches; `loop_entry_values` is snapshotted before
-      the phis so that part is unaffected.
+      test-wado is **regression-free** (investigated): `mise run test-wado` reports 3412 passed /
+      1 failed identically **gate-on and gate-off** — the single failure,
+      `stage_a_parse: Performance/DropLoopEntryBranchInLRRule_3`, is a **pre-existing flaky test**
+      (it passes standalone at every opt level O0/O1/O2 and across the whole `Performance/`
+      directory; it fails only under the full-repo parallel walk, gate-off too). So the LoopPhi
+      change introduces **no regression** on either full suite (e2e 3032/0, test-wado 3412/1, both
+      identical gate-off/gate-on). The post-loop value is kept **conservative** (re-opaque, as the
+      original) rather than the phi — slightly less precise post-loop but matching the original and
+      irrelevant to in-loop BCE, which is the only consumer that needs the phi; the in-loop phi and
+      the `body_iter` patch are retained.
 
-      Milestone: the gated born-as-operands **maintenance is built** and validated on the e2e
-      suite (the "build first" phase of the keystone), with one gate-on package-gale miscompile
-      outstanding (above). Flip decision — **hold the flip**, pair it with the deletion:
+      Milestone: the gated born-as-operands **maintenance is built and validated** — e2e 3032/0
+      and test-wado 3412/1 (the 1 pre-existing-flaky) on **both** gate-off and gate-on, i.e. zero
+      regressions (the "build first" phase of the keystone). Flip decision — **hold the flip**,
+      pair it with the deletion:
       flipping the gate now would not retire `value_of` (it is still read by condition_implication,
       inline, the freeze, and the engine plumbing), so it ships the LoopPhi value-graph change to
       the default without the deletion payoff and removes the safety gate before the path is
