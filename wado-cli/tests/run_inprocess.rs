@@ -103,6 +103,8 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         no_cache: false,
         codegen_flags: Vec::new(),
         lib_world: None,
+        param_overrides: wado_compiler::hashmap::IndexMap::default(),
+        param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
     }
 }
 
