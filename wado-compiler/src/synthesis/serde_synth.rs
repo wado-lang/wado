@@ -434,10 +434,11 @@ pub fn synthesize_serde(project: &mut Package) {
                     if existing.contains(&key) {
                         continue;
                     }
-                    if let Some((lookup_func, deser_func)) =
+                    if let Some((lookup_func, positional_at_func, deser_func)) =
                         generate_struct_deserialize(module, req, &names)
                     {
                         generated.push(Rc::new(RefCell::new(lookup_func)));
+                        generated.push(Rc::new(RefCell::new(positional_at_func)));
                         generated.push(Rc::new(RefCell::new(deser_func)));
                     } else {
                         let func = generate_enum_deserialize(module, req, &names)
@@ -1232,7 +1233,7 @@ fn generate_struct_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
     names: &SerdeStdlibNames,
-) -> Option<(TirFunction, TirFunction)> {
+) -> Option<(TirFunction, TirFunction, TirFunction)> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
     let serde_module = ModuleSource::serde();
@@ -1299,14 +1300,37 @@ fn generate_struct_deserialize(
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
+    // `#[serde(positional)]` flags, aligned with `fields` (enumerate index ==
+    // field index used by the deserialize loop). A positional field is ordinal:
+    // `lookup` omits it, `positional_at` enumerates it.
+    let positional_flags: Vec<bool> = struct_def
+        .fields
+        .iter()
+        .map(|f| f.serde_positional)
+        .collect();
+
     // `impl FieldSchema for <Type> { fn lookup(...) }` — the static, per-type
     // field-name → index matcher. `next_field::<Type>()` resolves it directly
     // at monomorphization, so no closure value is constructed or allocated.
+    // Positional fields are skipped: they are never matched by name.
     let lookup_func = generate_lookup_function(
         &req.target_type_name,
         &names.field_schema,
         &fields,
+        &positional_flags,
         key_slice_type,
+        option_i32,
+        span,
+        &compiler_items,
+    );
+
+    // `impl FieldSchema for <Type> { fn positional_at(rank) }` — maps the
+    // rank-th positional field to its field index. Empty (always `null`) when
+    // the type has no positional fields, so non-args formats are unaffected.
+    let positional_at_func = generate_positional_at_function(
+        &req.target_type_name,
+        &names.field_schema,
+        &positional_flags,
         option_i32,
         span,
         &compiler_items,
@@ -1730,7 +1754,7 @@ fn generate_struct_deserialize(
         return_abi: crate::tir::ReturnAbi::default(),
     };
 
-    Some((lookup_func, deser_func))
+    Some((lookup_func, positional_at_func, deser_func))
 }
 
 /// Build a `key.get_unchecked(index_expr) as i32` expression on a
@@ -1853,6 +1877,7 @@ fn generate_lookup_function(
     type_name: &str,
     field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
+    positional_flags: &[bool],
     key_slice_type: TypeId,
     option_i32: TypeId,
     span: Span,
@@ -1877,7 +1902,12 @@ fn generate_lookup_function(
 
     // For each field, generate:
     //   if __len == N && key.get_byte(0) as i32 == B0 && ... { return Some(i); }
+    // Positional fields are ordinal: skip them so they are never matched by
+    // name (their values are bound via `positional_at`).
     for (i, (_, wire_name, _, _)) in fields.iter().enumerate() {
+        if positional_flags.get(i).copied().unwrap_or(false) {
+            continue;
+        }
         let name_bytes = wire_name.as_bytes();
         let name_len = name_bytes.len() as i32;
 
@@ -1935,6 +1965,99 @@ fn generate_lookup_function(
         params: vec![TirParam {
             name: "__key".to_string(),
             type_id: key_slice_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        }],
+        return_type: option_i32,
+        task_return_type: None,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(block(stmts)),
+        span,
+        local_count: next_local,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_dispatch_wrapper: false,
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
+/// `impl FieldSchema for <Type> { fn positional_at(rank: i32) -> Option<i32> }`
+/// — the static, per-type ordinal-field matcher. Maps the `rank`-th
+/// `#[serde(positional)]` field (in declaration order) to its field index;
+/// returns `null` for an out-of-range rank, and for every rank when the type
+/// has no positional fields. `positional_flags` is aligned with the deserialize
+/// loop's field indices, so the returned index drives the same `field == i`
+/// assignment as `lookup`.
+fn generate_positional_at_function(
+    type_name: &str,
+    field_schema_trait: &str,
+    positional_flags: &[bool],
+    option_i32: TypeId,
+    span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
+) -> TirFunction {
+    let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "positional_at");
+    // Parameter: rank: i32 at local 0.
+    let locals = vec![param_local("__rank", TypeTable::I32, false)];
+    let next_local: u32 = 1;
+
+    let mut stmts = Vec::new();
+
+    // For each positional field (in declaration order), generate:
+    //   if __rank == R { return Some(field_index); }
+    let mut rank: i32 = 0;
+    for (field_index, &is_positional) in positional_flags.iter().enumerate() {
+        if !is_positional {
+            continue;
+        }
+        let condition = i32_eq(
+            local_ref(0, "__rank", TypeTable::I32),
+            i32_const(rank),
+            span,
+        );
+        stmts.push(if_stmt(
+            condition,
+            block(vec![return_stmt(Some(option_some(
+                i32_const(field_index as i32),
+                option_i32,
+                compiler_items,
+            )))]),
+            None,
+        ));
+        rank += 1;
+    }
+    stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
+
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: fn_name,
+        is_pub: true,
+        is_export: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(LocalMethodName::new(
+            type_name.to_string(),
+            Some(field_schema_trait.to_string()),
+            "positional_at".to_string(),
+        )),
+        params: vec![TirParam {
+            name: "__rank".to_string(),
+            type_id: TypeTable::I32,
             local_index: 0,
             is_mut: false,
             span,

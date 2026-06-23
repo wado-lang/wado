@@ -752,6 +752,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `#[serde(default)]` is removed (rejected in `resolve_struct`).
             let serde_default = field.default.is_some();
 
+            let serde_positional = field
+                .attrs
+                .iter()
+                .any(|a| a.name == "serde" && a.has_arg("positional"));
+
             fields.push(crate::tir::TirField {
                 name: field.name.clone(),
                 is_pub: field.is_pub,
@@ -761,6 +766,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
                 serde_rename,
                 serde_default,
+                serde_positional,
                 default_expr,
             });
         }

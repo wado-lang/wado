@@ -180,7 +180,19 @@ by every format.
 `lookup` is a static method resolved at monomorphization, so the call is
 direct and inlinable — no closure value, no per-decode allocation.
 
+A field marked `#[serde(positional)]` is ordinal, not nominal: `lookup`
+omits it (it is never matched by name) and `positional_at` enumerates the
+positional fields in declaration order. Name-only and sequence-only formats
+ignore `positional_at` and stay backward compatible; `core:args` consults it
+to bind bare tokens to positional fields.
+
 #### `fn lookup(key: ArraySlice<u8>) -> Option<i32>`
+
+#### `fn positional_at(rank: i32) -> Option<i32>`
+
+Field index of the `rank`-th `#[serde(positional)]` field (in
+declaration order), or `null` when `rank` is out of range. Returns
+`null` for every `rank` when the type has no positional fields.
 
 ### `pub trait DeserializeStruct`
 

@@ -324,6 +324,7 @@ fn synthesize_dispatch_struct(
         is_hidden: false,
         serde_rename: None,
         serde_default: false,
+        serde_positional: false,
         default_expr: None,
     });
 
@@ -345,6 +346,7 @@ fn synthesize_dispatch_struct(
             is_hidden: false,
             serde_rename: None,
             serde_default: false,
+            serde_positional: false,
             default_expr: None,
         });
         wrapper_names.insert(

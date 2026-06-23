@@ -558,6 +558,7 @@ fn build_list_wrapper_copy(
         is_hidden: false,
         serde_rename: None,
         serde_default: false,
+        serde_positional: false,
         default_expr: None,
     };
     let used_field = TirField {
@@ -569,6 +570,7 @@ fn build_list_wrapper_copy(
         is_hidden: false,
         serde_rename: None,
         serde_default: false,
+        serde_positional: false,
         default_expr: None,
     };
     let fields = vec![
@@ -615,6 +617,7 @@ fn build_tuple_copy(
                 is_hidden: false,
                 serde_rename: None,
                 serde_default: false,
+                serde_positional: false,
                 default_expr: None,
             };
             TirStructField {
@@ -665,6 +668,7 @@ fn build_struct_copy_with_substitution(
                 is_hidden: field.is_hidden,
                 serde_rename: field.serde_rename.clone(),
                 serde_default: field.serde_default,
+                serde_positional: field.serde_positional,
                 default_expr: field.default_expr.clone(),
             };
             let value = make_field_copy(v_local.clone(), &concrete_field, type_table, span);

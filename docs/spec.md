@@ -4504,9 +4504,9 @@ test "slow computation" {
 }
 ```
 
-#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]`
+#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]` / `#[serde(positional)]`
 
-Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. `#[serde(positional)]` marks a field as ordinal: it is resolved by position, never by name (name-only and sequence-only formats ignore the hint), which [`core:args`](./wep-2026-06-22-core-args.md) uses to bind a bare token to the field. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
 
 ### Standard Library Attributes
 

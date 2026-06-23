@@ -1,0 +1,52 @@
+use { Deserialize, DeserializeError, DeserializeErrorKind } from "core:serde";
+use { from_string } from "core:json";
+
+// `#[serde(positional)]` marks a field as ordinal: the synthesized
+// `FieldSchema::lookup` omits it, so a self-describing format (JSON) never
+// matches it by key name. Such a field is reachable only through a positional
+// format (`core:args`); via JSON it behaves as an absent field.
+
+struct WithDefaults {
+    #[serde(positional)] input: String = "DEFAULT_IN",
+    #[serde(positional)] out: String = "DEFAULT_OUT",
+    jobs: i32 = 1,
+    verbose: bool = false,
+}
+
+impl Deserialize for WithDefaults;
+
+test "positional fields are not matched by JSON key, named fields still are" {
+    // "input"/"out" are positional → excluded from name lookup → treated as
+    // unknown keys and skipped, falling back to their defaults. "jobs" and
+    // "verbose" are nominal and still bind by name.
+    let r = from_string::<WithDefaults>(`\{"input":"x","out":"y","jobs":4,"verbose":true\}`);
+    if let Ok(c) = r {
+        assert c.input == "DEFAULT_IN";
+        assert c.out == "DEFAULT_OUT";
+        assert c.jobs == 4;
+        assert c.verbose == true;
+    } else {
+        panic("deserialize WithDefaults failed");
+    }
+}
+
+struct RequiredPositional {
+    #[serde(positional)] input: String,
+    jobs: i32 = 1,
+}
+
+impl Deserialize for RequiredPositional;
+
+test "required positional field cannot be set by JSON key name" {
+    // "input" is required but positional, so its JSON key is ignored; the field
+    // is never filled and deserialization reports the missing field.
+    let r = from_string::<RequiredPositional>(`\{"input":"x","jobs":4\}`);
+    if let Err(e) = r {
+        assert e.kind == DeserializeErrorKind::MissingField;
+    } else {
+        panic("expected MissingField for unset required positional");
+    }
+}
+
+__DATA__
+{"test": {}}

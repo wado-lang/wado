@@ -3888,6 +3888,11 @@ pub struct TirField {
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
+    /// `#[serde(positional)]` — field is resolved by position, not by name.
+    /// Format-agnostic ordinal hint: synthesized `FieldSchema::lookup` omits it
+    /// (never matched by name) and `positional_at` enumerates it. Name-only and
+    /// sequence-only formats ignore it; `core:args` binds it to a bare token.
+    pub serde_positional: bool,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,

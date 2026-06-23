@@ -247,6 +247,7 @@ impl TypeBuilder {
                 is_hidden: false,
                 serde_rename: None,
                 serde_default: false,
+                serde_positional: false,
                 default_expr: None,
             }],
             span: Span::new(0, 0, 0, 0),
