@@ -356,36 +356,20 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// Grow the live `ValueGraph` with the forwarded constant value of every read
-    /// of a bare scalar local in `scalars`, re-deriving them through a scratch
-    /// re-walk (the same splice-point growth `inline` uses — no live rebuild).
+    /// The reaching constant of every bare scalar read in `scalars`, computed by a
+    /// scratch re-walk (the same splice-point growth `inline` uses — no live
+    /// rebuild) — without writing them into `value_of`.
     ///
     /// A structural pass (SROA) that introduces bare scalar stores
-    /// (`__sroa_x = 99; … __sroa_x …`) leaves the build-once graph — built, and
-    /// by `inline` coarsened, before the pass — with no value for the new reads,
-    /// so store→load forwarding misses them. Bare-local forwarding is immune to
-    /// the call/heap bumps that defeat the pre-SROA *field* form, so a re-walk
-    /// recovers each read's reaching constant. Only constants are kept (a fresh
-    /// build forwards the identical store value, so the merge cannot over-merge);
-    /// non-constant scalar values are left for the next query to derive.
-    pub fn grow_bare_local_constants(&mut self, scalars: &IndexSet<u32>) {
-        let consts = self.bare_local_constants(scalars);
-        let Some(vg) = self.body.value_graph.as_mut() else {
-            return;
-        };
-        for (e, v) in consts {
-            vg.value_of.insert(e, v);
-            vg.analysis_only.insert(e);
-        }
-    }
-
-    /// The reaching constant of every bare scalar read in `scalars`, computed by
-    /// the scratch re-walk [`Self::grow_bare_local_constants`] uses — without
-    /// writing them into `value_of`. The born-as-operands path
-    /// (`store_load_forward` under `WADO_BORN_OPERANDS`) promotes these directly
-    /// into operand slots, so the constant forwarding no longer round-trips
-    /// through the persisted side-table (WEP item 3). Returns `(read, value)`
-    /// pairs; empty when there is no built graph to grow.
+    /// (`__sroa_x = 99; … __sroa_x …`) leaves the build-once graph — built, and by
+    /// `inline` coarsened, before the pass — with no value for the new reads, so
+    /// store→load forwarding misses them. Bare-local forwarding is immune to the
+    /// call/heap bumps that defeat the pre-SROA *field* form, so a re-walk recovers
+    /// each read's reaching constant. The born-as-operands path
+    /// (`store_load_forward`) promotes these directly into operand slots, so the
+    /// constant forwarding no longer round-trips through the persisted side-table
+    /// (WEP item 3). Returns `(read, value)` pairs; empty when there is no built
+    /// graph to grow.
     pub fn bare_local_constants(
         &mut self,
         scalars: &IndexSet<u32>,

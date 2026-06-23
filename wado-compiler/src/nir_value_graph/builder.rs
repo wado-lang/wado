@@ -1875,31 +1875,26 @@ impl<'a> Builder<'a> {
         // written locals' pre-loop values.
         self.loop_entry_values
             .insert(body_block, self.current_value.clone());
-        // Born-as-operands (gated): give each written local a `LoopPhi { entry,
-        // body_iter }` at the loop head instead of a fresh `Opaque`. `entry` is the
-        // snapshotted pre-loop value (the phi's first-iteration meaning); the body
-        // walk then resolves reads *before* the in-loop write to the phi and reads
-        // *after* to the post-write value (phase split handled by ordinary
-        // propagation), and `body_iter` is patched to the post-body value below.
-        // More precise than the conservative opaque; default path unchanged.
-        let born_operands = crate::optimize::born_operands_enabled();
+        // Born-as-operands: give each written local a `LoopPhi { entry, body_iter }`
+        // at the loop head instead of a fresh `Opaque`. `entry` is the snapshotted
+        // pre-loop value (the phi's first-iteration meaning); the body walk then
+        // resolves reads *before* the in-loop write to the phi and reads *after* to
+        // the post-write value (phase split handled by ordinary propagation), and
+        // `body_iter` is patched to the post-body value below. A local whose entry
+        // value has no recorded type falls back to a fresh opaque.
         let mut phis: Vec<(u32, ValueId)> = Vec::new();
         for idx in &writes {
             let Some(&entry) = self.current_value.get(idx) else {
                 continue;
             };
-            let phi = if born_operands {
-                let rep = self.pool.find(entry);
-                match self.pool.type_of(rep) {
-                    Some(ty) => {
-                        let phi = self.pool.alloc_loop_phi(entry, ty);
-                        phis.push((*idx, phi));
-                        phi
-                    }
-                    None => self.pool.fresh_opaque(),
+            let rep = self.pool.find(entry);
+            let phi = match self.pool.type_of(rep) {
+                Some(ty) => {
+                    let phi = self.pool.alloc_loop_phi(entry, ty);
+                    phis.push((*idx, phi));
+                    phi
                 }
-            } else {
-                self.pool.fresh_opaque()
+                None => self.pool.fresh_opaque(),
             };
             self.current_value.insert(*idx, phi);
         }

@@ -100,26 +100,18 @@ fn forward_one(
     let safe_scalars: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();
-    // Born-as-operands (WEP item 3, `WADO_BORN_OPERANDS`): take the bare-scalar
-    // reaching constants straight from the scratch re-walk and promote them
-    // directly, so the forwarding no longer round-trips through the persisted
-    // `value_of` side-table. Default path: grow the graph and read it back.
-    let bare_consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> =
-        if super::born_operands_enabled() {
-            // Both bare-scalar and field constant reads, straight from the walk —
-            // no `value_of` consulted for any forwarded read under the gate.
-            engine
-                .scoped_const_reads(&safe_scalars, /* include_fields */ true)
-                .into_iter()
-                .collect()
-        } else {
-            engine.grow_bare_local_constants(&safe_scalars);
-            crate::hashmap::IndexMap::default()
-        };
+    // Born-as-operands (WEP item 3): take every reaching constant — bare-scalar
+    // `Local`s and `FieldAccess`es — straight from the scratch re-walk and promote
+    // them directly into operand slots, so the forwarding never round-trips
+    // through the persisted `value_of` side-table.
+    let consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> = engine
+        .scoped_const_reads(&safe_scalars, /* include_fields */ true)
+        .into_iter()
+        .collect();
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
-        bare_consts,
+        consts,
     };
     engine.run(&[&rule])
 }
@@ -129,10 +121,9 @@ fn forward_one(
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
     unsafe_locals: IndexSet<u32>,
-    /// Born-as-operands bare-scalar constants (`WADO_BORN_OPERANDS`): the reads
-    /// in this map promote from it directly, never consulting `value_of`. Empty
-    /// on the default path (those reads were grown into `value_of` instead).
-    bare_consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    /// Born-as-operands constants from the scratch re-walk: the reads in this map
+    /// promote from it directly, never consulting `value_of`.
+    consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 }
 
 impl Rule for StoreLoadForwardRule {
@@ -143,7 +134,7 @@ impl Rule for StoreLoadForwardRule {
         if self.applied.replace(true) {
             return false;
         }
-        forward_at_root(engine, &self.unsafe_locals, &self.bare_consts)
+        forward_at_root(engine, &self.unsafe_locals, &self.consts)
     }
 }
 
@@ -153,7 +144,7 @@ impl Rule for StoreLoadForwardRule {
 pub(super) fn forward_at_root(
     engine: &mut Engine,
     unsafe_locals: &IndexSet<u32>,
-    bare_consts: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    consts: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 ) -> bool {
     // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
     // their alias safety is upstream — the builder never seeds an aliased
@@ -174,16 +165,9 @@ pub(super) fn forward_at_root(
             continue;
         }
         // Born-as-operands: every forwardable read carries its reaching constant
-        // in `bare_consts` (from the scratch re-walk), promoted without touching
-        // `value_of`; under the gate that map is authoritative, so the graph query
-        // is skipped entirely. Default path: query the maintained graph.
-        let from_walk = bare_consts.get(&expr).copied();
-        let resolved = if super::born_operands_enabled() {
-            from_walk
-        } else {
-            from_walk.or_else(|| engine.value(expr))
-        };
-        let Some(vid) = resolved else {
+        // in `consts` (from the scratch re-walk), promoted without touching
+        // `value_of`. A read not in the map is non-constant — skip it.
+        let Some(vid) = consts.get(&expr).copied() else {
             continue;
         };
         // Resolve through the e-class representative so a value proven equal to

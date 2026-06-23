@@ -89,6 +89,8 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let mut unsafe_locals = address_taken_locals.clone();
         unsafe_locals.extend(stores_aliased_locals.iter().copied());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
+        // `cse` is dead under `promote_active` (always true); this combined
+        // session never runs, so an empty const map suffices to compile.
         let slf_changed = super::store_load_forward::forward_at_root(
             &mut engine,
             &unsafe_locals,

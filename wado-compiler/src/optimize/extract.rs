@@ -467,7 +467,6 @@ pub(super) fn freeze_pure_arith(
         // entry, where the `let` is inserted, so it dominates every use soundly.
         // Other values redirect inline as before. `record_value_tree_types` stamps
         // the tree's width and skips a width-conflicting value.
-        let promote_early = promote_early_enabled();
         let mut by_rep: crate::hashmap::IndexMap<ValueId, Vec<ExprId>> =
             crate::hashmap::IndexMap::default();
         for (id, rep) in to_freeze {
@@ -528,8 +527,7 @@ pub(super) fn freeze_pure_arith(
             }
             let mut leaves = crate::hashmap::IndexSet::default();
             engine.body.values.collect_opaque_locals(rep, &mut leaves);
-            let materialize = promote_early
-                && ids.len() > 1
+            let materialize = ids.len() > 1
                 && !leaves.is_empty()
                 && leaves.iter().all(|l| param_set.contains(l));
             if materialize {
@@ -567,12 +565,6 @@ pub(super) fn freeze_pure_arith(
         }
     }
     changed
-}
-
-/// Whether the operand-promotion keystone runs early (mirrors `optimize.rs`); the
-/// freeze's materialisation (WEP P2) is gated on it so the default stays inline.
-fn promote_early_enabled() -> bool {
-    std::env::var_os("WADO_PROMOTE_EARLY").is_some()
 }
 
 /// The constant [`Value`] for `rep` if its representative kind is a scalar

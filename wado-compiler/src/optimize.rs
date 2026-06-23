@@ -117,32 +117,11 @@ use value_copy_demote::demote_value_copies;
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
 
-/// Whether the operand-promotion keystone runs early (before the value passes).
-/// Unconditional: operand promotion is the production path (the live
-/// `ValueGraph`). See `docs/wep-2026-06-15-live-value-graph.md`.
-pub(crate) fn promote_early_enabled() -> bool {
-    true
-}
-
 /// Whether **any** operand promotion is active. Unconditional — the cse
 /// subsumption and the promotion-aware liveness in `elide_local` / `copy_prop`
 /// all key on it.
 pub(crate) fn promote_active() -> bool {
     true
-}
-
-/// Born-as-operands keystone gate (`WADO_BORN_OPERANDS`, default off). When on,
-/// an extra invariant-read promotion runs after `field_scalarize` so the
-/// post-scalarize constant field reads `store_load_forward` forwards are born as
-/// `Operand::Value` instead, letting `store_load_forward` (and, as the migration
-/// completes, every value pass) read operands rather than the persisted
-/// `value_of` side-table. Off by default — built and validated under the gate
-/// (full e2e + `WADO_VERIFY_VG`) before the flip. See
-/// `docs/wep-2026-06-15-live-value-graph.md` item 3 (born-as-operands).
-pub(crate) fn born_operands_enabled() -> bool {
-    use std::sync::OnceLock;
-    static FLAG: OnceLock<bool> = OnceLock::new();
-    *FLAG.get_or_init(|| std::env::var_os("WADO_BORN_OPERANDS").is_some())
 }
 
 /// Configuration for optimization passes
@@ -553,14 +532,12 @@ fn run_optimization_passes(
     // Operand-promotion keystone (WEP: The Live ValueGraph). Pure values are
     // frozen into `Operand::Value` before the value passes, so the passes read
     // operands (`engine.operand_value`) instead of rebuilding the value graph.
-    if promote_early_enabled() {
-        // Arith only here (before the loop); `FieldAccess` promotion runs late
-        // (after the SROA passes), since SROA scalarizes the structs a promoted
-        // `FieldAccess` would reference. See the late call in `optimize`.
-        run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
-        });
-    }
+    // Arith only here (before the loop); `FieldAccess` promotion runs late (after
+    // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
+    // would reference. See the late call in `optimize`.
+    run_pass("nir/promote_pure_values_early", project, profiler, |p| {
+        extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ true)
+    });
     for i in 0..config.iterations {
         profiler.span_start(&format!("nir/iteration {}", i + 1));
         let mut changed = false;
