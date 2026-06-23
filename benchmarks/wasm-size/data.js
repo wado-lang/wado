@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782218912893,
+  "lastUpdate": 1782230260267,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35037,6 +35037,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dd369a4c031a8b9d4b0b027430268ae31a06fbf0"
         },
         "date": 1782218912273,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289392,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa734ef445e2e56f438eb8511cb96f3cbbd7d885",
+          "message": "Merge pull request #1434 from wado-lang/claude/compile-time-params-k2ipue\n\nfeat: compile-time parameters (#[param] globals)",
+          "timestamp": "2026-06-24T00:47:18+09:00",
+          "tree_id": "29e7f965f731cb3454d239a871fde6974ad81d96",
+          "url": "https://github.com/wado-lang/wado/commit/aa734ef445e2e56f438eb8511cb96f3cbbd7d885"
+        },
+        "date": 1782230259641,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
