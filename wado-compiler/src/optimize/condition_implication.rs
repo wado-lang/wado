@@ -673,22 +673,55 @@ fn eliminate_checks_in_node(
     changed
 }
 
+/// A straight-line early-exit guard `if (var >= bound) { return/break }`: after
+/// it, the surviving path has `var < bound` (structural, value_of-free). Returns
+/// `(var, bound)`.
+fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u32, BoundKey)> {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = &engine.body.stmts[s].kind
+    else {
+        return None;
+    };
+    let (cond, then_b) = (*condition, *then_block);
+    if !block_always_exits(engine, then_b) {
+        return None;
+    }
+    parse_check(engine, binds, cond)
+}
+
 fn process_block(engine: &mut Engine, block: BlockId) -> bool {
     let mut changed = false;
     // Guard facts from earlier early-exit statements. No staleness
     // tracking: a mutation between guard and check changes the check
     // operand's `ValueId`, so the fact stops matching by itself.
     let mut guards: Vec<GuardFact> = Vec::new();
+    // Structural early-exit facts `var < bound` (value_of-free): a fact is used
+    // for a later statement's checks while no statement since the guard has
+    // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
+    let binds = build_copy_bindings(engine.body);
+    let mut seguards: Vec<(u32, BoundKey)> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         for guard in &guards {
             changed |= GuardEliminator { fact: *guard }.visit_stmt(engine, s);
         }
+        for &(var, bound) in &seguards {
+            if !stmt_modifies(engine, s, var, bound) {
+                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, bound, &binds);
+            }
+        }
         changed |= BitmaskEliminator.visit_stmt(engine, s);
         changed |= ShortCircuitEliminator.visit_stmt(engine, s);
         changed |= process_stmt(engine, s);
+        seguards.retain(|&(var, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(guard) = extract_early_exit_guard(engine, s) {
             guards.push(guard);
+        }
+        if let Some(fact) = recognize_early_exit(engine, s, &binds) {
+            seguards.push(fact);
         }
     }
     changed
