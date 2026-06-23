@@ -1650,6 +1650,7 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_CONTINUE_ {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1659,6 +1660,9 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -1728,7 +1732,7 @@ fn _parse_root(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_continue__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_FOR {
@@ -1800,7 +1804,7 @@ fn _parse_continue__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_CONTINUE, _start);
-    _parse_continue__inner_atom(p, follow);
+    _parse_continue__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }

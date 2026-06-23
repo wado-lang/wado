@@ -326,24 +326,29 @@ fn build_lr_body(
     let back = b.new_state(ATN_STAR_LOOP_BACK, r);
     b.mark_decision(entry);
 
-    // One precedence-guarded enter edge per LR alt with a non-empty suffix
-    // (a degenerate `expr : expr` with no suffix is skipped). The edge index
-    // `atn_lr_loop_decision` returns is over THIS list.
+    // Union of every LR alt's suffix-first operator tokens — drives the
+    // follow-aware precedence of nested self-refs in `build_lr_suffix`.
+    let mut lr_first: List<String> = [];
+    for let a of &lr.lr_alts {
+        for let tk of &a.suffix_first {
+            if !lr_first.contains(tk) {
+                lr_first.push(*tk);
+            }
+        }
+    }
+
+    // One precedence-guarded enter edge per LR alt with a real suffix
+    // (degenerate `expr : expr` skipped). `atn_lr_loop_decision` returns an
+    // index over this list, and an ATN-class rule's `valid_lr_alts` is built
+    // over the same set, so the index lines up with the dispatch branches and
+    // `scan_X_lr_N` helpers. A `.`/`~X` operator is admitted by
+    // `atn_first_admits`, so the loop entry stays well defined.
     for let a of &lr.lr_alts {
         let alt = &rule.alternatives[a.alt_index];
         if alt.elements.len() <= 1 {
             continue;
         }
-        // The parse/scan dispatchers map the edge index onto
-        // `LrDispatchData.valid_lr_alts`, which drops alts with an empty static
-        // `suffix_first` (a `.` / `~X`-led suffix). For an ATN-class rule that
-        // would misalign the edge index against the suffix helpers and
-        // silently mis-dispatch. Aligning the dispatcher to this edge list is a
-        // real (but unimplemented) fix; until then, fail loudly at codegen
-        // rather than emit a parser that mis-parses such a grammar. No corpus
-        // grammar has a `.`/`~X`-led LR suffix.
-        assert !(lr.atn_class && a.suffix_first.is_empty()), `Gale does not yet support an open-ended (\`.\`/\`~X\`-led) LR suffix in an ATN-class rule (\`{rule.name}\`)`;
-        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, r, rule_index);
+        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
     }
@@ -354,46 +359,304 @@ fn build_lr_body(
 }
 
 /// Build the suffix of one LR alt (`alt.elements[1..]`, the leading self-ref
-/// stripped) as a sequence, returning `[entry, exit]`. A recursive operand
-/// (`expr[next_i]`) is a self-reference: the trailing one (at original
-/// element index `last_self_ref_idx`) carries the alt's `conflict_min` as
-/// its precedence floor; any earlier self-ref carries 0. Non-self-ref
-/// elements build exactly as in the generic path.
+/// stripped) as a sequence, returning `[entry, exit]`. Each element's self-ref
+/// precedence is decided by `build_lr_suffix_element` from its own follow.
 fn build_lr_suffix(
     b: &mut AtnBuilder,
     alt: &Alternative,
     lr_alt: &LrAlt,
     rule_name: &String,
+    lr_first: &List<String>,
     r: i32,
     rule_index: &TreeMap<String, i32>,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        let seg = if element_is_self_ref(&alt.elements[i], rule_name) {
-            let prec = if i == lr_alt.last_self_ref_idx { lr_alt.conflict_min } else { 0 };
-            self_ref_segment(b, r, prec, self_ref_call_site(&alt.elements[i]));
-        } else {
-            // A self-ref *nested* inside a Group/Repeat suffix element would be
-            // built by the generic path with `prec = 0`, whereas lowering
-            // stamps it with `conflict_min` — so the ATN would model a
-            // different language than the parser (skewing the general simulator
-            // for a non-greedy `??` traversing this rule). Fixing it needs a
-            // precedence-aware recursive element builder; until then fail
-            // loudly rather than emit a divergent ATN. No corpus grammar has a
-            // nested-self-ref LR suffix.
-            assert !element_contains_self_ref(&alt.elements[i], rule_name), `Gale does not yet support a self-reference nested inside a group/repeat in an LR suffix (\`{*rule_name}\`)`;
-            build_element(b, &alt.elements[i], r, rule_index);
-        };
+        // Whether an LR operator can follow this element in the rest of the
+        // suffix. The LR loop can re-enter on an operator after the suffix,
+        // so the suffix tail conservatively carries one (`tail_has = true`).
+        let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
+        let seg = build_lr_suffix_element(
+            b,
+            &alt.elements[i],
+            rule_name,
+            lr_first,
+            lr_alt.conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        );
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
     return [entry, cursor];
 }
 
+/// Build one LR-suffix element. A self-ref carries a precedence floor
+/// (`conflict_min` when an LR operator can follow — `follow_has` — else 0, a
+/// primary reference like a bracketed call arg); a nested self-ref recurses
+/// through its container so each occurrence is decided from its own follow.
+/// Mirrors the static path's `stamp_lr_self_ref_min_prec`, so the ATN models
+/// the same language the parser does. Non-self-ref elements build generically.
+fn build_lr_suffix_element(
+    b: &mut AtnBuilder,
+    elem: &Element,
+    rule_name: &String,
+    lr_first: &List<String>,
+    conflict_min: i32,
+    follow_has: bool,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
+    if element_is_self_ref(elem, rule_name) {
+        let prec = if follow_has { conflict_min } else { 0 };
+        return self_ref_segment(b, r, prec, self_ref_call_site(elem));
+    }
+    if !element_contains_self_ref(elem, rule_name) {
+        return build_element(b, elem, r, rule_index);
+    }
+    return match *elem {
+        Label(lab) => build_lr_suffix_element(
+            b,
+            &lab.element,
+            rule_name,
+            lr_first,
+            conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        ),
+        Group(g) => build_alternation_prec(
+            b,
+            &g.alternatives,
+            rule_name,
+            lr_first,
+            conflict_min,
+            follow_has,
+            r,
+            rule_index,
+        ),
+        Repeat(rep) => {
+            // For `*` / `+` the body can be followed by another iteration
+            // (its own FIRST) or by the Repeat's follow; `?` never re-iterates.
+            let iter_has = match rep.kind {
+                RepeatKind::Optional => follow_has,
+                RepeatKind::Star => element_first_has_lr(&rep.element, lr_first) || follow_has,
+                RepeatKind::Plus => element_first_has_lr(&rep.element, lr_first) || follow_has,
+            };
+            build_repeat_prec(
+                b,
+                rep.kind,
+                rep.non_greedy,
+                &rep.element,
+                rule_name,
+                lr_first,
+                conflict_min,
+                iter_has,
+                r,
+                rule_index,
+            );
+        },
+        // A self-ref nested under `Not` is not a rule operand; build generically.
+        _ => build_element(b, elem, r, rule_index),
+    };
+}
+
+/// Follow-aware mirror of `build_alternation` for an LR suffix subrule.
+fn build_alternation_prec(
+    b: &mut AtnBuilder,
+    alts: &List<Alternative>,
+    rule_name: &String,
+    lr_first: &List<String>,
+    conflict_min: i32,
+    follow_has: bool,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
+    let start = b.new_state(ATN_BLOCK_START, r);
+    let end = b.new_state(ATN_BLOCK_END, r);
+    if alts.len() > 1 {
+        b.mark_decision(start);
+    }
+    for let alt of alts {
+        let seg = build_sequence_prec(b, &alt.elements, rule_name, lr_first, conflict_min, follow_has, r, rule_index);
+        b.add_eps(start, seg.0);
+        b.add_eps(seg.1, end);
+    }
+    if alts.is_empty() {
+        b.add_eps(start, end);
+    }
+    return [start, end];
+}
+
+/// Follow-aware mirror of `build_sequence`: each element's follow within the
+/// sequence (and `seq_tail_has` past it) decides its self-refs' precedence.
+fn build_sequence_prec(
+    b: &mut AtnBuilder,
+    elements: &List<Element>,
+    rule_name: &String,
+    lr_first: &List<String>,
+    conflict_min: i32,
+    seq_tail_has: bool,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
+    let entry = b.new_state(ATN_BASIC, r);
+    let mut cursor = entry;
+    for let mut j = 0; j < elements.len(); j += 1 {
+        let follow_has = elements_seq_first_has_lr(elements, j + 1, lr_first, seq_tail_has);
+        let seg = build_lr_suffix_element(b, &elements[j], rule_name, lr_first, conflict_min, follow_has, r, rule_index);
+        b.add_eps(cursor, seg.0);
+        cursor = seg.1;
+    }
+    return [entry, cursor];
+}
+
+/// Follow-aware mirror of `build_repeat`: identical state/edge shape, but the
+/// inner element builds via `build_lr_suffix_element` with the iteration
+/// follow `iter_has` (the caller folds in the body's re-entry FIRST).
+fn build_repeat_prec(
+    b: &mut AtnBuilder,
+    kind: RepeatKind,
+    non_greedy: bool,
+    inner: &Element,
+    rule_name: &String,
+    lr_first: &List<String>,
+    conflict_min: i32,
+    iter_has: bool,
+    r: i32,
+    rule_index: &TreeMap<String, i32>,
+) -> [i32, i32] {
+    return match kind {
+        Optional => {
+            let start = b.new_state(ATN_BLOCK_START, r);
+            let end = b.new_state(ATN_BLOCK_END, r);
+            b.mark_decision(start);
+            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
+            if non_greedy {
+                b.add_eps(start, end);
+                b.add_eps(start, seg.0);
+            } else {
+                b.add_eps(start, seg.0);
+                b.add_eps(start, end);
+            }
+            b.add_eps(seg.1, end);
+            [start, end];
+        },
+        Star => {
+            let entry = b.new_state(ATN_STAR_LOOP_ENTRY, r);
+            let end = b.new_state(ATN_LOOP_END, r);
+            b.mark_decision(entry);
+            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
+            let back = b.new_state(ATN_STAR_LOOP_BACK, r);
+            if non_greedy {
+                b.add_eps(entry, end);
+                b.add_eps(entry, seg.0);
+            } else {
+                b.add_eps(entry, seg.0);
+                b.add_eps(entry, end);
+            }
+            b.add_eps(seg.1, back);
+            b.add_eps(back, entry);
+            [entry, end];
+        },
+        Plus => {
+            let seg = build_lr_suffix_element(b, inner, rule_name, lr_first, conflict_min, iter_has, r, rule_index);
+            let back = b.new_state(ATN_PLUS_LOOP_BACK, r);
+            let end = b.new_state(ATN_LOOP_END, r);
+            b.mark_decision(back);
+            b.add_eps(seg.1, back);
+            if non_greedy {
+                b.add_eps(back, end);
+                b.add_eps(back, seg.0);
+            } else {
+                b.add_eps(back, seg.0);
+                b.add_eps(back, end);
+            }
+            [seg.0, end];
+        },
+    };
+}
+
+/// True iff FIRST(`elem`) can contain a token in `lr_first`. Opaque elements
+/// (RuleRef / Wildcard / Not) return true conservatively so a nested self-ref
+/// is never wrongly dropped to prec 0 when an operator might follow.
+fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
+    return match *elem {
+        TokenRef(t) => lr_first.contains(&`TK_{t.name}`),
+        Literal(l) => lr_first.contains(&literal_const_name(&l.text)),
+        RuleRef(_) => true,
+        Wildcard(_) => true,
+        Not(_) => true,
+        Repeat(rep) => element_first_has_lr(&rep.element, lr_first),
+        Group(g) => {
+            let mut found = false;
+            for let alt of &g.alternatives {
+                if elements_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
+                    found = true;
+                }
+            }
+            found;
+        },
+        Label(lab) => element_first_has_lr(&lab.element, lr_first),
+    };
+}
+
+/// True iff `elem` can match the empty string.
+fn element_nullable(elem: &Element) -> bool {
+    return match *elem {
+        TokenRef(_) => false,
+        Literal(_) => false,
+        RuleRef(_) => false,
+        Wildcard(_) => false,
+        Not(_) => false,
+        Repeat(rep) => match rep.kind {
+            RepeatKind::Star => true,
+            RepeatKind::Optional => true,
+            RepeatKind::Plus => element_nullable(&rep.element),
+        },
+        Group(g) => {
+            let mut any_nullable = false;
+            for let alt of &g.alternatives {
+                if elements_all_nullable(&alt.elements) {
+                    any_nullable = true;
+                }
+            }
+            any_nullable;
+        },
+        Label(lab) => element_nullable(&lab.element),
+    };
+}
+
+fn elements_all_nullable(elements: &List<Element>) -> bool {
+    for let elem of elements {
+        if !element_nullable(elem) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// True iff the content of `elements[idx..]`, followed by `tail_has`, can
+/// begin with a token in `lr_first` — the FOLLOW-has-LR-operator test for the
+/// position just before `elements[idx]`.
+fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List<String>, tail_has: bool) -> bool {
+    if idx >= elements.len() {
+        return tail_has;
+    }
+    if element_first_has_lr(&elements[idx], lr_first) {
+        return true;
+    }
+    if element_nullable(&elements[idx]) {
+        return elements_seq_first_has_lr(elements, idx + 1, lr_first, tail_has);
+    }
+    return false;
+}
+
 /// True iff `elem` contains a self-reference to `rule_name` anywhere —
 /// including nested inside a Group / Repeat / Not / Label. Used to detect
-/// an unsupported nested self-ref in an LR suffix (the top-level case is
+/// a nested self-ref in an LR suffix (the top-level case is
 /// `element_is_self_ref`). Flag-based walk (no early `break`/`return` inside
 /// the nested loop) to sidestep a known compiler codegen ICE.
 fn element_contains_self_ref(elem: &Element, rule_name: &String) -> bool {

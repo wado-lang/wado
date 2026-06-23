@@ -1461,7 +1461,7 @@ fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, 3);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
     pos += 1;
@@ -1482,6 +1482,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_LBRACKET {
             if suffix_kind == TK_LIT_LBRACKET {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
@@ -1506,11 +1507,14 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else {
             break;
         }
+        if pos == _lr_pos0 {
+            break;
+        }
     }
     return pos;
 }
 
-fn _parse_e__inner_atom(p: &mut Parser) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_INT {
@@ -1529,7 +1533,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p);
+    _parse_e__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -1543,7 +1547,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         }
                         p.b.start_node_at(_cp, RK_E, _start);
                         let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                        let e_2 = _parse_e(p, 3);
+                        let e_2 = _parse_e(p, 0);
                         let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                         p.b.finish_node(p.last_end());
                     } else {

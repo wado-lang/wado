@@ -1,0 +1,61 @@
+//! White-box tests for `parser_gen` emitters that are unreachable
+//! through the public `generate()` API today but guard latent codegen
+//! hazards.
+
+use { gen_alt_scan_op_elements } from "./parser_gen.wado";
+use { GenContext } from "./gen_context.wado";
+use { CodeWriter } from "./wadopoet.wado";
+use { ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
+
+fn empty_ctx() -> GenContext {
+    return GenContext::new(&[], &[]);
+}
+
+fn self_ref_call(target_snake: String) -> ScanElement {
+    return ScanElement::RuleCall(ScanRuleCallElement {
+        target_snake,
+        follow_arg: FollowArg::NoFollow,
+        min_prec_arg: null,
+    });
+}
+
+// Regression: `gen_alt_scan_op_elements` raises `min_prec` to `i32::MAX`
+// for a TRAILING self-reference so the outer LR loop, not this scan,
+// consumes the trailing tokens. When `end` is a partial scannable
+// prefix (`end < scan_elems.len()`), the element at `end - 1` is NOT the
+// alt tail — more elements follow it — so it is an inner self-ref that
+// must scan its full LR climb. Short-circuiting it under-scans the
+// tournament prefix.
+test "alt-scan does not short-circuit a self-ref at a partial-prefix boundary" {
+    let mut ctx = empty_ctx();
+    let mut w = CodeWriter::new();
+    // `X r Y`: scannable prefix is `X r` (end = 2), with `Y` past the end.
+    let elems: List<ScanElement> = [
+        ScanElement::Token(ScanTokenElement { kind: "TK_X" }),
+        self_ref_call("r"),
+        ScanElement::Token(ScanTokenElement { kind: "TK_Y" }),
+    ];
+    gen_alt_scan_op_elements(&mut w, &elems, 2, &"r", &mut ctx);
+    let out = w.to_string();
+
+    assert out.contains("scan_r(tokens, pos, 0)"), `inner self-ref must scan its full LR climb (min_prec 0): {out}`;
+    assert !out.contains("2147483647"), `inner self-ref was short-circuited with i32::MAX: {out}`;
+}
+
+// Companion: when the walk covers the whole alternative, a trailing
+// self-ref IS the alt tail and the `i32::MAX` short-circuit is correct —
+// the outer LR loop consumes what follows.
+test "alt-scan short-circuits a genuinely trailing self-ref" {
+    let mut ctx = empty_ctx();
+    let mut w = CodeWriter::new();
+    // `X Y r`: the whole alt is scannable (end = 3), `r` is the tail.
+    let elems: List<ScanElement> = [
+        ScanElement::Token(ScanTokenElement { kind: "TK_X" }),
+        ScanElement::Token(ScanTokenElement { kind: "TK_Y" }),
+        self_ref_call("r"),
+    ];
+    gen_alt_scan_op_elements(&mut w, &elems, 3, &"r", &mut ctx);
+    let out = w.to_string();
+
+    assert out.contains("scan_r(tokens, pos, 2147483647)"), `trailing self-ref must short-circuit the LR climb (i32::MAX): {out}`;
+}

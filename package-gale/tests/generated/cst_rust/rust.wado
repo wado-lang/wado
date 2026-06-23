@@ -2194,6 +2194,7 @@ pub fn atn_ng_optional_enter(
     tokens: &Array<i32>,
     pos: i32,
     eof: i32,
+    min_prec: i32 = 0,
 ) -> bool {
     // `current_rule` is the rule the `??` lives in (a compile-time constant
     // the emitter passes): the caller stack now holds ATN return states, so
@@ -2218,7 +2219,11 @@ pub fn atn_ng_optional_enter(
     if found != 1 {
         return true;
     }
-    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Forward `min_prec` so a `??` inside a left-recursive rule predicts
+    // against the rule's current precedence — an enter edge that would climb
+    // an LR suffix below `min_prec` is pruned, so the simulator does not keep
+    // an impossible suffix and wrongly choose SKIP.
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof, min_prec);
     // Non-greedy optional edges are ordered [exit=0, enter=1].
     return alt == 1;
 }
@@ -10213,7 +10218,7 @@ fn scan_expression_lr_8(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_23, 17);
+    pos = scan_expression(tokens, pos, &FOLLOW_MASK_23, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -10412,6 +10417,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_DOT {
             if suffix_kind == TK_DOT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
@@ -10642,6 +10648,9 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -19067,7 +19076,7 @@ fn _parse_expression__inner_scan_34(tokens: &Array<i32>, pos: i32, follow: &List
     return pos;
 }
 
-fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_expression__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_83(kind) {
@@ -19317,7 +19326,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    _parse_expression__inner_atom(p, follow);
+    _parse_expression__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -19407,7 +19416,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 p.b.set_alt(8);
                 let lsquarebracket = p.expect(TK_LSQUAREBRACKET, &EMPTY_SYNC);
-                let expression_2 = _parse_expression(p, &FOLLOW_MASK_23, 17);
+                let expression_2 = _parse_expression(p, &FOLLOW_MASK_23, 0);
                 let rsquarebracket = p.expect(TK_RSQUAREBRACKET, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {

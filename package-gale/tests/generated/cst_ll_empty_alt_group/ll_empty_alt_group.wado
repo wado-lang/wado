@@ -2190,6 +2190,7 @@ pub fn atn_ng_optional_enter(
     tokens: &Array<i32>,
     pos: i32,
     eof: i32,
+    min_prec: i32 = 0,
 ) -> bool {
     // `current_rule` is the rule the `??` lives in (a compile-time constant
     // the emitter passes): the caller stack now holds ATN return states, so
@@ -2214,7 +2215,11 @@ pub fn atn_ng_optional_enter(
     if found != 1 {
         return true;
     }
-    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Forward `min_prec` so a `??` inside a left-recursive rule predicts
+    // against the rule's current precedence — an enter edge that would climb
+    // an LR suffix below `min_prec` is pruned, so the simulator does not keep
+    // an impossible suffix and wrongly choose SKIP.
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof, min_prec);
     // Non-greedy optional edges are ordered [exit=0, enter=1].
     return alt == 1;
 }
@@ -2823,7 +2828,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_y = p.expect(TK_LIT_Y, &SYNC_1);
     p.atn_ret_pending = 29;
     let statement = _parse_statement(p, follow);
-    if atn_ng_optional_enter(&ATN_SIM, 2, &p.atn_stack, &p.kinds, p.pos, TK_EOF) {
+    if atn_ng_optional_enter(&ATN_SIM, 2, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) {
         let lit_else = p.expect(TK_LIT_ELSE, &SYNC_1);
         p.atn_ret_pending = 38;
         let statement = _parse_statement(p, follow);

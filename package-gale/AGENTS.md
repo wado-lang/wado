@@ -20,6 +20,8 @@ Gale is a Wado-native parser generator. See [README.md](./README.md) and [WEP: G
 
 Gale aims for full compatibility with the ANTLR4 `.g4` grammar syntax. The g4 parser must accept any well-formed grammar that the upstream `antlr4` tool accepts. Treat this as a hard contract: if you find a real-world `.g4` file that ANTLR4 accepts but Gale rejects, that is a bug in Gale.
 
+Gale is a **superset**: it may also accept grammars ANTLR4 _rejects_, but only when the meaning is **uniquely determined** by Gale's existing language model — a canonical, forced extension, never an idiosyncratic interpretation. If accepting a construct would require inventing a behavior (the result is ambiguous, or context-defined with no single forced answer), reject it loudly instead of guessing. Example: a `.` / `~X`-led left-recursive suffix (`e ~';' e`, `e .`). ANTLR4 errors on these (no operator token to climb on), but precedence climbing fixes the meaning with no remaining choice — the loop-entry admits any token (`.`) or any token outside the complement set (`~X`), and the usual precedence order resolves overlaps — so Gale accepts them (the runtime ATN simulator decides the loop entry). Regression fixtures: `tests/grammars/lr_complement_op.g4`, `tests/grammars/lr_wildcard_postfix.g4`.
+
 The single intentional exception is action bodies, whose contents are skipped:
 
 - `{ ... }` action blocks (rule-level, element-level, named actions like `@header`/`@members`/`@parser::name`)

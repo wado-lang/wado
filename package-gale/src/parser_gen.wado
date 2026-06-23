@@ -970,7 +970,7 @@ fn gen_scan_lr_functions(
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, rule, lr_alts, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -1006,17 +1006,19 @@ fn gen_scan_lr_functions(
 /// `ScanRuleCallElement.min_prec_arg` by `stamp_lr_self_ref_min_prec`.
 fn gen_scan_lr_suffix_helpers(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     lr_alts: &List<LrAlt>,
+    valid_lr_alts: &List<i32>,
     ctx: &mut GenContext,
     fn_name: &String,
 ) {
-    for let lr_alt of lr_alts {
+    // Emit a helper for EXACTLY the alts the dispatch references — iterate
+    // `valid_lr_alts` directly rather than re-deriving the skip predicate, so
+    // the helper set and the dispatch's reference set cannot drift and emit a
+    // call to an undefined `scan_X_lr_N` (the static/ATN-class predicates for
+    // `valid_lr_alts` differ; this stays correct for both).
+    for let vi of valid_lr_alts {
+        let lr_alt = &lr_alts[*vi];
         let lr_idx = lr_alt.alt_index;
-        let alt = &rule.alternatives[lr_idx];
-        if alt.elements.len() <= 1 {
-            continue;
-        }
         let suffix_fn = `{*fn_name}_lr_{lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
@@ -1129,12 +1131,21 @@ fn gen_lr_suffix_dispatch(
     let lr_precs = projected.1;
     let suffix_first_sets = projected.2;
 
+    let pos_expr = if side.scan { "pos" } else { "p.pos" };
     w.begin(&"loop");
     if side.scan {
         w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     } else {
         w.line(&"let suffix_kind = p.peek_kind();");
     }
+    // No-progress guard, mirroring the ATN twins
+    // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
+    // suffix begins with a mandatory operator token, so a committed
+    // iteration always advances. The guard makes that termination
+    // structural rather than relying on each suffix consuming input — a
+    // suffix that yielded an empty `valid_lr_alts` member would otherwise
+    // spin here.
+    w.line(&`let _lr_pos0 = {pos_expr};`);
 
     let mut is_first = true;
     for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
@@ -1178,6 +1189,9 @@ fn gen_lr_suffix_dispatch(
     } else {
         w.line(&"break;");
     }
+    w.begin(&`if {pos_expr} == _lr_pos0`);
+    w.line(&"break;");
+    w.end();
     w.end();  // loop
 }
 
@@ -1540,16 +1554,25 @@ fn i32_arrays_equal(a: &List<i32>, b: &List<i32>) -> bool {
 /// loop will consume the trailing tokens. Inner self-refs are
 /// bounded by surrounding tokens (e.g. `K_WHEN expr K_THEN expr`
 /// inside `case_expr`) and need a full scan.
-fn gen_alt_scan_op_elements(
+///
+/// The short-circuit only applies when `end == scan_elems.len()`,
+/// i.e. the walk covers the whole alternative so `end - 1` is the
+/// genuine alt tail. When `end` is a partial scannable prefix
+/// (`end < scan_elems.len()`), the element at `end - 1` is followed
+/// by more (unscannable) elements, so it is an inner self-ref bounded
+/// by that continuation and must scan its full LR climb — short-
+/// circuiting it would under-scan the tournament prefix.
+pub fn gen_alt_scan_op_elements(
     w: &mut CodeWriter,
     scan_elems: &List<ScanElement>,
     end: i32,
     rule_name: &String,
     ctx: &mut GenContext,
 ) {
+    let covers_whole_alt = end == scan_elems.len();
     for let mut i = 0; i < end; i += 1 {
         let se = &scan_elems[i];
-        let is_last_self_ref = i == end - 1 && is_self_ref_scan_call(se, rule_name);
+        let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
         let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
         gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
     }
@@ -2526,6 +2549,14 @@ fn gen_parse_fn_named(
         if ctx.emit_follow() {
             add_follow_param(&mut f);
         }
+        // The atom carries `min_prec` so a non-greedy `??` inside it predicts
+        // against the rule's invocation precedence (`atn_optional_enter_cond`
+        // reads it). Defaulted, so non-precedence call sites are unaffected.
+        f.add_param_spec(ParamSpec {
+            name: "min_prec",
+            type_str: "i32",
+            default_value: Option::Some("0"),
+        });
         f.set_return_type(&rule_result_type());
         f.emit_begin(w);
         if needs_start {
@@ -3112,7 +3143,7 @@ fn gen_lr_fn(
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node({rk}, _start);`);
-    w.line(&`{*fn_name}_atom(p{fsep});`);
+    w.line(&`{*fn_name}_atom(p{fsep}, min_prec);`);
     w.line(&"p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
     // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
@@ -3756,15 +3787,16 @@ fn gen_op_storable_optional(
 /// needed.
 fn atn_optional_enter_cond(ctx: &GenContext) -> String {
     let rule = ctx.current_rule_index();
-    // A non-greedy `??` inside a left-recursive rule predicts at min_prec 0,
-    // but the rule can be invoked with a raised precedence — so prediction may
-    // keep LR suffixes the parser will reject and choose SKIP on an impossible
-    // path. Threading the live precedence into `atn_ng_optional_enter` /
-    // `atn_predict_with_stack` is the fix; until then fail loudly at codegen
-    // rather than emit a parser that silently mispredicts. No corpus grammar
-    // has a `??` inside an LR rule.
-    assert ctx.lr_loop_entry_decision(rule) < 0, `Gale does not yet support a non-greedy \`??\` inside a left-recursive rule`;
-    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF)`;
+    // A non-greedy `??` predicts enter-vs-skip with the rule's live
+    // precedence: inside a left-recursive rule the parser can be invoked with
+    // a raised `min_prec`, so the prediction must prune LR enter edges below
+    // it (otherwise it keeps an impossible suffix and wrongly SKIPs). The
+    // `min_prec` variable is only in scope in a left-recursive rule's bodies
+    // (atom, inlined suffix); a plain rule has no precedence climbing, so it is
+    // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
+    // literal `0` there.
+    let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
+    return `atn_ng_optional_enter(&ATN_SIM, {rule}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, {prec_arg})`;
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW

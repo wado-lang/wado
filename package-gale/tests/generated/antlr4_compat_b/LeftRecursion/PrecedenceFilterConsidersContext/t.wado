@@ -1433,6 +1433,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_A {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1442,6 +1443,9 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -1500,7 +1504,7 @@ fn _parse_prog(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_statement__inner_atom(p: &mut Parser) -> () {
+fn _parse_statement__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
@@ -1519,7 +1523,7 @@ fn _parse_statement__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_STATEMENT, _start);
-    _parse_statement__inner_atom(p);
+    _parse_statement__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
