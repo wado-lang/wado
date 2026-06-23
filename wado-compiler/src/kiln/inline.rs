@@ -233,14 +233,17 @@ fn lower_inline(
         }
     };
 
-    let from = InvocationPath::normalize(&use_decl.source);
+    // The literal source string keys the loader redirect (frame-independent);
+    // `from` is the same path resolved relative to the declaring file.
+    let source = InvocationPath::normalize(&use_decl.source);
+    let from = resolve_decl_relative(module_path, &use_decl.source, manifest_root);
     let inputs = match cfg.get("inputs") {
         None => Vec::new(),
         Some(AttrValue::Array(items)) => items
             .iter()
             .enumerate()
             .filter_map(|(i, v)| match v {
-                AttrValue::String(s) => Some(InvocationPath::normalize(s)),
+                AttrValue::String(s) => Some(resolve_decl_relative(module_path, s, manifest_root)),
                 other => {
                     errors.push(Diagnostic {
                         severity: Severity::Error,
@@ -284,7 +287,7 @@ fn lower_inline(
 
     let output_dir_override = match cfg.get("output_dir") {
         None => None,
-        Some(AttrValue::String(s)) => Some(InvocationPath::normalize(s)),
+        Some(AttrValue::String(s)) => Some(resolve_decl_relative(module_path, s, manifest_root)),
         Some(other) => {
             errors.push(Diagnostic {
                 severity: Severity::Error,
@@ -330,11 +333,23 @@ fn lower_inline(
         },
         module,
         from,
+        source,
         inputs,
         output_dir,
         options_canonical,
         raw_options: cfg.get("options").cloned(),
     })
+}
+
+/// Resolve a `from` / `inputs` / `output_dir` path written in a `use` clause
+/// relative to the declaring file (`module_path`), then re-anchor it to the
+/// manifest root — the same treatment a relative `module` path receives in
+/// [`lower_module_specifier`]. This upholds the rule that every path a `.wado`
+/// file references is relative to that file.
+fn resolve_decl_relative(module_path: &str, raw: &str, manifest_root: &str) -> InvocationPath {
+    let resolved = crate::name::resolve_module_path(module_path, raw);
+    let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
+    InvocationPath::normalize(&manifest_relative)
 }
 
 /// Lower an inline `module: "<specifier>"` value to a [`GeneratorModule`].
@@ -552,7 +567,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].from.as_str(), "schema.proto");
+        // `from` is resolved relative to the declaring file (`src/main.wado`).
+        assert_eq!(result[0].from.as_str(), "src/schema.proto");
+        // The literal source string is preserved for the loader redirect key.
+        assert_eq!(result[0].source.as_str(), "schema.proto");
         assert!(matches!(&result[0].module, GeneratorModule::Spec(s) if s == "ns:gen@1.0.0"));
         assert_eq!(result[0].decl_site.module, "src/main.wado");
     }
@@ -642,9 +660,11 @@ mod tests {
 
     #[test]
     fn output_dir_override_is_respected() {
+        // `output_dir`, like every path written in the file, resolves relative
+        // to the declaring file (`src/main.wado`): "generated" → "src/generated".
         let attrs = attr_with_generator(&[
             ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
-            ("output_dir", AttrValue::String("src/generated".to_string())),
+            ("output_dir", AttrValue::String("generated".to_string())),
         ]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -658,6 +678,7 @@ mod tests {
         .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].output_dir.as_str(), "src/generated");
+        assert_eq!(result[0].source.as_str(), "schema.proto");
     }
 
     #[test]

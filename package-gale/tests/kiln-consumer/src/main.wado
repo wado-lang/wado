@@ -6,13 +6,16 @@
 //! `use ... from "./grammar.g4"` import to the generated entry module
 //! that the pipeline emits, so the consumer never has to hand-spell
 //! the generated filename.
+//!
+//! `grammar.g4` sits next to this file, so `from "./grammar.g4"` resolves
+//! relative to it like any other Wado path. `output_dir` is left at its
+//! default (`build/kiln/<id>`), so no generated source is committed.
 
 use calculator from "./grammar.g4"
     with {
         generator: {
             module: "../../../src/generator.wado",
             options: { highlight: false },
-            output_dir: "src/generated",
         },
     };
 

@@ -1075,9 +1075,12 @@ where
                 let joined = manifest_root.join(entry_path);
                 let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
                 let uri = path_to_kiln_uri(&abs);
+                // Key by the literal `from "<source>"` string (frame-independent),
+                // which is what the loader looks up — `invocation.from` is the
+                // resolved path used for input loading and the cache key.
                 outcome
                     .invocations
-                    .insert(&decl_file, invocation.from.as_str(), &uri);
+                    .insert(&decl_file, invocation.source.as_str(), &uri);
             }
             if executed
                 && let Err(source) = kiln_metadata::save(
@@ -1193,7 +1196,7 @@ where
             let uri = path_to_kiln_uri(&abs);
             outcome
                 .invocations
-                .insert(&decl_file, invocation.from.as_str(), &uri);
+                .insert(&decl_file, invocation.source.as_str(), &uri);
         }
 
         for output in &run.outputs {
@@ -1492,6 +1495,7 @@ mod tests {
                 },
                 module: GeneratorModule::Spec("ns:proto@1.0.0".to_string()),
                 from: InvocationPath::normalize("schema.proto"),
+                source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],
@@ -1742,6 +1746,7 @@ mod tests {
                 },
                 module: GeneratorModule::Spec("ns:proto@1.0.0".to_string()),
                 from: InvocationPath::normalize("schema.proto"),
+                source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options_canonical: vec![],

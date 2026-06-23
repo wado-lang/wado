@@ -148,10 +148,17 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
-        let mut outcome =
-            crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
-                .await
-                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
+        // Schemas are anchored at the manifest root; load them relative to it.
+        let kiln_host = host.rebased(manifest_root.clone());
+        let mut outcome = crate::kiln_driver::check_pipeline(
+            &manifest,
+            &manifest_root,
+            &kiln_host,
+            &provider,
+            inline,
+        )
+        .await
+        .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
         crate::compile::remap_index_decl_files(&mut outcome.invocations, &identities);
         outcome
     };

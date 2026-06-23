@@ -517,10 +517,14 @@ pub(crate) async fn maybe_run_pipeline(
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
+    // root, so schemas must be loaded relative to it — not the entry file's
+    // directory, where the main compile host is based.
+    let kiln_host = host.rebased(manifest_root.clone());
     let mut outcome = crate::kiln_driver::run_pipeline(
         &manifest,
         &manifest_root,
-        host,
+        &kiln_host,
         &provider,
         inline,
         no_cache,
@@ -861,7 +865,8 @@ mod kiln_dir_module_tests {
                 synthetic_id: "kiln-test".to_string(),
             },
             module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
-            from: InvocationPath::normalize("./grammar.g4"),
+            from: InvocationPath::normalize("grammar.g4"),
+            source: InvocationPath::normalize("./grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
             options_canonical: Vec::new(),

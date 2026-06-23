@@ -87,14 +87,17 @@ pub fn prepare_invocations<H: CompilerHost>(
         let invocation_id = &invocation.decl_site.synthetic_id;
         match resolve_invocation(&manifest_root, invocation) {
             Ok(entry_uri) => {
+                // Key by the literal `from "<source>"` string: the loader looks
+                // up redirects with the unresolved import path, while
+                // `invocation.from` is resolved relative to the declaring file.
                 index.insert(
                     &invocation.decl_site.module,
-                    invocation.from.as_str(),
+                    invocation.source.as_str(),
                     &entry_uri,
                 );
             }
             Err(reason) => {
-                let span = use_decl_span_for(entry_ast, &invocation.from, entry_filename);
+                let span = use_decl_span_for(entry_ast, &invocation.source, entry_filename);
                 emit_stale(host, invocation_id, &reason, span);
             }
         }
