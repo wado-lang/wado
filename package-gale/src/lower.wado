@@ -755,31 +755,28 @@ fn stamp_lr_self_ref_min_prec(lr_alts: &mut List<LrAlt>, rule_name: &String, rul
             } else {
                 // Self-ref nested inside a container (`Repeat`, `Group`,
                 // scan-side `OptionalLookahead`). A nested self-ref is a
-                // primary reference: it takes prec 0 (a full sub-
-                // expression) unless an LR operator can appear in its
-                // follow, in which case `conflict_min` keeps it from
-                // stealing that operator. `stamp_op_follow` decides per
-                // self-ref from the follow; the container's own follow is
-                // whether an LR operator can follow it in the rest of the
-                // suffix (`seq_first_has_lr` from `k + 1`). The LR loop can
-                // re-enter on an LR operator after the suffix, so the
-                // suffix tail conservatively carries one. Short-circuit
-                // when the subtree has no self-ref to avoid a deep clone.
-                let needs_op = op_subtree_contains_self_ref(op_ref, rule_name);
-                let needs_scan = scan_element_contains_self_ref(se_ref, rule_snake);
-                if needs_op {
-                    let container_follow = seq_first_has_lr(&lr_alts[i].suffix.ops, k + 1, &lr_suffix_first_tokens, true);
-                    let mut precs: List<i32> = [];
-                    new_ops.push(stamp_op_follow(*op_ref, rule_name, rule_snake, &lr_suffix_first_tokens, conflict_min, container_follow, &mut precs));
-                    if needs_scan {
-                        let mut cursor = 0;
-                        new_scan.push(stamp_scan_follow(*se_ref, rule_snake, &precs, &mut cursor));
-                        assert cursor == precs.len(), `LR nested self-ref stamp mismatch: parse side stamped {precs.len()}, scan side consumed {cursor}`;
-                    } else {
-                        new_scan.push(*se_ref);
-                    }
+                // primary reference: it takes prec 0 (a full sub-expression)
+                // unless an LR operator can appear in its follow, in which
+                // case `conflict_min` keeps it from stealing that operator.
+                // The container's own follow is whether an LR operator can
+                // follow it in the rest of the suffix (from `k + 1`); the LR
+                // loop can re-enter on an LR operator after the suffix, so the
+                // suffix tail conservatively carries one. The parse (`Op`) and
+                // scan (`ScanElement`) sides each compute the decision over
+                // their OWN tree — they mirror the same surface alt, so they
+                // agree, with no ordinal coupling between the two walks.
+                // Short-circuit when the subtree has no self-ref to avoid a
+                // deep clone.
+                if op_subtree_contains_self_ref(op_ref, rule_name) {
+                    let op_follow = seq_first_has_lr(&lr_alts[i].suffix.ops, k + 1, &lr_suffix_first_tokens, true);
+                    new_ops.push(stamp_op_follow(*op_ref, rule_name, rule_snake, &lr_suffix_first_tokens, conflict_min, op_follow));
                 } else {
                     new_ops.push(*op_ref);
+                }
+                if scan_element_contains_self_ref(se_ref, rule_snake) {
+                    let scan_follow = scan_seq_first_has_lr(&lr_alts[i].scan_suffix.elements, k + 1, &lr_suffix_first_tokens, true);
+                    new_scan.push(stamp_scan_follow(*se_ref, rule_snake, &lr_suffix_first_tokens, conflict_min, scan_follow));
+                } else {
                     new_scan.push(*se_ref);
                 }
             }
@@ -952,10 +949,9 @@ fn seq_first_has_lr(ops: &List<Op>, idx: i32, lr_first: &List<String>, tail_has:
 /// operator can appear in its follow, in which case it keeps
 /// `conflict_min` so it cannot steal that operator (the `expr (',' expr)*
 /// '>>' expr` list operand, BETWEEN…AND). `follow_has` is whether an LR
-/// operator can follow THIS op. Each stamped self-ref's precedence is
-/// appended to `precs` in left-to-right order; the scan-side mirror
-/// (`stamp_scan_follow`) replays the identical decisions. Replaces the
-/// former blanket-`conflict_min` walk.
+/// operator can follow THIS op. The scan-side mirror `stamp_scan_follow`
+/// computes the same decision over its own tree (no cross-walk coupling).
+/// Replaces the former blanket-`conflict_min` walk.
 fn stamp_op_follow(
     op: Op,
     rule_name: &String,
@@ -963,19 +959,16 @@ fn stamp_op_follow(
     lr_first: &List<String>,
     conflict_min: i32,
     follow_has: bool,
-    precs: &mut List<i32>,
 ) -> Op {
     return match op {
         RuleCall(mut rc) => {
             if rc.target_name == *rule_name {
-                let prec = if follow_has { conflict_min } else { 0 };
-                rc.min_prec_arg = Option::Some(prec);
-                precs.push(prec);
+                rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             Op::RuleCall(rc);
         },
         ListLabel(mut ll) => {
-            ll.inner = stamp_op_follow(ll.inner, rule_name, rule_snake, lr_first, conflict_min, follow_has, precs);
+            ll.inner = stamp_op_follow(ll.inner, rule_name, rule_snake, lr_first, conflict_min, follow_has);
             Op::ListLabel(ll);
         },
         Repeat(mut r) => {
@@ -987,7 +980,7 @@ fn stamp_op_follow(
                 RepeatKind::Star => op_first_has_lr(&r.body, lr_first) || follow_has,
                 RepeatKind::Plus => op_first_has_lr(&r.body, lr_first) || follow_has,
             };
-            r.body = stamp_op_follow(r.body, rule_name, rule_snake, lr_first, conflict_min, iter_has, precs);
+            r.body = stamp_op_follow(r.body, rule_name, rule_snake, lr_first, conflict_min, iter_has);
             Op::Repeat(r);
         },
         Group(mut g) => {
@@ -996,7 +989,7 @@ fn stamp_op_follow(
                 let mut new_ops: List<Op> = [];
                 for let mut j = 0; j < alt.ops.len(); j += 1 {
                     let pos_follow = seq_first_has_lr(&alt.ops, j + 1, lr_first, follow_has);
-                    new_ops.push(stamp_op_follow(alt.ops[j], rule_name, rule_snake, lr_first, conflict_min, pos_follow, precs));
+                    new_ops.push(stamp_op_follow(alt.ops[j], rule_name, rule_snake, lr_first, conflict_min, pos_follow));
                 }
                 new_alts.push(AltBody {
                     alt_index: alt.alt_index,
@@ -1020,32 +1013,122 @@ fn stamp_op_follow(
     };
 }
 
-/// Scan-side mirror of `stamp_op_follow`. Replays the per-self-ref
-/// precedence decisions recorded by the parse-side walk (`precs`, consumed
-/// in left-to-right order via `cursor`) onto the scan elements. The
-/// scan/parse trees mirror the same grammar so their self-refs occur in
-/// the same order; `stamp_lr_self_ref_min_prec` asserts the cursor
-/// consumed every entry. Preserves each call's `follow_arg` — a nested
-/// self-ref isn't an LR climb, so only `min_prec_arg` is stamped.
-fn stamp_scan_follow(se: ScanElement, rule_snake: &String, precs: &List<i32>, cursor: &mut i32) -> ScanElement {
+/// True iff FIRST(`se`) can contain a token in `lr_first`. Scan-side mirror
+/// of `op_first_has_lr`; opaque elements return true conservatively.
+fn scan_first_has_lr(se: &ScanElement, lr_first: &List<String>) -> bool {
+    return match *se {
+        Token(t) => first_contains(lr_first, &t.kind),
+        RuleCall(_) => true,
+        Wildcard => true,
+        Excluded(_) => true,
+        Repeat(r) => scan_first_has_lr(&r.body, lr_first),
+        Group(g) => {
+            let mut found = false;
+            for let alt of &g.alts {
+                if scan_seq_first_has_lr(&alt.elements, 0, lr_first, false) {
+                    found = true;
+                }
+            }
+            found;
+        },
+        // `?`-over-group: its body's FIRST.
+        OptionalLookahead(ole) => {
+            let mut found = false;
+            for let body of &ole.bodies {
+                if scan_seq_first_has_lr(&body.elements, 0, lr_first, false) {
+                    found = true;
+                }
+            }
+            found;
+        },
+    };
+}
+
+/// True iff `se` can match the empty string. Scan-side mirror of `op_nullable`.
+fn scan_nullable(se: &ScanElement) -> bool {
+    return match *se {
+        Token(_) => false,
+        RuleCall(_) => false,
+        Wildcard => false,
+        Excluded(_) => false,
+        Repeat(r) => match r.kind {
+            RepeatKind::Star => true,
+            RepeatKind::Optional => true,
+            RepeatKind::Plus => scan_nullable(&r.body),
+        },
+        Group(g) => {
+            let mut any_nullable = false;
+            for let alt of &g.alts {
+                if scan_seq_all_nullable(&alt.elements) {
+                    any_nullable = true;
+                }
+            }
+            any_nullable;
+        },
+        // `?`-over-group is itself optional.
+        OptionalLookahead(_) => true,
+    };
+}
+
+fn scan_seq_all_nullable(elements: &List<ScanElement>) -> bool {
+    for let se of elements {
+        if !scan_nullable(se) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Scan-side mirror of `seq_first_has_lr`.
+fn scan_seq_first_has_lr(elements: &List<ScanElement>, idx: i32, lr_first: &List<String>, tail_has: bool) -> bool {
+    if idx >= elements.len() {
+        return tail_has;
+    }
+    if scan_first_has_lr(&elements[idx], lr_first) {
+        return true;
+    }
+    if scan_nullable(&elements[idx]) {
+        return scan_seq_first_has_lr(elements, idx + 1, lr_first, tail_has);
+    }
+    return false;
+}
+
+/// Scan-side mirror of `stamp_op_follow`: stamps each nested self-recursive
+/// `ScanRuleCall`'s `min_prec_arg` from its own follow (prec 0 for a primary
+/// reference, `conflict_min` when an LR operator can follow). It walks the
+/// scan tree independently of the parse side — both mirror the same surface
+/// alt, so they agree without any ordinal coupling. Preserves each call's
+/// `follow_arg` (a nested self-ref isn't an LR climb).
+fn stamp_scan_follow(
+    se: ScanElement,
+    rule_snake: &String,
+    lr_first: &List<String>,
+    conflict_min: i32,
+    follow_has: bool,
+) -> ScanElement {
     return match se {
         RuleCall(mut rc) => {
             if rc.target_snake == *rule_snake {
-                rc.min_prec_arg = Option::Some(precs[*cursor]);
-                *cursor += 1;
+                rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             ScanElement::RuleCall(rc);
         },
         Repeat(mut r) => {
-            r.body = stamp_scan_follow(r.body, rule_snake, precs, cursor);
+            let iter_has = match r.kind {
+                RepeatKind::Optional => follow_has,
+                RepeatKind::Star => scan_first_has_lr(&r.body, lr_first) || follow_has,
+                RepeatKind::Plus => scan_first_has_lr(&r.body, lr_first) || follow_has,
+            };
+            r.body = stamp_scan_follow(r.body, rule_snake, lr_first, conflict_min, iter_has);
             ScanElement::Repeat(r);
         },
         Group(mut g) => {
             let mut new_alts: List<ScanBody> = [];
             for let scan_alt of &g.alts {
                 let mut new_elements: List<ScanElement> = [];
-                for let inner of &scan_alt.elements {
-                    new_elements.push(stamp_scan_follow(*inner, rule_snake, precs, cursor));
+                for let mut j = 0; j < scan_alt.elements.len(); j += 1 {
+                    let pos_follow = scan_seq_first_has_lr(&scan_alt.elements, j + 1, lr_first, follow_has);
+                    new_elements.push(stamp_scan_follow(scan_alt.elements[j], rule_snake, lr_first, conflict_min, pos_follow));
                 }
                 new_alts.push(ScanBody { elements: new_elements });
             }
@@ -1056,8 +1139,9 @@ fn stamp_scan_follow(se: ScanElement, rule_snake: &String, precs: &List<i32>, cu
             let mut new_bodies: List<ScanBody> = [];
             for let body of &ole.bodies {
                 let mut new_elements: List<ScanElement> = [];
-                for let inner of &body.elements {
-                    new_elements.push(stamp_scan_follow(*inner, rule_snake, precs, cursor));
+                for let mut j = 0; j < body.elements.len(); j += 1 {
+                    let pos_follow = scan_seq_first_has_lr(&body.elements, j + 1, lr_first, follow_has);
+                    new_elements.push(stamp_scan_follow(body.elements[j], rule_snake, lr_first, conflict_min, pos_follow));
                 }
                 new_bodies.push(ScanBody { elements: new_elements });
             }
