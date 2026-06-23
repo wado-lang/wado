@@ -144,6 +144,20 @@ forced by the dependencies above):
        re-seed's leaf operands. Conclusion: steps 4 and 5 **collapse into the
        born-as-operands keystone (item 3 below)** — there is no reorder/WIR-const-prop
        route that removes these `value_of` reads without regression.
+
+       Started, gated (`WADO_BORN_OPERANDS`, default off). Brick 1: store_load_forward's
+       **bare-scalar** constant forwarding no longer round-trips through `value_of`.
+       `grow_bare_local_constants` is split into `bare_local_constants` (the scratch
+       re-walk, returns the `(read, value)` constants — no `value_of` write) and the
+       thin `grow_*` wrapper that still inserts them on the default path. Under the
+       gate store_load_forward promotes the bare-scalar constants **directly** from the
+       walk (no `value_of` read/write); field reads still query the graph. Validated:
+       gate-off behaviorally identical (the two store_load_forward fixtures pass, same
+       pre-existing benign `WADO_VERIFY_VG` `expr3/expr0` over-merge the default path
+       already reports — the scoped-walk constant is more precise than a fresh build,
+       which is why the default marks it `analysis_only`); gate-on runtime-correct
+       (4/4). Remaining for store_load_forward: field reads (needs invariant scalar
+       field promotion on the maintained post-scalarize graph).
 5. [ ] **Make `value_of` transient, then delete it.** Reachable only **after** the
        keystone (item 3): once every flow-sensitive read is born as an `Operand::Value`
        (so store_load_forward / condition_implication / inline read operands, never

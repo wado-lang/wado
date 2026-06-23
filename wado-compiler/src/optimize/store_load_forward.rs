@@ -100,10 +100,24 @@ fn forward_one(
     let safe_scalars: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();
-    engine.grow_bare_local_constants(&safe_scalars);
+    // Born-as-operands (WEP item 3, `WADO_BORN_OPERANDS`): take the bare-scalar
+    // reaching constants straight from the scratch re-walk and promote them
+    // directly, so the forwarding no longer round-trips through the persisted
+    // `value_of` side-table. Default path: grow the graph and read it back.
+    let bare_consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> =
+        if super::born_operands_enabled() {
+            engine
+                .bare_local_constants(&safe_scalars)
+                .into_iter()
+                .collect()
+        } else {
+            engine.grow_bare_local_constants(&safe_scalars);
+            crate::hashmap::IndexMap::default()
+        };
     let rule = StoreLoadForwardRule {
         applied: Cell::new(false),
         unsafe_locals,
+        bare_consts,
     };
     engine.run(&[&rule])
 }
@@ -113,6 +127,10 @@ fn forward_one(
 pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
     unsafe_locals: IndexSet<u32>,
+    /// Born-as-operands bare-scalar constants (`WADO_BORN_OPERANDS`): the reads
+    /// in this map promote from it directly, never consulting `value_of`. Empty
+    /// on the default path (those reads were grown into `value_of` instead).
+    bare_consts: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 }
 
 impl Rule for StoreLoadForwardRule {
@@ -123,14 +141,18 @@ impl Rule for StoreLoadForwardRule {
         if self.applied.replace(true) {
             return false;
         }
-        forward_at_root(engine, &self.unsafe_locals)
+        forward_at_root(engine, &self.unsafe_locals, &self.bare_consts)
     }
 }
 
 /// Forward stored literals to later reads at the body root. Shared by the
 /// standalone rule and the combined cse+forward session, which runs it on a
 /// `ValueGraph` cse already built (both passes are graph-preserving).
-pub(super) fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>) -> bool {
+pub(super) fn forward_at_root(
+    engine: &mut Engine,
+    unsafe_locals: &IndexSet<u32>,
+    bare_consts: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+) -> bool {
     // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
     // their alias safety is upstream — the builder never seeds an aliased
     // receiver, so such a read never carries a literal `ValueId`.
@@ -149,7 +171,14 @@ pub(super) fn forward_at_root(engine: &mut Engine, unsafe_locals: &IndexSet<u32>
         if is_assign_target(engine, expr) {
             continue;
         }
-        let Some(vid) = engine.value(expr) else {
+        // Born-as-operands: a bare-scalar read carries its reaching constant in
+        // `bare_consts` (from the scratch re-walk), promoted without touching
+        // `value_of`. Other reads (fields) fall back to the graph query.
+        let Some(vid) = bare_consts
+            .get(&expr)
+            .copied()
+            .or_else(|| engine.value(expr))
+        else {
             continue;
         };
         // Resolve through the e-class representative so a value proven equal to

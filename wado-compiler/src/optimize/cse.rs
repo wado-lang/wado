@@ -89,7 +89,11 @@ pub fn eliminate_common_subexprs(project: &mut NirPackage, gate: &mut FunctionGa
         let mut unsafe_locals = address_taken_locals.clone();
         unsafe_locals.extend(stores_aliased_locals.iter().copied());
         unsafe_locals.extend(engine.body_address_taken().iter().copied());
-        let slf_changed = super::store_load_forward::forward_at_root(&mut engine, &unsafe_locals);
+        let slf_changed = super::store_load_forward::forward_at_root(
+            &mut engine,
+            &unsafe_locals,
+            &crate::hashmap::IndexMap::default(),
+        );
         cse_changed || slf_changed
     })
 }

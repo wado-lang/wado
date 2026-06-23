@@ -131,6 +131,20 @@ pub(crate) fn promote_active() -> bool {
     true
 }
 
+/// Born-as-operands keystone gate (`WADO_BORN_OPERANDS`, default off). When on,
+/// an extra invariant-read promotion runs after `field_scalarize` so the
+/// post-scalarize constant field reads `store_load_forward` forwards are born as
+/// `Operand::Value` instead, letting `store_load_forward` (and, as the migration
+/// completes, every value pass) read operands rather than the persisted
+/// `value_of` side-table. Off by default — built and validated under the gate
+/// (full e2e + `WADO_VERIFY_VG`) before the flip. See
+/// `docs/wep-2026-06-15-live-value-graph.md` item 3 (born-as-operands).
+pub(crate) fn born_operands_enabled() -> bool {
+    use std::sync::OnceLock;
+    static FLAG: OnceLock<bool> = OnceLock::new();
+    *FLAG.get_or_init(|| std::env::var_os("WADO_BORN_OPERANDS").is_some())
+}
+
 /// Configuration for optimization passes
 struct OptConfig {
     /// Number of fixed-point iterations

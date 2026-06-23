@@ -369,13 +369,34 @@ impl<'a> Engine<'a> {
     /// build forwards the identical store value, so the merge cannot over-merge);
     /// non-constant scalar values are left for the next query to derive.
     pub fn grow_bare_local_constants(&mut self, scalars: &IndexSet<u32>) {
+        let consts = self.bare_local_constants(scalars);
+        let Some(vg) = self.body.value_graph.as_mut() else {
+            return;
+        };
+        for (e, v) in consts {
+            vg.value_of.insert(e, v);
+            vg.analysis_only.insert(e);
+        }
+    }
+
+    /// The reaching constant of every bare scalar read in `scalars`, computed by
+    /// the scratch re-walk [`Self::grow_bare_local_constants`] uses — without
+    /// writing them into `value_of`. The born-as-operands path
+    /// (`store_load_forward` under `WADO_BORN_OPERANDS`) promotes these directly
+    /// into operand slots, so the constant forwarding no longer round-trips
+    /// through the persisted side-table (WEP item 3). Returns `(read, value)`
+    /// pairs; empty when there is no built graph to grow.
+    pub fn bare_local_constants(
+        &mut self,
+        scalars: &IndexSet<u32>,
+    ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
         use crate::nir_value_graph::builder;
         // Only grow an already-built graph: building it here would use this
         // session's alias config, which is sound only when the caller has set the
         // real sets (`store_load_forward` does). A missing graph is left for the
         // natural lazy build at the next query.
         if scalars.is_empty() || self.body.value_graph.is_none() {
-            return;
+            return Vec::new();
         }
         let root = self.body.root;
         let live_base = self.body.values.len() as u32;
@@ -401,16 +422,16 @@ impl<'a> Engine<'a> {
             None,
             live_base,
         );
+        let mut out = Vec::new();
         for (e, v) in vo {
             if let ExprKind::Local { index, .. } = &self.body.exprs[e].kind
                 && scalars.contains(index)
                 && builder::is_const_value(&self.body.values, v)
             {
-                let vg = self.body.value_graph.as_mut().unwrap();
-                vg.value_of.insert(e, v);
-                vg.analysis_only.insert(e);
+                out.push((e, v));
             }
         }
+        out
     }
 
     /// The class representative of `id` in the session's value graph. Two ids
