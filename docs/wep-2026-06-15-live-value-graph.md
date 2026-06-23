@@ -264,11 +264,24 @@ and the flip is proven):
       i = i + 1; … i …` reads two distinct values in one iteration. So a single `LoopPhi`
       value cannot be promoted onto *all* reads of `i` (it would over-merge the pre- and
       post-increment phases — the same flow-sensitivity that makes `cse_loop_body`
-      correctness-load-bearing). The phi denotes `i` at the loop head; only reads dominated
-      by the head and not preceded by the increment may take it. The recognition must
-      therefore pair the phi with a **phase/position check** (reads before the first in-body
-      write), or it miscompiles. This is why it is a dedicated, full-budget task with the
-      array_bounds_elim + oob suite as the P0 oracle, not a session-end brick.
+      correctness-load-bearing).
+
+      Design breakthrough (de-risks the implementation): the phase split is handled **for
+      free** by the build's existing in-order value propagation — no separate phase/position
+      check, and no induction *recognition* is even needed. The fix is in `walk_loop`: today
+      it overwrites every written local with a `fresh_opaque` at the loop head. Instead, set
+      `current_value[i]` to a `LoopPhi { entry, body_iter }` whose `entry` is the snapshotted
+      pre-loop value (this is exactly the phi's first-iteration meaning). Then walk the body
+      normally: reads of `i` **before** `i = i + 1` resolve to the phi; the assignment updates
+      `current_value[i]` to `binary(Add, phi, 1)`; reads **after** resolve to that. Phase
+      handled by ordinary propagation. After the body, set the phi's `body_iter` to the
+      post-body `current_value[i]` (the recursive patch — hang-safe now) and leave
+      `current_value[i] = phi` post-loop (its merge meaning). This is correct for **any**
+      written local, not just `i = i + c` (a non-induction write simply yields a phi whose
+      `body_iter` doesn't reference the phi), so the loop value precision improves uniformly.
+      Implementation needs only: a pool primitive to alloc a phi placeholder and patch its
+      `body_iter`; the two-pass head/tail in `walk_loop`; gated under `WADO_BORN_OPERANDS`;
+      validated against the **whole** e2e + oob + `WADO_VERIFY_VG` (every loop is affected).
 
 ### Open design question (surfaced by the condition_implication investigation)
 

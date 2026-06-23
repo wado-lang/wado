@@ -1875,17 +1875,53 @@ impl<'a> Builder<'a> {
         // written locals' pre-loop values.
         self.loop_entry_values
             .insert(body_block, self.current_value.clone());
+        // Born-as-operands (gated): give each written local a `LoopPhi { entry,
+        // body_iter }` at the loop head instead of a fresh `Opaque`. `entry` is the
+        // snapshotted pre-loop value (the phi's first-iteration meaning); the body
+        // walk then resolves reads *before* the in-loop write to the phi and reads
+        // *after* to the post-write value (phase split handled by ordinary
+        // propagation), and `body_iter` is patched to the post-body value below.
+        // More precise than the conservative opaque; default path unchanged.
+        let born_operands = crate::optimize::born_operands_enabled();
+        let mut phis: Vec<(u32, ValueId)> = Vec::new();
         for idx in &writes {
-            if self.current_value.contains_key(idx) {
-                let opaque = self.pool.fresh_opaque();
-                self.current_value.insert(*idx, opaque);
-            }
+            let Some(&entry) = self.current_value.get(idx) else {
+                continue;
+            };
+            let phi = if born_operands {
+                let rep = self.pool.find(entry);
+                match self.pool.type_of(rep) {
+                    Some(ty) => {
+                        let phi = self.pool.alloc_loop_phi(entry, ty);
+                        phis.push((*idx, phi));
+                        phi
+                    }
+                    None => self.pool.fresh_opaque(),
+                }
+            } else {
+                self.pool.fresh_opaque()
+            };
+            self.current_value.insert(*idx, phi);
         }
         self.drop_ref_targets_for(&writes);
         self.apply_loop_heap_effects(&heap_effects);
         self.walk_block(body_block);
+        // Patch each phi's `body_iter` to the body's exit value (which may
+        // reference the phi — a sound self-reference; traversals are guarded), and
+        // leave `current_value[idx] = phi` post-loop (its merge meaning: `entry` on
+        // zero iterations, `body_iter` after). Non-phi written locals (gate off, or
+        // no known entry type) re-opaque as before.
+        let phi_idxs: crate::hashmap::IndexSet<u32> = phis.iter().map(|(i, _)| *i).collect();
+        for (idx, phi) in &phis {
+            if let Some(&body_val) = self.current_value.get(idx) {
+                self.pool.set_loop_phi_body_iter(*phi, body_val);
+            }
+            self.current_value.insert(*idx, *phi);
+        }
+        // Every other written local (gate off, or no known entry type under the
+        // gate) re-opaques as before — the conservative post-loop value.
         for idx in &writes {
-            if self.current_value.contains_key(idx) {
+            if !phi_idxs.contains(idx) && self.current_value.contains_key(idx) {
                 let opaque = self.pool.fresh_opaque();
                 self.current_value.insert(*idx, opaque);
             }

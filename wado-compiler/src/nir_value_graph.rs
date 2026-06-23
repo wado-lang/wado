@@ -836,6 +836,31 @@ impl ValuePool {
         self.intern(ValueKind::LoopPhi { entry, body_iter })
     }
 
+    /// Allocate a `LoopPhi` placeholder whose `body_iter` is initially `entry`,
+    /// to be patched once the loop body's exit value is known
+    /// ([`ValuePool::set_loop_phi_body_iter`]). Un-interned: an induction phi's
+    /// final `body_iter` references the phi itself, so it must not hash-cons with
+    /// another loop's phi by structure, and its kind is mutated after the body
+    /// walk — both incompatible with the interned table.
+    pub fn alloc_loop_phi(&mut self, entry: ValueId, type_id: TypeId) -> ValueId {
+        self.alloc_unshared(ValueKind::LoopPhi { entry, body_iter: entry }, type_id)
+    }
+
+    /// Patch the `body_iter` of a phi made by [`ValuePool::alloc_loop_phi`] to the
+    /// loop body's exit value (which may reference `phi` itself — a sound
+    /// self-reference, traversals are visited-set/stop-at-phi guarded). Registers
+    /// the (now final) child links so a later union of `entry` / `body_iter`
+    /// re-canonicalizes the phi.
+    pub fn set_loop_phi_body_iter(&mut self, phi: ValueId, body_iter: ValueId) {
+        let entry = match self.values[phi.0 as usize] {
+            ValueKind::LoopPhi { entry, .. } => entry,
+            ref k => panic!("set_loop_phi_body_iter on non-phi {k:?}"),
+        };
+        let kind = ValueKind::LoopPhi { entry, body_iter };
+        self.register_parent_links(phi, &kind);
+        self.values[phi.0 as usize] = kind;
+    }
+
     #[inline]
     pub fn field_access(
         &mut self,
