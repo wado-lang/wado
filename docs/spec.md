@@ -3215,6 +3215,23 @@ let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeErro
 
 The same `Serialize` and `Deserialize` trait impls work with both `core:json` and `core:json_nsd`.
 
+### Command-Line Arguments (`core:args`)
+
+`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[serde(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`. See [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
+
+```wado
+use { parse } from "core:args";
+
+struct Cli {
+    #[serde(positional)] input: String,
+    jobs: i32 = 1,
+    verbose: bool = false,
+}
+impl Deserialize for Cli;
+
+let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
+```
+
 ## Module System
 
 Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.

@@ -1,0 +1,169 @@
+//! Tests for `core:args` — argv parsing via `core:serde`.
+//!
+//! These exercise serde's per-field positional resolution end to end: the
+//! synthesized `FieldSchema::lookup` (for `--options`) and `positional_at` (for
+//! bare tokens), through the `ArgvDeserializer`.
+
+use { Deserialize } from "core:serde";
+use { parse, ArgsError, ArgsErrorKind } from "core:args";
+
+struct Cli {
+    #[serde(positional)] input: String,
+    #[serde(positional)] out: String = "out.txt",
+    #[serde(positional)] rest: List<String> = [],
+    jobs: i32 = 1,
+    verbose: bool = false,
+    output: Option<String> = null,
+}
+impl Deserialize for Cli;
+
+fn cli(r: Result<Cli, ArgsError>) -> Cli {
+    if let Ok(c) = r {
+        return c;
+    }
+    if let Err(e) = r {
+        panic(`parse failed: {e.message}`);
+    }
+    unreachable();
+}
+
+test "positionals and options mixed" {
+    let c = cli(parse::<Cli>(["in.txt", "out.bin", "a", "b", "--jobs", "4", "--verbose"]));
+    assert c.input == "in.txt";
+    assert c.out == "out.bin";
+    assert c.rest.len() == 2;
+    assert c.rest[0] == "a";
+    assert c.rest[1] == "b";
+    assert c.jobs == 4;
+    assert c.verbose == true;
+    assert c.output matches { None };
+}
+
+test "options may precede positionals" {
+    let c = cli(parse::<Cli>(["--jobs", "7", "in.txt"]));
+    assert c.input == "in.txt";
+    assert c.jobs == 7;
+}
+
+test "defaults fill omitted optional fields" {
+    let c = cli(parse::<Cli>(["only.txt"]));
+    assert c.input == "only.txt";
+    assert c.out == "out.txt";
+    assert c.rest.len() == 0;
+    assert c.jobs == 1;
+    assert c.verbose == false;
+    assert c.output matches { None };
+}
+
+test "inline --name=value and Option option" {
+    let c = cli(parse::<Cli>(["x", "--jobs=8", "--output", "log.txt"]));
+    assert c.jobs == 8;
+    assert c.output matches { Some(s) && s == "log.txt" };
+}
+
+test "bare flag is true, inline flag is converted" {
+    let on = cli(parse::<Cli>(["x", "--verbose"]));
+    assert on.verbose == true;
+    let off = cli(parse::<Cli>(["x", "--verbose=0"]));
+    assert off.verbose == false;
+}
+
+test "lenient scalar conversion" {
+    let c = cli(parse::<Cli>(["x", "--jobs", "0x10"]));
+    assert c.jobs == 16;
+}
+
+test "missing required positional reports MissingArgument" {
+    let r = parse::<Cli>(["--jobs", "2"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };
+}
+
+test "unknown option reports UnknownOption" {
+    let r = parse::<Cli>(["in.txt", "--nope"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::UnknownOption };
+}
+
+test "missing option value reports MissingValue" {
+    let r = parse::<Cli>(["in.txt", "--jobs"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}
+
+test "invalid scalar reports InvalidValue" {
+    let r = parse::<Cli>(["in.txt", "--jobs", "abc"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+// Positional fields need not be contiguous in declaration order: `positional_at`
+// maps the rank-th positional to its field index across the option fields.
+struct Mixed {
+    jobs: i32 = 1,                      // field 0 (option)
+    #[serde(positional)] a: String,     // field 1 (positional rank 0)
+    dry_run: bool = false,              // field 2 (option, dash-folded)
+    #[serde(positional)] b: String,     // field 3 (positional rank 1)
+}
+impl Deserialize for Mixed;
+
+fn mixed(r: Result<Mixed, ArgsError>) -> Mixed {
+    if let Ok(c) = r {
+        return c;
+    }
+    if let Err(e) = r {
+        panic(`parse failed: {e.message}`);
+    }
+    unreachable();
+}
+
+test "non-contiguous positionals map by rank" {
+    let c = mixed(parse::<Mixed>(["--jobs", "5", "first", "--dry-run", "second"]));
+    assert c.a == "first";
+    assert c.b == "second";
+    assert c.jobs == 5;
+    assert c.dry_run == true;
+}
+
+test "dash and underscore fold in option names" {
+    let c = mixed(parse::<Mixed>(["one", "two", "--dry-run"]));
+    assert c.dry_run == true;
+}
+
+test "too many positionals reports TooManyPositionals" {
+    let r = parse::<Mixed>(["one", "two", "three"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::TooManyPositionals };
+}
+
+struct Variadic {
+    #[serde(positional)] first: String,
+    #[serde(positional)] rest: List<String> = [],
+}
+impl Deserialize for Variadic;
+
+fn variadic(r: Result<Variadic, ArgsError>) -> Variadic {
+    if let Ok(c) = r {
+        return c;
+    }
+    if let Err(e) = r {
+        panic(`parse failed: {e.message}`);
+    }
+    unreachable();
+}
+
+test "variadic positional with no extra tokens is empty" {
+    let c = variadic(parse::<Variadic>(["solo"]));
+    assert c.first == "solo";
+    assert c.rest.len() == 0;
+}
+
+test "variadic positional collects the rest" {
+    let c = variadic(parse::<Variadic>(["a", "b", "c", "d"]));
+    assert c.first == "a";
+    assert c.rest.len() == 3;
+    assert c.rest[2] == "d";
+}
+
+test "double dash forces remaining tokens positional" {
+    let c = variadic(parse::<Variadic>(["a", "--", "--weird", "-x"]));
+    assert c.first == "a";
+    assert c.rest.len() == 2;
+    assert c.rest[0] == "--weird";
+    assert c.rest[1] == "-x";
+}

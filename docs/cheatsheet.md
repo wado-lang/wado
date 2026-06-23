@@ -1196,6 +1196,7 @@ For full API reference, see:
   - [`core:serde`](./stdlib-core-serde.md) - `Serialize` and `Deserialize` framework
   - [`core:json`](./stdlib-core-json.md) - JSON and its serde integration
   - [`core:json_nsd`](./stdlib-core-json_nsd.md) - non-self-describing JSON and its serde integration
+  - [`core:args`](./stdlib-core-args.md) - command-line argument parsing via serde
   - [`core:value`](./stdlib-core-value.md) - dynamic, format-agnostic value and its serde integration
   - [`core:cbor`](./stdlib-core-cbor.md) - CBOR (RFC 8949) binary serialization and its serde integration
   - [`core:base64`](./stdlib-core-base64.md) - base64 encoding and decoding

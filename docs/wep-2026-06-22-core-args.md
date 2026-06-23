@@ -35,6 +35,31 @@ irreducible core: tokenize argv, pull values, honor `--`.
 to `core:json` and `core:json_nsd`. The synthesized `Deserialize` code is reused
 verbatim; only the format is new.
 
+### Implementation Status
+
+Implemented (`lib/core/args.wado`, tested in `lib/core/args_test.wado`):
+
+- [x] `parse` / `from_env` entry points.
+- [x] `--name value`, `--name=value`, and `bool` flags; `-`/`_` folding; `--`
+      end-of-options marker.
+- [x] Required, optional (defaulted), and `Option<T> = null` options.
+- [x] Positional arguments (required, optional, variadic) via serde's
+      `FieldSchema::positional_at`.
+- [x] Lenient scalar conversion (`LenientFromStr`) and the `ArgsError` kinds.
+
+Deferred (each currently reports a clear error; tracked below and in Future
+Extensions):
+
+- [ ] Repeatable `List<T>` options (`--include a --include b`). Interspersed
+      occurrences must group by field, which the on-demand pull model cannot do
+      without field-type knowledge the deserializer lacks. Variadic _positionals_
+      are supported (they consume a contiguous token run).
+- [ ] Subcommands (`variant` fields) via externally-tagged `begin_variant`.
+- [ ] Schema validation (positionals contiguous, required-before-optional, ≤1
+      variadic last) — needs field-type/arity info at the `core:args` layer;
+      currently relies on correct declaration order.
+- [ ] `--help` / `--version`.
+
 ### Entry Points
 
 ```wado
