@@ -64,6 +64,60 @@ side-table** (criterion 3's other half) and the CPU win it yields (criterion 2):
 make the value passes read operands, then delete the map. Execute **Route B**
 (full plan + confirmed touchpoints at "Route B execution plan" below):
 
+### `value_of` deletion: the proven dependency chain (do not look for a shortcut)
+
+Established by exhaustive consumer + producer analysis: deleting the `value_of`
+map requires **born-as-operands for every flow-sensitive value** plus folding the
+build into `lower`. There is **no incremental consumer migration** that deletes it
+or even nets positive without the keystone — each was checked and rejected:
+
+- The live `value_of` consumers are the **freeze** (`extract.rs` — the
+  operand-promotion mechanism itself), **licm** (`value(leaf)` / `value(e)` /
+  `cse_loop_body`), **store_load_forward** (constant field forwarding), and
+  `condition_implication`'s two licm re-seed band-aids. (`cse` is skipped under
+  `promote_active`; `const_fold` / `copy_prop` / `select_lowering` do not call
+  `engine.value`.)
+- **licm cannot be migrated structurally.** `cse_loop_body`'s `ValueId` is
+  flow-sensitive and **correctness-load-bearing**: it distinguishes `x+y` before
+  vs after `x = …` in the loop. A structural key would dedup them and miscompile;
+  a conservative "don't dedup if any leaf is loop-modified" key is sound but
+  **regresses perf** (loses CSE the value graph captures), which defeats the
+  WEP's purpose. Correct + non-regressing requires loop locals frozen as
+  **LoopPhi operands** — and `ValueKind::LoopPhi`'s `body_iter` is an unbuilt MVP
+  `Opaque` (no induction recognition).
+- **store_load_forward** is optimization-only (skipping it: full e2e, **1**
+  `wir_not_expect`); its constant comes from the builder, so removing its
+  `value()` needs constant fields born as operands.
+- **Enabling scalar `FieldAccess` promotion by default** (which would let
+  store_load_forward read operands) is itself blocked: materialising `arr.used`
+  into `let _av = arr.used` defeats **WIR const-propagation** — the baseline folds
+  `1 >= arr.used` because `arr` globalizes to a const struct and WIR folds the
+  direct `StructGet`, but it does not propagate `_av = StructGet(const)` through
+  the local (`niri_*_preserves_fields`, 3 `wir_not_expect`). The fix is WIR
+  const-propagation through single-assignment local bindings (`const_forward` /
+  `peephole`).
+- The **freeze itself** queries `value_of` to decide promotions, so even with
+  every other consumer migrated, `value_of` persists until the build is folded
+  into `lower::translate` (born-at-lower) so values are born as operands without a
+  query. That fold is blocked by a layering inversion (the builder needs
+  `optimize::alias`, which depends on `lower`).
+
+Sequenced plan (each step is substantial and separately validated; the order is
+forced by the dependencies above):
+
+1. **WIR const-propagation through SSA local bindings** (`const_forward` /
+   `peephole`) — unblocks field-promotion-default (`niri_*` go green).
+2. **Field-promotion-default** (flip the `WADO_PROMOTE_FIELDS` gate) +
+   **store_load_forward → operands** — drops the first `value_of` consumer.
+3. **LoopPhi induction** in the builder (`body_iter` recognition) + **licm reads
+   LoopPhi operands** — drops the largest consumer; the re-seed band-aids fall
+   out.
+4. **const_fold → graph subsumption** (the builder tracks struct-literal field
+   constants across non-falling-through branches, matching const_fold's
+   field_env Stage 1.5) — closes the value-graph/const_fold divergence.
+5. **Fold the builder into `lower::translate`** (resolve the alias layering) so
+   the freeze stops querying — then **delete `value_of` + `nir_value_graph::builder`**.
+
 - [~] **1. Availability-aware extraction — the one new analysis.** Materialise a
   shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
   version, a value a later pass may drop) into a `let _av = <value>` at a point
