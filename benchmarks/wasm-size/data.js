@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782172235065,
+  "lastUpdate": 1782178487731,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -34949,6 +34949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f2b7b6a0374805dac370c5fe579dae617cb13b2f"
         },
         "date": 1782172234560,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289376,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d30884a1b85fbb04c47b2e22692aa44ffae5023",
+          "message": "Merge pull request #1432 from wado-lang/claude/package-gale-ir-rationale-9uriz9\n\nrefactor(gale): drop ATN blob magic/version header",
+          "timestamp": "2026-06-23T10:24:52+09:00",
+          "tree_id": "cf3d3604b172e3d59057c312421199396b091bd8",
+          "url": "https://github.com/wado-lang/wado/commit/9d30884a1b85fbb04c47b2e22692aa44ffae5023"
+        },
+        "date": 1782178487101,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
