@@ -105,18 +105,29 @@ or even nets positive without the keystone — each was checked and rejected:
 Sequenced plan (each step is substantial and separately validated; the order is
 forced by the dependencies above):
 
-1. **WIR const-propagation through SSA local bindings** (`const_forward` /
-   `peephole`) — unblocks field-promotion-default (`niri_*` go green).
-2. **Field-promotion-default** (flip the `WADO_PROMOTE_FIELDS` gate) +
-   **store_load_forward → operands** — drops the first `value_of` consumer.
-3. **LoopPhi induction** in the builder (`body_iter` recognition) + **licm reads
-   LoopPhi operands** — drops the largest consumer; the re-seed band-aids fall
-   out.
-4. **const_fold → graph subsumption** (the builder tracks struct-literal field
-   constants across non-falling-through branches, matching const_fold's
-   field_env Stage 1.5) — closes the value-graph/const_fold divergence.
-5. **Fold the builder into `lower::translate`** (resolve the alias layering) so
-   the freeze stops querying — then **delete `value_of` + `nir_value_graph::builder`**.
+1. [x] **WIR const-propagation through SSA local bindings** (`const_forward`,
+       `2d21c0302`) — folds `LocalSet{x, scalar const}` reads, closing the
+       value-graph/const_fold field_env divergence at WIR. Default e2e 3032/0.
+2. [x] **Field-promotion-default** (`3a2eaffc2`) — scalar `FieldAccess` reads are
+       born as operands in the default pipeline; default e2e 3032/0, no regressions.
+3. [ ] **licm off `value_of`** (perf-neutral, value-graph-free; no LoopPhi
+       needed): the invariance check is exactly `!modified_vars(leaf)` (an in-loop
+       `let` counts as modified, confirmed), and after that filter the leaves are
+       invariant so a **structural key** (kind / op / leaf-local / const) is exact
+       value-identity for the hoist dedup. `cse_loop_body` (which CSEs modified-leaf
+       arith) needs a position-aware "no leaf modified between the two occurrences"
+       check to stay exact. Touches `ArithHoist` (thread `&ModifiedVars`; key type
+       `ValueId` → structural key), `collect_in_block`, the grouping, `cse_loop_body`.
+4. [ ] **store_load_forward + the `condition_implication` re-seed band-aids off
+       `value_of`** — once field promotion runs before them (reorder) or their
+       constant-forwarding is recovered by the WIR const-prop, migrate / retire.
+5. [ ] **Make `value_of` transient, then delete it.** Once licm /
+       store_load_forward / re-seed no longer read `value_of`, the **only** remaining
+       user is the freeze (`extract.rs`) — which builds it. Build it into a
+       freeze-local graph (not persisted on `Body`), discard after promoting, and
+       **delete the persisted `Body::value_graph.value_of` side-table** (criterion 3).
+       Folding the freeze's build into `lower::translate` (born-at-lower) is a later
+       perf step, but the persisted side-table is gone at this step.
 
 - [~] **1. Availability-aware extraction — the one new analysis.** Materialise a
   shared / flow-dependent value (`Select` at a merge, a `FieldAccess` at its heap
