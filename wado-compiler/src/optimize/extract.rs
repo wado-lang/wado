@@ -157,6 +157,81 @@ fn materialise_point(
     Some((stmt, block))
 }
 
+/// The structured-control path from the root down to `stmt`'s enclosing chain:
+/// an outermost-first list of `(block, stmt_index)`. Like [`block_path`] but
+/// rooted at a statement, for the def-dominance check.
+fn stmt_block_path(e: &Engine, stmt: crate::nir_arena::StmtId) -> Vec<(crate::nir_arena::BlockId, usize)> {
+    let mut path = Vec::new();
+    let mut last = stmt;
+    let mut node = e.parent_of(NodeRef::Stmt(stmt));
+    while let Some(n) = node {
+        match n {
+            NodeRef::Block(b) => {
+                if let Some(pos) = e.body.blocks[b].stmts.iter().position(|&x| x == last) {
+                    path.push((b, pos));
+                }
+                node = e.parent_of(NodeRef::Block(b));
+            }
+            NodeRef::Stmt(s) => {
+                last = s;
+                node = e.parent_of(NodeRef::Stmt(s));
+            }
+            NodeRef::Expr(_) | NodeRef::Pat(_) => node = e.parent_of(n),
+        }
+    }
+    path.reverse();
+    path
+}
+
+/// Whether `def_stmt` **dominates** the insertion point `before_stmt` (insert
+/// *before* it): in structured control flow, `def_stmt`'s enclosing block must be
+/// the deepest block common to both paths (not nested in a sibling branch
+/// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
+/// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
+/// def is live at the materialisation point (WEP P2 receiver-availability gate).
+fn def_dominates(e: &Engine, def_stmt: crate::nir_arena::StmtId, before_stmt: crate::nir_arena::StmtId) -> bool {
+    let dp = stmt_block_path(e, def_stmt);
+    let mp = stmt_block_path(e, before_stmt);
+    let mut l = 0;
+    while l < dp.len() && l < mp.len() && dp[l].0 == mp[l].0 {
+        l += 1;
+    }
+    l > 0 && dp.len() == l && dp[l - 1].1 < mp[l - 1].1
+}
+
+/// Whether the receiver of the `FieldAccess` value `rep` is **available** (live)
+/// at the materialisation statement `before_stmt`. A **param** receiver is
+/// entry-defined, so always available. A non-param single-assignment local is
+/// available only when its defining `let` dominates the insertion point — the
+/// value's receiver `Opaque(Local i)` can differ from a use's syntactic local
+/// (copy-prop / value identity), so `i`'s def must be checked against the actual
+/// placement, not assumed. Without a recoverable def, conservatively `false`.
+fn receiver_available_at(
+    e: &Engine,
+    rep: ValueId,
+    before_stmt: crate::nir_arena::StmtId,
+    param_set: &crate::hashmap::IndexSet<u32>,
+) -> bool {
+    let ValueKind::FieldAccess { receiver, .. } = e.body.values.kind(rep) else {
+        return false;
+    };
+    let recv = *receiver;
+    let local = match e.body.values.kind(recv) {
+        ValueKind::Opaque(o) => e.body.values.opaque_source(*o),
+        _ => None,
+    };
+    let Some(crate::nir_value_graph::OpaqueSource::Local(i)) = local else {
+        return false;
+    };
+    if param_set.contains(&i) {
+        return true;
+    }
+    match e.local_def(i) {
+        Some(def_stmt) => def_dominates(e, def_stmt, before_stmt),
+        None => false,
+    }
+}
+
 /// Stamp `type_id` onto `v` and its arithmetic children so the WIR extractor
 /// can recover each value's width. Arithmetic is width-uniform, so the result
 /// type carries down through `Binary` / `Unary`. Returns `false` on a **width
@@ -230,6 +305,9 @@ pub(super) fn freeze_pure_arith(
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
+        // receivers by the receiver-stability gate. Cloned before `Engine::new`.
+        let address_taken: crate::hashmap::IndexSet<u32> = address_taken_locals.clone();
         let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
@@ -321,35 +399,42 @@ pub(super) fn freeze_pure_arith(
                 let reemittable = match engine.body.values.kind(rep) {
                     ValueKind::FieldAccess { receiver, .. } => {
                         let recv = *receiver;
-                        // Conservative placement soundness: only materialise over a
-                        // **parameter** receiver. A param is valid (non-null,
-                        // available) at every program point, so the hoisted
-                        // `let _av = param.field` at the dominating statement cannot
-                        // deref a value control flow had not yet validated (e.g. a
-                        // loop/`if let` item). Broadening to a non-param owned
-                        // receiver was implemented and measured, then **reverted**:
-                        // the receiver-stability gate
-                        // (owned / non-`mut` / non-address-taken / non-reference) is
-                        // necessary but not sufficient — it admits a `List`/array
-                        // local whose materialised `.repr` field is *itself* a
-                        // reference into a mutable backing store, and pinning that
-                        // aggregate/reference field across uses changes value-copy
-                        // semantics and re-traps `array_index_1` (`wasm trap: null
-                        // reference`, the ~165-fixture dead-end in the WEP). Sound
-                        // broadening additionally needs a field-*value*-type gate
-                        // (scalar-only is sound but recovers nothing; aggregate /
-                        // reference fields need value-copy-aware materialisation).
+                        // Two gates make a `FieldAccess` materialisation sound (WEP P2).
+                        // (1) Field-value-type gate: only a **scalar** field — a
+                        // primitive copy is value-independent, so pinning + sharing it
+                        // is sound; an aggregate / reference field (`List.repr`, a
+                        // nested struct) aliases a mutable backing the `heap_ver` does
+                        // not pin (the `array_index_1` null-ref trap).
+                        let scalar_field =
+                            type_table.is_primitive_like(engine.body.exprs[id].type_id);
+                        // (2) Receiver-stability gate. A **param** is entry-defined
+                        // (dominates every point) and by-value (no alias). A **non-param
+                        // local** must be owned (non-reference), non-`mut` (single
+                        // assignment), not address-taken, not `&mut`-escaped — *and*
+                        // its def must dominate the materialisation point, checked in
+                        // the apply phase (`def_dominates`), since the value's receiver
+                        // `Opaque(Local i)` can differ from a use's syntactic local.
                         let recv_src = match engine.body.values.kind(recv) {
                             ValueKind::Opaque(o) => Some(*o),
                             _ => None,
                         }
                         .and_then(|o| engine.body.values.opaque_source(o));
-                        let recv_param = matches!(
-                            recv_src,
-                            Some(crate::nir_value_graph::OpaqueSource::Local(i))
-                                if param_set.contains(&i)
-                        );
-                        recv_param
+                        let recv_stable = match recv_src {
+                            Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
+                                param_set.contains(&i)
+                                    || (!mut_locals.contains(&i)
+                                        && !address_taken.contains(&i)
+                                        && !mut_escaped_leaf.contains(&i)
+                                        && !matches!(
+                                            type_table.get(engine.locals()[i as usize].type_id),
+                                            crate::tir::ResolvedType::Ref(_)
+                                                | crate::tir::ResolvedType::MutRef(_)
+                                        ))
+                            }
+                            _ => false,
+                        };
+                        scalar_field
+                            && recv_stable
                             && engine
                                 .body
                                 .values
@@ -397,7 +482,9 @@ pub(super) fn freeze_pure_arith(
             // including cross-block uses (placed before the deepest common `if`/loop).
             let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
             if is_field {
-                if let Some((s, b)) = materialise_point(&engine, &ids) {
+                if let Some((s, b)) = materialise_point(&engine, &ids)
+                    && receiver_available_at(&engine, rep, s, &param_set)
+                {
                     let span = engine.body.exprs[ids[0]].span;
                     let name = format!("_av_{}", engine.locals().len());
                     let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
