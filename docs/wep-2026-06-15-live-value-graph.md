@@ -266,14 +266,14 @@ and the flip is proven):
       when the gate is off), gate-on runtime-correct on the loop/bounds/oob subset (40/0, no
       miscompiles).
 
-      Remaining issue for the gated path (precisely diagnosed, the next step): `WADO_VERIFY_VG`
-      flags a maintained-vs-fresh **over-merge** — two *distinct* licm-hoisted invariant bound
-      locals (`_licm_used_33`, `_licm_used_23`) collapse to one `ValueId` in the maintained graph
-      while a fresh build splits them. So the new phi values cascade through the per-edit
-      *maintenance* (which assigns licm's hoisted bounds their values) into invariant bounds, not
-      just induction vars. Fix direction: make the maintenance LoopPhi-aware (or the phis stable
-      across maintenance) so the maintained partition still refines a fresh build. Until then the
-      gate stays off; default is unaffected.
+      Correction (the `WADO_VERIFY_VG` over-merge on the BCE fixtures is **pre-existing**, not
+      caused by the LoopPhi change): the `_licm_used_33`/`_licm_used_23` over-merge fails VERIFY
+      identically **gate-off**, and VERIFY flags a large swath of the `array_bounds_elim*` /
+      `array_bounds_check*` suite gate-off too — known benign maintenance over-merges on BCE,
+      validated by runtime instead (the same class as the store_load_forward `expr3/expr0`
+      pair). So the LoopPhi change is **VERIFY-neutral** (same pre-existing failures either way)
+      and **runtime-correct** on the subset. The real oracle here is runtime: a full gate-on
+      e2e is the gate for soundness. If green, the gate is potentially flippable.
 
       Soundness subtlety surfaced (constrains the recognition, not just the plumbing): an
       induction variable's value **differs before vs after** its in-loop increment — `… i …;
