@@ -301,11 +301,14 @@ pub fn optimize(
         }
     }
 
-    // FieldAccess promotion (WEP P2), gated by WADO_PROMOTE_FIELDS, runs here:
-    // after the optimization loop (so the struct shape is post-SROA) but BEFORE
-    // select_lowering / multi_value_return, which rewrite the body into
-    // WIR-shaped forms the value-graph build would misread.
-    if opt_level != OptLevel::O0 && std::env::var_os("WADO_PROMOTE_FIELDS").is_some() {
+    // FieldAccess promotion (WEP P2): scalar fields over stable receivers freeze
+    // to operands (born-as-operands), so store-load forwarding / cse become
+    // operand reads. Runs after the optimization loop (so the struct shape is
+    // post-SROA) but BEFORE select_lowering / multi_value_return, which rewrite
+    // the body into WIR-shaped forms the value-graph build would misread. The
+    // two soundness gates (scalar-field + receiver-availability) and the WIR
+    // const-local propagation keep it default-safe.
+    if opt_level != OptLevel::O0 {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
             extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
         });
