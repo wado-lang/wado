@@ -272,8 +272,26 @@ and the flip is proven):
       `array_bounds_check*` suite gate-off too — known benign maintenance over-merges on BCE,
       validated by runtime instead (the same class as the store_load_forward `expr3/expr0`
       pair). So the LoopPhi change is **VERIFY-neutral** (same pre-existing failures either way)
-      and **runtime-correct** on the subset. The real oracle here is runtime: a full gate-on
-      e2e is the gate for soundness. If green, the gate is potentially flippable.
+      and **runtime-correct**. Confirmed: **full gate-on e2e 3032/0** — the born-operands path
+      (store_load_forward off `value_of` + LoopPhi loop values) is runtime-sound across the whole
+      suite, both gate-on and gate-off at 3032/0.
+
+      Milestone: the gated born-as-operands **maintenance is built and validated** (the "build
+      first" phase of the keystone). Flip decision — **hold the flip**, pair it with the deletion:
+      flipping the gate now would not retire `value_of` (it is still read by condition_implication,
+      inline, the freeze, and the engine plumbing), so it ships the LoopPhi value-graph change to
+      the default without the deletion payoff and removes the safety gate before the path is
+      complete. The flip belongs with the deletion, once `value_of` is actually retireable.
+
+      Next concrete step toward deletion (now enabled by LoopPhi): **LoopPhi-aware maintenance** to
+      retire condition_implication's loop re-seed. `reseed_loop_stable_operands` exists because
+      `drop_local_readers` drops the `value_of` entries of an induction variable's reads after
+      licm's structural edits; the re-seed restores a stable identity. With induction vars now
+      carrying a `LoopPhi` value at build time, make the maintenance keep (not drop) a read whose
+      value is a stable `LoopPhi`, so the guard and check copies keep one identity without the
+      re-seed — then the same for invariant fields (`reseed_invariant_fields`), then the matching
+      (already operand-based) needs no `value_of`. That retires the condition_implication consumer;
+      `inline` regrow and the freeze follow, then the side-table is deleted.
 
       Soundness subtlety surfaced (constrains the recognition, not just the plumbing): an
       induction variable's value **differs before vs after** its in-loop increment — `… i …;
