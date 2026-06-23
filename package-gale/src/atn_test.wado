@@ -344,9 +344,9 @@ test "build_atn builds a precedence edge for a `~X`-led LR suffix" {
     assert prec_edges >= 2, `expected precedence edges for every real LR suffix, got {prec_edges}`;
 }
 
-// An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`)
-// would be built with the wrong precedence floor. `build_atn` must trap rather
-// than emit an ATN that models a different language than the parser.
+// An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`).
+// The follow-aware builder decides the nested operand's precedence floor from
+// its own follow, so the ATN models the same language as the parser (no trap).
 global LR_NESTED_SELFREF_G4: String = "
 grammar T;
 e : e ('and' e)+
