@@ -2352,19 +2352,27 @@ The ideal removes the root cause rather than patching symptoms:
         full O0+O2 e2e at the same two residue reds, so the structural matchers
         already subsume it. No gate retained — the structural path is the only
         path.
-  - [ ] **Bitmask** (`optimize_bitmask_bce`) is ported to a structural recogniser
+  - [x] **Bitmask** (`optimize_bitmask_bce`) recovered via **born-as-operands**,
+        not the side-table. The structural recogniser
         (`is_bitmask_bounded_structural`: `(x & MASK) >= BOUND`, `BOUND > MASK ≥ 0`,
-        `MASK`/`BOUND` read as constants through copy temps / the pool) but does not
-        yet recover the fixture: at the recogniser's program point the bound is still
-        the **un-promoted invariant field read** `arr.used`, not the literal `32768`.
-        Its constant value is known only via cross-statement propagation (the `List {
-        used: 32768 }` construction → the loop-body read, with `index_assign` not
-        touching `.used`) — exactly the born-as-operands / value-flow obligation, not
-        something a syntactic scan can establish soundly (a structural pass must
-        conservatively treat the whole `arr` as mutated by `index_assign`). So
-        bitmask and `array_bounds_elim_le_guard_wir` are the residue that lands when
-        the invariant bound is surfaced as an `Operand::Value` — the recogniser is
-        already value_of-free and fires the moment the bound is promoted/folded.
+        `MASK`/`BOUND` read through copy temps / the value pool) needed the
+        invariant bound `arr.used` as a constant operand — which `promote_fields`
+        (the post-loop `FieldAccess` freeze) already produces, but _after_ the
+        optimization loop where the in-loop cond-impl runs. A syntactic scan can't
+        recover it earlier soundly (a structural pass must treat all of `arr` as
+        mutated by `index_assign`). Fix: a new `nir/cond_impl_post_promote` pass
+        re-runs the structural matcher on the post-promotion body
+        (`eliminate_post_promote`), paired with `const_branch_prune` to fixpoint, so
+        the now-constant `idx < 32768` bound's check folds to `false` and its panic
+        block is pruned. Validated: `optimize_bitmask_bce` green, every
+        `array_bounds_elim_oob_*` still green (no over-elimination), no `WADO_VERIFY_VG`
+        mismatch. No `value_of`, no gate.
+  - [ ] **`le_guard`** (`array_bounds_elim_le_guard_wir`) is the last residue: a
+        `<=` loop guard (`i <= limit`) with a **symbolic** bound `arr.used == limit
+        + 1` (not a constant). Needs the structural loop-guard recogniser extended
+        to `<=` guards (surviving `i < bound + 1`) _and_ the bound related to
+        `limit + 1` — i.e. the symbolic invariant bound surfaced as an operand, the
+        harder sibling of the bitmask constant case.
 
 Build redness during the migration is accepted: the side-table's removal is the
 point, not its preservation. The persisted-snapshot seed is the next concrete

@@ -305,6 +305,18 @@ pub fn optimize(
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
             extract::freeze_pure_arith(p, /* include_fields */ true, /* early */ false)
         });
+        // Re-run the structural BCE matcher now that `promote_fields` froze
+        // invariant bounds (`arr.used`) into constant operands the in-loop
+        // cond-impl could not see; pair with `const_branch_prune` so the
+        // now-`false` checks' panic blocks are removed. Must precede
+        // `select_lowering`, which reshapes conditions out of matcher form.
+        run_pass("nir/cond_impl_post_promote", &mut project, profiler, |p| {
+            let mut changed = false;
+            while condition_implication::eliminate_post_promote(p) | prune_constant_branches(p) {
+                changed = true;
+            }
+            changed
+        });
     }
 
     // Post-optimization rewrites: select lowering for branchless Wasm

@@ -40,15 +40,60 @@ use crate::nir_value_graph::ValueKind;
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
-    // The `value_of` re-seed band-aids are removed (WEP item 3: retiring the
-    // side-table). The BCE matching now sees only the build's identities and the
-    // operands promotion produces; loop induction vars / hoisted bounds and
-    // dropped invariant-field reads no longer get a restored identity, so some
-    // loop / straight-line bounds checks are no longer eliminated (sound
-    // under-elimination — never a miscompile). That regression is the honest cost
-    // of the side-table; recovering it is the LoopPhi-operand work.
     let root = engine.body.root;
     process_block(engine, root)
+}
+
+/// Standalone post-`promote_fields` run of the structural BCE matcher.
+///
+/// `promote_fields` (born-as-operands) freezes invariant field reads — an array
+/// bound `arr.used` over a stable receiver — into `Operand::Value`, but it runs
+/// *after* the optimization loop, so the in-loop cond-impl never sees the
+/// promoted bound. This re-runs the matcher on the post-promotion body, where
+/// `(idx & MASK) < BOUND`'s bound is now a constant operand the structural
+/// recogniser reads through the value **pool** (no `value_of`). The caller pairs
+/// it with `const_branch_prune` to fixpoint so the now-`false` checks' panic
+/// blocks are removed.
+pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackage) -> bool {
+    use crate::nir::NirFunction;
+    use crate::nir_engine::EngineBuffers;
+    let type_table = project.type_table.borrow();
+    let first_param_types = super::alias::first_param_types(project);
+    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let mut buffers = EngineBuffers::default();
+    let mut changed = false;
+    for (fid, func_rc) in project.functions.iter().enumerate() {
+        let mut func = func_rc.borrow_mut();
+        if func.body.is_none() {
+            continue;
+        }
+        let _vg_scope = super::vg_measure::BuildScope::enter(fid, "cond_impl_post_promote");
+        let NirFunction {
+            body,
+            locals,
+            params,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *func;
+        let body = body.as_mut().expect("checked above");
+        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+            body,
+            locals,
+            address_taken_locals,
+            stores_aliased_locals,
+            &type_table,
+            &first_param_types,
+            &call_immutability,
+        );
+        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        engine.set_alias_sets(aliased, untrackable, mut_escaped);
+        engine.set_value_graph_type_table(&type_table);
+        engine.set_param_locals(param_locals);
+        changed |= eliminate_at_root(&mut engine);
+    }
+    changed
 }
 
 /// A structural bound: the right-hand side of a guard / check comparison,
