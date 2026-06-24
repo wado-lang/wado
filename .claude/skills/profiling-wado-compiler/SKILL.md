@@ -71,6 +71,20 @@ echo '1' | sudo tee /proc/sys/kernel/perf_event_paranoid
 addr2line --version >/dev/null || sudo apt-get install -y binutils
 ```
 
+### Installing samply
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo install samply
+```
+
+The repo pins an older toolchain via `rust-toolchain.toml` (e.g. 1.96).
+Running a bare `cargo install samply` inside the workspace builds under that
+pinned toolchain, which is older than samply's MSRV and fails (rustup reports
+it as a toolchain rename/install error, not an MSRV error — misleading). Force
+the `stable` toolchain with `RUSTUP_TOOLCHAIN=stable` (or run the install from
+a directory outside the repo so the override doesn't apply). `samply` lands in
+`~/.cargo/bin`, shared across toolchains, so installing under stable is fine.
+
 ## How `analyze_native_profile.ts` works
 
 samply's `--save-only` profile is **unsymbolicated**: `funcTable.name`
