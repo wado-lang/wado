@@ -140,11 +140,7 @@ impl ArgvDeserializer {
             raw = body.substr_bytes(0, eq);
             inline = Option::Some(body.substr_bytes(eq + 1, body.len()));
         }
-        let folded = if raw.contains("-") {
-            raw.replace("-", "_")
-        } else {
-            raw
-        };
+        let folded = if raw.contains("-") { raw.replace("-", "_") } else { raw };
         return LongOpt { raw, folded, inline };
     }
 
@@ -528,8 +524,7 @@ impl Deserializer for ArgvDeserializer {
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         // A bare `--flag` is `true`; an inline `--flag=0`, a positional bool, or
         // a forced repeatable value is converted leniently.
-        let bare_flag =
-            self.cur_is_option && self.cur_inline matches { None } && self.forced matches { None };
+        let bare_flag = self.cur_is_option && self.cur_inline matches { None } && self.forced matches { None };
         if bare_flag {
             return Result::Ok(true);
         }

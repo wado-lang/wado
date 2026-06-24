@@ -8,9 +8,12 @@ use { Deserialize } from "core:serde";
 use { parse, ArgsError, ArgsErrorKind } from "core:args";
 
 struct Cli {
-    #[serde(positional)] input: String,
-    #[serde(positional)] out: String = "out.txt",
-    #[serde(positional)] rest: List<String> = [],
+    #[serde(positional)]
+    input: String,
+    #[serde(positional)]
+    out: String = "out.txt",
+    #[serde(positional)]
+    rest: List<String> = [],
     jobs: i32 = 1,
     verbose: bool = false,
     output: Option<String> = null,
@@ -113,10 +116,12 @@ test "malformed empty option name reports a clear error" {
 // Positional fields need not be contiguous in declaration order: `positional_at`
 // maps the rank-th positional to its field index across the option fields.
 struct Mixed {
-    jobs: i32 = 1,                      // field 0 (option)
-    #[serde(positional)] a: String,     // field 1 (positional rank 0)
-    dry_run: bool = false,              // field 2 (option, dash-folded)
-    #[serde(positional)] b: String,     // field 3 (positional rank 1)
+    jobs: i32 = 1,  // field 0 (option)
+    #[serde(positional)]
+    a: String,  // field 1 (positional rank 0)
+    dry_run: bool = false,  // field 2 (option, dash-folded)
+    #[serde(positional)]
+    b: String,  // field 3 (positional rank 1)
 }
 impl Deserialize for Mixed;
 
@@ -149,8 +154,10 @@ test "too many positionals reports TooManyPositionals" {
 }
 
 struct Variadic {
-    #[serde(positional)] first: String,
-    #[serde(positional)] rest: List<String> = [],
+    #[serde(positional)]
+    first: String,
+    #[serde(positional)]
+    rest: List<String> = [],
 }
 impl Deserialize for Variadic;
 
@@ -188,9 +195,10 @@ test "double dash forces remaining tokens positional" {
 // Repeatable `List<T>` options: each `--name v` appends; occurrences may be
 // interspersed with other options.
 struct Repeatable {
-    #[serde(positional)] input: String,
-    include: List<String> = [],   // repeatable, optional (>=0)
-    n: List<i32> = [],            // repeatable, typed
+    #[serde(positional)]
+    input: String,
+    include: List<String> = [],  // repeatable, optional (>=0)
+    n: List<i32> = [],  // repeatable, typed
     jobs: i32 = 1,
 }
 impl Deserialize for Repeatable;
@@ -232,7 +240,7 @@ test "repeatable option absent yields empty default" {
 }
 
 struct Required {
-    define: List<String>,   // repeatable, required (>=1)
+    define: List<String>,  // repeatable, required (>=1)
 }
 impl Deserialize for Required;
 
@@ -253,7 +261,8 @@ test "required repeatable absent reports MissingArgument" {
 // Subcommands: a `#[serde(positional)]` variant field. The leading bare token
 // selects the case (externally tagged); the payload parses from the rest.
 struct AddArgs {
-    #[serde(positional)] path: String,
+    #[serde(positional)]
+    path: String,
     all: bool = false,
 }
 impl Deserialize for AddArgs;
@@ -263,7 +272,8 @@ variant RemoteCmd {
     List,
 }
 struct AddRemoteArgs {
-    #[serde(positional)] name: String,
+    #[serde(positional)]
+    name: String,
 }
 impl Deserialize for AddRemoteArgs;
 impl Deserialize for RemoteCmd;
@@ -278,7 +288,8 @@ impl Deserialize for Command;
 struct App {
     verbose: bool = false,
     jobs: i32 = 1,
-    #[serde(positional)] command: Command,
+    #[serde(positional)]
+    command: Command,
 }
 impl Deserialize for App;
 
@@ -329,7 +340,8 @@ variant KebabCmd {
 impl Deserialize for KebabCmd;
 
 struct KebabApp {
-    #[serde(positional)] command: KebabCmd,
+    #[serde(positional)]
+    command: KebabCmd,
 }
 impl Deserialize for KebabApp;
 
