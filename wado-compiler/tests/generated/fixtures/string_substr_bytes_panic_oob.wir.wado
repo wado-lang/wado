@@ -244,7 +244,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -253,8 +252,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b8: block {
             l9: loop {
                 break_if b8 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l9;
             };
@@ -306,11 +305,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -403,6 +403,7 @@ fn "core:prelude/string.wado/String::substr_bytes"(self, start, end) {
     let __cond_12: bool;
     let __v0_13: bool;
     let __v1_14: bool;
+    let __cond_15: bool;
     let __local_16: ref "core:prelude/string.wado//String";
     let __local_17: ref "core:prelude/format.wado//Formatter";
     let __local_18: ref "core:prelude/string.wado//String";
@@ -430,11 +431,12 @@ condition: 0 <= start && start <= end && end <= self.used
     }
     __v0_13 = "core:prelude/string.wado/String::is_char_boundary"(self, start);
     __v1_14 = "core:prelude/string.wado/String::is_char_boundary"(self, end);
-    if @unlikely((if __v0_13 -> i32 {
+    __cond_15 = (if __v0_13 -> i32 {
         __v1_14;
     } else {
         0;
-    }) == 0) {
+    });
+    if @unlikely(__cond_15 == 0) {
         cold_path;
         "core:internal/panic"(__local_18 = "core:prelude/string.wado/String::with_capacity"(254); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String::substr_bytes"), used: 20 }); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push"(__local_18, 97); "core:prelude/string.wado/String::push"(__local_18, 116); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado"), used: 24 }); "core:prelude/string.wado/String::push"(__local_18, 58); __local_19 = "core:prelude/format.wado/Formatter::new"(__local_18); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 836 }, __local_19); "core:prelude/string.wado/String::push"(__local_18, 58); "core:prelude/string.wado/String::push"(__local_18, 32); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("byte range not on UTF-8 character boundaries"), used: 44 }); "core:prelude/string.wado/String::push_str"(__local_18, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: self.is_char_boundary(start) && self.is_char_boundary(end)

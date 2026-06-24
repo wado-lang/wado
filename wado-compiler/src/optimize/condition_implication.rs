@@ -557,7 +557,7 @@ fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKey) -> bool 
 /// short-circuit `||`).
 fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
     let roots = [Some(var), bound_root(bound)];
-    let is_root = |l: u32| roots.iter().any(|r| *r == Some(l));
+    let is_root = |l: u32| roots.contains(&Some(l));
     let mut hit = false;
     let mut visit = |node: NodeRef| {
         if let NodeRef::Expr(e) = node {
@@ -785,7 +785,7 @@ fn eliminate_le_checks_in_node(
             && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
             && cvar == var
             && let Some(c) = bound_offset_over(engine, binds, right, gbound)
-            && c >= cj + 1
+            && c > cj
         {
             holders.push((n, cond));
         }
@@ -823,7 +823,7 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
         return false;
     }
     let mut changed = false;
-    for &ts in engine.body.blocks[then_b].stmts.clone().iter() {
+    for &ts in &engine.body.blocks[then_b].stmts.clone() {
         if stmt_modifies(engine, ts, var, bound) {
             break;
         }

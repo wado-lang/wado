@@ -9,49 +9,47 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 };  // TypeId(2)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/run" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/run" = fn();  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(15)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(16)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(17)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(18)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -69,30 +67,21 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/run"() with Stdout {
-    let ord: "core:prelude/traits.wado//enum:Ordering";
-    let ord2: "core:prelude/traits.wado//enum:Ordering";
-    let ord3: "core:prelude/traits.wado//enum:Ordering";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    ord = 0;
-    if ord == 0 {
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("1 < 2"), used: 5 });
-    } else {
-    }
-    ord2 = 1;
-    if ord2 == 1 {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("3 == 3"), used: 6 });
-    } else {
-    }
-    ord3 = 2;
-    if ord3 == 2 {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("5 > 1"), used: 5 });
-    } else {
-    }
+    };
 }
 
 fn "wado-compiler/tests/fixtures/variant_cross_module_pattern.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

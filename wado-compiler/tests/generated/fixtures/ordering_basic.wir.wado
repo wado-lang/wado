@@ -88,9 +88,6 @@ global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "co
 global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
 
 fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
-    let less: "core:prelude/traits.wado//enum:Ordering";
-    let equal: "core:prelude/traits.wado//enum:Ordering";
-    let greater: "core:prelude/traits.wado//enum:Ordering";
     let s1: ref "core:prelude/string.wado//String";
     let s2: ref "core:prelude/string.wado//String";
     let s3: ref "core:prelude/string.wado//String";
@@ -100,18 +97,15 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    less = 0;
-    equal = 1;
-    greater = 2;
-    if less == 0 {
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Less matches Less"), used: 17 });
-    }
-    if equal == 1 {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Equal matches Equal"), used: 19 });
-    }
-    if greater == 2 {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Greater matches Greater"), used: 23 });
-    }
+    };
     if "core:prelude/list.wado/List<i32>^Ord::cmp"(global:__const_obj_0, global:__const_obj_1) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 < arr2"), used: 11 });
     }

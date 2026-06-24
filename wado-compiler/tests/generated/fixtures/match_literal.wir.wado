@@ -27,35 +27,39 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_i128" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative" = fn();  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_i16" = fn();  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_u128" = fn();  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_i8" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/match_literal.wado/run" = fn();  // TypeId(13)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative" = fn();  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/match_literal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/match_literal_u128" = fn();  // TypeId(14)
 
-type "functype//wado-compiler/tests/fixtures/match_literal.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/run" = fn();  // TypeId(15)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//wado-compiler/tests/fixtures/match_literal.wado/__cm_export__run" = fn();  // TypeId(17)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(18)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(19)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(20)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(20)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(21)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(22)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -92,9 +96,50 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i128"() with S
     "core:cli/println"(r1);
 }
 
+fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i16"() with Stdout {
+    let z: i16;
+    let r1: ref "core:prelude/string.wado//String";
+    let r2: ref "core:prelude/string.wado//String";
+    let r3: ref "core:prelude/string.wado//String";
+    z = builtin::i32_extend16_s(0 - 100);
+    r1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
+    "core:cli/println"(r1);
+    r2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
+    "core:cli/println"(r2);
+    r3 = (if z == 0 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
+    } else if z == -100 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus hundred"), used: 13 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+    });
+    "core:cli/println"(r3);
+}
+
+fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i8"() with Stdout {
+    let z: i8;
+    let r1: ref "core:prelude/string.wado//String";
+    let r2: ref "core:prelude/string.wado//String";
+    let r3: ref "core:prelude/string.wado//String";
+    z = builtin::i32_extend8_s(0 - 1);
+    r1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
+    "core:cli/println"(r1);
+    r2 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
+    "core:cli/println"(r2);
+    r3 = (if z == 0 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
+    } else if z == -1 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus one"), used: 9 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+    });
+    "core:cli/println"(r3);
+}
+
 fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"() with Stdout {
     let r1: ref "core:prelude/string.wado//String";
     let r2: ref "core:prelude/string.wado//String";
+    let c: i64;
     let r3: ref "core:prelude/string.wado//String";
     let r4: ref "core:prelude/string.wado//String";
     let r5: ref "core:prelude/string.wado//String";
@@ -102,7 +147,14 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"() wi
     "core:cli/println"(r1);
     r2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus hundred"), used: 13 };
     "core:cli/println"(r2);
-    r3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus trillion"), used: 14 };
+    c = 0_i64 - 1000000000000_i64;
+    r3 = (if c == 0_i64 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
+    } else if c == -1000000000000_i64 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus trillion"), used: 14 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
+    });
     "core:cli/println"(r3);
     r4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r4);
@@ -155,12 +207,6 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/run"() with Stdout {
     let r1_44: ref "core:prelude/string.wado//String";
     let r2_45: ref "core:prelude/string.wado//String";
     let r3_46: ref "core:prelude/string.wado//String";
-    let r1_50: ref "core:prelude/string.wado//String";
-    let r2_51: ref "core:prelude/string.wado//String";
-    let r3_52: ref "core:prelude/string.wado//String";
-    let r1_56: ref "core:prelude/string.wado//String";
-    let r2_57: ref "core:prelude/string.wado//String";
-    let r3_58: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -180,56 +226,46 @@ fn "wado-compiler/tests/fixtures/match_literal.wado/run"() with Stdout {
     r3_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("newline"), used: 7 };
     "core:cli/println"(r3_10);
     "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i128"();
+    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i16"();
     r1_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_14);
     r2_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_15);
-    r3_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus hundred"), used: 13 };
+    r3_16 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus one"), used: 9 };
     "core:cli/println"(r3_16);
     r1_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_20);
     r2_21 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_21);
-    r3_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus one"), used: 9 };
+    r3_22 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trillion"), used: 8 };
     "core:cli/println"(r3_22);
+    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_i8"();
+    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"();
+    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_u128"();
     r1_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_26);
     r2_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_27);
-    r3_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trillion"), used: 8 };
+    r3_28 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max u16"), used: 7 };
     "core:cli/println"(r3_28);
     r1_32 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_32);
     r2_33 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_33);
-    r3_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("minus one"), used: 9 };
+    r3_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("four billion"), used: 12 };
     "core:cli/println"(r3_34);
-    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_negative"();
-    "wado-compiler/tests/fixtures/match_literal.wado/match_literal_u128"();
     r1_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_38);
     r2_39 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_39);
-    r3_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max u16"), used: 7 };
+    r3_40 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ten trillion"), used: 12 };
     "core:cli/println"(r3_40);
     r1_44 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r1_44);
     r2_45 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
     "core:cli/println"(r2_45);
-    r3_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("four billion"), used: 12 };
+    r3_46 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max u8"), used: 6 };
     "core:cli/println"(r3_46);
-    r1_50 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    "core:cli/println"(r1_50);
-    r2_51 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
-    "core:cli/println"(r2_51);
-    r3_52 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ten trillion"), used: 12 };
-    "core:cli/println"(r3_52);
-    r1_56 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    "core:cli/println"(r1_56);
-    r2_57 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 101, 114, 111), used: 4 };
-    "core:cli/println"(r2_57);
-    r3_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max u8"), used: 6 };
-    "core:cli/println"(r3_58);
 }
 
 fn "wado-compiler/tests/fixtures/match_literal.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -279,12 +315,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b9: block {
-        l10: loop {
-            break_if b9 i >= len;
+    b15: block {
+        l16: loop {
+            break_if b15 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l10;
+            continue l16;
         };
     };
 }
