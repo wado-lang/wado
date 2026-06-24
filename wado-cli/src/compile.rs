@@ -657,13 +657,6 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
     }
 }
 
-pub fn collect_inline_invocations_for_entry(
-    entry_file: &Path,
-    manifest_root: &Path,
-) -> Vec<wado_compiler::kiln::Invocation> {
-    collect_inline_invocations_for_entry_with_identities(entry_file, manifest_root).0
-}
-
 /// Harvest inline Kiln invocations from `entry_file` *and its transitive local
 /// `.wado` imports*, plus the map needed to fix up the redirect index.
 ///

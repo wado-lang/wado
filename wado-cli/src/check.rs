@@ -139,10 +139,19 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let (mut inline, identities, inline_diagnostics) =
         crate::compile::collect_inline_invocations_for_entry_with_identities(path, &manifest_root);
 
-    // Malformed inline clauses (e.g. a bare, non-`./` path) emit error
-    // diagnostics through the host, which `has_compile_errors` below gates on.
+    // A malformed inline clause (e.g. a bare, non-`./` path) is fatal on its
+    // own — emit its diagnostics and stop, rather than continuing into a
+    // full compile that would pile a confusing downstream error (the `use`
+    // falling through to the lexer) on top of the clear one.
+    let inline_errors = inline_diagnostics
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
     for d in inline_diagnostics {
         wado_compiler::CompilerHost::emit_diagnostic(&host, d);
+    }
+    if inline_errors > 0 {
+        return Err(CliExit::silent_failure(1));
     }
 
     let outcome = if inline.is_empty() {

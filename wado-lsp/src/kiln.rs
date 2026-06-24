@@ -76,10 +76,17 @@ pub fn prepare_invocations<H: CompilerHost>(
         &manifest_root_str,
     ) {
         Ok(v) => v,
-        // Inline-clause errors are surfaced by the regular
-        // semantics pass (it re-runs the same collector). We
-        // silently fall through here so we don't double-emit.
-        Err(_) => return InvocationIndex::new(),
+        // A malformed inline clause (e.g. a bare, non-`./` path) is reported
+        // here: the semantics pass never re-runs this collector, so emitting
+        // the diagnostics through the host is the only way they reach the
+        // editor. No double-emit risk — this is the sole `collect` call on the
+        // consume-only LSP path.
+        Err(diags) => {
+            for d in diags {
+                host.emit_diagnostic(d);
+            }
+            return InvocationIndex::new();
+        }
     };
 
     let mut index = InvocationIndex::new();
