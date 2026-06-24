@@ -593,16 +593,20 @@ impl ConstFoldVisitor<'_> {
         let Some(recv_e) = recv.as_expr() else {
             return false;
         };
-        let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
-            return false;
+        let fields: Vec<(String, Operand)> = {
+            let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
+                return false;
+            };
+            fields.iter().map(|f| (f.name.clone(), f.value)).collect()
         };
         let mut projected = None;
-        for f in fields {
-            if f.name == field_name {
-                projected = Some(f.value);
-            } else if f.value.as_value().is_none() {
-                // A non-projected sibling may carry a side effect; keep the
-                // struct so its evaluation is preserved.
+        for (name, value) in &fields {
+            if *name == field_name {
+                projected = Some(*value);
+            } else if !super::arena_query::is_pure_operand(engine.body, *value) {
+                // A non-projected sibling with an observable effect must keep
+                // the struct so its evaluation is preserved. A pure sibling
+                // (e.g. a `PackedArray` repr) is dropped with the struct.
                 return false;
             }
         }

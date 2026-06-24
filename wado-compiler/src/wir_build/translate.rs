@@ -1890,7 +1890,6 @@ impl FunctionTranslator<'_, '_> {
             },
             ValueKind::Bool(b) => WirInstr::I32Const(i32::from(b)),
             ValueKind::Char(c) => WirInstr::I32Const(c as i32),
-            ValueKind::String(s) => self.translate_string_literal(&s),
             ValueKind::Null => {
                 if let Some(inner) = self.type_table.as_option(type_id) {
                     assert!(
@@ -2028,8 +2027,10 @@ impl FunctionTranslator<'_, '_> {
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
             ExprKind::PackedArray(b) => {
-                // Bytes literals are constructed as List<u8> from data segments
-                self.translate_bytes_literal(b)
+                // A raw constant `Array<u8>` (the `repr` of a `String` / `List<u8>`
+                // literal). The struct wrapping comes from the enclosing
+                // `StructLiteral`.
+                self.translate_packed_array(b)
             }
             // Orphaned tombstone: never materialised (DCE drops it first).
             ExprKind::Dead => WirInstr::Nop,

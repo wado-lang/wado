@@ -354,7 +354,6 @@ fn is_const_kind(k: &ValueKind) -> bool {
             | ValueKind::Float(..)
             | ValueKind::Bool(_)
             | ValueKind::Char(_)
-            | ValueKind::String(_)
             | ValueKind::Null
             | ValueKind::Unit
     )
@@ -367,7 +366,6 @@ fn reintern_const(pool: &mut ValuePool, k: ValueKind) -> ValueId {
         ValueKind::Float(b, t) => pool.float_bits(b, t),
         ValueKind::Bool(b) => pool.bool(b),
         ValueKind::Char(c) => pool.char(c),
-        ValueKind::String(s) => pool.string(s),
         ValueKind::Null => pool.null(),
         ValueKind::Unit => pool.unit(),
         _ => unreachable!("is_const_kind gates this"),
@@ -402,7 +400,6 @@ fn reintern_live_rooted(
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
-        | ValueKind::String(_)
         | ValueKind::Null
         | ValueKind::Unit => reintern_const(live, kind),
         ValueKind::Binary { op, lhs, rhs, ty } => {
@@ -1229,6 +1226,18 @@ impl<'a> Builder<'a> {
         loop {
             match &self.body.exprs[producer].kind {
                 ExprKind::StructLiteral { .. } => break,
+                // `let r = &S` / `&mut S` where `S` is an inline aggregate (e.g.
+                // the inlined `len(&self)` binds `self = &String { … }`). Peel
+                // the borrow and seed `r`'s fields from `S` directly, so a later
+                // `r.field` read forwards — the pointee has no own local to track
+                // via `ref_targets`, so seeding onto `r` is the only handle.
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    expr: inner,
+                } => match inner.as_expr() {
+                    Some(e) => producer = e,
+                    None => return,
+                },
                 // The producing tail is a bare `Local` (e.g. inlining
                 // `fn f(mut p: S) -> S { p = S { … }; return p }` makes the
                 // break value the reassigned local `p`, not the literal). Copy

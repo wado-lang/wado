@@ -5,7 +5,6 @@
 //! the struct definition and the primary translation dispatch.
 
 use crate::compiler_item::SeqField;
-use crate::module_source::ModuleSource;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
@@ -76,129 +75,46 @@ impl PrimitiveKind {
 }
 
 impl FunctionTranslator<'_, '_> {
-    /// Translate a string literal to WIR instructions.
+    /// Translate a raw constant `Array<u8>` (`ExprKind::PackedArray`) — the
+    /// `repr` of a `String` / `List<u8>` literal — to WIR.
     ///
-    /// Short strings use a constant `array.new_fixed<u8>` repr; longer strings
-    /// use a passive `array.new_data` data segment:
-    ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
-    ///   struct.new $String (repr=array, used=len)
-    pub(super) fn translate_string_literal(&self, s: &str) -> WirInstr {
-        let byte_len = s.len();
-
-        // Look up u8 array type
-        let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
-
-        // Look up String struct type
-        let string_struct_name =
-            crate::name::StructName::new(ModuleSource::string(), "String".to_string());
-        let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();
-
-        let (Some(array_type_id), Some(string_type_id)) = (u8_array_type, string_type) else {
-            panic!("[WIR] String literal: u8 array or String struct type not registered");
-        };
-
-        let len_i32 = i32::try_from(byte_len).unwrap_or(0);
-
-        if byte_len == 0 {
-            // Empty string: array.new_default + struct.new
-            self.struct_new(
-                string_type_id,
-                vec![
-                    WirInstr::ArrayNewDefault {
-                        type_id: array_type_id,
-                        len: Box::new(WirInstr::I32Const(0)),
-                    },
-                    WirInstr::I32Const(0),
-                ],
-            )
-        } else if byte_len <= self.ctx.package.string_inline_max_bytes {
-            // Short string: materialize the bytes with `array.new_fixed<u8>`, a
-            // valid Wasm *constant* instruction. This lets a constant string
-            // global be promoted to an eager Wasm constant by
-            // `wir_optimize::const_global` (the data-segment form below is not a
-            // constant instruction, so longer strings stay lazy). `u8` elements
-            // are carried as `I32Const`, like every other `u8` array literal.
-            let elements = s
-                .bytes()
-                .map(|b| WirInstr::I32Const(i32::from(b)))
-                .collect();
-            self.struct_new(
-                string_type_id,
-                vec![
-                    WirInstr::ArrayNewFixed {
-                        type_id: array_type_id,
-                        elements,
-                    },
-                    WirInstr::I32Const(len_i32),
-                ],
-            )
-        } else {
-            // Longer string: passive data segment (compact, but not constant).
-            let data_index = self.ctx.string_literal_map.get(s).copied().unwrap_or(0);
-            self.struct_new(
-                string_type_id,
-                vec![
-                    WirInstr::ArrayNewData {
-                        type_id: array_type_id,
-                        data_index,
-                        offset: Box::new(WirInstr::I32Const(0)),
-                        len: Box::new(WirInstr::I32Const(len_i32)),
-                    },
-                    WirInstr::I32Const(len_i32),
-                ],
-            )
-        }
-    }
-
-    /// Translate a bytes literal to WIR instructions.
-    ///
-    /// Creates an `List<u8>` struct from a passive data segment:
-    ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
-    ///   struct.new $`List<u8>` (repr=array, used=len)
-    pub(super) fn translate_bytes_literal(&self, b: &[u8]) -> WirInstr {
+    /// Short payloads use a constant `array.new_fixed<u8>` (a valid Wasm const
+    /// instruction, so a const sequence global can be promoted eager by
+    /// `wir_optimize::const_global`); longer ones use a passive `array.new_data`
+    /// segment (compact, but not const). The `String` / `List<u8>` struct
+    /// wrapping is emitted by the enclosing `StructLiteral`.
+    pub(super) fn translate_packed_array(&self, b: &[u8]) -> WirInstr {
         let byte_len = b.len();
-
-        // Look up u8 GC array type
-        let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
-
-        // Look up List<u8> wrapper struct type
-        let mangled =
-            crate::name::mangle_generic_name("List", std::slice::from_ref(&"u8".to_string()));
-        let list_struct_name = crate::name::StructName::new(ModuleSource::prelude(), mangled);
-        let list_struct_type = self.ctx.struct_type_map.get(&list_struct_name).cloned();
-
-        let (Some(gc_array_type_id), Some(struct_type_id)) = (u8_array_type, list_struct_type)
-        else {
-            panic!("[WIR] Bytes literal: u8 array or List<u8> struct type not registered");
-        };
+        let array_type_id = self
+            .ctx
+            .array_type_by_name
+            .get("u8")
+            .cloned()
+            .expect("[WIR] PackedArray: u8 array type not registered");
 
         if byte_len == 0 {
-            self.struct_new(
-                struct_type_id,
-                vec![
-                    WirInstr::ArrayNewDefault {
-                        type_id: gc_array_type_id,
-                        len: Box::new(WirInstr::I32Const(0)),
-                    },
-                    WirInstr::I32Const(0),
-                ],
-            )
+            WirInstr::ArrayNewDefault {
+                type_id: array_type_id,
+                len: Box::new(WirInstr::I32Const(0)),
+            }
+        } else if byte_len <= self.ctx.package.string_inline_max_bytes {
+            let elements = b
+                .iter()
+                .map(|&x| WirInstr::I32Const(i32::from(x)))
+                .collect();
+            WirInstr::ArrayNewFixed {
+                type_id: array_type_id,
+                elements,
+            }
         } else {
-            let data_index = self.ctx.bytes_literal_map.get(b).copied().unwrap_or(0);
+            let data_index = self.ctx.packed_data_map.get(b).copied().unwrap_or(0);
             let len_i32 = i32::try_from(byte_len).unwrap_or(0);
-
-            self.struct_new(
-                struct_type_id,
-                vec![
-                    WirInstr::ArrayNewData {
-                        type_id: gc_array_type_id,
-                        data_index,
-                        offset: Box::new(WirInstr::I32Const(0)),
-                        len: Box::new(WirInstr::I32Const(len_i32)),
-                    },
-                    WirInstr::I32Const(len_i32),
-                ],
-            )
+            WirInstr::ArrayNewData {
+                type_id: array_type_id,
+                data_index,
+                offset: Box::new(WirInstr::I32Const(0)),
+                len: Box::new(WirInstr::I32Const(len_i32)),
+            }
         }
     }
 

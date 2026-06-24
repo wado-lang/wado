@@ -537,11 +537,7 @@ impl<'a> NirUnparser<'a> {
             Operand::Value(v) => {
                 // A pure constant renders as its literal; other graph values
                 // (opaques, derived nodes) render as `%id`.
-                if let crate::nir_value_graph::ValueKind::String(s) = body.values.kind(v) {
-                    self.output.push('"');
-                    self.output.push_str(&escape_string(s));
-                    self.output.push('"');
-                } else if matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit) {
+                if matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit) {
                     self.output.push_str("()");
                 } else if let Some(value) =
                     crate::const_eval::Value::from_operand(body, op, self.type_table)
@@ -558,10 +554,18 @@ impl<'a> NirUnparser<'a> {
     fn unparse_expr(&mut self, body: &Body, id: ExprId) {
         let ty = body.exprs[id].type_id;
         match &body.exprs[id].kind {
-            ExprKind::PackedArray(bytes) => {
-                self.output
-                    .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));
-            }
+            ExprKind::PackedArray(bytes) => match core::str::from_utf8(bytes) {
+                // The packed `Array<u8>` repr of a `String` / `List<u8>` literal:
+                // render UTF-8 payloads as a `packed"…"` string for readable dumps.
+                Ok(s) => {
+                    self.output.push_str("packed\"");
+                    self.output.push_str(&escape_string(s));
+                    self.output.push('"');
+                }
+                Err(_) => self
+                    .output
+                    .push_str(&format!("packed(/* {} bytes */)", bytes.len())),
+            },
             ExprKind::VariantConstruct {
                 case_name, payload, ..
             } => {

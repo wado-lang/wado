@@ -278,16 +278,11 @@ impl ModRef {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
             // A promoted constant is a pure leaf except `String`, whose WIR
-            // materialisation (`translate_string_literal`) builds a fresh
-            // `String` heap object with a distinct identity at each use site.
-            Operand::Value(v) => {
-                if matches!(
-                    body.values.kind(v),
-                    crate::nir_value_graph::ValueKind::String(_)
-                ) {
-                    self.allocates = true;
-                }
-            }
+            // A pooled `Operand::Value` is now only a scalar / null / unit
+            // constant — never an allocation. String and bytes literals are
+            // `StructLiteral`s over a packed `Array<u8>` and are accounted for
+            // by the aggregate arms.
+            Operand::Value(_) => {}
         }
     }
 

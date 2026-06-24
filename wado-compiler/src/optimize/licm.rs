@@ -2244,7 +2244,6 @@ fn value_is_invariant(
         | ValueKind::Float(..)
         | ValueKind::Bool(_)
         | ValueKind::Char(_)
-        | ValueKind::String(_)
         | ValueKind::Null
         | ValueKind::Unit => true,
         ValueKind::Opaque(oid) => match pool.opaque_source(*oid) {

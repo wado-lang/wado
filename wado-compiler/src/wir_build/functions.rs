@@ -459,29 +459,31 @@ fn register_single_function(
     });
 }
 
-/// Register data segments for string literals.
+/// Register passive data segments for string and bytes literals.
+///
+/// Both lower to a packed `Array<u8>` `repr` (see `translate_packed_array`).
+/// Only payloads longer than `string_inline_max_bytes` need a segment; shorter
+/// ones materialize inline as a constant `array.new_fixed<u8>`, so a segment for
+/// them would be dead. String and bytes payloads share one content-keyed map,
+/// so equal bytes dedup to one segment.
 fn register_string_data(ctx: &mut WirContext<'_>) {
-    // `package` is a `&NirPackage` whose lifetime outlives `ctx`, so copying
-    // the reference lets us iterate the source literals while still calling
-    // `&mut self` registration methods. `register_string_literal` dedups via
-    // `string_literal_map`, so segment indices are assigned in first-occurrence
-    // order regardless of duplicates in the package list.
+    // `package` is a `&NirPackage` whose lifetime outlives `ctx`, so copying the
+    // reference lets us iterate the source literals while calling `&mut self`.
     let package = ctx.package;
     for s in &package.string_literals {
-        // Short strings are materialized inline with a constant
-        // `array.new_fixed<u8>` repr (see `translate_string_literal`) and need
-        // no data segment; registering one would leave a dead passive segment.
         if s.len() > package.string_inline_max_bytes {
-            ctx.register_string_literal(s);
+            ctx.register_packed_data(s.as_bytes());
         }
     }
 }
 
-/// Register data segments for bytes literals.
+/// Register passive data segments for bytes literals (see `register_string_data`).
 fn register_bytes_data(ctx: &mut WirContext<'_>) {
     let package = ctx.package;
     for b in &package.bytes_literals {
-        ctx.register_bytes_literal(b);
+        if b.len() > package.string_inline_max_bytes {
+            ctx.register_packed_data(b);
+        }
     }
 }
 

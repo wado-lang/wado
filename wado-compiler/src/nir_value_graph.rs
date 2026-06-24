@@ -132,7 +132,6 @@ pub enum ValueKind {
     Float(u64, TypeId),
     Bool(bool),
     Char(char),
-    String(String),
     Null,
     Unit,
 
@@ -434,7 +433,6 @@ impl ValuePool {
             | ValueKind::Float(_, _)
             | ValueKind::Bool(_)
             | ValueKind::Char(_)
-            | ValueKind::String(_)
             | ValueKind::Null
             | ValueKind::Unit => 0,
             _ => 1,
@@ -773,10 +771,6 @@ impl ValuePool {
         self.intern(ValueKind::Char(value))
     }
 
-    #[inline]
-    pub fn string(&mut self, value: String) -> ValueId {
-        self.intern(ValueKind::String(value))
-    }
 
     #[inline]
     pub fn null(&mut self) -> ValueId {

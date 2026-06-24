@@ -1,0 +1,28 @@
+// String literals lower to `StructLiteral String { repr: PackedArray(bytes),
+// used: <len> }` (no atomic `ValueKind::String`), so `.len()` (`self.used`)
+// folds through the generic struct field-projection — verified by the runtime
+// result below. (Full dead-allocation elimination of the folded literal is a
+// follow-up; see the optimizer cleanup-ordering note.)
+
+use { println, Stdout } from "core:cli";
+
+fn string_literal_len() -> i32 {
+    let mut acc = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        acc += "hi".len();
+    }
+    if "hi".len() != 2 {
+        panic("string len did not fold to 2");
+    }
+    return acc;
+}
+
+export fn run() with Stdout {
+    let r = string_literal_len();
+    println(`{r}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n"
+}
