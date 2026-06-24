@@ -671,6 +671,14 @@ pub fn inline_functions(
 
     let mut changed = false;
 
+    // Purity inputs for the graph-preserving inline gate (the splice site below):
+    // an inlined call that mutates no caller-reachable state lets the caller's
+    // `value_of` survive the splice. Computed once over the project; the
+    // per-call `pure_calls` set is taken per body just before inlining it.
+    let inline_first_param_types = super::alias::first_param_types(project);
+    let inline_type_table = project.type_table.borrow();
+    let inline_call_immutability = super::alias::CallImmutability::new(project, &inline_type_table);
+
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
         let caller_idx = fid.index();
@@ -689,6 +697,18 @@ pub fn inline_functions(
             let mut locals = std::mem::take(&mut func.locals);
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
+            // Calls in this body that mutate no caller-reachable state, taken
+            // *before* the splice (the call exprs survive as `reval.call_expr`
+            // keys). Drives the graph-preserving gate below.
+            let pure_set = {
+                let body = func.body.as_ref().unwrap();
+                super::alias::pure_calls(
+                    body,
+                    &inline_type_table,
+                    &inline_first_param_types,
+                    &inline_call_immutability,
+                )
+            };
             {
                 let body = func.body.as_mut().unwrap();
                 let root = body.root;
@@ -732,7 +752,23 @@ pub fn inline_functions(
                 //    equal what a fresh build assigns. The walk runs in a scratch
                 //    pool (see `build_scoped`), never mutating the live graph's
                 //    shared values, and parks no cache.
-                if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
+                //
+                // Graph-preserving gate: keep the caller's own `value_of` across
+                // the splice when every inlined call (a) is **pure** — mutates no
+                // caller-reachable state, so no caller read of a `&mut` param (e.g.
+                // a `Formatter f`) is split by an intervening write the splice
+                // exposes — and (b) introduces **no loop** — so no new back-edge
+                // makes a fresh build see a caller read as loop-variant. Otherwise
+                // coarsen (clear). The splice points are re-valued below either way.
+                // `WADO_VERIFY_VG` is the soundness net for this maintenance.
+                let preserving = func.body.as_ref().is_some_and(|b| {
+                    reval.iter().all(|i| {
+                        pure_set.contains(&i.call_expr) && !block_contains_loop(b, i.block)
+                    })
+                });
+                if !preserving
+                    && let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut())
+                {
                     vg.value_of.clear();
                     vg.analysis_only.clear();
                     vg.loop_entry_values.clear();
@@ -1241,6 +1277,23 @@ fn operand_value_in(caller: &Body, op: Operand) -> Option<crate::nir_value_graph
             .as_ref()
             .and_then(|vg| vg.value_of.get(&e).copied()),
     }
+}
+
+/// Whether any node under `block` (statements and nested expression blocks) is a
+/// `Loop`. A loop-free splice introduces no new value-graph back-edge, so the
+/// caller's `value_of` stays valid across the inline (see the graph-preserving
+/// gate at the splice site).
+fn block_contains_loop(body: &Body, block: BlockId) -> bool {
+    let mut stack = vec![NodeRef::Block(block)];
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Stmt(s) = n
+            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+        {
+            return true;
+        }
+        body.for_each_child(n, |c| stack.push(c));
+    }
+    false
 }
 
 /// Core inlining routine: builds a labeled block (in the caller arena) that
