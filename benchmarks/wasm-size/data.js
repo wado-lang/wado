@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782276410108,
+  "lastUpdate": 1782288306903,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35169,6 +35169,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cf4d3d0bb95e7a23104fb6453705d2f22e5a7c10"
         },
         "date": 1782276409455,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289392,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "285690e27b09ba8a82c5214800b9e6c163595489",
+          "message": "Merge pull request #1438 from wado-lang/claude/core-serde-positional-elements-vef64n\n\nfeat: serde positional + case rename, and core:args CLI parser",
+          "timestamp": "2026-06-24T16:54:22+09:00",
+          "tree_id": "bf78c83d50b3c96d74470e4dfedfd019ad5248af",
+          "url": "https://github.com/wado-lang/wado/commit/285690e27b09ba8a82c5214800b9e6c163595489"
+        },
+        "date": 1782288306274,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
