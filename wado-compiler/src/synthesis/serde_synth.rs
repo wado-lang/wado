@@ -2102,9 +2102,8 @@ fn generate_enum_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index))
         .collect();
-    // Rename-applied wire names, aligned with `cases`: the emitted
-    // `serialize_unit_variant` tag, while the match pattern uses the
-    // source-level case name from `cases`.
+    // Wire tag per case (rename applied); the match pattern keeps the
+    // source-level name from `cases`.
     let wire_names: Vec<String> = enum_def
         .cases
         .iter()
@@ -2599,8 +2598,6 @@ fn generate_variant_family_deserialize(
             ref_string_type,
             span,
         );
-        // Match against the rename-applied wire name; `build_case_arm`
-        // constructs from the source-level name in `cases`.
         let lit_ref = ref_expr(
             string_lit(&wire_names[i], string_type, span),
             ref_string_type,
@@ -2793,9 +2790,8 @@ fn generate_variant_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, c.payload))
         .collect();
-    // Rename-applied wire names, aligned with `cases`: used for the emitted
-    // `begin_variant`/`serialize_unit_variant` tag, while the match pattern uses
-    // the source-level case name from `cases`.
+    // Wire tag per case (rename applied); the match pattern keeps the
+    // source-level name from `cases`.
     let wire_names: Vec<String> = variant_def
         .cases
         .iter()
@@ -3830,17 +3826,15 @@ mod tests {
     #[test]
     fn serialized_case_name_precedence() {
         let kebab = Some("kebab-case".to_string());
-        // Explicit per-case rename wins over rename_all.
+        // Per-case rename wins over rename_all wins over the verbatim name.
         assert_eq!(
             serialized_case_name("Remove", &Some("rm".to_string()), &kebab),
             "rm"
         );
-        // rename_all applies when no per-case rename.
         assert_eq!(
             serialized_case_name("AddRemote", &None, &kebab),
             "add-remote"
         );
-        // Neither: verbatim.
         assert_eq!(serialized_case_name("AddRemote", &None, &None), "AddRemote");
     }
 }
