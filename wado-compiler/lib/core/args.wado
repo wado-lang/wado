@@ -28,9 +28,30 @@
 //! the leading bare token selects the case (externally tagged) and the rest is
 //! the payload, so `command [global-opts] subcommand [sub-opts]` works and
 //! nesting is free. The tag matches the case name verbatim (name a case
-//! lowercase, e.g. `add`, for a lowercase subcommand). Do not combine a variadic
-//! positional with a subcommand in one struct (the variadic would swallow the
-//! tag).
+//! lowercase, e.g. `add`, for a lowercase subcommand).
+//!
+//! ## Positional declaration order is not validated
+//!
+//! Positional fields are bound left-to-right by declaration order (rank), and
+//! that binding is greedy. `core:args` does not check the schema for
+//! well-formedness, so a few declarations parse in surprising ways — keep these
+//! invariants yourself (the compiler will not flag a violation; you get a
+//! confusing `MissingArgument`, not a crash):
+//!
+//! - Declare required positionals before optional (defaulted) ones. An optional
+//!   positional placed first greedily takes the token, starving a later required
+//!   one. (This footgun is shared by any ordinal format, e.g. `core:json_nsd`.)
+//! - At most one variadic (`List<T>`) positional, and it must be last. The first
+//!   variadic consumes every remaining bare token, leaving later positionals
+//!   empty or unfilled.
+//! - Do not combine a variadic positional with a subcommand in one struct: the
+//!   variadic would swallow the subcommand tag token.
+//!
+//! Validation is intentionally omitted: it is a CLI-specific well-formedness
+//! rule, not a data-model property, so it stays out of the format-agnostic
+//! compiler layer; and at parse time the deserializer sees only field indices,
+//! not their types or arity, so it cannot self-check (only over-supply —
+//! "too many positionals" — is caught). See the WEP for the rationale.
 
 use {
     Deserialize,
