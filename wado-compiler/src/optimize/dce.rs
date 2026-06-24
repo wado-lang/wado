@@ -476,7 +476,7 @@ pub fn filter_string_literals(project: &mut NirPackage) {
 /// Filter bytes literals to only include bytes referenced by surviving functions.
 ///
 /// Unlike string literals (which have a `function_strings` map for per-function
-/// tracking), bytes literals are stored inline as `ExprKind::BytesLiteral(Vec<u8>)`.
+/// tracking), bytes literals are stored inline as `ExprKind::PackedArray(Vec<u8>)`.
 /// This function scans all surviving function bodies to collect referenced bytes,
 /// then retains only matching entries in `project.bytes_literals`.
 pub fn filter_bytes_literals(project: &mut NirPackage) {
@@ -503,7 +503,7 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
             continue;
         }
         if let NodeRef::Expr(e) = node
-            && let ExprKind::BytesLiteral(b) = &body.exprs[e].kind
+            && let ExprKind::PackedArray(b) = &body.exprs[e].kind
         {
             used.insert(b.clone());
         }

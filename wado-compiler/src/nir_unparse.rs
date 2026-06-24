@@ -558,7 +558,7 @@ impl<'a> NirUnparser<'a> {
     fn unparse_expr(&mut self, body: &Body, id: ExprId) {
         let ty = body.exprs[id].type_id;
         match &body.exprs[id].kind {
-            ExprKind::BytesLiteral(bytes) => {
+            ExprKind::PackedArray(bytes) => {
                 self.output
                     .push_str(&format!("#include_bytes(/* {} bytes */)", bytes.len()));
             }

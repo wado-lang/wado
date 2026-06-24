@@ -438,7 +438,7 @@ fn collect_escaping_in_expr(body: &Body, e: ExprId, escaping: &mut IndexSet<u32>
         // Leaf nodes
         ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
-        | ExprKind::BytesLiteral(_)
+        | ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::EnumConstruct { .. } => {}
     }

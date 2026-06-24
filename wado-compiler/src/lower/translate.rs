@@ -1122,7 +1122,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::StringLiteral(_) => {
                 unreachable!("string literals are interned via convert_operand, never convert_expr")
             }
-            TirExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
+            TirExprKind::BytesLiteral(b) => ExprKind::PackedArray(b.clone()),
             TirExprKind::Null => {
                 unreachable!("Null is interned via convert_operand, never convert_expr")
             }

@@ -540,7 +540,7 @@ fn expr_child_nodes(body: &Body, e: ExprId) -> Vec<Child> {
             v
         }
         // Leaves.
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1082,7 +1082,7 @@ fn collect_modified_vars_in_expr(
             }
             collect_modified_vars_in_block(body, default, modified, type_table);
         }
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1711,7 +1711,7 @@ fn cse_clone_in_scope(
         ExprKind::Local { index, .. } => K::Local(*index),
         ExprKind::Binary { left, right, .. } => K::Bin(*left, *right),
         ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => K::Un(*expr),
-        ExprKind::BytesLiteral(_) => K::Lit,
+        ExprKind::PackedArray(_) => K::Lit,
         _ => K::No,
     };
     match k {

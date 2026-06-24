@@ -521,7 +521,7 @@ impl ModRef {
             // distinct heap object with its own identity. (String literals are
             // promoted to `Operand::Value`; their allocation is recognised in
             // `accumulate_operand`.)
-            ExprKind::BytesLiteral(_) => {
+            ExprKind::PackedArray(_) => {
                 self.allocates = true;
             }
 
@@ -1405,7 +1405,7 @@ mod tests {
     }
 
     fn bytes_lit(body: &mut Body) -> ExprId {
-        pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
+        pe(body, ExprKind::PackedArray(vec![1, 2, 3]))
     }
 
     #[test]

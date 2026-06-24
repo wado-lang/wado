@@ -1210,7 +1210,7 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            ExprKind::GlobalVarGet { .. } | ExprKind::BytesLiteral(_) => None,
+            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => None,
         }
     }
 

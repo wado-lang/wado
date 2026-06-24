@@ -2027,7 +2027,7 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::BytesLiteral(b) => {
+            ExprKind::PackedArray(b) => {
                 // Bytes literals are constructed as List<u8> from data segments
                 self.translate_bytes_literal(b)
             }

@@ -171,7 +171,7 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
 /// agree, since both gate the same rewrites.
 pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => true,
