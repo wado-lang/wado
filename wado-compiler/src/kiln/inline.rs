@@ -755,7 +755,8 @@ mod tests {
         .unwrap_err();
         assert!(errs.iter().any(|d| {
             d.message.contains("generator.output_dir")
-                && d.message.contains("must be a relative path starting with `./` or `../`")
+                && d.message
+                    .contains("must be a relative path starting with `./` or `../`")
         }));
     }
 

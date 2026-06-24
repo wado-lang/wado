@@ -136,8 +136,14 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
                 .map(std::path::Path::to_path_buf)
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         });
-    let (mut inline, identities) =
+    let (mut inline, identities, inline_diagnostics) =
         crate::compile::collect_inline_invocations_for_entry_with_identities(path, &manifest_root);
+
+    // Malformed inline clauses (e.g. a bare, non-`./` path) emit error
+    // diagnostics through the host, which `has_compile_errors` below gates on.
+    for d in inline_diagnostics {
+        wado_compiler::CompilerHost::emit_diagnostic(&host, d);
+    }
 
     let outcome = if inline.is_empty() {
         CheckOutcome::default()

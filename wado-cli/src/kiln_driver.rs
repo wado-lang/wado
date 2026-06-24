@@ -798,6 +798,10 @@ pub enum PipelineError {
         invocation: String,
         source: kiln_metadata::MetadataError,
     },
+    /// One or more inline `with { generator: ... }` clauses are malformed
+    /// (e.g. a bare, non-`./` path). The per-clause diagnostics have already
+    /// been emitted through the host; this carries the count for the summary.
+    InlineClause(usize),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -815,6 +819,9 @@ impl std::fmt::Display for PipelineError {
             }
             PipelineError::MetadataSave { invocation, source } => {
                 write!(f, "kiln[{invocation}]: {source}")
+            }
+            PipelineError::InlineClause(n) => {
+                write!(f, "kiln: {n} invalid inline generator clause(s)")
             }
         }
     }

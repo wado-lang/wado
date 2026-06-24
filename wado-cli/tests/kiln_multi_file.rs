@@ -151,7 +151,9 @@ fn bare_relative_paths_are_rejected() {
         .args(["run", "src/main.wado"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("must be a relative path starting with `./` or `../`"));
+        .stderr(predicate::str::contains(
+            "must be a relative path starting with `./` or `../`",
+        ));
 }
 
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

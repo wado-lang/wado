@@ -501,8 +501,24 @@ pub(crate) async fn maybe_run_pipeline(
             .map(std::path::Path::to_path_buf)
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
-    let (inline, identities) =
+    let (inline, identities, inline_diagnostics) =
         collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
+
+    // Surface malformed inline-clause diagnostics (e.g. a bare, non-`./` path)
+    // through the host and fail, rather than letting the `use` fall through to
+    // a confusing downstream error.
+    let inline_errors = inline_diagnostics
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
+    for d in inline_diagnostics {
+        wado_compiler::CompilerHost::emit_diagnostic(host, d);
+    }
+    if inline_errors > 0 {
+        return Err(crate::kiln_driver::PipelineError::InlineClause(
+            inline_errors,
+        ));
+    }
 
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
@@ -679,6 +695,7 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
+    Vec<wado_compiler::Diagnostic>,
 ) {
     use std::collections::VecDeque;
     use wado_compiler::name::{normalize_module_path, resolve_module_path};
@@ -747,13 +764,19 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    let invocations = wado_compiler::kiln::collect_inline_invocations(
+    let (invocations, diagnostics) = match wado_compiler::kiln::collect_inline_invocations(
         modules.iter().map(|(k, v)| (k.as_str(), v)),
         &descriptors,
         &manifest_root_str,
-    )
-    .unwrap_or_default();
-    (invocations, identities)
+    ) {
+        Ok(invs) => (invs, Vec::new()),
+        // A malformed inline clause (e.g. a bare, non-`./` path) yields an
+        // empty invocation set plus the diagnostics; the caller surfaces them
+        // and fails the build rather than letting the `use` fall through to a
+        // confusing downstream error.
+        Err(diags) => (Vec::new(), diags),
+    };
+    (invocations, identities, diagnostics)
 }
 
 /// Rewrite the redirect index's `decl_file` keys from the harvest key (a
@@ -977,7 +1000,7 @@ mod kiln_dir_module_tests {
         .unwrap();
 
         let entry = example.join("main.wado");
-        let (invs, identities) =
+        let (invs, identities, _diags) =
             collect_inline_invocations_for_entry_with_identities(&entry, &root);
 
         assert_eq!(invs.len(), 1, "should harvest the imported module's clause");
