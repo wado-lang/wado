@@ -6,7 +6,7 @@
 //! wrap this host.
 
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, Severity, SourceError};
 use wado_manifest::DependencySource;
@@ -14,7 +14,7 @@ use wado_manifest::DependencySource;
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
     base_path: PathBuf,
-    diagnostics: Mutex<Vec<Diagnostic>>,
+    diagnostics: Arc<Mutex<Vec<Diagnostic>>>,
 }
 
 impl FilesystemCompilerHost {
@@ -22,7 +22,20 @@ impl FilesystemCompilerHost {
     pub fn new(base_path: PathBuf) -> Self {
         Self {
             base_path,
-            diagnostics: Mutex::new(Vec::new()),
+            diagnostics: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// A sibling host that loads sources relative to `base_path` but shares
+    /// this host's diagnostics buffer, so diagnostics emitted through either
+    /// remain visible to `diagnostics()` / `has_errors()`. The Kiln pipeline
+    /// uses this to read schemas relative to the manifest root while its
+    /// diagnostics still gate the consuming `wado compile` / `wado check`.
+    #[must_use]
+    pub fn rebased(&self, base_path: PathBuf) -> Self {
+        Self {
+            base_path,
+            diagnostics: Arc::clone(&self.diagnostics),
         }
     }
 

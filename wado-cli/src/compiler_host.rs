@@ -174,18 +174,18 @@ impl FilesystemCompilerHost {
     }
 
     /// A sibling host that loads sources relative to `base_path` instead of
-    /// this host's base, while sharing the AOT generator cache and copying the
-    /// log/print settings. The Kiln pipeline uses this to read schemas relative
-    /// to the manifest root (where `Invocation` paths are anchored), whereas the
-    /// main compile host stays anchored at the entry file's directory.
-    ///
-    /// Diagnostics emitted through the returned host are printed but collected
-    /// in its own buffer, not this host's — fine for the pipeline, whose
-    /// hard failures propagate as `Result`s rather than through `has_errors`.
+    /// this host's base, while sharing the AOT generator cache, the
+    /// dependency index, and — crucially — the diagnostics buffer, and copying
+    /// the log/print settings. The Kiln pipeline uses this to read schemas
+    /// relative to the manifest root (where `Invocation` paths are anchored),
+    /// whereas the main compile host stays anchored at the entry file's
+    /// directory; sharing the diagnostics buffer keeps pipeline-emitted
+    /// diagnostics visible to the consuming `host.has_errors()` /
+    /// `host.diagnostics()` gate.
     #[must_use]
     pub fn rebased(&self, base_path: PathBuf) -> Self {
         Self {
-            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
+            inner: Arc::new(self.inner.rebased(base_path)),
             print_diagnostics: self.print_diagnostics,
             log_level: self.log_level,
             start_time: self.start_time,

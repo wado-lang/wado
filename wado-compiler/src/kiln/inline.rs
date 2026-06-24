@@ -341,10 +341,10 @@ fn lower_inline(
     })
 }
 
-/// Resolve a `from` / `inputs` / `output_dir` path written in a `use` clause
-/// relative to the declaring file (`module_path`), then re-anchor it to the
-/// manifest root — the same treatment a relative `module` path receives in
-/// [`lower_module_specifier`]. This upholds the rule that every path a `.wado`
+/// Resolve a path written in a `use` clause (`module`, `from`, `inputs`, or
+/// `output_dir`) relative to the declaring file (`module_path`), then re-anchor
+/// it to the manifest root so the provider/pipeline can read it as
+/// `manifest_root.join(path)`. This upholds the rule that every path a `.wado`
 /// file references is relative to that file.
 fn resolve_decl_relative(module_path: &str, raw: &str, manifest_root: &str) -> InvocationPath {
     let resolved = crate::name::resolve_module_path(module_path, raw);
@@ -382,10 +382,10 @@ fn lower_module_specifier(
     // project — the provider resolves it as `manifest_root.join(path)`
     // when reading the file on disk and computing a stable cache key.
     if spec.starts_with("./") || spec.starts_with("../") {
-        let resolved = crate::name::resolve_module_path(module_path, spec);
-        let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
-        return Some(GeneratorModule::LocalPath(InvocationPath::normalize(
-            &manifest_relative,
+        return Some(GeneratorModule::LocalPath(resolve_decl_relative(
+            module_path,
+            spec,
+            manifest_root,
         )));
     }
     // Namespaced specifier (`ns:name@ver`, `core:foo`, `wasi:foo`, …).
@@ -430,15 +430,18 @@ fn lower_module_specifier(
 /// clause in `wasm-size/foo/bar.wado` referencing
 /// `../../package-gale/src/generator.wado`), `..` segments are emitted to
 /// walk up out of `manifest_root` before descending into `resolved`. An
-/// empty `manifest_root` means the path is already project-root-relative
-/// and is returned verbatim.
+/// An empty or current-directory (`.`) `manifest_root` means the path is
+/// already project-root-relative and is returned verbatim. `.` path segments
+/// are dropped on both sides so a root of `.` (the common case of compiling an
+/// entry that sits next to `wado.toml`) does not spuriously emit a leading
+/// `..` (issue: `output_dir: "generated"` escaping the project).
 fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
-    let root = manifest_root.trim_end_matches('/');
-    if root.is_empty() {
+    let is_segment = |p: &&str| !p.is_empty() && *p != ".";
+    let root_parts: Vec<&str> = manifest_root.split('/').filter(is_segment).collect();
+    if root_parts.is_empty() {
         return resolved.to_string();
     }
-    let root_parts: Vec<&str> = root.split('/').filter(|p| !p.is_empty()).collect();
-    let resolved_parts: Vec<&str> = resolved.split('/').filter(|p| !p.is_empty()).collect();
+    let resolved_parts: Vec<&str> = resolved.split('/').filter(is_segment).collect();
     let common = root_parts
         .iter()
         .zip(resolved_parts.iter())
@@ -770,5 +773,43 @@ mod tests {
     fn strip_manifest_root_prefix_empty_root_is_passthrough() {
         let p = strip_manifest_root_prefix("", "package/src/gen.wado");
         assert_eq!(p, "package/src/gen.wado");
+    }
+
+    #[test]
+    fn strip_manifest_root_prefix_dot_root_is_passthrough() {
+        // `.` (entry sits next to `wado.toml`) must behave like an empty root,
+        // not emit a spurious `..` that escapes the project.
+        assert_eq!(strip_manifest_root_prefix(".", "generated"), "generated");
+        assert_eq!(strip_manifest_root_prefix(".", "src/x.wado"), "src/x.wado");
+        assert_eq!(strip_manifest_root_prefix("./", "schema.g4"), "schema.g4");
+        // A `.` root passes the resolved path through verbatim (the caller
+        // runs it through `InvocationPath::normalize`, which strips `./`).
+        assert_eq!(
+            strip_manifest_root_prefix(".", "./schema.g4"),
+            "./schema.g4"
+        );
+    }
+
+    #[test]
+    fn output_dir_override_relative_to_root_entry() {
+        // Regression: entry at the manifest root → manifest_root is `.`; a bare
+        // `output_dir` must stay inside the project, not resolve to `../`.
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::String("generated".to_string())),
+        ]);
+        let module = module_with_use("./schema.g4", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("main.wado".to_string(), module);
+
+        let result = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            ".",
+        )
+        .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].output_dir.as_str(), "generated");
+        assert_eq!(result[0].from.as_str(), "schema.g4");
     }
 }
