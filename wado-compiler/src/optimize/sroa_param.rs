@@ -613,8 +613,7 @@ fn rewrite_arg(
     scalar_param_struct: &IndexMap<u32, (String, ModuleSource)>,
     type_table: &TypeTable,
 ) {
-    // Peel auto-ref wrappers (`&x`, `&mut x`). A promoted-value inner has no node
-    // to become and carries no SROA'd wrapper, so leave such an arg untouched.
+    // Peel auto-ref wrappers (`&x`, `&mut x`).
     if let ExprKind::Unary {
         op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
         expr: inner,

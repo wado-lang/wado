@@ -92,8 +92,6 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
         && func.name == "copy_value"
         && args.len() == 1
     {
-        // A promoted-operand arg has no inner skeleton to unwrap to; leave the
-        // `copy_value` call as-is (conservative).
         return args[0].expr.as_expr().unwrap_or(expr);
     }
     expr
@@ -376,8 +374,7 @@ fn analyze_expr(
                 .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
                 .collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
-            // mutate the receiver (`conservative_on_unknown = false`). A promoted
-            // receiver has no place to mutate, so `None` skips the guard.
+            // mutate the receiver (`conservative_on_unknown = false`).
             if let Some(recv_e) = receiver.as_expr()
                 && super::alias::method_mutates_receiver(
                     body, recv_e, func, fpt, type_table, false, None,

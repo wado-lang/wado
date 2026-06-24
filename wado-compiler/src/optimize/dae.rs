@@ -305,7 +305,6 @@ fn validate_call(
                     continue;
                 }
                 let pure = match args.get(i).map(|a| a.expr) {
-                    // A promoted value is pure.
                     Some(Operand::Value(_)) => true,
                     Some(Operand::Expr(e)) => arena_query::is_pure_expr(body, e),
                     None => false,
@@ -332,7 +331,6 @@ fn validate_call(
             // If the rewriter drops the receiver, the MethodCall collapses to
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
-            // A promoted receiver is a pooled pure value, so dropping it is safe.
             if drops_receiver
                 && !receiver
                     .as_expr()

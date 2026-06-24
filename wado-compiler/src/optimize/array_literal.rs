@@ -457,7 +457,6 @@ fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                // A promoted-operand receiver is not a local place — no path.
                 match expr.as_expr() {
                     Some(e) => cur = e,
                     None => return None,

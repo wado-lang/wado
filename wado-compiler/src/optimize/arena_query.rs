@@ -204,7 +204,6 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            // A promoted condition is pure, so `None` counts as pure.
             condition.as_expr().is_none_or(|e| is_pure_expr(body, e))
                 && is_pure_block(body, *then_branch)
                 && else_branch.is_none_or(|b| is_pure_block(body, b))

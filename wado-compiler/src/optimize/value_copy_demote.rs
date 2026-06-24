@@ -337,7 +337,6 @@ fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => {
-            // A promoted-value inner is a fresh constant — no shared storage.
             inner.as_expr().and_then(|ie| arg_source_root(body, ie))
         }
         _ => None,
@@ -718,8 +717,7 @@ impl ElementClean<'_, '_> {
                 }
             }
             ExprKind::Index { expr: base, index } => {
-                // Index read `x[i]` produces an element copy; a promoted base/index
-                // is a constant, not the handle.
+                // Index read `x[i]` produces an element copy.
                 let base = *base;
                 let index = *index;
                 if let Some(be) = base.as_expr()
