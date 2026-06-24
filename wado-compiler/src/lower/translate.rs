@@ -1520,48 +1520,42 @@ impl FunctionTranslator<'_, '_> {
     /// `repr` field's raw-array type and the field indices come from the
     /// sequence struct's definition.
     fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
+        use crate::compiler_item::SeqField;
         let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
-        let (struct_name, struct_module) = match self.base.type_table.borrow().get(seq_type_id) {
-            crate::tir::ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source.clone()),
-            other => panic!("seq literal: expected struct type, got {other:?}"),
-        };
-        let struct_display_name = self.base.type_table.borrow().type_name(seq_type_id);
-        let fields = self
+        // `String` and `List<u8>` share the `{ repr: Array<u8>, used: i32 }`
+        // layout (fixed `SeqField` indices). The raw `Array<u8>` `repr` type is
+        // the same for both; read it off the always-loaded `String` struct,
+        // since a bytes-only program may not monomorphize `List<u8>` into
+        // `struct_fields_map`.
+        let array_u8_ty = self
             .base
             .struct_fields_map
-            .get(&(struct_name.clone(), struct_module))
-            .unwrap_or_else(|| panic!("seq literal: no fields for struct {struct_name}"))
-            .clone();
-        let repr = fields
-            .iter()
-            .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
-            .expect("seq struct has a repr field");
-        let used = fields
-            .iter()
-            .find(|f| f.name == crate::compiler_item::SeqField::Len.field_name())
-            .expect("seq struct has a used field");
-        let packed = self.alloc_expr(ExprKind::PackedArray(bytes), repr.type_id, span);
+            .get(&("String".to_string(), crate::module_source::ModuleSource::string()))
+            .and_then(|fields| {
+                fields
+                    .iter()
+                    .find(|f| f.name == SeqField::Backing.field_name())
+            })
+            .map(|f| f.type_id)
+            .expect("String struct (repr field) is always loaded");
+        let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
             crate::nir_value_graph::ValueKind::Int(i64::from(len) as u64, crate::tir::TypeTable::I32),
             crate::tir::TypeTable::I32,
         );
         let kind = ExprKind::StructLiteral {
             struct_type: seq_type_id,
-            struct_name: struct_display_name,
+            struct_name: self.base.type_table.borrow().type_name(seq_type_id),
             fields: vec![
                 ArenaStructField {
-                    name: repr.name.clone(),
+                    name: SeqField::Backing.field_name().to_string(),
                     value: Operand::Expr(packed),
-                    field_index: repr.index,
+                    field_index: SeqField::Backing.index(),
                 },
                 ArenaStructField {
-                    name: used.name.clone(),
+                    name: SeqField::Len.field_name().to_string(),
                     value: Operand::Value(used_val),
-                    field_index: used.index,
+                    field_index: SeqField::Len.index(),
                 },
             ],
         };
