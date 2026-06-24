@@ -19,14 +19,43 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
         // Uses stores info: locals passed to functions without `stores` for that
         // parameter are NOT marked as aliased.
         let aliased = collect_aliased_locals(&body, &module.functions);
+        // Locals assigned exactly once. `local_const` folds a `LocalGet` to its
+        // bound constant, which is only sound for single-assignment locals: a
+        // reassignment elsewhere — in particular a `local.tee` or a `LocalSet`
+        // nested in a subexpression, which the per-instruction knowledge update
+        // does not observe — would otherwise leave a later read folding to a
+        // stale value. (The `local_const` docstring already assumed single
+        // assignment; this enforces it.)
+        let single_assigned = single_assigned_locals(&body);
         let mut body = body;
         let mut changed = true;
         while changed {
-            let mut known = FieldKnowledge::new(types, &aliased);
+            let mut known = FieldKnowledge::new(types, &aliased, &single_assigned);
             changed = forward_fields_in_body(&mut body, &mut known);
         }
         module.functions[func_idx].body = Some(body);
     }
+}
+
+/// Locals assigned exactly once across the whole body, counting every
+/// `LocalSet`/`LocalTee` including those nested in subexpressions.
+fn single_assigned_locals(body: &[WirInstr]) -> IndexSet<String> {
+    let mut counts: IndexMap<String, u32> = IndexMap::default();
+    for instr in body {
+        count_assignments_in_instr(instr, &mut counts);
+    }
+    counts
+        .into_iter()
+        .filter(|(_, c)| *c == 1)
+        .map(|(name, _)| name)
+        .collect()
+}
+
+fn count_assignments_in_instr(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
+    if let WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } = instr {
+        *counts.entry(name.clone()).or_insert(0) += 1;
+    }
+    instr.for_each_child(&mut |child| count_assignments_in_instr(child, counts));
 }
 
 /// Collect locals whose references escape (address taken, embedded in structs,
@@ -116,21 +145,29 @@ struct FieldKnowledge<'a> {
     /// Single-assignment locals bound to a constant: `local_name` → const instr.
     /// A `LocalGet` of one is replaced by the constant, so a materialised
     /// `let _av = obj.f` whose field folds to a constant (`niri_*_preserves_fields`)
-    /// propagates into `1 >= _av` and the dead branch prunes.
+    /// propagates into `1 >= _av` and the dead branch prunes. Only locals in
+    /// `single_assigned` are recorded here.
     local_const: IndexMap<String, WirInstr>,
     /// Type definitions for resolving field names by index
     types: &'a [WirTypeDef],
     /// Locals that are aliased and unsafe for field forwarding
     aliased: &'a IndexSet<String>,
+    /// Locals assigned exactly once — the only ones eligible for `local_const`.
+    single_assigned: &'a IndexSet<String>,
 }
 
 impl<'a> FieldKnowledge<'a> {
-    fn new(types: &'a [WirTypeDef], aliased: &'a IndexSet<String>) -> Self {
+    fn new(
+        types: &'a [WirTypeDef],
+        aliased: &'a IndexSet<String>,
+        single_assigned: &'a IndexSet<String>,
+    ) -> Self {
         Self {
             fields: IndexMap::default(),
             local_const: IndexMap::default(),
             types,
             aliased,
+            single_assigned,
         }
     }
 
@@ -221,16 +258,58 @@ fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>)
     changed
 }
 
-/// The locals/fields whose tracked knowledge a single `instr` node invalidates,
-/// not recursing into children. [`invalidate_locals_modified_in_instr`] applies
-/// it across a whole instruction tree; both the forward-time knowledge update and
-/// the post-branch / post-loop merge go through that deep walk, so the two views
-/// can never disagree about what a call mutates.
-fn invalidate_shallow(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
+/// Update field knowledge from an instruction (after processing its children).
+fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     match instr {
-        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+        // LocalSet with StructNew: record known fields
+        WirInstr::LocalSet { name, value } => {
+            // First invalidate any existing knowledge for this local
             known.invalidate_local(name);
+            match value.as_ref() {
+                // Direct StructNew: record known fields
+                WirInstr::StructNew { type_id, fields } => {
+                    known.record_struct_new(name, type_id.clone(), fields);
+                }
+                // Block whose result is a LocalGet: copy knowledge from that local
+                // Block whose result is a StructNew: record its fields
+                WirInstr::Block { body, .. } => {
+                    if let Some(source_name) = extract_block_result_local(body) {
+                        copy_field_knowledge(known, &source_name, name);
+                    } else if let Some((type_id, fields)) = extract_block_result_struct_new(body) {
+                        known.record_struct_new(name, type_id, &fields);
+                    }
+                }
+                // Seq whose tail is a LocalGet: copy knowledge from that local.
+                // Seq whose tail is a StructNew: record its fields.
+                //
+                // This case appears after `branch_prune` flattens a labeled
+                // value block (`label: block -> T { …; break label: V; }`)
+                // into a plain stmt list — the NIR `Block` translates to a
+                // WIR `Seq`, and the tail expression is the result.
+                WirInstr::Seq(body) => {
+                    if let Some(source_name) = extract_seq_result_local(body) {
+                        copy_field_knowledge(known, &source_name, name);
+                    } else if let Some((type_id, fields)) = extract_seq_result_struct_new(body) {
+                        known.record_struct_new(name, type_id, &fields);
+                    }
+                }
+                // LocalGet: copy knowledge from source local
+                WirInstr::LocalGet { name: source, .. } => {
+                    copy_field_knowledge(known, source, name);
+                }
+                // A constant binding `local = <const>`: record it so a later
+                // `LocalGet local` folds to the constant. Skip aliased locals
+                // (their value can be overwritten through a retained reference).
+                v if is_wir_constant(v)
+                    && !known.aliased.contains(name)
+                    && known.single_assigned.contains(name) =>
+                {
+                    known.local_const.insert(name.clone(), v.clone());
+                }
+                _ => {}
+            }
         }
+        // StructSet: invalidate the specific field
         WirInstr::StructSet {
             field_name, expr, ..
         } => {
@@ -238,8 +317,8 @@ fn invalidate_shallow(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
                 known.invalidate_field(name, field_name);
             }
         }
-        // A local passed to a call may be mutated through an `&mut` reference,
-        // so any tracked value for it is no longer known.
+        // Function calls: invalidate all locals passed as arguments
+        // (they could be modified via &mut references)
         WirInstr::Call { args, .. } | WirInstr::CallRef { args, .. } => {
             for arg in args {
                 match arg {
@@ -259,60 +338,6 @@ fn invalidate_shallow(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     }
 }
 
-/// Update field knowledge from an instruction (after processing its children).
-fn update_knowledge_from_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
-    // Clear stale knowledge for everything this instruction modifies, including
-    // nested mutations — e.g. a local passed `&mut` to a call buried inside a
-    // larger subexpression. This is the same deep walk as the post-branch /
-    // post-loop invalidation, so the forward-time and merge-time views can never
-    // drift (a shallow update here would keep folding a call-mutated local to a
-    // stale constant).
-    invalidate_locals_modified_in_instr(instr, known);
-    // Then record what a `LocalSet` newly establishes.
-    if let WirInstr::LocalSet { name, value } = instr {
-        match value.as_ref() {
-            // Direct StructNew: record known fields
-            WirInstr::StructNew { type_id, fields } => {
-                known.record_struct_new(name, type_id.clone(), fields);
-            }
-            // Block whose result is a LocalGet: copy knowledge from that local
-            // Block whose result is a StructNew: record its fields
-            WirInstr::Block { body, .. } => {
-                if let Some(source_name) = extract_block_result_local(body) {
-                    copy_field_knowledge(known, &source_name, name);
-                } else if let Some((type_id, fields)) = extract_block_result_struct_new(body) {
-                    known.record_struct_new(name, type_id, &fields);
-                }
-            }
-            // Seq whose tail is a LocalGet: copy knowledge from that local.
-            // Seq whose tail is a StructNew: record its fields.
-            //
-            // This case appears after `branch_prune` flattens a labeled
-            // value block (`label: block -> T { …; break label: V; }`)
-            // into a plain stmt list — the NIR `Block` translates to a
-            // WIR `Seq`, and the tail expression is the result.
-            WirInstr::Seq(body) => {
-                if let Some(source_name) = extract_seq_result_local(body) {
-                    copy_field_knowledge(known, &source_name, name);
-                } else if let Some((type_id, fields)) = extract_seq_result_struct_new(body) {
-                    known.record_struct_new(name, type_id, &fields);
-                }
-            }
-            // LocalGet: copy knowledge from source local
-            WirInstr::LocalGet { name: source, .. } => {
-                copy_field_knowledge(known, source, name);
-            }
-            // A constant binding `local = <const>`: record it so a later
-            // `LocalGet local` folds to the constant. Skip aliased locals
-            // (their value can be overwritten through a retained reference).
-            v if is_wir_constant(v) && !known.aliased.contains(name) => {
-                known.local_const.insert(name.clone(), v.clone());
-            }
-            _ => {}
-        }
-    }
-}
-
 /// Process a single instruction, recursively forwarding constants.
 /// Returns true if any changes were made.
 fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>) -> bool {
@@ -326,7 +351,7 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
         WirInstr::Loop { body, .. } => {
             // Conservatively invalidate all knowledge for loops
             // (locals could be modified on back-edges)
-            let mut loop_known = FieldKnowledge::new(known.types, known.aliased);
+            let mut loop_known = FieldKnowledge::new(known.types, known.aliased, known.single_assigned);
             changed |= forward_fields_in_body(body, &mut loop_known);
             // Invalidate outer knowledge for locals modified inside the loop
             invalidate_locals_modified_in_body(body, known);
@@ -346,6 +371,7 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
                 local_const: known.local_const.clone(),
                 types: known.types,
                 aliased: known.aliased,
+                single_assigned: known.single_assigned,
             };
             changed |= forward_fields_in_body(then_body, &mut then_known);
             if let Some(eb) = else_body {
@@ -354,6 +380,7 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
                     local_const: known.local_const.clone(),
                     types: known.types,
                     aliased: known.aliased,
+                    single_assigned: known.single_assigned,
                 };
                 changed |= forward_fields_in_body(eb, &mut else_known);
             }
@@ -582,7 +609,19 @@ fn invalidate_locals_modified_in_body(body: &[WirInstr], known: &mut FieldKnowle
 }
 
 fn invalidate_locals_modified_in_instr(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
-    invalidate_shallow(instr, known);
+    match instr {
+        WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+            known.invalidate_local(name);
+        }
+        WirInstr::StructSet {
+            expr, field_name, ..
+        } => {
+            if let WirInstr::LocalGet { name, .. } = expr.as_ref() {
+                known.invalidate_field(name, field_name);
+            }
+        }
+        _ => {}
+    }
     instr.for_each_child(&mut |child| {
         invalidate_locals_modified_in_instr(child, known);
     });
@@ -607,19 +646,18 @@ mod tests {
         }
     }
 
-    // A local bound to a constant and then reassigned by a `local.tee` *nested*
-    // in a later subexpression must not keep folding to the stale constant.
-    // The forward-time knowledge update has to invalidate deeply; a shallow walk
-    // only sees the outer `LocalSet` and misses the nested tee. (The optimizer's
-    // copy-merge produces exactly such nested tees of const-bound locals.)
+    // A constant-bound local reassigned by a `local.tee` *nested* in a later
+    // subexpression must not fold to the stale constant. The per-instruction
+    // knowledge update only sees the outer `LocalSet`, so it misses the tee;
+    // restricting `local_const` to single-assignment locals keeps the fold
+    // sound. (The optimizer's copy-merge produces exactly such nested tees.)
     #[test]
-    fn nested_tee_invalidates_const_local() {
+    fn nested_tee_reassignment_blocks_const_fold() {
         let types: Vec<WirTypeDef> = vec![];
         let aliased = IndexSet::default();
-        let mut known = FieldKnowledge::new(&types, &aliased);
 
         let mut body = vec![
-            // a = 5  → recorded as a constant
+            // a = 5  → a constant binding
             local_set("a", WirInstr::I32Const(5)),
             // b = (a := 10) + 0  → the tee reassigns `a` inside the subexpression
             local_set(
@@ -636,6 +674,14 @@ mod tests {
             local_set("out", local_get("a")),
         ];
 
+        let single_assigned = single_assigned_locals(&body);
+        assert!(
+            !single_assigned.contains("a"),
+            "`a` is assigned twice (LocalSet + nested LocalTee), so it is not \
+             single-assignment and must be ineligible for the const fold"
+        );
+
+        let mut known = FieldKnowledge::new(&types, &aliased, &single_assigned);
         forward_fields_in_body(&mut body, &mut known);
 
         let WirInstr::LocalSet { value, .. } = &body[2] else {
@@ -643,8 +689,7 @@ mod tests {
         };
         assert!(
             matches!(value.as_ref(), WirInstr::LocalGet { name, .. } if name == "a"),
-            "const-bound `a` was reassigned by a nested tee; its later read must \
-             not fold to the stale constant, got {value:?}"
+            "reassigned `a` must not fold to the stale constant, got {value:?}"
         );
     }
 }

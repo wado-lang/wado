@@ -1,0 +1,41 @@
+// Regression: WIR const-forwarding must not fold a read of a multiply-assigned
+// local to a stale constant.
+//
+// `winner` is assigned a constant on several mutually exclusive paths — each
+// labeled-block branch sets it and `break`s out, and the fall-through sets the
+// default. `const_forward` walks block bodies as straight-line code, so it would
+// record the *last* assignment (`winner = 99`) and fold the trailing
+// `return winner` to 99 on every path. Only single-assignment locals are
+// eligible for that fold, so `winner` (assigned four times) must stay a read.
+//
+// This mirrors the Gale parser's `gd_winner` alternative-dispatch variable,
+// whose miscompile produced `expected Eof` parse failures at -O2.
+
+#[inline("never")]
+fn classify(tag: i32) -> i32 {
+    let mut winner = -1;
+    let _: i32 = dispatch: {
+        if tag == 0 { winner = 0; break dispatch: 0; }
+        if tag == 1 { winner = 1; break dispatch: 0; }
+        winner = 99;
+        break dispatch: 0;
+    };
+    return winner;
+}
+
+export fn run() {
+    assert classify(0) == 0;
+    assert classify(1) == 1;
+    assert classify(5) == 99;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "return winner;"
+    ],
+    "wir_not_expect:O2": [
+        "return 99;"
+    ]
+}

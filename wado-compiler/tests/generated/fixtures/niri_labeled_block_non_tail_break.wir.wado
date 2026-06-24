@@ -112,9 +112,9 @@ fn "wado-compiler/tests/fixtures/niri_labeled_block_non_tail_break.wado/run"() w
         __sroa_c_size = 16;
         __sroa_c_size = 7;
         drop(99);
-        block {
-            break __inline_early_break_clears_post_block_0: 7;
-        };
+        if 10 >= __sroa_c_size {
+            break __inline_early_break_clears_post_block_0: __sroa_c_size;
+        }
         break __inline_early_break_clears_post_block_0: -1;
     };
     "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 }; "core:prelude/primitive.wado/i32::fmt_decimal"(a, __local_2); __local_1);
