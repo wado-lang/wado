@@ -15,14 +15,14 @@ function and rewritten eagerly in place via e-class union (the aegraph model —
 build once, rewrite, extract once), not re-derived per pass. Operand promotion
 ("born as operands") makes a pure skeleton position carry its `ValueId` directly
 as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
-the operand instead of looking it up — there is no `ExprId`→value side-table
-(`value_of` is deleted). BCE recognisers are structural.
+the operand instead of looking it up — there is no `ExprId`→value side-table.
+BCE recognisers are structural.
 
 Never reintroduce, regardless of perf:
 
 - a rebuild of the value graph mid-pipeline (`WADO_MEASURE_VG` must stay `rebuilds = 0`), or
-- an `ExprId`-keyed cache / side-table (`value_of`, `vg_cache`). A pass needing a
-  value uses born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
+- an `ExprId`-keyed cache / side-table. A pass needing a value uses
+  born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 
 Details: `docs/wep-2026-06-15-live-value-graph.md`.
 
