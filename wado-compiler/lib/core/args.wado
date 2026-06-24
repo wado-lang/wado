@@ -20,11 +20,17 @@
 //!   let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
 //!
 //! Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
-//! `Option<T> = null`, required/optional/variadic positionals, and the `--`
+//! `Option<T> = null`, required/optional/variadic positionals, repeatable
+//! `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
 //! end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 //!
-//! Not yet supported (see the WEP's future work): repeatable `List<T>` options
-//! and subcommands (`variant` fields); both report a clear error.
+//! Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
+//! the leading bare token selects the case (externally tagged) and the rest is
+//! the payload, so `command [global-opts] subcommand [sub-opts]` works and
+//! nesting is free. The tag matches the case name verbatim (name a case
+//! lowercase, e.g. `add`, for a lowercase subcommand). Do not combine a variadic
+//! positional with a subcommand in one struct (the variadic would swallow the
+//! tag).
 
 use {
     Deserialize,
@@ -73,21 +79,42 @@ pub struct ArgvDeserializer {
     cur_has_inline: bool,
     /// The inline `=value`, valid when `cur_has_inline`.
     cur_inline: String,
-    /// The current option's name (for error messages).
+    /// The current option's name, `-`/`_` folded (for error messages and for
+    /// matching further occurrences of a repeatable option).
     cur_name: String,
+    /// Tokens already claimed by a repeatable option's forward scan, so
+    /// `next_field` and value reads skip them instead of reprocessing.
+    consumed: List<bool>,
+    /// A value injected by a repeatable option's `next_element`, served to the
+    /// next `deserialize_*` instead of reading from `tokens`.
+    forced: bool,
+    forced_val: String,
     /// First argv-specific error, taking priority over the generated
     /// `Deserialize` code's `DeserializeError` (which only knows MissingField).
     err: Option<ArgsError>,
 }
 
 impl ArgvDeserializer {
-    /// Read the next value token for the field being deserialized: the inline
-    /// `=value`, the option's following token, or the next positional token.
+    /// Advance `pos` past tokens already claimed by a repeatable option.
+    fn skip_consumed(&mut self) {
+        while self.pos < self.tokens.len() && self.consumed[self.pos] {
+            self.pos += 1;
+        }
+    }
+
+    /// Read the next value token for the field being deserialized: a forced
+    /// value (repeatable option), the inline `=value`, the option's following
+    /// token, or the next positional token.
     fn take_value(&mut self) -> Result<String, DeserializeError> {
+        if self.forced {
+            self.forced = false;
+            return Result::Ok(self.forced_val);
+        }
         if self.cur_is_option {
             if self.cur_has_inline {
                 return Result::Ok(self.cur_inline);
             }
+            self.skip_consumed();
             if self.pos >= self.tokens.len() {
                 self.err = Option::Some(ArgsError {
                     kind: ArgsErrorKind::MissingValue,
@@ -99,12 +126,84 @@ impl ArgvDeserializer {
             self.pos += 1;
             return Result::Ok(v);
         }
+        self.skip_consumed();
         if self.pos >= self.tokens.len() {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
         let v = self.tokens[self.pos];
         self.pos += 1;
         return Result::Ok(v);
+    }
+
+    /// Gather every value of the current repeatable `--option` (`cur_name`):
+    /// its first occurrence's value plus all further `--cur_name` occurrences,
+    /// which are marked consumed so the main loop skips them. Handles
+    /// interspersed occurrences (`--inc a --jobs 4 --inc b`).
+    fn gather_option_values(&mut self) -> Result<List<String>, DeserializeError> {
+        let mut vals: List<String> = [];
+        // First occurrence (the one `next_field` positioned at).
+        if self.cur_has_inline {
+            vals.push(self.cur_inline);
+        } else {
+            self.skip_consumed();
+            if self.pos >= self.tokens.len() {
+                self.err = Option::Some(ArgsError {
+                    kind: ArgsErrorKind::MissingValue,
+                    message: `missing value for option --{self.cur_name}`,
+                });
+                return Result::Err(DeserializeError::eof(-1));
+            }
+            vals.push(self.tokens[self.pos]);
+            self.pos += 1;
+        }
+        // Forward-scan for further `--cur_name` occurrences.
+        let n = self.tokens.len();
+        let mut j = self.pos;
+        while j < n {
+            if !self.consumed[j] {
+                let t = self.tokens[j];
+                if t == "--" {
+                    // End-of-options marker: no `--name` options beyond here.
+                    j = n;
+                } else if t.starts_with("--") {
+                    let body = t.substr_bytes(2, t.len());
+                    let mut nm = body;
+                    let mut inl = "";
+                    let mut has_inl = false;
+                    if let Some(eq) = body.find("=") {
+                        nm = body.substr_bytes(0, eq);
+                        inl = body.substr_bytes(eq + 1, body.len());
+                        has_inl = true;
+                    }
+                    if nm.replace("-", "_") == self.cur_name {
+                        self.consumed[j] = true;
+                        if has_inl {
+                            vals.push(inl);
+                            j += 1;
+                        } else {
+                            let k = j + 1;
+                            if k >= n {
+                                self.err = Option::Some(ArgsError {
+                                    kind: ArgsErrorKind::MissingValue,
+                                    message: `missing value for option --{self.cur_name}`,
+                                });
+                                return Result::Err(DeserializeError::eof(-1));
+                            }
+                            vals.push(self.tokens[k]);
+                            self.consumed[k] = true;
+                            j = k + 1;
+                        }
+                    } else {
+                        j += 1;
+                    }
+                } else {
+                    j += 1;
+                }
+            } else {
+                j += 1;
+            }
+        }
+        return Result::Ok(vals);
     }
 
     /// Record an `InvalidValue` and return the matching `DeserializeError`.
@@ -127,6 +226,13 @@ struct ArgvStructAccess {
 
 struct ArgvSeqAccess {
     de: &mut ArgvDeserializer,
+    /// True for a repeatable `--option` list (values pre-gathered in `vals`);
+    /// false for a variadic positional (consumes the bare-token run on demand).
+    is_option_list: bool,
+    /// Pre-gathered values for a repeatable option.
+    vals: List<String>,
+    /// Cursor into `vals`.
+    cursor: i32,
 }
 
 struct ArgvMapAccess {
@@ -135,11 +241,14 @@ struct ArgvMapAccess {
 
 struct ArgvVariantAccess {
     de: &mut ArgvDeserializer,
+    /// The leading bare token selecting the case (externally tagged).
+    tag: String,
 }
 
 impl DeserializeStruct for ArgvStructAccess {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         loop {
+            self.de.skip_consumed();
             if self.de.pos >= self.de.tokens.len() {
                 return Result::Ok(null);
             }
@@ -167,7 +276,7 @@ impl DeserializeStruct for ArgvStructAccess {
                     self.de.cur_is_option = true;
                     self.de.cur_has_inline = has_inline;
                     self.de.cur_inline = inline_val;
-                    self.de.cur_name = name;
+                    self.de.cur_name = folded;
                     return Result::Ok(Option::Some(idx));
                 }
                 self.de.err = Option::Some(ArgsError {
@@ -216,8 +325,21 @@ impl DeserializeStruct for ArgvStructAccess {
 
 impl DeserializeSeq for ArgvSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        if self.is_option_list {
+            // Repeatable `--option`: yield each pre-gathered value, forcing it
+            // through `T`'s scalar conversion.
+            if self.cursor >= self.vals.len() {
+                return Result::Ok(null);
+            }
+            self.de.forced = true;
+            self.de.forced_val = self.vals[self.cursor];
+            self.cursor += 1;
+            let v = T::deserialize(self.de)?;
+            return Result::Ok(Option::Some(v));
+        }
         // A variadic positional (`List<T> = []`) consumes the contiguous run of
         // bare tokens, stopping at the next `--option` or end of input.
+        self.de.skip_consumed();
         if self.de.pos >= self.de.tokens.len() {
             return Result::Ok(null);
         }
@@ -250,23 +372,35 @@ impl DeserializeMap for ArgvMapAccess {
 
 impl DeserializeVariant for ArgvVariantAccess {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
-        return Result::Err(unsupported("subcommand"));
+        return Result::Ok(self.tag);
     }
 
     fn disc(&mut self) -> Result<i32, DeserializeError> {
-        return Result::Err(unsupported("subcommand"));
+        // argv selects the case by its name tag (externally tagged), never by a
+        // numeric discriminant. Returning `Err` makes the generated variant
+        // deserializer fall through to the `variant_name` path.
+        return Result::Err(DeserializeError {
+            kind: DeserializeErrorKind::Custom,
+            message: "argv variants are name-tagged",
+            offset: -1,
+        });
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        return Result::Err(unsupported("subcommand"));
+        // The payload parses from the tokens after the tag: a nested struct
+        // continues from the shared deserializer state, so its `--options` and
+        // positionals fall out of the same machinery.
+        return T::deserialize(self.de);
     }
 
     fn is_unit(&mut self) -> Result<bool, DeserializeError> {
-        return Result::Err(unsupported("subcommand"));
+        // Unused: the generated variant deserializer knows per case whether a
+        // payload exists, so it never consults this.
+        return Result::Ok(false);
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return Result::Err(unsupported("subcommand"));
+        return Result::Ok(());
     }
 }
 
@@ -351,8 +485,9 @@ impl Deserializer for ArgvDeserializer {
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
         // A bare `--flag` (option, no inline value) is `true`; an inline
-        // `--flag=0` or a positional bool is converted leniently.
-        if self.cur_is_option && !self.cur_has_inline {
+        // `--flag=0`, a positional bool, or a forced (repeatable) value is
+        // converted leniently.
+        if self.cur_is_option && !self.cur_has_inline && !self.forced {
             return Result::Ok(true);
         }
         let tok = self.take_value()?;
@@ -381,7 +516,23 @@ impl Deserializer for ArgvDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> with stores[self] {
-        return Result::Ok(ArgvSeqAccess { de: self });
+        if self.cur_is_option {
+            // Repeatable `--option`: gather all its values up front.
+            let vals = self.gather_option_values()?;
+            return Result::Ok(ArgvSeqAccess {
+                de: self,
+                is_option_list: true,
+                vals,
+                cursor: 0,
+            });
+        }
+        // Variadic positional: values are pulled on demand from the bare-token run.
+        return Result::Ok(ArgvSeqAccess {
+            de: self,
+            is_option_list: false,
+            vals: [],
+            cursor: 0,
+        });
     }
 
     fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> with stores[self] {
@@ -404,7 +555,20 @@ impl Deserializer for ArgvDeserializer {
         type_name: &String,
         num_cases: i32,
     ) -> Result<ArgvVariantAccess, DeserializeError> with stores[self] {
-        return Result::Err(unsupported("subcommand"));
+        // Externally tagged: the next bare token is the case tag. A subcommand
+        // field is reached as a positional slot (`#[serde(positional)]`), so the
+        // token the outer `next_field` saw is the tag.
+        self.skip_consumed();
+        if self.pos >= self.tokens.len() {
+            self.err = Option::Some(ArgsError {
+                kind: ArgsErrorKind::MissingArgument,
+                message: `missing subcommand for {type_name}`,
+            });
+            return Result::Err(DeserializeError::eof(-1));
+        }
+        let tag = self.tokens[self.pos];
+        self.pos += 1;
+        return Result::Ok(ArgvVariantAccess { de: self, tag });
     }
 
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
@@ -420,6 +584,7 @@ fn map_error(e: DeserializeError) -> ArgsError {
         DeserializeErrorKind::MissingField => ArgsErrorKind::MissingArgument,
         DeserializeErrorKind::InvalidValue => ArgsErrorKind::InvalidValue,
         DeserializeErrorKind::Overflow => ArgsErrorKind::InvalidValue,
+        DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
         _ => ArgsErrorKind::InvalidValue,
     };
     return ArgsError {
@@ -431,6 +596,12 @@ fn map_error(e: DeserializeError) -> ArgsError {
 /// Parse `argv` (excluding the program name) into `T`. Effect-free and testable;
 /// subcommand dispatch and tests inject a `List<String>` directly.
 pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
+    let mut consumed: List<bool> = [];
+    let mut i = 0;
+    while i < argv.len() {
+        consumed.push(false);
+        i += 1;
+    }
     let mut de = ArgvDeserializer {
         tokens: argv,
         pos: 0,
@@ -439,6 +610,9 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         cur_has_inline: false,
         cur_inline: "",
         cur_name: "",
+        consumed,
+        forced: false,
+        forced_val: "",
         err: null,
     };
     let r = T::deserialize(&mut de);

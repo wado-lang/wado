@@ -25,11 +25,17 @@ impl Deserialize for Cli;
 let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
 
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
-`Option<T> = null`, required/optional/variadic positionals, and the `--`
+`Option<T> = null`, required/optional/variadic positionals, repeatable
+`List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
 end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 
-Not yet supported (see the WEP's future work): repeatable `List<T>` options
-and subcommands (`variant` fields); both report a clear error.
+Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
+the leading bare token selects the case (externally tagged) and the rest is
+the payload, so `command [global-opts] subcommand [sub-opts]` works and
+nesting is free. The tag matches the case name verbatim (name a case
+lowercase, e.g. `add`, for a lowercase subcommand). Do not combine a variadic
+positional with a subcommand in one struct (the variadic would swallow the
+tag).
 
 ## Functions
 

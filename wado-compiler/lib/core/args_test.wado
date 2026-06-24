@@ -167,3 +167,137 @@ test "double dash forces remaining tokens positional" {
     assert c.rest[0] == "--weird";
     assert c.rest[1] == "-x";
 }
+
+// Repeatable `List<T>` options: each `--name v` appends; occurrences may be
+// interspersed with other options.
+struct Repeatable {
+    #[serde(positional)] input: String,
+    include: List<String> = [],   // repeatable, optional (>=0)
+    n: List<i32> = [],            // repeatable, typed
+    jobs: i32 = 1,
+}
+impl Deserialize for Repeatable;
+
+fn repeatable(r: Result<Repeatable, ArgsError>) -> Repeatable {
+    if let Ok(c) = r {
+        return c;
+    }
+    if let Err(e) = r {
+        panic(`parse failed: {e.message}`);
+    }
+    unreachable();
+}
+
+test "repeatable option appends across occurrences" {
+    let c = repeatable(parse::<Repeatable>(["in", "--include", "a", "--include", "b"]));
+    assert c.include.len() == 2;
+    assert c.include[0] == "a";
+    assert c.include[1] == "b";
+}
+
+test "repeatable option interspersed with other options" {
+    let c = repeatable(parse::<Repeatable>(["in", "--include", "a", "--jobs", "4", "--include=b", "--include", "c"]));
+    assert c.jobs == 4;
+    assert c.include.len() == 3;
+    assert c.include[2] == "c";
+}
+
+test "repeatable typed values convert leniently" {
+    let c = repeatable(parse::<Repeatable>(["in", "--n", "1", "--n", "0x10"]));
+    assert c.n.len() == 2;
+    assert c.n[0] == 1;
+    assert c.n[1] == 16;
+}
+
+test "repeatable option absent yields empty default" {
+    let c = repeatable(parse::<Repeatable>(["in"]));
+    assert c.include.len() == 0;
+}
+
+struct Required {
+    define: List<String>,   // repeatable, required (>=1)
+}
+impl Deserialize for Required;
+
+test "required repeatable present" {
+    let r = parse::<Required>(["--define", "X", "--define", "Y"]);
+    if let Ok(c) = r {
+        assert c.define.len() == 2;
+    } else {
+        panic("expected Ok");
+    }
+}
+
+test "required repeatable absent reports MissingArgument" {
+    let r = parse::<Required>([]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };
+}
+
+// Subcommands: a `#[serde(positional)]` variant field. The leading bare token
+// selects the case (externally tagged); the payload parses from the rest.
+struct AddArgs {
+    #[serde(positional)] path: String,
+    all: bool = false,
+}
+impl Deserialize for AddArgs;
+
+variant RemoteCmd {
+    AddRemote(AddRemoteArgs),
+    List,
+}
+struct AddRemoteArgs {
+    #[serde(positional)] name: String,
+}
+impl Deserialize for AddRemoteArgs;
+impl Deserialize for RemoteCmd;
+
+variant Command {
+    Add(AddArgs),
+    Remote(RemoteCmd),
+    Status,
+}
+impl Deserialize for Command;
+
+struct App {
+    verbose: bool = false,
+    jobs: i32 = 1,
+    #[serde(positional)] command: Command,
+}
+impl Deserialize for App;
+
+fn app(r: Result<App, ArgsError>) -> App {
+    if let Ok(c) = r {
+        return c;
+    }
+    if let Err(e) = r {
+        panic(`parse failed: {e.message}`);
+    }
+    unreachable();
+}
+
+test "global options precede subcommand, then sub-options" {
+    let c = app(parse::<App>(["--verbose", "--jobs", "4", "Add", "p.txt", "--all"]));
+    assert c.verbose == true;
+    assert c.jobs == 4;
+    assert c.command matches { Add(a) && a.path == "p.txt" && a.all == true };
+}
+
+test "unit subcommand" {
+    let c = app(parse::<App>(["Status"]));
+    assert c.command matches { Status };
+}
+
+test "subcommand payload defaults" {
+    let c = app(parse::<App>(["Add", "only.txt"]));
+    assert c.command matches { Add(a) && a.path == "only.txt" && a.all == false };
+}
+
+test "nested subcommands" {
+    let c = app(parse::<App>(["Remote", "AddRemote", "origin"]));
+    assert c.command matches { Remote(r) && r matches { AddRemote(a) && a.name == "origin" } };
+}
+
+test "unknown subcommand reports UnknownSubcommand" {
+    let r = parse::<App>(["Bogus"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::UnknownSubcommand };
+}
