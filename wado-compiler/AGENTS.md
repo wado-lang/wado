@@ -11,7 +11,8 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 ## NIR Optimize
 
 The live value graph is the source of truth for pure values: built once per
-function and rewritten eagerly in place via e-class union (the aegraph model —
+function (`Body::value_graph`, set lazily on first query and reused across every
+pass) and rewritten eagerly in place via e-class union (the aegraph model —
 build once, rewrite, extract once), not re-derived per pass. Operand promotion
 ("born as operands") makes a pure skeleton position carry its `ValueId` directly
 as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
@@ -20,7 +21,9 @@ BCE recognisers are structural.
 
 Never reintroduce, regardless of perf:
 
-- a rebuild of the value graph mid-pipeline (`WADO_MEASURE_VG` must stay `rebuilds = 0`), or
+- a rebuild of the value graph mid-pipeline. Build-once is structural: nothing
+  clears `Body::value_graph` back to `None`, so it is built at most once; keep it
+  that way by maintaining the graph in place instead of clearing and rebuilding.
 - an `ExprId`-keyed cache / side-table. A pass needing a value uses
   born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 

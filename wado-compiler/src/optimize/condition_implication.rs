@@ -62,12 +62,11 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
-    for (fid, func_rc) in project.functions.iter().enumerate() {
+    for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if func.body.is_none() {
             continue;
         }
-        let _vg_scope = super::vg_measure::BuildScope::enter(fid, "cond_impl_post_promote");
         let NirFunction {
             body,
             locals,

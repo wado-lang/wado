@@ -88,7 +88,6 @@ mod string_push;
 mod tmpl_hoist;
 mod value_copy_demote;
 mod value_copy_elide;
-pub(crate) mod vg_measure;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};
@@ -762,5 +761,4 @@ fn run_optimization_passes(
         }
         changed
     });
-    vg_measure::report();
 }

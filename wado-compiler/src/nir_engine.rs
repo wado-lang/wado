@@ -445,7 +445,6 @@ impl<'a> Engine<'a> {
         if self.body.exprs.len() > VG_MAX_EXPRS {
             return;
         }
-        crate::optimize::vg_measure::record_actual_build(&*self.body);
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
             &self.param_locals,
@@ -641,7 +640,6 @@ impl<'a> Engine<'a> {
     /// kind's id children, and re-enqueues the affected neighbourhood — the
     /// node's parent (its context may now reduce) and the new children.
     pub fn replace_expr_kind(&mut self, id: ExprId, new_kind: ExprKind) {
-        crate::optimize::vg_measure::record_inplace_edit();
         // Drop the old `Local` mention, if any, from the use index.
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
             let index = *index;
@@ -703,7 +701,6 @@ impl<'a> Engine<'a> {
         if !self.body.replace_operand_to(parent, id, new) {
             return false;
         }
-        crate::optimize::vg_measure::record_inplace_edit();
         if let Operand::Expr(e) = new {
             self.set_parent(NodeRef::Expr(e), Some(parent));
             self.enqueue(NodeRef::Expr(e));
@@ -763,7 +760,6 @@ impl<'a> Engine<'a> {
     /// tree). Use index entries for any `Let` in a dropped statement are left
     /// in place — they name a now-dead def and are simply never consulted.
     pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
-        crate::optimize::vg_measure::record_inplace_edit();
         self.body.blocks[block].stmts = stmts;
         let kids = self.body.blocks[block].stmts.clone();
         for s in &kids {
@@ -782,7 +778,6 @@ impl<'a> Engine<'a> {
     /// children, registers a `Local` mention, and enqueues it (and its
     /// children) so a freshly built subtree is visited.
     pub fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
-        crate::optimize::vg_measure::record_node_created();
         let id = self.body.exprs.push(ExprNode {
             kind,
             type_id,
@@ -817,7 +812,6 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh statement node.
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
-        crate::optimize::vg_measure::record_node_created();
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.stmt_parent.push(None);
         let mut children = Vec::new();
@@ -836,7 +830,6 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh block node from a statement list.
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
-        crate::optimize::vg_measure::record_node_created();
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.block_parent.push(None);
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
@@ -849,7 +842,6 @@ impl<'a> Engine<'a> {
 
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
-        crate::optimize::vg_measure::record_node_created();
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.pat_parent.push(None);
         let mut children = Vec::new();
