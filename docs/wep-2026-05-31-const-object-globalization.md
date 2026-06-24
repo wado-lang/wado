@@ -217,3 +217,21 @@ Deferred:
 - [ ] Fold user-immutable globals' reads from their initializers (`niri`
       `GlobalEnv` keyed on `wado_mutable`) — overlaps
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
+
+## Update (2026-06-24): string/bytes literals as constant aggregates
+
+The atomic `ValueKind::String` was removed. A string literal now lowers to
+`StructLiteral String { repr: PackedArray(bytes), used: <len> }` (a bytes literal
+to the same shape over `List<u8>`), where `ExprKind::PackedArray` is a raw
+constant `Array<u8>` — the renamed former NIR `BytesLiteral`, now meaning the
+inner array rather than a `List<u8>` wrapper. The short/long split (the
+`array.new_fixed<u8>` vs `array.new_data<u8>` choice gated on
+`string_inline_max_bytes`) moved from the old `translate_string_literal` onto
+`PackedArray`'s WIR lowering; the `String`/`List` struct wrapping is the generic
+`StructLiteral` lowering.
+
+Consequence: string/bytes literals are now genuine const aggregates, so this
+pass globalizes constant read-only string/bytes bindings with no string-specific
+code (`is_globalizable_const` accepts `PackedArray` as a const leaf), and
+`"x".len()` folds via `project_struct_literal` + `ref_elim` (the latter extended
+to substitute a `&<pure inline aggregate>`).

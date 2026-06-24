@@ -1390,12 +1390,33 @@ mod tests {
     // GC-allocating literals (String / Bytes) — see B1 finding
     // -----------------------------------------------------------------
 
-    // A promoted string literal lives as `Operand::Value(String)`; it has no
-    // `ExprKind`. Returned as the operand a real `&"..."` would reference.
+    // A string literal lowers to `StructLiteral String { repr: PackedArray, used }`
+    // — a fresh GC object at each use site. Returned as the operand a real
+    // `&"..."` would reference.
     fn string_val(body: &mut Body, s: &str) -> Operand {
-        Operand::Value(body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::String(s.to_string()),
+        let repr = pe(body, ExprKind::PackedArray(s.as_bytes().to_vec()));
+        let used = body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(s.len() as u64, ty()),
             ty(),
+        );
+        Operand::Expr(pe(
+            body,
+            ExprKind::StructLiteral {
+                struct_type: ty(),
+                struct_name: "String".to_string(),
+                fields: vec![
+                    crate::nir_arena::ArenaStructField {
+                        name: "repr".to_string(),
+                        value: Operand::Expr(repr),
+                        field_index: 0,
+                    },
+                    crate::nir_arena::ArenaStructField {
+                        name: "used".to_string(),
+                        value: Operand::Value(used),
+                        field_index: 1,
+                    },
+                ],
+            },
         ))
     }
 
