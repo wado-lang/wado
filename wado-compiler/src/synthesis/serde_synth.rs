@@ -1873,6 +1873,68 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
     )
 }
 
+/// Assemble a static `FieldSchema` method (`lookup` / `positional_at`): a
+/// no-`self`, single-`i32`-or-bytes-param function returning `Option<i32>`.
+/// Both methods share this boilerplate; only the name, parameter, and body
+/// differ.
+#[allow(clippy::too_many_arguments)]
+fn field_schema_method_fn(
+    type_name: &str,
+    field_schema_trait: &str,
+    method: &str,
+    param_name: &str,
+    param_type: TypeId,
+    return_type: TypeId,
+    locals: Vec<TirLocal>,
+    local_count: u32,
+    body: Vec<TirStmt>,
+    span: Span,
+) -> TirFunction {
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: MethodName::format_local(type_name, Some(field_schema_trait), method),
+        is_pub: true,
+        is_export: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(LocalMethodName::new(
+            type_name.to_string(),
+            Some(field_schema_trait.to_string()),
+            method.to_string(),
+        )),
+        params: vec![TirParam {
+            name: param_name.to_string(),
+            type_id: param_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        }],
+        return_type,
+        task_return_type: None,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(block(body)),
+        span,
+        local_count,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_dispatch_wrapper: false,
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
 fn generate_lookup_function(
     type_name: &str,
     field_schema_trait: &str,
@@ -1888,7 +1950,6 @@ fn generate_lookup_function(
     // monomorphization, replacing the former runtime `lookup` closure. The key
     // is a borrowed byte view, so each format passes its wire key's bytes with
     // no `String` round-trip.
-    let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "lookup");
     // Parameter: key: ByteSlice (ArraySlice<u8>) at local 0.
     let mut locals = vec![param_local("__key", key_slice_type, false)];
     let mut next_local: u32 = 1;
@@ -1945,50 +2006,18 @@ fn generate_lookup_function(
     }
     stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: fn_name,
-        is_pub: true,
-        is_export: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        is_async: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: Some(LocalMethodName::new(
-            type_name.to_string(),
-            Some(field_schema_trait.to_string()),
-            "lookup".to_string(),
-        )),
-        params: vec![TirParam {
-            name: "__key".to_string(),
-            type_id: key_slice_type,
-            local_index: 0,
-            is_mut: false,
-            span,
-        }],
-        return_type: option_i32,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(block(stmts)),
-        span,
-        local_count: next_local,
+    field_schema_method_fn(
+        type_name,
+        field_schema_trait,
+        "lookup",
+        "__key",
+        key_slice_type,
+        option_i32,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
-
-        return_abi: crate::tir::ReturnAbi::default(),
-    }
+        next_local,
+        stmts,
+        span,
+    )
 }
 
 /// `impl FieldSchema for <Type> { fn positional_at(rank: i32) -> Option<i32> }`
@@ -2006,7 +2035,6 @@ fn generate_positional_at_function(
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
-    let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "positional_at");
     // Parameter: rank: i32 at local 0.
     let locals = vec![param_local("__rank", TypeTable::I32, false)];
     let next_local: u32 = 1;
@@ -2038,50 +2066,18 @@ fn generate_positional_at_function(
     }
     stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: fn_name,
-        is_pub: true,
-        is_export: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        is_async: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: Some(LocalMethodName::new(
-            type_name.to_string(),
-            Some(field_schema_trait.to_string()),
-            "positional_at".to_string(),
-        )),
-        params: vec![TirParam {
-            name: "__rank".to_string(),
-            type_id: TypeTable::I32,
-            local_index: 0,
-            is_mut: false,
-            span,
-        }],
-        return_type: option_i32,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(block(stmts)),
-        span,
-        local_count: next_local,
+    field_schema_method_fn(
+        type_name,
+        field_schema_trait,
+        "positional_at",
+        "__rank",
+        TypeTable::I32,
+        option_i32,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
-
-        return_abi: crate::tir::ReturnAbi::default(),
-    }
+        next_local,
+        stmts,
+        span,
+    )
 }
 
 fn find_enum<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirEnum> {

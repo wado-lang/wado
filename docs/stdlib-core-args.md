@@ -29,6 +29,12 @@ Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
 end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 
+Long options only: an option value never starts with `--`, so a missing
+value (`--name --next`) is reported as `MissingValue` rather than swallowing
+the next flag; a single `-` is a value, so negatives like `-5` work. A
+repeatable option always takes a value (there is no repeatable flag);
+`--flag` with no value is `MissingValue`.
+
 Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
 the leading bare token selects the case (externally tagged) and the rest is
 the payload, so `command [global-opts] subcommand [sub-opts]` works and

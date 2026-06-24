@@ -93,6 +93,23 @@ test "invalid scalar reports InvalidValue" {
     assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
+test "option value missing before a flag reports MissingValue, not a silent steal" {
+    // `--output` needs a value; the next token `--verbose` is an option, so the
+    // value is missing rather than `--verbose` being swallowed as the value.
+    let r = parse::<Cli>(["in.txt", "--output", "--verbose"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}
+
+test "negative number is a valid option value (single dash, not an option)" {
+    let c = cli(parse::<Cli>(["in.txt", "--jobs", "-5"]));
+    assert c.jobs == -5;
+}
+
+test "malformed empty option name reports a clear error" {
+    let r = parse::<Cli>(["in.txt", "--=x"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::UnknownOption && e.message == "malformed option: --=x" };
+}
+
 // Positional fields need not be contiguous in declaration order: `positional_at`
 // maps the rank-th positional to its field index across the option fields.
 struct Mixed {
