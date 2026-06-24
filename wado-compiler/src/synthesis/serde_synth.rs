@@ -345,9 +345,9 @@ fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirS
     })
 }
 
-/// Apply a `rename_all` strategy. `heck` tokenizes any source casing into words,
-/// so this works for both `snake_case` struct fields and `PascalCase` enum/variant
-/// cases (Wado casing is convention, not a rule, so the source form is open).
+/// Apply a `rename_all` strategy. Source-casing-agnostic, so it works for both
+/// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
+/// convention, not a rule, so the source form is open).
 fn apply_rename_all(s: &str, strategy: &str) -> String {
     use heck::{
         ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
@@ -3816,7 +3816,7 @@ mod tests {
 
     #[test]
     fn rename_all_from_pascal_case() {
-        // Case names are PascalCase; `heck` tokenizes them too.
+        // PascalCase source, not the snake_case of struct fields.
         assert_eq!(apply_rename_all("AddRemote", "kebab-case"), "add-remote");
         assert_eq!(apply_rename_all("AddRemote", "snake_case"), "add_remote");
         assert_eq!(apply_rename_all("AddRemote", "camelCase"), "addRemote");
