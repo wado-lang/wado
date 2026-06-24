@@ -1267,15 +1267,14 @@ pub(super) struct InlineRevalInfo {
     pub call_expr: ExprId,
 }
 
-/// The value of an operand in `caller`'s graph: a promoted value directly, or a
-/// skeleton expr's recorded value (`None` for an unvalued / impure operand).
-fn operand_value_in(caller: &Body, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+/// The value of a call-site argument operand for seeding the inlined block's
+/// re-valuation: a promoted operand carries its value directly; a skeleton
+/// expr has no value (value_of is being retired — born-as-operands is the only
+/// value carrier). An unseeded param simply re-values as opaque in build_scoped.
+fn operand_value_in(_caller: &Body, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
     match op {
         Operand::Value(v) => Some(v),
-        Operand::Expr(e) => caller
-            .value_graph
-            .as_ref()
-            .and_then(|vg| vg.value_of.get(&e).copied()),
+        Operand::Expr(_) => None,
     }
 }
 
