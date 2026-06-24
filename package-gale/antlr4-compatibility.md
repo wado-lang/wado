@@ -18,6 +18,21 @@ Treat this as a hard contract: if you find a real-world `.g4` file
 that ANTLR4 accepts but Gale rejects, or one whose generated parser
 diverges, that is a bug in Gale.
 
+Compatibility is one-directional, **and then some**: Gale is a
+**superset**. It may also accept grammars ANTLR4 _rejects_, but only
+when the meaning is **uniquely determined** by Gale's existing language
+model — a canonical, forced extension, never an idiosyncratic
+interpretation. The worked example is a `.` / `~X`-led left-recursive
+suffix (`e ~';' e`, `e .`): ANTLR4 errors (no operator token to climb
+on), but precedence climbing fixes the meaning with no remaining choice,
+so Gale accepts it and lets the runtime ATN simulator decide the loop
+entry (fixtures `tests/grammars/lr_complement_op.g4`,
+`lr_wildcard_postfix.g4`). Where accepting a construct would require
+inventing behavior — the result is ambiguous, or context-defined with no
+single forced answer — Gale rejects loudly instead of guessing. The
+canonical statement of this rule is the "Compatibility Principle" in
+[`AGENTS.md`](./AGENTS.md).
+
 The contract is verified at three layered stages.
 
 ## Stages of Compatibility
@@ -278,30 +293,17 @@ simulator plan. The performance invariant is preserved throughout.
 
 **Closed (correct fix + regression test):**
 
-| Edge                                                                                  | Resolution                                                                                               |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)           | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`  |
-| Scan stack pushed only for a rule's own self-ref operand                              | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper  |
-| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)       | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST |
-| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`) | select the entry by its **precedence enter edges**                                                       |
-| Packed-key depth limit (998 caller frames; 254 precedence levels)                     | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only   |
-| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                      | stamp the call's exact return state before the recovery parse (diagnostic-only path)                     |
-
-**Guarded (loud codegen panic + `#[expect_trap]` test):** shapes the
-ATN-class machinery does not yet model are rejected at generation rather
-than mis-dispatched at runtime —
-
-- an open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix
-  in an ATN-class rule (its edge index misaligns against `valid_lr_alts`);
-- a self-reference nested inside a Group/Repeat LR-suffix element (built
-  with the wrong precedence floor);
-- a non-greedy `??` inside a left-recursive rule (prediction at
-  `min_prec 0` ignores the raised precedence).
-
-No corpus grammar trips any guard. Each is a real fix away (align the
-dispatcher to the edge list; a precedence-aware recursive element
-builder; thread `min_prec` into `atn_ng_optional_enter`) — the guard is
-the honest interim.
+| Edge                                                                                                    | Resolution                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~X` (`NOT_ATOM`) treated as "matches anything" (`~COMMA` mandates `COMMA`)                             | FIRST carries the **excluded** label (`rule_first_neg` / `atn_first_admits`); tests `token != excluded`                                                                                            |
+| Scan stack pushed only for a rule's own self-ref operand                                                | every scan rule call pushes its exact return state (`needs_scan_atn`), mirroring the parse-side wrapper                                                                                            |
+| Nullable-atom LR rule trapped at decode (the guard blocked _correct_ behaviour)                         | removed: a nullable atom legitimately puts the loop operator in FIRST, so walk precedence edges in FIRST                                                                                           |
+| `lr_loop_entry_decision` returned the first `STAR_LOOP_ENTRY` (wrong for an atom `*`)                   | select the entry by its **precedence enter edges**                                                                                                                                                 |
+| Packed-key depth limit (998 caller frames; 254 precedence levels)                                       | collision-free power-of-two bit-pack (pr/alt 11b, rs/state 20b ≈ 1M); assert is encoding-capacity only                                                                                             |
+| Speculative repeat-recovery `_parse_R` missing `atn_ret_pending`                                        | stamp the call's exact return state before the recovery parse (diagnostic-only path)                                                                                                               |
+| Open-ended (`.` / `~X`-led, empty static `suffix_first`) LR suffix in an ATN-class rule                 | `valid_lr_alts` built over the same real-suffix set as the enter edges, so the edge index lines up; rule forced ATN-class. Superset case; fixtures `lr_complement_op.g4`, `lr_wildcard_postfix.g4` |
+| Self-reference nested inside a Group/Repeat LR-suffix element (wrong precedence floor)                  | `build_lr_suffix_element` recurses through the container, deciding each self-ref's precedence floor (`conflict_min` vs `0`) from its own follow                                                    |
+| Non-greedy `??` inside a left-recursive rule (prediction at `min_prec 0` ignored the raised precedence) | `atn_ng_optional_enter` takes `min_prec` and forwards it to `atn_predict_with_stack`, so the decision honors the loop's precedence floor                                                           |
 
 **Open — runtime precision (fall back, don't panic):** these mispredict
 on _valid_ input the heuristic can't resolve, where a panic would reject

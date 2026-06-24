@@ -87,6 +87,10 @@ pub struct CompileOptions {
     /// the compiler synthesizes a library world from the entry module's
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
+    /// `-D NAME=value` compile-time parameter overrides.
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    /// `--param-*` policy levels.
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -118,6 +122,11 @@ pub struct CompileFlags {
     pub codegen_flags: Vec<String>,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
+    /// `-D NAME=value` compile-time parameter overrides. Forwarded to
+    /// `CompilerOptions::param_overrides`.
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    /// `--param-*` policy levels. Forwarded to `CompilerOptions::param_policy`.
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 impl CompileOptions {
@@ -135,6 +144,8 @@ impl CompileOptions {
             test_name_filters: Vec::new(),
             codegen_flags: self.codegen_flags.clone(),
             lib_world: self.lib_world.clone(),
+            param_overrides: self.param_overrides.clone(),
+            param_policy: self.param_policy,
         }
     }
 }
@@ -223,6 +234,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -246,8 +263,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
     let mut lib = false;
+    let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            param_args.apply(p, &mut parser)?;
+        } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Output => output = Some(args::require_string(&mut parser)?),
                 Opt::Format => {
@@ -323,6 +343,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         no_cache,
         codegen_flags,
         lib_world,
+        param_overrides: param_args.overrides,
+        param_policy: param_args.policy,
     })
 }
 
@@ -423,6 +445,8 @@ pub async fn try_compile_with_kiln_cache(
         test_name_filters: flags.test_name_filters.clone(),
         codegen_flags: flags.codegen_flags.clone(),
         lib_world: flags.lib_world.clone(),
+        param_overrides: flags.param_overrides.clone(),
+        param_policy: flags.param_policy,
         ..Default::default()
     };
 
@@ -477,8 +501,24 @@ pub(crate) async fn maybe_run_pipeline(
             .map(std::path::Path::to_path_buf)
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
-    let (inline, identities) =
+    let (inline, identities, inline_diagnostics) =
         collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
+
+    // Fail on a malformed clause here, with its own diagnostics, so the clear
+    // error is not buried under the downstream failure of the unredirected
+    // `use` falling through to the lexer.
+    let inline_errors = inline_diagnostics
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
+    for d in inline_diagnostics {
+        wado_compiler::CompilerHost::emit_diagnostic(host, d);
+    }
+    if inline_errors > 0 {
+        return Err(crate::kiln_driver::PipelineError::InlineClause(
+            inline_errors,
+        ));
+    }
 
     let (manifest, manifest_root) = match manifest_pair {
         Some(pair) => pair,
@@ -493,10 +533,14 @@ pub(crate) async fn maybe_run_pipeline(
     rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut inline, &manifest_root);
     let provider = CliGeneratorProvider::new(manifest_root.clone()).with_no_cache(no_cache);
+    // Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
+    // root, so schemas must be loaded relative to it — not the entry file's
+    // directory, where the main compile host is based.
+    let kiln_host = host.rebased(manifest_root.clone());
     let mut outcome = crate::kiln_driver::run_pipeline(
         &manifest,
         &manifest_root,
-        host,
+        &kiln_host,
         &provider,
         inline,
         no_cache,
@@ -613,13 +657,6 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
     }
 }
 
-pub fn collect_inline_invocations_for_entry(
-    entry_file: &Path,
-    manifest_root: &Path,
-) -> Vec<wado_compiler::kiln::Invocation> {
-    collect_inline_invocations_for_entry_with_identities(entry_file, manifest_root).0
-}
-
 /// Harvest inline Kiln invocations from `entry_file` *and its transitive local
 /// `.wado` imports*, plus the map needed to fix up the redirect index.
 ///
@@ -651,6 +688,7 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
+    Vec<wado_compiler::Diagnostic>,
 ) {
     use std::collections::VecDeque;
     use wado_compiler::name::{normalize_module_path, resolve_module_path};
@@ -719,13 +757,17 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    let invocations = wado_compiler::kiln::collect_inline_invocations(
+    let (invocations, diagnostics) = match wado_compiler::kiln::collect_inline_invocations(
         modules.iter().map(|(k, v)| (k.as_str(), v)),
         &descriptors,
         &manifest_root_str,
-    )
-    .unwrap_or_default();
-    (invocations, identities)
+    ) {
+        Ok(invs) => (invs, Vec::new()),
+        // Hand the diagnostics back for the caller to surface; a malformed
+        // clause produces no invocations.
+        Err(diags) => (Vec::new(), diags),
+    };
+    (invocations, identities, diagnostics)
 }
 
 /// Rewrite the redirect index's `decl_file` keys from the harvest key (a
@@ -837,7 +879,8 @@ mod kiln_dir_module_tests {
                 synthetic_id: "kiln-test".to_string(),
             },
             module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
-            from: InvocationPath::normalize("./grammar.g4"),
+            from: InvocationPath::normalize("grammar.g4"),
+            source: InvocationPath::normalize("./grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
             options_canonical: Vec::new(),
@@ -948,7 +991,7 @@ mod kiln_dir_module_tests {
         .unwrap();
 
         let entry = example.join("main.wado");
-        let (invs, identities) =
+        let (invs, identities, _diags) =
             collect_inline_invocations_for_entry_with_identities(&entry, &root);
 
         assert_eq!(invs.len(), 1, "should harvest the imported module's clause");

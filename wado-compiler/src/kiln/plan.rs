@@ -222,6 +222,7 @@ mod tests {
             },
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0")),
             from: InvocationPath::normalize(from),
+            source: InvocationPath::normalize(from),
             inputs: inputs
                 .iter()
                 .map(|p| InvocationPath::normalize(p))

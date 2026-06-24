@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["grammars/SQLite.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/SQLite.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -7050,7 +7050,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                         }
                         pos = gp_181;
                         sg_181_1: {
-                            pos = scan_expr(tokens, pos, follow, 9);
+                            pos = scan_expr(tokens, pos, follow, 0);
                             if pos < 0 { break sg_181_1; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                 let sp = pos;
@@ -7058,7 +7058,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                                     sg_182: {
                                         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_182; }
                                         pos += 1;
-                                        pos = scan_expr(tokens, pos, follow, 9);
+                                        pos = scan_expr(tokens, pos, follow, 0);
                                         if pos < 0 { break sg_182; }
                                         break sg_182_done;
                                     }
@@ -7167,7 +7167,7 @@ fn scan_expr_lr_17(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         }
         return -1;
     }
-    pos = scan_expr(tokens, pos, follow, 5);
+    pos = scan_expr(tokens, pos, follow, 0);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_ESCAPE && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -7255,6 +7255,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_PIPEPIPE {
             if 14 >= min_prec {
                 let lr_saved_pos = pos;
@@ -7437,6 +7438,9 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -13191,7 +13195,7 @@ fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i
     return pos;
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if _kind_set_70(kind) {
@@ -13465,7 +13469,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p, follow);
+    _parse_expr__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -13573,7 +13577,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                     }
                                     pos = gp_334;
                                     sg_334_1: {
-                                        pos = scan_expr(tokens, pos, follow, 9);
+                                        pos = scan_expr(tokens, pos, follow, 0);
                                         if pos < 0 { break sg_334_1; }
                                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                             let sp = pos;
@@ -13581,7 +13585,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                                 sg_335: {
                                                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_335; }
                                                     pos += 1;
-                                                    pos = scan_expr(tokens, pos, follow, 9);
+                                                    pos = scan_expr(tokens, pos, follow, 0);
                                                     if pos < 0 { break sg_335; }
                                                     break sg_335_done;
                                                 }
@@ -13620,10 +13624,10 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             if gd_winner_2 == 0 {
                                 let select_stmt = _parse_select_stmt(p, follow);
                             } else {
-                                let expr = _parse_expr(p, follow, 9);
+                                let expr = _parse_expr(p, follow, 0);
                                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
                                     let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                                    let expr = _parse_expr(p, follow, 9);
+                                    let expr = _parse_expr(p, follow, 0);
                                 }
                             }
                         }
@@ -13649,7 +13653,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
                     let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
-                    let expr_2 = _parse_expr(p, follow, 5);
+                    let expr_2 = _parse_expr(p, follow, 0);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         let expr = _parse_expr(p, follow, 5);
@@ -13668,7 +13672,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
                     let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
-                    let expr_2 = _parse_expr(p, follow, 5);
+                    let expr_2 = _parse_expr(p, follow, 0);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         let expr = _parse_expr(p, follow, 5);
@@ -13687,7 +13691,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
                     let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
-                    let expr_2 = _parse_expr(p, follow, 5);
+                    let expr_2 = _parse_expr(p, follow, 0);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         let expr = _parse_expr(p, follow, 5);
@@ -13706,7 +13710,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                     }
                     let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
-                    let expr_2 = _parse_expr(p, follow, 5);
+                    let expr_2 = _parse_expr(p, follow, 0);
                     if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                         let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         let expr = _parse_expr(p, follow, 5);
@@ -13805,7 +13809,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                         }
                                         pos = gp_336;
                                         sg_336_1: {
-                                            pos = scan_expr(tokens, pos, follow, 9);
+                                            pos = scan_expr(tokens, pos, follow, 0);
                                             if pos < 0 { break sg_336_1; }
                                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                                                 let sp = pos;
@@ -13813,7 +13817,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                                     sg_337: {
                                                         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_337; }
                                                         pos += 1;
-                                                        pos = scan_expr(tokens, pos, follow, 9);
+                                                        pos = scan_expr(tokens, pos, follow, 0);
                                                         if pos < 0 { break sg_337; }
                                                         break sg_337_done;
                                                     }
@@ -13852,10 +13856,10 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                                 if gd_winner_4 == 0 {
                                     let select_stmt = _parse_select_stmt(p, follow);
                                 } else {
-                                    let expr = _parse_expr(p, follow, 9);
+                                    let expr = _parse_expr(p, follow, 0);
                                     while !p.recovering && (p.peek_kind() == TK_LIT_COMMA && !follow_yields(&p.kinds, p.pos, follow, TK_EOF)) {
                                         let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                                        let expr = _parse_expr(p, follow, 9);
+                                        let expr = _parse_expr(p, follow, 0);
                                     }
                                 }
                             }
@@ -13881,7 +13885,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                             let k_not = p.expect(TK_K_NOT, &EMPTY_SYNC);
                         }
                         let _ = p.expect_set([TK_K_LIKE, TK_K_GLOB, TK_K_REGEXP, TK_K_MATCH]);
-                        let expr_2 = _parse_expr(p, follow, 5);
+                        let expr_2 = _parse_expr(p, follow, 0);
                         if p.peek_kind() == TK_K_ESCAPE && !follow_yields(&p.kinds, p.pos, follow, TK_EOF) {
                             let k_escape = p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                             let expr = _parse_expr(p, follow, 5);

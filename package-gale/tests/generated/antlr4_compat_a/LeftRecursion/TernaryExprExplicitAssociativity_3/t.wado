@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["../../grammars/LeftRecursion/TernaryExprExplicitAssociativity_3.g4"])]
+#![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/TernaryExprExplicitAssociativity_3.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -1546,6 +1546,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_STAR {
             if 4 >= min_prec {
                 let lr_saved_pos = pos;
@@ -1581,6 +1582,9 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else {
             break;
         }
+        if pos == _lr_pos0 {
+            break;
+        }
     }
     return pos;
 }
@@ -1603,7 +1607,7 @@ fn _parse_s(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_e__inner_atom(p: &mut Parser) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -1622,7 +1626,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p);
+    _parse_e__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }

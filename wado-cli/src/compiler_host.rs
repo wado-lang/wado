@@ -173,6 +173,24 @@ impl FilesystemCompilerHost {
         self.inner.base_path()
     }
 
+    /// A sibling host based at `base_path`, sharing the AOT generator cache,
+    /// the dependency index, and the diagnostics buffer (via
+    /// `wado_lsp::FilesystemCompilerHost::rebased`). The Kiln pipeline uses
+    /// it to read schemas relative to the manifest root, where `Invocation`
+    /// paths are anchored, while the main compile host stays at the entry
+    /// file's directory.
+    #[must_use]
+    pub fn rebased(&self, base_path: PathBuf) -> Self {
+        Self {
+            inner: Arc::new(self.inner.rebased(base_path)),
+            print_diagnostics: self.print_diagnostics,
+            log_level: self.log_level,
+            start_time: self.start_time,
+            kiln_cache: Arc::clone(&self.kiln_cache),
+            dep_index: self.dep_index.clone(),
+        }
+    }
+
     fn should_log(&self, severity: Severity) -> bool {
         match self.log_level {
             LogLevel::Off => false,
@@ -244,6 +262,10 @@ impl CompilerHost for FilesystemCompilerHost {
             Some(index) => index.clone(),
             None => self.inner.dependency_index(),
         }
+    }
+
+    fn env_var(&self, name: &str) -> Option<String> {
+        std::env::var(name).ok()
     }
 
     async fn run_generator(

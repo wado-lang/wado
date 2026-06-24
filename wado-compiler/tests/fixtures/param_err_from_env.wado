@@ -1,0 +1,11 @@
+use { println, Stdout } from "core:cli";
+
+#[param(from_env = "")]
+global TOKEN: String = "dev";
+
+export fn run() with Stdout {
+    println(`TOKEN={TOKEN}`);
+}
+
+__DATA__
+{"compile_error": "#[param] from_env must not be empty"}

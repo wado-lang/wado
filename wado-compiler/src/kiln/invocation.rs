@@ -88,9 +88,18 @@ pub enum GeneratorModule {
 pub struct Invocation {
     pub decl_site: DeclSite,
     pub module: GeneratorModule,
-    /// Primary schema file.
+    /// Primary schema file, resolved relative to the declaring `.wado` file
+    /// (project-root-relative). Drives input loading, the cache key, and the
+    /// default `output_dir`.
     pub from: InvocationPath,
-    /// Supplementary schema files, preserving declaration order.
+    /// The literal `from "<source>"` path as written, only normalized (not
+    /// resolved against the declaring file). Used solely as the loader-redirect
+    /// key: the loader matches `(decl_file, import_source)` against it without
+    /// resolving, so it must stay frame-independent. Excluded from
+    /// [`Invocation::identity_tuple`].
+    pub source: InvocationPath,
+    /// Supplementary schema files, resolved relative to the declaring `.wado`
+    /// file, preserving declaration order.
     pub inputs: Vec<InvocationPath>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
@@ -172,6 +181,7 @@ mod tests {
             },
             module: GeneratorModule::Spec("ns:x@1.0.0".to_string()),
             from: InvocationPath::normalize("s.proto"),
+            source: InvocationPath::normalize("./s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options_canonical: vec![],

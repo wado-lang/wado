@@ -3268,6 +3268,8 @@ A specifier names a package only — no interface segment; interfaces and member
 
 ### Module Path Validation
 
+Relative paths in Wado follow the gitignore / shell convention: a path that refers to a file **relative to the current file** must begin with `./` (next to me) or `../` (up one). A bare path (`foo/bar`, `utils.wado`) is never relative-to-here — it is read as a namespace/coordinate or handed to the host, and is rejected wherever only a relative file path is valid. This rule is uniform across every path literal: module imports (`use ... from`), `#include_str` / `#include_bytes`, and Kiln schema paths (`from`, `generator.inputs`, `generator.output_dir`).
+
 Module paths are validated before loading to provide clear error messages:
 
 **Namespace Resolution** (a namespace is reserved iff the compiler bundles it):

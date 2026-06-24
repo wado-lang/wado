@@ -3493,6 +3493,21 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
+/// A `#[param]` compile-time parameter declared on a `global`.
+///
+/// Carried from reify (which validates the attribute shape) to the
+/// param-resolution pass (which resolves an override and rewrites the
+/// initializer). See `wep-2026-04-26-compile-time-params.md`.
+#[derive(Debug, Clone)]
+pub struct ParamSpec {
+    /// Parameter name matched against `-D NAME=value`. Defaults to the
+    /// global's identifier; overridden by `#[param(name = "...")]`.
+    pub name: String,
+    /// Environment variable read at compile time, from
+    /// `#[param(from_env = "...")]`. Independent of `name`.
+    pub from_env: Option<String>,
+}
+
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
 pub struct TirGlobal {
@@ -3500,6 +3515,9 @@ pub struct TirGlobal {
     pub ty: TypeId,
     pub initializer: TirExpr,
     pub mutable: bool,
+    /// `Some` when the global carries a `#[param]` attribute. Drives the
+    /// param-resolution pass; `None` for ordinary globals.
+    pub param: Option<ParamSpec>,
     /// Whether the user declared this global as `global mut`.
     /// Preserved across lowering so the optimizer can promote lazy-init globals
     /// back to immutable when their initializers fold to constants.

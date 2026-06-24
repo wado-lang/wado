@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["../../grammars/LeftRecursion/JavaExpressions_2.g4"])]
+#![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/JavaExpressions_2.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -2481,7 +2481,7 @@ fn scan_e_lr_11(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 17);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_4, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
     pos += 1;
@@ -2817,6 +2817,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_DOT {
             if suffix_kind == TK_LIT_DOT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
@@ -2983,6 +2984,9 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -3173,7 +3177,7 @@ fn _parse_e__inner_scan_4(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     return pos;
 }
 
-fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
@@ -3305,7 +3309,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
-    _parse_e__inner_atom(p, follow);
+    _parse_e__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -3380,7 +3384,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 let lbracket = p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                let e_2 = _parse_e(p, &FOLLOW_MASK_4, 17);
+                let e_2 = _parse_e(p, &FOLLOW_MASK_4, 0);
                 let rbracket = p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {

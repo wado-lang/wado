@@ -1,0 +1,36 @@
+//! Postfix call with self-ref args nested in a Group/Repeat: args are primary
+//! references (prec 0), bounded by `,` / `)`. Regression for the
+//! `stamp_lr_self_ref_min_prec` nested branch. Static dispatch; trees match the
+//! published ANTLR4 jar.
+
+use lc from "./grammars/lr_call.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_lr_call",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = lc::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {lc::to_string_tree(&r)}`;
+    let a = lc::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "call: nested call arg stays a full expr" {
+    chk(&"a(b(c))", &"(prog (e (e a) ( (e (e b) ( (e c) )) )))");
+}
+test "call: lower-precedence arg parses inside the call" {
+    chk(&"a(b+c)", &"(prog (e (e a) ( (e (e b) + (e c)) )))");
+}
+test "call: comma-separated args" {
+    chk(&"a(b,c)", &"(prog (e (e a) ( (e b) , (e c) )))");
+}
+test "call: empty arg list" {
+    chk(&"a()", &"(prog (e (e a) ( )))");
+}
+test "call: postfix binds looser than +" {
+    chk(&"a+b(c)", &"(prog (e (e (e a) + (e b)) ( (e c) )))");
+}

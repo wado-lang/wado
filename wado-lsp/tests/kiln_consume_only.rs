@@ -46,7 +46,7 @@ fn entry_source() -> &'static str {
     "use { parse } from \"./grammars/calc.g4\" with {\n    \
      generator: {\n        \
      module: \"fake:gen@0.1\",\n        \
-     output_dir: \"tests/generated\",\n    \
+     output_dir: \"./tests/generated\",\n    \
      },\n\
      };\n\
      fn run() {\n    \

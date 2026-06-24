@@ -6,15 +6,21 @@ parser — lexer, recursive-descent parser, and an error-resilient parse tree �
 with no runtime to install and no version to keep in sync.
 
 The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
-[documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale aims to
-accept the same grammars.
+[documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale accepts
+every grammar ANTLR4 accepts — and a few it rejects, where the meaning is
+unambiguous (see [Design](#design)).
 
 ## Design
 
-Behavioral ANTLR4 compatibility. The goal is not just to _accept_ the grammars
-ANTLR4 accepts, but to _parse like ANTLR4 does_ — same precedence, same
-ambiguity resolution, same parse trees. A `.g4` that the upstream `antlr4`
-tool accepts should parse identically through Gale.
+Behavioral ANTLR4 compatibility, with a small superset. The goal is not just to
+_accept_ the grammars ANTLR4 accepts, but to _parse like ANTLR4 does_ — same
+precedence, same ambiguity resolution, same parse trees. A `.g4` that the
+upstream `antlr4` tool accepts should parse identically through Gale. Gale also
+accepts a few grammars ANTLR4 _rejects_, but only where precedence climbing
+fixes the meaning with no remaining choice — e.g. a `.`- or `~X`-led
+left-recursive suffix like `e ~';' e`, which ANTLR4 errors on (no operator
+token to climb). Where the meaning is not uniquely determined, Gale rejects
+loudly rather than guessing.
 
 Self-contained output, no version drift. Gale inlines its entire runtime into
 every generated parser. There is no `gale-runtime` package to keep aligned with
@@ -93,15 +99,15 @@ use arith from "./Arith.g4"
         generator: {
             module: "../src/generator.wado",   // the Gale generator
             options: { highlight: false },
-            output_dir: "example/generated/arith",
         },
     };
 ```
 
 `arith` is now an ordinary Wado module. It exports `parse`, the parse-tree
 types, and — because the rules are labeled — an `ExprAlt` enum with an
-`expr_alt` accessor. The generated source is written under `output_dir` so you
-can read it (and commit it); it is regenerated when the grammar changes.
+`expr_alt` accessor. The generated source defaults to `build/kiln/<id>/`
+(gitignored, regenerated when the grammar changes); add an `output_dir`
+(resolved relative to this file) to commit it to a tracked path instead.
 
 ### 3. Walking the tree: the interpreter
 
@@ -294,7 +300,8 @@ config.
 
 ## Compatibility and further reading
 
-Gale targets the full ANTLR4 `.g4` grammar syntax.
+Gale targets the full ANTLR4 `.g4` grammar syntax, plus the small superset
+described under [Design](#design).
 
 - [WEP: Gale](../docs/wep-2026-03-02-gale.md) — design and architecture.
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility

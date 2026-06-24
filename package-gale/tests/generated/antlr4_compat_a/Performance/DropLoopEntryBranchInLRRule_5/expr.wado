@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["../../grammars/Performance/DropLoopEntryBranchInLRRule_5.g4"])]
+#![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/Performance/DropLoopEntryBranchInLRRule_5.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -1068,7 +1068,7 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 //! Clean-room: follows the published ALL(*) description, not ANTLR4 sources
 //! (License hygiene, AGENTS.md). The wire-format constants below are the
 //! single source of truth; the builder/serializer in `src/atn.wado` `use`s
-//! them. The blob carries a version word `atn_decode` asserts.
+//! them.
 //!
 //! Prediction reads token kinds only, so the simulator takes the flat
 //! `&Array<i32>` kinds array rather than the full `TokenStream` (or the
@@ -1078,14 +1078,9 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
 use { TreeMap } from "core:collections";
 
 // ATN wire-format constants — the single source of truth for the serialized
-// blob layout, shared by the builder/serializer in `src/atn.wado` (which
-// `use`s these) and the decoder/simulator below. They live here, not in
-// `atn.wado`, because this runtime is `#include_str`'d verbatim into every
-// generated parser and so cannot import from the compiler crate — whereas
-// the compiler crate is free to `use` the runtime. Bump `ATN_BLOB_VERSION`
-// on any layout change so a stale committed blob fails loudly.
-pub global ATN_BLOB_MAGIC: i32 = 0x47_41_54_4e;
-pub global ATN_BLOB_VERSION: i32 = 2;
+// blob layout, shared with the builder/serializer in `src/atn.wado`. They
+// live here, not in `atn.wado`, because this runtime is `#include_str`'d into
+// every generated parser and so cannot import from the compiler crate.
 
 // State kinds. `atn_decode` copies every state's kind through verbatim and
 // the simulator only interprets `RULE_STOP` / `BLOCK_START` / `BLOCK_END`,
@@ -1373,12 +1368,6 @@ fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
 #[allow(dead_code)]
 pub fn atn_decode(data: &List<i32>) -> AtnSim {
     let mut p = 0;
-    let magic = data[p];
-    p += 1;
-    let version = data[p];
-    p += 1;
-    assert magic == ATN_BLOB_MAGIC, `ATN blob magic mismatch: {magic}`;
-    assert version == ATN_BLOB_VERSION, `ATN blob version mismatch: {version}`;
     let num_tokens = data[p];
     p += 1;
 
@@ -2130,6 +2119,7 @@ pub fn atn_ng_optional_enter(
     tokens: &Array<i32>,
     pos: i32,
     eof: i32,
+    min_prec: i32 = 0,
 ) -> bool {
     // `current_rule` is the rule the `??` lives in (a compile-time constant
     // the emitter passes): the caller stack now holds ATN return states, so
@@ -2154,7 +2144,11 @@ pub fn atn_ng_optional_enter(
     if found != 1 {
         return true;
     }
-    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof);
+    // Forward `min_prec` so a `??` inside a left-recursive rule predicts
+    // against the rule's current precedence — an enter edge that would climb
+    // an LR suffix below `min_prec` is pruned, so the simulator does not keep
+    // an impossible suffix and wrongly choose SKIP.
+    let alt = atn_predict_with_stack(sim, dec, rule_stack, tokens, pos, eof, min_prec);
     // Non-greedy optional edges are ordered [exit=0, enter=1].
     return alt == 1;
 }
@@ -2929,7 +2923,7 @@ fn _parse_stat(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2971,7 +2965,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p);
+    _parse_expr__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -3084,7 +3078,7 @@ global SYNC_0: List<i32> = [TK_ID, TK_LIT_BETWEEN, TK_LIT_LPAREN, TK_LIT_NOT];
 global SYNC_1: List<i32> = [TK_ID];
 global SYNC_2: List<i32> = [TK_LIT_RPAREN];
 
-global ATN_DATA: List<i32> = [1195463758, 2, 14, 2, 0, 2, 1, 3, 3, 4, 16, 44, 66, 2, 0, -1, 1, 0, 4, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 16, -1, -1, 0, 3, 1, -1, 0, 4, 0, 0, 2, 0, 6, -1, -1, 0, 0, 11, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 7, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 8, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 1, 10, 4, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 1, 0, -1, 1, 0, 12, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 13, 0, 1, 0, -1, 1, 0, 14, -1, -1, 0, 1, 0, -1, 1, 1, 15, 5, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 4, 1, 1, 4, 0, 18, -1, -1, 0, 0, 21, -1, -1, 0, 0, 26, -1, -1, 0, 0, 35, -1, -1, 0, 5, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 1, 20, 0, -1, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 22, -1, -1, 0, 1, 1, -1, 1, 1, 23, 6, -1, 0, 1, 1, -1, 1, 0, 24, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 25, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 27, -1, -1, 0, 1, 1, -1, 1, 1, 28, 9, -1, 0, 1, 1, -1, 1, 0, 29, -1, -1, 0, 1, 1, -1, 1, 1, 30, 0, -1, 0, 1, 1, -1, 1, 0, 31, -1, -1, 0, 1, 1, -1, 1, 1, 32, 10, -1, 0, 1, 1, -1, 1, 0, 33, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 34, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 36, -1, -1, 0, 1, 1, -1, 1, 1, 37, 13, -1, 0, 1, 1, -1, 1, 0, 38, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 39, 0, 1, 1, -1, 1, 0, 40, -1, -1, 0, 1, 1, -1, 1, 1, 41, 7, -1, 0, 1, 1, -1, 1, 0, 42, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 43, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 6, 1, 2, 4, 5, 47, -1, -1, 3, 5, 52, -1, -1, 2, 5, 57, -1, -1, 1, 0, 45, -1, -1, 0, 9, 1, -1, 1, 0, 3, -1, -1, 0, 7, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 48, -1, -1, 0, 1, 1, -1, 1, 1, 49, 7, -1, 0, 1, 1, -1, 1, 0, 50, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 51, 4, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 53, -1, -1, 0, 1, 1, -1, 1, 1, 54, 8, -1, 0, 1, 1, -1, 1, 0, 55, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 56, 3, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 58, -1, -1, 0, 1, 1, -1, 1, 1, 59, 11, -1, 0, 1, 1, -1, 1, 0, 60, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 61, 0, 1, 1, -1, 1, 0, 62, -1, -1, 0, 1, 1, -1, 1, 1, 63, 12, -1, 0, 1, 1, -1, 1, 0, 64, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 65, 2, 1, 1, -1, 1, 0, 46, -1, -1, 0];
+global ATN_DATA: List<i32> = [14, 2, 0, 2, 1, 3, 3, 4, 16, 44, 66, 2, 0, -1, 1, 0, 4, -1, -1, 0, 3, 0, -1, 0, 2, 1, -1, 1, 0, 16, -1, -1, 0, 3, 1, -1, 0, 4, 0, 0, 2, 0, 6, -1, -1, 0, 0, 11, -1, -1, 0, 5, 0, -1, 1, 0, 1, -1, -1, 0, 1, 0, -1, 1, 0, 7, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 8, 0, 1, 0, -1, 1, 0, 9, -1, -1, 0, 1, 0, -1, 1, 1, 10, 4, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 1, 0, -1, 1, 0, 12, -1, -1, 0, 1, 0, -1, 1, 4, 2, 1, 13, 0, 1, 0, -1, 1, 0, 14, -1, -1, 0, 1, 0, -1, 1, 1, 15, 5, -1, 0, 1, 0, -1, 1, 0, 5, -1, -1, 0, 4, 1, 1, 4, 0, 18, -1, -1, 0, 0, 21, -1, -1, 0, 0, 26, -1, -1, 0, 0, 35, -1, -1, 0, 5, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 19, -1, -1, 0, 1, 1, -1, 1, 1, 20, 0, -1, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 22, -1, -1, 0, 1, 1, -1, 1, 1, 23, 6, -1, 0, 1, 1, -1, 1, 0, 24, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 25, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 27, -1, -1, 0, 1, 1, -1, 1, 1, 28, 9, -1, 0, 1, 1, -1, 1, 0, 29, -1, -1, 0, 1, 1, -1, 1, 1, 30, 0, -1, 0, 1, 1, -1, 1, 0, 31, -1, -1, 0, 1, 1, -1, 1, 1, 32, 10, -1, 0, 1, 1, -1, 1, 0, 33, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 34, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 1, 1, -1, 1, 0, 36, -1, -1, 0, 1, 1, -1, 1, 1, 37, 13, -1, 0, 1, 1, -1, 1, 0, 38, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 39, 0, 1, 1, -1, 1, 0, 40, -1, -1, 0, 1, 1, -1, 1, 1, 41, 7, -1, 0, 1, 1, -1, 1, 0, 42, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 43, 0, 1, 1, -1, 1, 0, 17, -1, -1, 0, 6, 1, 2, 4, 5, 47, -1, -1, 3, 5, 52, -1, -1, 2, 5, 57, -1, -1, 1, 0, 45, -1, -1, 0, 9, 1, -1, 1, 0, 3, -1, -1, 0, 7, 1, -1, 1, 0, 44, -1, -1, 0, 1, 1, -1, 1, 0, 48, -1, -1, 0, 1, 1, -1, 1, 1, 49, 7, -1, 0, 1, 1, -1, 1, 0, 50, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 51, 4, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 53, -1, -1, 0, 1, 1, -1, 1, 1, 54, 8, -1, 0, 1, 1, -1, 1, 0, 55, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 56, 3, 1, 1, -1, 1, 0, 46, -1, -1, 0, 1, 1, -1, 1, 0, 58, -1, -1, 0, 1, 1, -1, 1, 1, 59, 11, -1, 0, 1, 1, -1, 1, 0, 60, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 61, 0, 1, 1, -1, 1, 0, 62, -1, -1, 0, 1, 1, -1, 1, 1, 63, 12, -1, 0, 1, 1, -1, 1, 0, 64, -1, -1, 0, 1, 1, -1, 1, 4, 2, 1, 65, 2, 1, 1, -1, 1, 0, 46, -1, -1, 0];
 global ATN_SIM: AtnSim = atn_decode(&ATN_DATA);
 global SCAN_STACK: List<i32> = [];
 

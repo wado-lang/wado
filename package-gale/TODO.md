@@ -148,8 +148,6 @@ PR with full-corpus validation rather than a quick patch (the AGENTS.md
 - [ ] Empty lookahead `sig` is guarded on the scan side but not the parse side, where `gen_lookahead_condition` would emit syntactically broken code (`if` / `&& ()`); either the guard is dead or the parse side is missing it. `src/parser_gen.wado:1679-1681` vs `:3178`, `:3240`
 - [ ] Diagnostic-to-rule association is by substring on a free-form label; `Diagnostic.rule` carries labels like `"SimpleCst group"` with no rule name, so the `(rule, message)` dedup can collapse diagnostics from different rules. Already tracked under "Structured diagnostic-to-rule identity". `src/gir.wado:106-109`, `src/dump.wado:505-517`
 - [ ] List-label leaf path double-bumps the inner name counter (lower bakes one bump, codegen applies two), and the Group arm lacks the collision rebind the leaf arm has — both in the dedup bug class `codegen_label_collision_test.wado` exists for. Also the non-greedy transparent first iteration dedups outer-scope bindings against a fresh counter table. `src/parser_gen.wado:3502-3530`, `:3480-3493`, `:3835-3838`
-- [ ] `gen_alt_scan_op_elements` treats the last scanned-prefix element as "trailing self-ref" even when the prefix is partial, short-circuiting the LR climb and under-scanning the tournament prefix. `src/parser_gen.wado:1253-1258`
-- [ ] Static `gen_scan_lr_suffix_dispatch` lacks the no-progress guard its ATN twin has; combined with the `continue` that skips emitting `scan_X_lr_N` for 1-element LR alts, a future `valid_lr_alts` change could reference an undefined function. `src/parser_gen.wado:825-885`, `:743` vs `:819-821`
 
 ### Unchecked-argument quality nits (non-crash)
 

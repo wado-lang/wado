@@ -136,8 +136,21 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
                 .map(std::path::Path::to_path_buf)
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         });
-    let (mut inline, identities) =
+    let (mut inline, identities, inline_diagnostics) =
         crate::compile::collect_inline_invocations_for_entry_with_identities(path, &manifest_root);
+
+    // Stop at a malformed clause, with its own diagnostics, before the compile
+    // below buries it under the unredirected `use`'s downstream failure.
+    let inline_errors = inline_diagnostics
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
+    for d in inline_diagnostics {
+        wado_compiler::CompilerHost::emit_diagnostic(&host, d);
+    }
+    if inline_errors > 0 {
+        return Err(CliExit::silent_failure(1));
+    }
 
     let outcome = if inline.is_empty() {
         CheckOutcome::default()
@@ -148,10 +161,17 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         crate::compile::rewrite_build_dep_modules(&mut inline, &manifest, &manifest_root);
         crate::compile::rewrite_local_dir_modules(&mut inline, &manifest_root);
         let provider = CliGeneratorProvider::new(manifest_root.clone());
-        let mut outcome =
-            crate::kiln_driver::check_pipeline(&manifest, &manifest_root, &host, &provider, inline)
-                .await
-                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
+        // Schemas are anchored at the manifest root; load them relative to it.
+        let kiln_host = host.rebased(manifest_root.clone());
+        let mut outcome = crate::kiln_driver::check_pipeline(
+            &manifest,
+            &manifest_root,
+            &kiln_host,
+            &provider,
+            inline,
+        )
+        .await
+        .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
         crate::compile::remap_index_decl_files(&mut outcome.invocations, &identities);
         outcome
     };

@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["Arith.g4"])]
+#![generated(by = "gale", sources = ["tests/grammars/lr_paren.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -1050,22 +1050,19 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     return [lo + 1, pos - line_starts[lo]];
 }
 pub enum TokenKind {
-    INT,
+    ID,
     WS,
     Eof,
     Error,
 }
 
-global TK_INT: i32 = 0;
+global TK_ID: i32 = 0;
 global TK_WS: i32 = 1;
 global TK_EOF: i32 = 2;
 global TK_ERROR: i32 = 3;
 global TK_LIT_STAR: i32 = 4;
-global TK_LIT_SLASH: i32 = 5;
-global TK_LIT_PLUS: i32 = 6;
-global TK_LIT_MINUS: i32 = 7;
-global TK_LIT_LPAREN: i32 = 8;
-global TK_LIT_RPAREN: i32 = 9;
+global TK_LIT_LPAREN: i32 = 5;
+global TK_LIT_RPAREN: i32 = 6;
 
 struct Lexer {
     chars: List<char>,
@@ -1086,16 +1083,16 @@ impl Lexer {
     }
 }
 
-fn try_INT(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !('0' <= chars[pos] <= '9') { return -1; }
+    if !('a' <= chars[pos] <= 'z') { return -1; }
     pos += 1;
     loop {
         let rep_saved_0 = pos;
         rep_0: {
             if pos >= chars.len() { break rep_0; }
-            if !('0' <= chars[pos] <= '9') { break rep_0; }
+            if !('a' <= chars[pos] <= 'z') { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1127,24 +1124,6 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
 fn try_lit_star(chars: &List<char>, start: i32) -> i32 {
     let pos = start;
     if pos + 0 >= chars.len() || chars[pos + 0] != '*' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_slash(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '/' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_plus(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '+' { return -1; }
-    return pos + 1;
-}
-
-fn try_lit_minus(chars: &List<char>, start: i32) -> i32 {
-    let pos = start;
-    if pos + 0 >= chars.len() || chars[pos + 0] != '-' { return -1; }
     return pos + 1;
 }
 
@@ -1182,21 +1161,12 @@ pub fn tokenize(input: &String) -> TokenStream {
         } else if first_char == '*' {
             end = try_lit_star(&lexer.chars, start);
             if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-        } else if first_char == '+' {
-            end = try_lit_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char == '-' {
-            end = try_lit_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        } else if first_char == '/' {
-            end = try_lit_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-        } else if '0' <= first_char <= '9' {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
+        } else if 'a' <= first_char <= 'z' {
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         } else {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
+            end = try_ID(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_ID; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
@@ -1220,14 +1190,11 @@ pub fn tokenize(input: &String) -> TokenStream {
 
 pub fn token_kind_name(kind: i32) -> String {
     return match kind {
-        TK_INT => "INT",
+        TK_ID => "ID",
         TK_WS => "WS",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         TK_LIT_STAR => "TK_LIT_STAR",
-        TK_LIT_SLASH => "TK_LIT_SLASH",
-        TK_LIT_PLUS => "TK_LIT_PLUS",
-        TK_LIT_MINUS => "TK_LIT_MINUS",
         TK_LIT_LPAREN => "TK_LIT_LPAREN",
         TK_LIT_RPAREN => "TK_LIT_RPAREN",
         _ => "Unknown",
@@ -1235,9 +1202,9 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_PROG: NodeKind = 0;
-pub global RK_EXPR: NodeKind = 1;
+pub global RK_E: NodeKind = 1;
 
-global RULE_NAMES: List<String> = ["prog", "expr"];
+global RULE_NAMES: List<String> = ["prog", "e"];
 
 impl Display for NodeKind {
     fn fmt(&self, f: &mut Formatter) {
@@ -1254,23 +1221,6 @@ impl Inspect for NodeKind {
         self.fmt(f);
         f.write_str(&`({*self as i32})`);
     }
-}
-
-pub enum ExprAlt {
-    MulDiv,
-    AddSub,
-    Paren,
-    Num,
-}
-
-pub fn expr_alt(node: &CstNode) -> Option<ExprAlt> {
-    return match node.alt {
-        0 => Option::Some(ExprAlt::MulDiv),
-        1 => Option::Some(ExprAlt::AddSub),
-        2 => Option::Some(ExprAlt::Paren),
-        3 => Option::Some(ExprAlt::Num),
-        _ => null,
-    };
 }
 
 struct Parser {
@@ -1514,113 +1464,66 @@ impl Parser {
 
 fn scan_prog(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos, 0);
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
-    let start = pos;
+fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    scan_alts: {
-        if alt_kind == TK_LIT_LPAREN {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
-                pos += 1;
-                pos = scan_expr(tokens, pos, 0);
-                if pos < 0 { break try_0; }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else if alt_kind == TK_INT {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
-        } else {
-            return -1;
-        }
-    }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     return pos;
 }
 
-fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_e_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_0 = pos;
-    sg_0: {
-        pos = gp_0;
-        sg_0_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { break sg_0_0; }
-            pos += 1;
-            break sg_0;
-        }
-        pos = gp_0;
-        sg_0_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_SLASH { break sg_0_1; }
-            pos += 1;
-            break sg_0;
-        }
-        return -1;
-    }
-    pos = scan_expr(tokens, pos, 3);
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_STAR { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 3);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_1 = pos;
-    sg_1: {
-        pos = gp_1;
-        sg_1_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break sg_1_0; }
-            pos += 1;
-            break sg_1;
-        }
-        pos = gp_1;
-        sg_1_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break sg_1_1; }
-            pos += 1;
-            break sg_1;
-        }
-        return -1;
-    }
-    pos = scan_expr(tokens, pos, 2);
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
+    pos += 1;
+    pos = scan_e(tokens, pos, 0);
     if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
+    pos += 1;
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos);
+fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_e_atom(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if _kind_set_0(suffix_kind) {
+        let _lr_pos0 = pos;
+        if suffix_kind == TK_LIT_STAR {
             if 2 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_0(tokens, pos);
+                pos = scan_e_lr_0(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
-        } else if _kind_set_1(suffix_kind) {
+        } else if suffix_kind == TK_LIT_LPAREN {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                pos = scan_expr_lr_1(tokens, pos);
+                pos = scan_e_lr_1(tokens, pos);
                 if pos < 0 { pos = lr_saved_pos; break; }
             } else {
                 break;
             }
         } else {
+            break;
+        }
+        if pos == _lr_pos0 {
             break;
         }
     }
@@ -1629,7 +1532,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
     let start = p.peek_start();
-    let expr = _parse_expr(p);
+    let e = _parse_e(p);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1645,60 +1548,51 @@ fn _parse_prog(p: &mut Parser) -> () {
     }
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
-    if kind == TK_LIT_LPAREN {
-        p.b.set_alt(2);
-        let lparen = p.expect(TK_LIT_LPAREN, &SYNC_0);
-        let expr = _parse_expr(p);
-        let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
-        return;
-    }
-    if kind == TK_INT {
-        p.b.set_alt(3);
-        let int = p.expect(TK_INT, &EMPTY_SYNC);
+    if kind == TK_ID {
+        let id = p.expect(TK_ID, &EMPTY_SYNC);
         return;
     }
     p.no_viable(
-        "expected expr",
+        "expected e",
         p.peek_span(),
-        ["TK_LIT_LPAREN", "TK_INT"],
+        ["TK_ID"],
     );
     return;
 }
 
-fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
-    p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p);
+    p.b.start_node(RK_E, _start);
+    _parse_e__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
         let _sk = p.peek_kind();
-        if _kind_set_0(_sk) {
+        if _sk == TK_LIT_STAR {
             if 2 >= min_prec {
-                if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_0(&p.kinds, p.pos) < 0 {
                     break;
                 }
-                p.b.start_node_at(_cp, RK_EXPR, _start);
-                p.b.set_alt(0);
-                let _ = p.expect_set([TK_LIT_STAR, TK_LIT_SLASH]);
-                let expr_2 = _parse_expr(p, 3);
+                p.b.start_node_at(_cp, RK_E, _start);
+                let star = p.expect(TK_LIT_STAR, &EMPTY_SYNC);
+                let e_2 = _parse_e(p, 3);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
             }
-        } else if _kind_set_1(_sk) {
+        } else if _sk == TK_LIT_LPAREN {
             if 1 >= min_prec {
-                if scan_expr_lr_1(&p.kinds, p.pos) < 0 {
+                if scan_e_lr_1(&p.kinds, p.pos) < 0 {
                     break;
                 }
-                p.b.start_node_at(_cp, RK_EXPR, _start);
-                p.b.set_alt(1);
-                let _ = p.expect_set([TK_LIT_PLUS, TK_LIT_MINUS]);
-                let expr_2 = _parse_expr(p, 2);
+                p.b.start_node_at(_cp, RK_E, _start);
+                let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
+                let e_2 = _parse_e(p, 0);
+                let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -1710,11 +1604,11 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     return;
 }
 
-fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
-    _parse_expr__inner(p, min_prec);
+    _parse_e__inner(p, min_prec);
     if p.recovering {
-        p.push_rule_stack("expr");
+        p.push_rule_stack("e");
     }
 }
 
@@ -1743,21 +1637,21 @@ pub fn parse_prog(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_prog(p));
 }
 
-pub fn parse_expr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));
+pub fn parse_e(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_e(p));
 }
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    let mut token_names: List<String> = List::with_capacity(10);
-    for let mut k = 0; k < 10; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
-    let mut token_names: List<String> = List::with_capacity(10);
-    for let mut k = 0; k < 10; k += 1 {
+    let mut token_names: List<String> = List::with_capacity(7);
+    for let mut k = 0; k < 7; k += 1 {
         token_names.push(token_kind_name(k));
     }
     let mut _kind: i32 = -1;
@@ -1773,14 +1667,5 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
     return String::new();
 }
 
-fn _kind_set_0(k: i32) -> bool {
-    return k matches { TK_LIT_SLASH | TK_LIT_STAR };
-}
-
-fn _kind_set_1(k: i32) -> bool {
-    return k matches { TK_LIT_MINUS | TK_LIT_PLUS };
-}
-
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_INT, TK_LIT_LPAREN];
 

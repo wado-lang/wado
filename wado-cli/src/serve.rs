@@ -76,6 +76,8 @@ pub struct ServeOptions {
     pub no_cache: bool,
     /// Generic codegen feature flags from `-f <flag>`.
     pub codegen_flags: Vec<String>,
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 #[derive(Clone, Copy)]
@@ -193,6 +195,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -248,9 +256,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut profile = ProfileMode::None;
     let mut no_cache = false;
     let mut codegen_flags: Vec<String> = Vec::new();
+    let mut param_args = args::ParamArgs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            param_args.apply(p, &mut parser)?;
+        } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Addr => addr = args::require_string(&mut parser)?,
                 Opt::Dir => preopened_dirs.push(args::parse_dir_arg(&mut parser)?),
@@ -343,6 +354,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         profile,
         no_cache,
         codegen_flags,
+        param_overrides: param_args.overrides,
+        param_policy: param_args.policy,
     })
 }
 
@@ -1180,6 +1193,8 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         test_name_filters: Vec::new(),
         codegen_flags: opts.codegen_flags.clone(),
         lib_world: None,
+        param_overrides: opts.param_overrides.clone(),
+        param_policy: opts.param_policy,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

@@ -6,6 +6,7 @@ use std::process;
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::param_resolution::ParamPolicyLevel;
 
 /// Outcome of a subcommand: a message to print and an exit code.
 ///
@@ -212,6 +213,108 @@ pub const NO_CACHE_SPEC: OptSpec = OptSpec {
     value: None,
     desc: "Bypass all build caches: re-run Kiln generators on every invocation\nand recompile generator wasm components from source.\nThe cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
 };
+
+/// Shared spec: `-D NAME=value` (alias `--define`) — compile-time parameter
+/// override for a `#[param]` global. Repeatable.
+pub const DEFINE_SPEC: OptSpec = OptSpec {
+    long: Some("define"),
+    short: Some('D'),
+    value: Some("NAME=value"),
+    desc: "Override a #[param] compile-time parameter (repeatable)",
+};
+
+pub const PARAM_UNKNOWN_SPEC: OptSpec = OptSpec {
+    long: Some("param-unknown"),
+    short: None,
+    value: Some("<level>"),
+    desc: "Policy for a -D matching no #[param]: error, warn, ignore (default: error)",
+};
+
+pub const PARAM_INVALID_SPEC: OptSpec = OptSpec {
+    long: Some("param-invalid"),
+    short: None,
+    value: Some("<level>"),
+    desc: "Policy for an unconvertible override value: error, warn, ignore (default: error)",
+};
+
+pub const PARAM_MISSING_SPEC: OptSpec = OptSpec {
+    long: Some("param-missing"),
+    short: None,
+    value: Some("<level>"),
+    desc: "Policy for a parameter with no override: error, warn, ignore (default: ignore)",
+};
+
+/// Parse `-D NAME=value` / `--define NAME=value`, splitting on the first `=`.
+/// A bare `NAME` (no `=`) is an error.
+pub fn parse_define_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
+    let raw = require_string(parser)?;
+    match raw.split_once('=') {
+        Some((name, value)) if !name.is_empty() => Ok((name.to_owned(), value.to_owned())),
+        _ => Err(CliExit::error(format!(
+            "invalid -D argument '{raw}'; expected NAME=value"
+        ))),
+    }
+}
+
+/// Parse a `--param-*` policy level (`error` / `warn` / `ignore`).
+pub fn parse_param_policy_arg(opt: &str, parser: &mut Parser) -> Result<ParamPolicyLevel, CliExit> {
+    let s = require_string(parser)?;
+    ParamPolicyLevel::parse(&s)
+        .ok_or_else(|| CliExit::error(format!("{opt} requires error, warn, or ignore, got '{s}'")))
+}
+
+/// The compile-time-parameter options shared by every subcommand that compiles
+/// (`compile` / `run` / `serve` / `test` / `dump`). Embed [`ParamArgs`] in the
+/// parse loop and add `ParamOpt::ALL` to the help output.
+#[derive(Clone, Copy)]
+pub enum ParamOpt {
+    Define,
+    Unknown,
+    Invalid,
+    Missing,
+}
+
+impl ParamOpt {
+    pub const ALL: &[Self] = &[Self::Define, Self::Unknown, Self::Invalid, Self::Missing];
+
+    pub const fn spec(self) -> OptSpec {
+        match self {
+            Self::Define => DEFINE_SPEC,
+            Self::Unknown => PARAM_UNKNOWN_SPEC,
+            Self::Invalid => PARAM_INVALID_SPEC,
+            Self::Missing => PARAM_MISSING_SPEC,
+        }
+    }
+}
+
+/// Accumulated `-D` overrides and `--param-*` policy from the command line.
+#[derive(Clone, Debug, Default)]
+pub struct ParamArgs {
+    pub overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    pub policy: wado_compiler::param_resolution::ParamPolicy,
+}
+
+impl ParamArgs {
+    /// Apply a matched [`ParamOpt`], consuming its value from the parser.
+    pub fn apply(&mut self, opt: ParamOpt, parser: &mut Parser) -> Result<(), CliExit> {
+        match opt {
+            ParamOpt::Define => {
+                let (name, value) = parse_define_arg(parser)?;
+                self.overrides.insert(name, value);
+            }
+            ParamOpt::Unknown => {
+                self.policy.unknown = parse_param_policy_arg("--param-unknown", parser)?;
+            }
+            ParamOpt::Invalid => {
+                self.policy.invalid = parse_param_policy_arg("--param-invalid", parser)?;
+            }
+            ParamOpt::Missing => {
+                self.policy.missing = parse_param_policy_arg("--param-missing", parser)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 pub fn match_opt<T: Copy>(
     arg: &lexopt::Arg<'_>,

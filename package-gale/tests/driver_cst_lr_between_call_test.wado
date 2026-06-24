@@ -1,0 +1,37 @@
+//! ATN-class LR rule (shared `'and'` delimiter forces the runtime loop-entry)
+//! with a postfix call alt whose args are self-refs nested in a Group/Repeat.
+//! Pins that the whole-grammar ATN builds those nested self-refs at prec 0,
+//! matching the static path and the published ANTLR4 jar. Previously rejected
+//! by the `build_lr_suffix` nested-self-ref assert.
+
+use bc from "./grammars/lr_between_call.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_lr_between_call",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = bc::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {bc::to_string_tree(&r)}`;
+    let a = bc::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "between-call: comma args parse at prec 0" {
+    chk(&"1(2,3)", &"(prog (expr (expr 1) ( (expr 2) , (expr 3) )))");
+}
+test "between-call: call binds tighter than and" {
+    chk(&"1(2,3) and 4", &"(prog (expr (expr (expr 1) ( (expr 2) , (expr 3) )) and (expr 4)))");
+}
+test "between-call: and binds tighter than call" {
+    chk(&"1 and 2(3)", &"(prog (expr (expr (expr 1) and (expr 2)) ( (expr 3) )))");
+}
+test "between-call: call applies to a between expression" {
+    chk(&"between 1 and 2(3)", &"(prog (expr (expr between (expr 1) and (expr 2)) ( (expr 3) )))");
+}
+test "between-call: lower-precedence arg parses inside the call" {
+    chk(&"1(2 and 3)", &"(prog (expr (expr 1) ( (expr (expr 2) and (expr 3)) )))");
+}

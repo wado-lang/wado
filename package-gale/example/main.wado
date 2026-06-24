@@ -1,27 +1,46 @@
-//! CLI for the arithmetic interpreter: `arith <expression>` prints the result.
+//! CLI driving both example interpreters as subcommands:
 //!
-//!   wado run package-gale/example/main.wado '2 * (3 + 4)'   # -> 14
+//!   wado run package-gale/example/main.wado arith '2 * (3 + 4)'    # -> 14
+//!   wado run package-gale/example/main.wado logic 'between 1 and 5' # -> 1
 //!
-//! The `between`/`and`/`or` ALL(*) example (`logic.wado`) is exercised by its
-//! own test rather than this CLI: a single program cannot yet import two
-//! independent Gale parsers, because their generated `CstNode` types share a
-//! name and collide in cross-module type resolution (issue #1416). Once that
-//! is fixed this entry can grow into a subcommand CLI driving both.
+//! `arith` (`eval.wado`) and `logic` (`logic.wado`) each embed an independent
+//! Gale-generated parser whose `CstNode` types share a name. Importing both
+//! into one program used to miscompile (issue #1416: cross-module recursive
+//! types behind a closure collided); that is now fixed, so this entry drives
+//! both.
 
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use { eval } from "./eval.wado";
+use { eval as eval_arith } from "./eval.wado";
+use { eval as eval_logic } from "./logic.wado";
 
 export fn run() with Stdout, Stderr, Environment, Exit {
     let arguments = args();
-    if arguments.len() != 1 {
-        eprintln("usage: arith <expression>");
+    if arguments.len() != 2 {
+        usage();
         exit(1);
     }
-    match eval(&arguments[0]) {
+    let command = &arguments[0];
+    let expr = &arguments[1];
+    let result = match *command {
+        "arith" => eval_arith(expr),
+        "logic" => eval_logic(expr),
+        _ => {
+            eprintln(`unknown subcommand: {*command}`);
+            usage();
+            exit(1);
+        },
+    };
+    match result {
         Ok(v) => println(`{v}`),
         Err(m) => {
             eprintln(`error: {m}`);
             exit(1);
         },
     }
+}
+
+fn usage() with Stderr {
+    eprintln("usage: <arith|logic> <expression>");
+    eprintln("  arith '2 * (3 + 4)'      # -> 14");
+    eprintln("  logic 'between 1 and 5'  # -> 1");
 }

@@ -1,4 +1,4 @@
-#![generated(by = "gale", sources = ["../../grammars/LeftRecursion/WhitespaceInfluence_2.g4"])]
+#![generated(by = "gale", sources = ["tests/antlr4-compat/grammars/LeftRecursion/WhitespaceInfluence_2.g4"])]
 
 //! Core lexing vocabulary shared by every generated parser and by Gale's
 //! own front end: source spans, lazy token-text slices, tokens, and the
@@ -2485,7 +2485,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, 4);
+    pos = scan_expression(tokens, pos, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
         let sp = pos;
@@ -2493,7 +2493,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32) -> i32 {
             sg_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_2; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, 4);
+                pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -2558,6 +2558,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_CARET {
             if 15 >= min_prec {
                 let lr_saved_pos = pos;
@@ -2681,6 +2682,9 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         } else {
             break;
         }
+        if pos == _lr_pos0 {
+            break;
+        }
     }
     return pos;
 }
@@ -2778,7 +2782,7 @@ fn _parse_expression__inner_scan_25(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_expression__inner_atom(p: &mut Parser) -> () {
+fn _parse_expression__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let start = p.peek_start();
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2901,7 +2905,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    _parse_expression__inner_atom(p);
+    _parse_expression__inner_atom(p, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -3071,10 +3075,10 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.b.set_alt(17);
                 let k_in = p.expect(TK_K_IN, &EMPTY_SYNC);
                 let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-                let expression_2 = _parse_expression(p, 4);
+                let expression_2 = _parse_expression(p, 0);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
                     let comma = p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
-                    let expression = _parse_expression(p, 4);
+                    let expression = _parse_expression(p, 0);
                 }
                 let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());

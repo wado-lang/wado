@@ -1,0 +1,30 @@
+//! Top-level parenthesised self-ref in an LR suffix (`e '(' e ')'`): the
+//! bracketed `e` is a primary reference (prec 0), bounded by `)` rather than a
+//! precedence floor. Regression for `compute_self_ref_prec_from_ops`. Trees
+//! match the published ANTLR4 jar.
+
+use lp from "./grammars/lr_paren.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_lr_paren",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = lp::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {lp::to_string_tree(&r)}`;
+    let a = lp::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "paren: nested parenthesised self-ref" {
+    chk(&"a(b(c))", &"(prog (e (e a) ( (e (e b) ( (e c) )) )))");
+}
+test "paren: bracketed arg admits higher precedence" {
+    chk(&"a(b*c)", &"(prog (e (e a) ( (e (e b) * (e c)) )))");
+}
+test "paren: star binds the parenthesised result" {
+    chk(&"a(b)*c", &"(prog (e (e (e a) ( (e b) )) * (e c)))");
+}

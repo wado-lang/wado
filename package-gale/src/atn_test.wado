@@ -312,10 +312,9 @@ test "lr_loop_entry_decision selects the precedence loop entry, not an atom star
 }
 
 // An ATN-class rule (made so by the `'between' …` atom) with a `~SEMI`-led LR
-// suffix has an empty static `suffix_first`, which the dispatcher drops from
-// `valid_lr_alts` — misaligning the ATN edge index. Until the dispatcher is
-// aligned to the edge list, `build_atn` must fail loudly rather than emit a
-// mis-dispatching parser.
+// suffix has an empty static `suffix_first`. The dispatcher keeps it (the
+// simulator admits the complement operator), so `build_atn` builds a precedence
+// edge for it, aligned with `valid_lr_alts`.
 global LR_OPEN_SUFFIX_G4: String = "
 grammar T;
 e : 'between' e 'and' e
@@ -327,15 +326,27 @@ SEMI : ';' ;
 WS : ' ' -> skip ;
 ";
 
-#[expect_trap]
-test "build_atn traps on an open-ended LR suffix in an ATN-class rule" {
+test "build_atn builds a precedence edge for a `~X`-led LR suffix" {
     let g = parse(LR_OPEN_SUFFIX_G4).unwrap();
-    let _ = build_atn(&g);
+    let atn = build_atn(&g);
+    // `e` is rule 0; its loop-entry must carry a precedence edge per real LR
+    // suffix — three here (`'and'`, the `~SEMI` operator, and `between`'s
+    // `'and'` are atom/loop alts), at least one of which is the open-ended
+    // `~SEMI` operator with no static first token.
+    let d = lr_loop_entry_decision(&atn, 0);
+    assert d >= 0, "rule `e` must have an LR loop-entry decision";
+    let mut prec_edges = 0;
+    for let t of &atn.states[atn.decision_state[d]].transitions {
+        if t.kind == ATN_TR_PRECEDENCE {
+            prec_edges += 1;
+        }
+    }
+    assert prec_edges >= 2, `expected precedence edges for every real LR suffix, got {prec_edges}`;
 }
 
-// An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`)
-// would be built with the wrong precedence floor. `build_atn` must trap rather
-// than emit an ATN that models a different language than the parser.
+// An LR suffix whose recursive operand is nested inside a Repeat (`('and' e)+`).
+// The follow-aware builder decides the nested operand's precedence floor from
+// its own follow, so the ATN models the same language as the parser (no trap).
 global LR_NESTED_SELFREF_G4: String = "
 grammar T;
 e : e ('and' e)+
@@ -344,8 +355,22 @@ ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ";
 
-#[expect_trap]
-test "build_atn traps on a nested self-reference in an LR suffix" {
+test "build_atn handles a nested self-reference in an LR suffix" {
+    // `e ('and' e)+` nests a self-ref inside the `+` repeat. The nested
+    // operand is followed by an LR operator (`and`), so it carries a
+    // precedence floor (`conflict_min`) — the follow-aware builder, not the
+    // old loud trap. A bracketed arg (no LR operator in follow) would get
+    // prec 0 instead.
     let g = parse(LR_NESTED_SELFREF_G4).unwrap();
-    let _ = build_atn(&g);
+    let atn = build_atn(&g);
+    // `e` is parser rule 0; find the self-recursive RULE transition.
+    let mut found_floored_self_ref = false;
+    for let st of &atn.states {
+        for let t of &st.transitions {
+            if t.kind == ATN_TR_RULE && t.target == atn.rule_start[0] && t.prec > 0 {
+                found_floored_self_ref = true;
+            }
+        }
+    }
+    assert found_floored_self_ref, "nested self-ref in `('and' e)+` should carry a precedence floor";
 }

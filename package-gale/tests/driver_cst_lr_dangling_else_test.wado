@@ -1,0 +1,33 @@
+//! Non-greedy `??` inside a left-recursive rule (dangling-else). The `??`
+//! enter/skip is decided by the ATN simulator with the rule's live `min_prec`
+//! threaded in. Regression for the former `atn_optional_enter_cond` LR assert.
+//! Trees match the published ANTLR4 jar.
+
+use de from "./grammars/lr_dangling_else.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: { highlight: false },
+            output_dir: "./generated/cst_lr_dangling_else",
+        },
+    };
+
+fn chk(input: &String, expected: &String) {
+    let r = de::parse(input);
+    assert r.ok(), `unexpected diagnostics for {*input}: {de::to_string_tree(&r)}`;
+    let a = de::to_string_tree(&r);
+    assert a == *expected, `\ninput:    {*input}\nexpected: {*expected}\nactual:   {a}`;
+}
+
+test "dangling-else: no else" {
+    chk(&"if 1 then 2", &"(prog (e if (e 1) then (e 2)))");
+}
+test "dangling-else: else binds" {
+    chk(&"if 1 then 2 else 3", &"(prog (e if (e 1) then (e 2) else (e 3)))");
+}
+test "dangling-else: else binds to the nearest (inner) if" {
+    chk(&"if 1 then if 2 then 3 else 4", &"(prog (e if (e 1) then (e if (e 2) then (e 3)) else (e 4)))");
+}
+test "dangling-else: then-operand admits a higher-precedence suffix" {
+    chk(&"if 1 then 2 * 3", &"(prog (e if (e 1) then (e (e 2) * (e 3))))");
+}

@@ -54,6 +54,8 @@ pub struct TestOptions {
     /// compiled and run; the rest are dropped before codegen so early DCE
     /// removes them. Empty means "run every test".
     pub test_name_filters: Vec<String>,
+    pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    pub param_policy: wado_compiler::param_resolution::ParamPolicy,
 }
 
 impl TestOptions {
@@ -72,6 +74,8 @@ impl TestOptions {
             test_name_filters: self.test_name_filters.clone(),
             codegen_flags: Vec::new(),
             lib_world: None,
+            param_overrides: self.param_overrides.clone(),
+            param_policy: self.param_policy,
         }
     }
 }
@@ -180,6 +184,12 @@ fn format_usage() -> String {
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(args::ParamOpt::ALL, |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -361,8 +371,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut no_dir = false;
     let mut no_run = false;
     let mut no_cache = false;
+    let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
-        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+        if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
+            param_args.apply(p, &mut parser)?;
+        } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Filter => {
                     filters.push(args::require_string(&mut parser)?);
@@ -484,6 +497,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         no_run,
         no_cache,
         test_name_filters,
+        param_overrides: param_args.overrides,
+        param_policy: param_args.policy,
     })
 }
 

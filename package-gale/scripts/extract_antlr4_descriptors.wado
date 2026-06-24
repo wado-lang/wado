@@ -665,7 +665,7 @@ fn emit_test_file(spec: &TestFileSpec, body: fn(&mut CodeWriter)) -> String {
     w.line(&"        generator: {");
     w.line(&`            module: "../../../../src/generator.wado",`);
     w.line(&"            options: { highlight: false },");
-    w.line(&`            output_dir: "tests/generated/{spec.output_subdir}/{spec.category}/{spec.name}",`);
+    w.line(&`            output_dir: "../../../generated/{spec.output_subdir}/{spec.category}/{spec.name}",`);
     w.line(&"        },");
     w.line(&"    };");
     for let sym of &spec.import_names {
@@ -2477,7 +2477,7 @@ test "emit_test_file: Todo triage decorates the test and wires Stage A paths" {
     let src = emit_stage_a_parse_test_file(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky"));
     assert src.contains("#[TODO]"), src;
     assert src.contains("// triage: flaky"), src;
-    assert src.contains("output_dir: \"tests/generated/antlr4_compat_a/Foo/Bar\""), src;
+    assert src.contains("output_dir: \"../../../generated/antlr4_compat_a/Foo/Bar\""), src;
     assert src.contains("test \"stage_a_parse: Foo/Bar\""), src;
     assert src.contains("t::parse_start(&input)"), src;
     // Stage A parse needs no extra runtime import.
@@ -2487,7 +2487,7 @@ test "emit_test_file: Todo triage decorates the test and wires Stage A paths" {
 test "emit_test_file: per-claim imports and output dirs differ" {
     let b = emit_stage_b_test_file(&"C", &"N", &"i", &"", &"(t)", &Triage::Pass);
     assert b.contains("use { normalize_tree }"), b;
-    assert b.contains("output_dir: \"tests/generated/antlr4_compat_b/C/N\""), b;
+    assert b.contains("output_dir: \"../../../generated/antlr4_compat_b/C/N\""), b;
     assert b.contains("t::parse(&input)"), b;
 
     let lexer_err = emit_stage_a_err_test_file(&"C", &"N", &"i", &"", true, &Triage::Pass);
