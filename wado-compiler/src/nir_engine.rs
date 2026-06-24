@@ -186,17 +186,13 @@ impl<'a> Engine<'a> {
     /// A query reflects the maintained state.
     pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.ensure_value_graph();
-        if let Some(v) = self.body.value_graph.as_ref()?.value_of.get(&expr).copied() {
-            return Some(v);
-        }
-        // Build-once pure-node maintenance. After a structural pass (`inline`)
-        // clears `value_of`, a **pure** node's value is recomputable from its
-        // operands: a promoted `Operand::Value` survives the clear, and a skeleton
-        // operand resolves recursively. This re-derives only `Binary` / non-address
-        // `Unary` / `Cast` — never a leaf (`Local` / `FieldAccess`), whose value is
-        // flow-dependent and must come from promotion, not query-time guessing — so
-        // the maintained graph still refines a fresh build (an unpromoted leaf stays
-        // `None`, never a wrong identity). Caches the result.
+        // `value_of` retirement: the skeleton-expr → value side-table read is
+        // removed. An expr's value now comes only from promoted operands
+        // (born-as-operands) and pure re-derivation over them; an unpromoted leaf
+        // (`Local` / `FieldAccess`) resolves to `None`. Sound — `None` is the
+        // finest partition, so consumers (cse / store_load_forward / freeze) skip
+        // the expr rather than over-merge. The remaining red is the honest measure
+        // of how much the optimizer still depends on the side-table.
         self.maintain_pure_node(expr)
     }
 
