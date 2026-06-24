@@ -478,12 +478,12 @@ fn lower_module_specifier(
 /// When `resolved` lies above or beside `manifest_root` (e.g. an inline
 /// clause in `wasm-size/foo/bar.wado` referencing
 /// `../../package-gale/src/generator.wado`), `..` segments are emitted to
-/// walk up out of `manifest_root` before descending into `resolved`. An
-/// An empty or current-directory (`.`) `manifest_root` means the path is
-/// already project-root-relative and is returned verbatim. `.` path segments
-/// are dropped on both sides so a root of `.` (the common case of compiling an
-/// entry that sits next to `wado.toml`) does not spuriously emit a leading
-/// `..` (issue: `output_dir: "generated"` escaping the project).
+/// walk up out of `manifest_root` before descending into `resolved`.
+///
+/// An empty or `.` `manifest_root` returns the path verbatim. `.` segments are
+/// dropped on both sides, so a `.` root (compiling an entry next to
+/// `wado.toml`) does not emit a spurious leading `..` that would put output
+/// outside the project (e.g. `output_dir: "generated"` → `../generated`).
 fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
     let is_segment = |p: &&str| !p.is_empty() && *p != ".";
     let root_parts: Vec<&str> = manifest_root.split('/').filter(is_segment).collect();

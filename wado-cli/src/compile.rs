@@ -504,9 +504,9 @@ pub(crate) async fn maybe_run_pipeline(
     let (inline, identities, inline_diagnostics) =
         collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root);
 
-    // Surface malformed inline-clause diagnostics (e.g. a bare, non-`./` path)
-    // through the host and fail, rather than letting the `use` fall through to
-    // a confusing downstream error.
+    // Fail on a malformed clause here, with its own diagnostics, so the clear
+    // error is not buried under the downstream failure of the unredirected
+    // `use` falling through to the lexer.
     let inline_errors = inline_diagnostics
         .iter()
         .filter(|d| d.severity == wado_compiler::Severity::Error)
@@ -763,10 +763,8 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
         &manifest_root_str,
     ) {
         Ok(invs) => (invs, Vec::new()),
-        // A malformed inline clause (e.g. a bare, non-`./` path) yields an
-        // empty invocation set plus the diagnostics; the caller surfaces them
-        // and fails the build rather than letting the `use` fall through to a
-        // confusing downstream error.
+        // Hand the diagnostics back for the caller to surface; a malformed
+        // clause produces no invocations.
         Err(diags) => (Vec::new(), diags),
     };
     (invocations, identities, diagnostics)

@@ -173,15 +173,12 @@ impl FilesystemCompilerHost {
         self.inner.base_path()
     }
 
-    /// A sibling host that loads sources relative to `base_path` instead of
-    /// this host's base, while sharing the AOT generator cache, the
-    /// dependency index, and — crucially — the diagnostics buffer, and copying
-    /// the log/print settings. The Kiln pipeline uses this to read schemas
-    /// relative to the manifest root (where `Invocation` paths are anchored),
-    /// whereas the main compile host stays anchored at the entry file's
-    /// directory; sharing the diagnostics buffer keeps pipeline-emitted
-    /// diagnostics visible to the consuming `host.has_errors()` /
-    /// `host.diagnostics()` gate.
+    /// A sibling host based at `base_path`, sharing the AOT generator cache,
+    /// the dependency index, and the diagnostics buffer (via
+    /// `wado_lsp::FilesystemCompilerHost::rebased`). The Kiln pipeline uses
+    /// it to read schemas relative to the manifest root, where `Invocation`
+    /// paths are anchored, while the main compile host stays at the entry
+    /// file's directory.
     #[must_use]
     pub fn rebased(&self, base_path: PathBuf) -> Self {
         Self {
