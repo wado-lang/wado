@@ -90,13 +90,12 @@ The work is done only when all three hold. None is satisfiable by a band-aid;
 each is a static or measured fact, not a "byte-identical and X% faster" proxy.
 
 - [x] **One build per function.** `WADO_MEASURE_VG` reports `rebuilds = 0` (only
-      `first_builds`) under `WADO_PROMOTE_EARLY`. Baseline was `builds=4474`,
-      `first_builds=1678`, `rebuilds=2796` — 2.67 builds per function. Achieved by
-      persisting the per-function graph on `Body` across passes (the freeze builds
-      it once; the value passes reuse it) and counting _actual_ `builder::build`
-      calls rather than pass entries. zlib -O2 under promotion: `builds=139,
-      first_builds=139, rebuilds=0`. See the P3 milestone below for the mechanism
-      (persist gates + honest measurement + config-aware verify oracle).
+      `first_builds`). Baseline was `builds=4474`, `first_builds=1678`,
+      `rebuilds=2796` — 2.67 builds per function. Achieved by persisting the
+      per-function graph on `Body` across passes (the freeze builds it once; the
+      value passes reuse it) and counting _actual_ `builder::build` calls rather
+      than pass entries. zlib -O2: `builds=139, first_builds=139, rebuilds=0`. See
+      the P3 milestone below for the mechanism (persist gates + honest measurement).
 - [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s). Measured: still
       ~15.7s — **not met, not pursued** (the bottleneck is the passes, not the
       value-graph build; see Status). Won't-do.
@@ -115,11 +114,10 @@ test` (every crate, all e2e fixtures at O0/O2) **and** `mise run test-wado`, wit
 no pre-existing failure left standing. The operand-promotion migration is part of
 this: a promoted `Operand::Value` (e.g. a constant struct receiver of a
 `FieldAccess`) must never hit an `as_expr().expect("skeleton operand")` in any
-pass the suite exercises. `gale_cli` (kiln-generated code, which exercises
-promoted shapes the mainline fixtures do not) is part of the gate. The remaining
-`expect("skeleton operand")` sites in passes the suite does not yet drive with a
-promoted operand are migrated test-first as Phase B.2 enables `WADO_PROMOTE_EARLY`
-(which promotes more positions and so exercises them).
+pass. `gale_cli` (kiln-generated code, which exercises promoted shapes the
+mainline fixtures do not) is part of the gate. Every `expect("skeleton operand")`
+site has been migrated to handle a promoted operand — none remains in the
+compiler source.
 
 ## Context
 

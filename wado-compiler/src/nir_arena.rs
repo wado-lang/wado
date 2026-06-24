@@ -788,23 +788,6 @@ impl Body {
         }
     }
 
-    /// The locals read **only through a promoted `Operand::Value`** — i.e. the
-    /// `Opaque(Local)` sources of every value sitting in a live operand slot.
-    /// A liveness-based pass (`elide_local`, `dae`) must treat these as reads:
-    /// the read lives in the value pool, not the skeleton, so the use index
-    /// alone misses it. Precise (only values actually in operand slots, unlike
-    /// the pool-wide [`ValuePool::opaque_local_sources`]); empty until promotion
-    /// runs.
-    pub fn locals_read_via_promotion(&self) -> IndexSet<u32> {
-        let mut out = IndexSet::default();
-        self.for_each_operand(|op| {
-            if let Operand::Value(v) = op {
-                self.values.collect_opaque_locals(v, &mut out);
-            }
-        });
-        out
-    }
-
     /// Deep-copy an operand. A promoted pure value is shared (the same pool
     /// backs the clone, so its `ValueId` stays valid); an effectful subtree is
     /// cloned into fresh nodes.

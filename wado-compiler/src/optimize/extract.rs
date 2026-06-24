@@ -461,8 +461,7 @@ pub(super) fn freeze_pure_arith(
         // value used by several slots can be **materialised once** (availability
         // extraction, WEP P2) — a single pre-header `let _av = <value>` whose uses
         // read `local.get _av` — instead of re-emitting the computation at each
-        // use. Materialisation is gated by `WADO_PROMOTE_EARLY` (keeping the
-        // default byte-identical) and limited to values whose leaves are all
+        // use. Materialisation is limited to values whose leaves are all
         // non-`mut` parameters: those are available and unchanged at function
         // entry, where the `let` is inserted, so it dominates every use soundly.
         // Other values redirect inline as before. `record_value_tree_types` stamps

@@ -1567,7 +1567,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate variant payload extraction.
-    pub(super) fn translate_variant_payload(&mut self, inner: Operand, case_index: u32) -> WirInstr {
+    pub(super) fn translate_variant_payload(
+        &mut self,
+        inner: Operand,
+        case_index: u32,
+    ) -> WirInstr {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
 

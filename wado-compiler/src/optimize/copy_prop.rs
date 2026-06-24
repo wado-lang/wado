@@ -250,18 +250,11 @@ fn analyze_function_body(
     result
 }
 
-/// Locals read through a promoted `Operand::Value`. Under early promotion
-/// (`WADO_PROMOTE_EARLY`) the precise live-slot walk has a known gap (a still-read
-/// local whose `Opaque(Local)` source it doesn't reach — see WEP / `elide_local`),
-/// so use the over-conservative pool-wide set: sound (keeps more locals live,
-/// never propagates/eliminates a still-read one), at the cost of a few missed
-/// copies. Flag-off keeps the precise walk, so the default is unchanged.
+/// Locals read through a promoted `Operand::Value`. Uses the over-conservative
+/// pool-wide set of opaque local sources: sound (keeps more locals live, never
+/// propagates/eliminates a still-read one), at the cost of a few missed copies.
 fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
-    if crate::optimize::promote_active() {
-        body.values.opaque_local_sources().collect()
-    } else {
-        body.locals_read_via_promotion()
-    }
+    body.values.opaque_local_sources().collect()
 }
 
 fn analyze_block(

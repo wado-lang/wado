@@ -1092,14 +1092,12 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
             Some(ExprKind::Local { index, .. }) => Some(*index),
             _ => None,
         },
-        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
-            args.first().and_then(|a| {
-                match a.expr.as_expr().map(|ae| &body.exprs[ae].kind) {
-                    Some(ExprKind::Local { index, .. }) => Some(*index),
-                    _ => None,
-                }
-            })
-        }
+        ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => args
+            .first()
+            .and_then(|a| match a.expr.as_expr().map(|ae| &body.exprs[ae].kind) {
+                Some(ExprKind::Local { index, .. }) => Some(*index),
+                _ => None,
+            }),
         _ => None,
     }
 }
@@ -1141,7 +1139,9 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => inner.as_expr().is_some_and(|ie| is_local(body, ie, local_index)),
+        } => inner
+            .as_expr()
+            .is_some_and(|ie| is_local(body, ie, local_index)),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")

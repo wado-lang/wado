@@ -1145,7 +1145,9 @@ impl<'a> Interpreter<'a> {
             } => {
                 let (c, t, e2) = (*condition, *then_block, *else_block);
                 // A promoted-value condition is already a reduced pool value.
-                let mut ch = c.as_expr().is_some_and(|ce| self.reduce_in_place_a(body, ce));
+                let mut ch = c
+                    .as_expr()
+                    .is_some_and(|ce| self.reduce_in_place_a(body, ce));
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);

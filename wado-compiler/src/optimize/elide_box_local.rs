@@ -458,8 +458,7 @@ fn walk_expr_for_leftmost(
         ..
     } = &body.exprs[expr].kind
         && fname == field_name
-        && let Some(ExprKind::Local { index, .. }) =
-            inner.as_expr().map(|ie| &body.exprs[ie].kind)
+        && let Some(ExprKind::Local { index, .. }) = inner.as_expr().map(|ie| &body.exprs[ie].kind)
         && *index == candidate
     {
         return LeftmostWalk::Found;
@@ -561,10 +560,7 @@ fn walk_expr_for_leftmost(
                 // Deref may trap on a null receiver; the op itself is
                 // observable.
                 NirUnaryOp::Deref => observable_propagate(walk_operand_for_leftmost(
-                    body,
-                    inner,
-                    candidate,
-                    field_name,
+                    body, inner, candidate, field_name,
                 )),
                 // Arithmetic / logical / address-taking unaries are pure.
                 NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot => {
@@ -577,10 +573,7 @@ fn walk_expr_for_leftmost(
         }
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
         ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_operand_for_leftmost(
-            body,
-            *inner,
-            candidate,
-            field_name,
+            body, *inner, candidate, field_name,
         )),
         // FieldAccess on a non-candidate receiver: a fresh `struct.get`
         // on a possibly-null reference, so the op itself may trap. A

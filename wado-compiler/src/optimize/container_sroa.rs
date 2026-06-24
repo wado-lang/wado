@@ -758,9 +758,7 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     let brk_val = *brk_val;
     // Break value must be a zero-argument method call whose receiver is `__b`
     // (possibly wrapped in `&`/`&mut`).
-    let ExprKind::MethodCall { receiver, args, .. } =
-        &body.exprs[brk_val.as_expr()?].kind
-    else {
+    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val.as_expr()?].kind else {
         return None;
     };
     if !args.is_empty() {

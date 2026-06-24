@@ -414,8 +414,10 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)
             ..
         } = &body.exprs[id].kind
         {
-            inner.as_expr().filter(|&e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
-                if affected.iter().any(|(li, fname)| li == index && fname == field_name)))
+            inner.as_expr().filter(|&e| {
+                matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
+                if affected.iter().any(|(li, fname)| li == index && fname == field_name))
+            })
         } else {
             None
         };

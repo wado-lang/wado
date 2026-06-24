@@ -64,7 +64,6 @@ mod const_folding;
 mod const_object_globalization;
 mod container_sroa;
 mod copy_prop;
-mod cse;
 mod dae;
 pub mod dce;
 mod drve;
@@ -96,7 +95,6 @@ use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
-use cse::eliminate_common_subexprs;
 use dae::eliminate_dead_arguments;
 use dce::{
     analyze_dce, filter_bytes_literals, filter_string_literals,
@@ -116,13 +114,6 @@ use value_copy_demote::demote_value_copies;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
-
-/// Whether **any** operand promotion is active. Unconditional — the cse
-/// subsumption and the promotion-aware liveness in `elide_local` / `copy_prop`
-/// all key on it.
-pub(crate) fn promote_active() -> bool {
-    true
-}
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -667,14 +658,9 @@ fn run_optimization_passes(
         // elimination moved into the unified `nir/peephole` pass above.)
         gated!("nir/dae", eliminate_dead_arguments);
         gated!("nir/drve", eliminate_dead_return_values);
-        // Under operand promotion (WEP P3), pure-value CSE is subsumed by
-        // hash-consing (identical values already share a ValueId), so cse is
-        // skipped — removing its per-function `builder::build`. Store-load
-        // forwarding is likewise subsumed once FieldAccess promotes at its heap
-        // version.
-        if !crate::optimize::promote_active() {
-            gated!("nir/cse", eliminate_common_subexprs);
-        }
+        // Pure-value CSE is subsumed by hash-consing (identical values already
+        // share a ValueId), and store-load forwarding by FieldAccess promoting at
+        // its heap version, so no separate `cse` pass runs (WEP: The Live ValueGraph).
         // The flow-sensitive half of constant folding; the env-free half
         // (literal arithmetic + pure CTFE) runs in the `nir/peephole` passes.
         // This walker handles the folds that need per-function dataflow state —
