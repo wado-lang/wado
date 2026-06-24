@@ -351,7 +351,8 @@ fn forward_fields_in_instr(instr: &mut WirInstr, known: &mut FieldKnowledge<'_>)
         WirInstr::Loop { body, .. } => {
             // Conservatively invalidate all knowledge for loops
             // (locals could be modified on back-edges)
-            let mut loop_known = FieldKnowledge::new(known.types, known.aliased, known.single_assigned);
+            let mut loop_known =
+                FieldKnowledge::new(known.types, known.aliased, known.single_assigned);
             changed |= forward_fields_in_body(body, &mut loop_known);
             // Invalidate outer knowledge for locals modified inside the loop
             invalidate_locals_modified_in_body(body, known);
