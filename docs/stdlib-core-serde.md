@@ -24,6 +24,11 @@ struct with `#[serde(rename_all = "...")]`, or per field with
 `rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
 `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
+The same `rename` / `rename_all` overrides apply to `enum` and `variant`
+case names (default: the `PascalCase` name verbatim), e.g.
+`#[serde(rename_all = "kebab-case")]` makes `AddRemote` serialize as
+`"add-remote"`.
+
 ```wado
 // Default — wire keys are the field names as written
 struct User {
@@ -180,7 +185,19 @@ by every format.
 `lookup` is a static method resolved at monomorphization, so the call is
 direct and inlinable — no closure value, no per-decode allocation.
 
+A field marked `#[serde(positional)]` is ordinal, not nominal: `lookup`
+omits it (it is never matched by name) and `positional_at` enumerates the
+positional fields in declaration order. Name-only and sequence-only formats
+ignore `positional_at` and stay backward compatible; `core:args` consults it
+to bind bare tokens to positional fields.
+
 #### `fn lookup(key: ArraySlice<u8>) -> Option<i32>`
+
+#### `fn positional_at(rank: i32) -> Option<i32>`
+
+Field index of the `rank`-th `#[serde(positional)]` field (in
+declaration order), or `null` when `rank` is out of range. Returns
+`null` for every `rank` when the type has no positional fields.
 
 ### `pub trait DeserializeStruct`
 

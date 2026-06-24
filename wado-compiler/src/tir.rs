@@ -3888,6 +3888,11 @@ pub struct TirField {
     pub serde_rename: Option<String>,
     /// `#[serde(default)]` — use default value when field is missing during deserialization.
     pub serde_default: bool,
+    /// `#[serde(positional)]` — field is resolved by position, not by name.
+    /// Format-agnostic ordinal hint: synthesized `FieldSchema::lookup` omits it
+    /// (never matched by name) and `positional_at` enumerates it. Name-only and
+    /// sequence-only formats ignore it; `core:args` binds it to a bare token.
+    pub serde_positional: bool,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
@@ -3904,6 +3909,8 @@ pub struct TirEnum {
     pub monomorph_info: Option<MonomorphInfo>,
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    pub serde_rename_all: Option<String>,
 }
 
 /// A case in a TIR enum.
@@ -3913,6 +3920,8 @@ pub struct TirEnumCase {
     pub name: String,
     pub index: u32,
     pub span: Span,
+    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    pub serde_rename: Option<String>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -3950,6 +3959,8 @@ pub struct TirVariantDecl {
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    pub serde_rename_all: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -3967,6 +3978,8 @@ pub struct TirVariantCase {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub payload: TypeId,
     pub span: Span,
+    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    pub serde_rename: Option<String>,
 }
 
 #[derive(Debug, Clone)]

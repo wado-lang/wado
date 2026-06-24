@@ -35,6 +35,45 @@ irreducible core: tokenize argv, pull values, honor `--`.
 to `core:json` and `core:json_nsd`. The synthesized `Deserialize` code is reused
 verbatim; only the format is new.
 
+### Implementation Status
+
+Implemented (`lib/core/args.wado`, tested in `lib/core/args_test.wado`):
+
+- [x] `parse` / `from_env` entry points.
+- [x] `--name value`, `--name=value`, and `bool` flags; `-`/`_` folding; `--`
+      end-of-options marker.
+- [x] Required, optional (defaulted), and `Option<T> = null` options.
+- [x] Positional arguments (required, optional, variadic) via serde's
+      `FieldSchema::positional_at`.
+- [x] Repeatable `List<T>` options (`--include a --include b`, interspersing
+      allowed). A consumed-token mask lets `begin_seq` gather every occurrence of
+      one option up front, so the on-demand value pull still drives flag-vs-value
+      detection.
+- [x] Subcommands (`variant` fields) via externally-tagged `begin_variant`,
+      including nesting and `command [global-opts] subcommand [sub-opts]`. A
+      subcommand field is marked `#[serde(positional)]` (see
+      [Subcommands as Variants](#subcommands-as-variants)); the case tag matches
+      the variant case name verbatim.
+- [x] Lenient scalar conversion (`LenientFromStr`) and the `ArgsError` kinds.
+
+Deferred:
+
+- [ ] Schema validation (positionals contiguous, required-before-optional, ≤1
+      variadic last; no variadic-positional + subcommand) — a CLI-specific
+      well-formedness rule, not a data-model property, so it stays out of the
+      format-agnostic compiler layer; `core:args` relies on correct declaration
+      order. Currently mis-declaration is GIGO; only "too many positionals" is
+      caught at runtime.
+- [ ] `--help` / `--version`.
+
+Lowercase / kebab subcommand tags are handled by serde's case rename, not by
+args: `#[serde(rename_all = "kebab-case")]` on the subcommand `variant` (or
+`#[serde(rename = "...")]` per case) makes the wire tag `add-remote` while the
+cases stay idiomatic PascalCase. `core:args` matches the tag against that wire
+name with no special support — the same rename that drives JSON/CBOR. (Case
+_folding_ — accepting `add` for a `PascalCase`-wire `Add` — is intentionally not
+done; the tag must equal the wire name, like every other format.)
+
 ### Entry Points
 
 ```wado
@@ -126,9 +165,9 @@ Defaults must be pure (effect system); CLI defaults always are.
 
 ### Subcommands as Variants
 
-A subcommand set is a `variant` field, read via serde's externally-tagged
-representation: the leading non-option token is the tag selecting the case, its
-payload parsed from the rest.
+A subcommand set is a `#[serde(positional)]` field whose type is a `variant`,
+read via serde's externally-tagged representation: the leading non-option token
+is the tag selecting the case, its payload parsed from the rest.
 
 ```wado
 struct AddArgs { #[serde(positional)] path: String, all: bool = false }
@@ -141,14 +180,30 @@ variant RemoteCmd { AddRemote(AddRemoteArgs), List }
 
 struct Cli {
     verbose: bool = false,
-    command: Command,      // leading token picks the case
+    #[serde(positional)] command: Command,   // the subcommand tag is an ordinal slot
 }
 impl Deserialize for Cli;
 ```
 
-Nesting needs nothing new; receivers dispatch by pattern matching. Fixed-arity
-positionals are consumed before the subcommand token; a variadic positional
-alongside a subcommand `variant` is rejected (ambiguous boundary).
+The `#[serde(positional)]` marker is what lets `next_field` reach the variant
+field at all: serde addresses a field only by name (`--option`) or by ordinal
+(`positional_at`), and the subcommand tag is an ordinal token, not a `--name`.
+This keeps the compiler at two format-agnostic addressing primitives — no
+CLI-specific "which field is the subcommand" concept leaks into synthesis. The
+externally-tagged tag-reading lives entirely in `core:args`'s `begin_variant`.
+
+Because the payload continues from the same deserializer state,
+`command [global-opts] subcommand [sub-opts]` works: global options (and
+fixed-arity positionals) before the tag bind to the outer struct, then the case
+payload — itself a struct — parses the rest, so its `--options` and positionals
+fall out of the same machinery. Options after the tag bind to the subcommand
+(standard Unix order, like `git --verbose commit` vs `git commit --verbose`).
+Nesting needs nothing new; receivers dispatch by pattern matching.
+
+The tag matches the variant case name **verbatim** (`Add`, not `add`); to get a
+lowercase subcommand, name the case lowercase (`variant Command { add(..) }`).
+A variadic positional alongside a subcommand is unsupported (the variadic would
+swallow the tag) — keep them in separate structs.
 
 ### Help, Version, Errors
 
@@ -208,6 +263,13 @@ Unix convention).
 - [ ] `enum`-valued options (`--color red`) once a lenient enum derive lands.
 - [ ] Shell completion from the schema.
 - [ ] `core:cli` helper wiring `from_env` + error printing + exit codes.
+- [ ] Subcommand-aware error context. `ArgsError` carries only `kind` + `message`,
+      so a caller wanting a `myprog gen: ...` prefix must re-derive the active
+      subcommand from `argv[0]` itself (fine for single-level CLIs). A future
+      `ArgsError` could record the subcommand path the parse failed under (the
+      tags seen by `begin_variant`); the program name stays caller-supplied, and
+      nested paths need an accumulated breadcrumb, so this waits until nested
+      subcommand diagnostics are a real pain.
 
 ## References
 

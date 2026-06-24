@@ -345,52 +345,42 @@ fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirS
     })
 }
 
+/// Apply a `rename_all` strategy. Source-casing-agnostic, so it works for both
+/// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
+/// convention, not a rule, so the source form is open).
 fn apply_rename_all(s: &str, strategy: &str) -> String {
+    use heck::{
+        ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
+        ToUpperCamelCase,
+    };
     match strategy {
-        "camelCase" => snake_to_camel(s),
-        "snake_case" => s.to_string(),
-        "PascalCase" => {
-            let mut result = String::with_capacity(s.len());
-            let mut capitalize_next = true;
-            for c in s.chars() {
-                if c == '_' {
-                    capitalize_next = true;
-                } else if capitalize_next {
-                    for upper in c.to_uppercase() {
-                        result.push(upper);
-                    }
-                    capitalize_next = false;
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
-        "kebab-case" => s.replace('_', "-"),
-        "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
+        "camelCase" => s.to_lower_camel_case(),
+        "snake_case" => s.to_snake_case(),
+        "PascalCase" => s.to_upper_camel_case(),
+        "SCREAMING_SNAKE_CASE" => s.to_shouty_snake_case(),
+        "kebab-case" => s.to_kebab_case(),
+        "SCREAMING-KEBAB-CASE" => s.to_shouty_kebab_case(),
         // Unrecognized strategy string: fall back to identity (the name as
         // written), matching the no-attribute default.
         _ => s.to_string(),
     }
 }
 
-fn snake_to_camel(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut capitalize_next = false;
-    for c in s.chars() {
-        if c == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            for upper in c.to_uppercase() {
-                result.push(upper);
-            }
-            capitalize_next = false;
-        } else {
-            result.push(c);
-        }
+/// Serialized name of an enum / variant case. `#[serde(rename = "...")]` wins;
+/// otherwise `#[serde(rename_all = "...")]` applies its strategy; otherwise the
+/// case name is used verbatim.
+fn serialized_case_name(
+    name: &str,
+    serde_rename: &Option<String>,
+    rename_all: &Option<String>,
+) -> String {
+    if let Some(r) = serde_rename {
+        return r.clone();
     }
-    result
+    match rename_all {
+        Some(strategy) => apply_rename_all(name, strategy),
+        None => name.to_string(),
+    }
 }
 
 pub fn synthesize_serde(project: &mut Package) {
@@ -434,10 +424,11 @@ pub fn synthesize_serde(project: &mut Package) {
                     if existing.contains(&key) {
                         continue;
                     }
-                    if let Some((lookup_func, deser_func)) =
+                    if let Some((lookup_func, positional_at_func, deser_func)) =
                         generate_struct_deserialize(module, req, &names)
                     {
                         generated.push(Rc::new(RefCell::new(lookup_func)));
+                        generated.push(Rc::new(RefCell::new(positional_at_func)));
                         generated.push(Rc::new(RefCell::new(deser_func)));
                     } else {
                         let func = generate_enum_deserialize(module, req, &names)
@@ -1232,7 +1223,7 @@ fn generate_struct_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
     names: &SerdeStdlibNames,
-) -> Option<(TirFunction, TirFunction)> {
+) -> Option<(TirFunction, TirFunction, TirFunction)> {
     let struct_def = find_struct(module, &req.target_type_name)?;
     let span = synth_span();
     let serde_module = ModuleSource::serde();
@@ -1299,14 +1290,37 @@ fn generate_struct_deserialize(
     let compiler_items = tt.compiler_items().clone();
     drop(tt);
 
+    // `#[serde(positional)]` flags, aligned with `fields` (enumerate index ==
+    // field index used by the deserialize loop). A positional field is ordinal:
+    // `lookup` omits it, `positional_at` enumerates it.
+    let positional_flags: Vec<bool> = struct_def
+        .fields
+        .iter()
+        .map(|f| f.serde_positional)
+        .collect();
+
     // `impl FieldSchema for <Type> { fn lookup(...) }` — the static, per-type
     // field-name → index matcher. `next_field::<Type>()` resolves it directly
     // at monomorphization, so no closure value is constructed or allocated.
+    // Positional fields are skipped: they are never matched by name.
     let lookup_func = generate_lookup_function(
         &req.target_type_name,
         &names.field_schema,
         &fields,
+        &positional_flags,
         key_slice_type,
+        option_i32,
+        span,
+        &compiler_items,
+    );
+
+    // `impl FieldSchema for <Type> { fn positional_at(rank) }` — maps the
+    // rank-th positional field to its field index. Empty (always `null`) when
+    // the type has no positional fields, so non-args formats are unaffected.
+    let positional_at_func = generate_positional_at_function(
+        &req.target_type_name,
+        &names.field_schema,
+        &positional_flags,
         option_i32,
         span,
         &compiler_items,
@@ -1730,7 +1744,7 @@ fn generate_struct_deserialize(
         return_abi: crate::tir::ReturnAbi::default(),
     };
 
-    Some((lookup_func, deser_func))
+    Some((lookup_func, positional_at_func, deser_func))
 }
 
 /// Build a `key.get_unchecked(index_expr) as i32` expression on a
@@ -1849,10 +1863,73 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
     )
 }
 
+/// Assemble a static `FieldSchema` method (`lookup` / `positional_at`): a
+/// no-`self`, single-`i32`-or-bytes-param function returning `Option<i32>`.
+/// Both methods share this boilerplate; only the name, parameter, and body
+/// differ.
+#[allow(clippy::too_many_arguments)]
+fn field_schema_method_fn(
+    type_name: &str,
+    field_schema_trait: &str,
+    method: &str,
+    param_name: &str,
+    param_type: TypeId,
+    return_type: TypeId,
+    locals: Vec<TirLocal>,
+    local_count: u32,
+    body: Vec<TirStmt>,
+    span: Span,
+) -> TirFunction {
+    TirFunction {
+        module_source: ModuleSource::default(),
+        name: MethodName::format_local(type_name, Some(field_schema_trait), method),
+        is_pub: true,
+        is_export: false,
+        is_cm_export: false,
+        is_ambient: false,
+        benign_effects: Vec::new(),
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(LocalMethodName::new(
+            type_name.to_string(),
+            Some(field_schema_trait.to_string()),
+            method.to_string(),
+        )),
+        params: vec![TirParam {
+            name: param_name.to_string(),
+            type_id: param_type,
+            local_index: 0,
+            is_mut: false,
+            span,
+        }],
+        return_type,
+        task_return_type: None,
+        effects: Vec::new(),
+        stores: vec![],
+        body: Some(block(body)),
+        span,
+        local_count,
+        locals,
+        address_taken_locals: IndexSet::default(),
+        stores_aliased_locals: IndexSet::default(),
+        is_cm_binding: false,
+        is_dispatch_wrapper: false,
+        inline_hint: InlineHint::Auto,
+        compiler_item: None,
+        export_name: None,
+        allocator_tag: None,
+        kind: FunctionKind::Regular,
+        return_abi: crate::tir::ReturnAbi::default(),
+    }
+}
+
 fn generate_lookup_function(
     type_name: &str,
     field_schema_trait: &str,
     fields: &[(String, String, TypeId, u32)],
+    positional_flags: &[bool],
     key_slice_type: TypeId,
     option_i32: TypeId,
     span: Span,
@@ -1863,7 +1940,6 @@ fn generate_lookup_function(
     // monomorphization, replacing the former runtime `lookup` closure. The key
     // is a borrowed byte view, so each format passes its wire key's bytes with
     // no `String` round-trip.
-    let fn_name = MethodName::format_local(type_name, Some(field_schema_trait), "lookup");
     // Parameter: key: ByteSlice (ArraySlice<u8>) at local 0.
     let mut locals = vec![param_local("__key", key_slice_type, false)];
     let mut next_local: u32 = 1;
@@ -1877,7 +1953,12 @@ fn generate_lookup_function(
 
     // For each field, generate:
     //   if __len == N && key.get_byte(0) as i32 == B0 && ... { return Some(i); }
+    // Positional fields are ordinal: skip them so they are never matched by
+    // name (their values are bound via `positional_at`).
     for (i, (_, wire_name, _, _)) in fields.iter().enumerate() {
+        if positional_flags.get(i).copied().unwrap_or(false) {
+            continue;
+        }
         let name_bytes = wire_name.as_bytes();
         let name_len = name_bytes.len() as i32;
 
@@ -1915,50 +1996,77 @@ fn generate_lookup_function(
     }
     stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: fn_name,
-        is_pub: true,
-        is_export: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        is_async: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: Some(LocalMethodName::new(
-            type_name.to_string(),
-            Some(field_schema_trait.to_string()),
-            "lookup".to_string(),
-        )),
-        params: vec![TirParam {
-            name: "__key".to_string(),
-            type_id: key_slice_type,
-            local_index: 0,
-            is_mut: false,
-            span,
-        }],
-        return_type: option_i32,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(block(stmts)),
-        span,
-        local_count: next_local,
+    field_schema_method_fn(
+        type_name,
+        field_schema_trait,
+        "lookup",
+        "__key",
+        key_slice_type,
+        option_i32,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
+        next_local,
+        stmts,
+        span,
+    )
+}
 
-        return_abi: crate::tir::ReturnAbi::default(),
+/// `impl FieldSchema for <Type> { fn positional_at(rank: i32) -> Option<i32> }`
+/// — the static, per-type ordinal-field matcher. Maps the `rank`-th
+/// `#[serde(positional)]` field (in declaration order) to its field index;
+/// returns `null` for an out-of-range rank, and for every rank when the type
+/// has no positional fields. `positional_flags` is aligned with the deserialize
+/// loop's field indices, so the returned index drives the same `field == i`
+/// assignment as `lookup`.
+fn generate_positional_at_function(
+    type_name: &str,
+    field_schema_trait: &str,
+    positional_flags: &[bool],
+    option_i32: TypeId,
+    span: Span,
+    compiler_items: &crate::compiler_item::CompilerItems,
+) -> TirFunction {
+    let locals = vec![param_local("__rank", TypeTable::I32, false)];
+    let next_local: u32 = 1;
+
+    let mut stmts = Vec::new();
+
+    // For each positional field (in declaration order), generate:
+    //   if __rank == R { return Some(field_index); }
+    let mut rank: i32 = 0;
+    for (field_index, &is_positional) in positional_flags.iter().enumerate() {
+        if !is_positional {
+            continue;
+        }
+        let condition = i32_eq(
+            local_ref(0, "__rank", TypeTable::I32),
+            i32_const(rank),
+            span,
+        );
+        stmts.push(if_stmt(
+            condition,
+            block(vec![return_stmt(Some(option_some(
+                i32_const(field_index as i32),
+                option_i32,
+                compiler_items,
+            )))]),
+            None,
+        ));
+        rank += 1;
     }
+    stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
+
+    field_schema_method_fn(
+        type_name,
+        field_schema_trait,
+        "positional_at",
+        "__rank",
+        TypeTable::I32,
+        option_i32,
+        locals,
+        next_local,
+        stmts,
+        span,
+    )
 }
 
 fn find_enum<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirEnum> {
@@ -1994,6 +2102,13 @@ fn generate_enum_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index))
         .collect();
+    // Wire tag per case (rename applied); the match pattern keeps the
+    // source-level name from `cases`.
+    let wire_names: Vec<String> = enum_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .collect();
 
     drop(tt);
 
@@ -2005,7 +2120,7 @@ fn generate_enum_serialize(
 
     // Build match arms: one per enum case calling serialize_unit_variant
     let mut match_arms = Vec::new();
-    for (case_name, case_index) in &cases {
+    for (i, (case_name, case_index)) in cases.iter().enumerate() {
         let call = type_param_method_call(
             local_ref(1, "s", mut_ref_s),
             "S",
@@ -2021,7 +2136,7 @@ fn generate_enum_serialize(
                     span,
                 ),
                 ref_expr(
-                    string_lit(case_name, string_type, span),
+                    string_lit(&wire_names[i], string_type, span),
                     ref_string_type,
                     span,
                 ),
@@ -2165,11 +2280,17 @@ fn generate_enum_deserialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, TypeTable::UNIT))
         .collect();
+    let wire_names = enum_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .collect();
     Some(generate_variant_family_deserialize(
         module,
         req,
         names,
         cases,
+        wire_names,
         DeserConstruct::Enum,
     ))
 }
@@ -2184,7 +2305,10 @@ fn generate_variant_family_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
     names: &SerdeStdlibNames,
+    // `cases` carries the source-level case name (for constructing the value);
+    // `wire_names` is the rename-applied name matched against the input tag.
     cases: Vec<(String, u32, TypeId)>,
+    wire_names: Vec<String>,
     kind: DeserConstruct,
 ) -> TirFunction {
     let span = synth_span();
@@ -2468,14 +2592,14 @@ fn generate_variant_family_deserialize(
     ));
 
     let mut name_then_stmts = Vec::new();
-    for (i, (case_name, _, _)) in cases.iter().enumerate() {
+    for (i, _) in cases.iter().enumerate() {
         let key_ref = ref_expr(
             local_ref(name_local, "__name", string_type),
             ref_string_type,
             span,
         );
         let lit_ref = ref_expr(
-            string_lit(case_name, string_type, span),
+            string_lit(&wire_names[i], string_type, span),
             ref_string_type,
             span,
         );
@@ -2666,6 +2790,13 @@ fn generate_variant_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, c.payload))
         .collect();
+    // Wire tag per case (rename applied); the match pattern keeps the
+    // source-level name from `cases`.
+    let wire_names: Vec<String> = variant_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .collect();
     let payload_ref_types: Vec<TypeId> = cases
         .iter()
         .map(|(_, _, payload)| tt.make_ref(*payload))
@@ -2705,7 +2836,7 @@ fn generate_variant_serialize(
                         span,
                     ),
                     ref_expr(
-                        string_lit(case_name, string_type, span),
+                        string_lit(&wire_names[i], string_type, span),
                         ref_string_type,
                         span,
                     ),
@@ -2751,7 +2882,7 @@ fn generate_variant_serialize(
                         span,
                     ),
                     ref_expr(
-                        string_lit(case_name, string_type, span),
+                        string_lit(&wire_names[i], string_type, span),
                         ref_string_type,
                         span,
                     ),
@@ -2931,11 +3062,17 @@ fn generate_variant_deserialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, c.payload))
         .collect();
+    let wire_names = variant_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .collect();
     Some(generate_variant_family_deserialize(
         module,
         req,
         names,
         cases,
+        wire_names,
         DeserConstruct::Variant,
     ))
 }
@@ -3666,11 +3803,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_snake_to_camel() {
-        assert_eq!(snake_to_camel("age"), "age");
-        assert_eq!(snake_to_camel("user_name"), "userName");
-        assert_eq!(snake_to_camel("http_url"), "httpUrl");
-        assert_eq!(snake_to_camel("first_name_last"), "firstNameLast");
-        assert_eq!(snake_to_camel("a"), "a");
+    fn rename_all_from_snake_field() {
+        assert_eq!(apply_rename_all("user_name", "camelCase"), "userName");
+        assert_eq!(apply_rename_all("user_name", "snake_case"), "user_name");
+        assert_eq!(apply_rename_all("user_name", "PascalCase"), "UserName");
+        assert_eq!(apply_rename_all("user_name", "kebab-case"), "user-name");
+        assert_eq!(
+            apply_rename_all("user_name", "SCREAMING_SNAKE_CASE"),
+            "USER_NAME"
+        );
+    }
+
+    #[test]
+    fn rename_all_from_pascal_case() {
+        // PascalCase source, not the snake_case of struct fields.
+        assert_eq!(apply_rename_all("AddRemote", "kebab-case"), "add-remote");
+        assert_eq!(apply_rename_all("AddRemote", "snake_case"), "add_remote");
+        assert_eq!(apply_rename_all("AddRemote", "camelCase"), "addRemote");
+        assert_eq!(apply_rename_all("List", "kebab-case"), "list");
+    }
+
+    #[test]
+    fn serialized_case_name_precedence() {
+        let kebab = Some("kebab-case".to_string());
+        // Per-case rename wins over rename_all wins over the verbatim name.
+        assert_eq!(
+            serialized_case_name("Remove", &Some("rm".to_string()), &kebab),
+            "rm"
+        );
+        assert_eq!(
+            serialized_case_name("AddRemote", &None, &kebab),
+            "add-remote"
+        );
+        assert_eq!(serialized_case_name("AddRemote", &None, &None), "AddRemote");
     }
 }

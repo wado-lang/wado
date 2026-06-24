@@ -3215,6 +3215,23 @@ let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeErro
 
 The same `Serialize` and `Deserialize` trait impls work with both `core:json` and `core:json_nsd`.
 
+### Command-Line Arguments (`core:args`)
+
+`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[serde(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`. See [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
+
+```wado
+use { parse } from "core:args";
+
+struct Cli {
+    #[serde(positional)] input: String,
+    jobs: i32 = 1,
+    verbose: bool = false,
+}
+impl Deserialize for Cli;
+
+let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
+```
+
 ## Module System
 
 Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
@@ -4506,9 +4523,9 @@ test "slow computation" {
 }
 ```
 
-#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]`
+#### `#[serde(rename = "...")]` / `#[serde(rename_all = "...")]` / `#[serde(positional)]`
 
-Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization/deserialization behavior for struct fields. `#[serde(rename = "...")]` overrides the wire-form key for a single field; `#[serde(rename_all = "...")]` (on a struct) renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...). A field is optional on deserialization when it has a default value (`f: T = expr`), falling back to that expression when absent — the single mechanism for optional fields. `#[serde(positional)]` marks a field as ordinal: it is resolved by position, never by name (name-only and sequence-only formats ignore the hint), which [`core:args`](./wep-2026-06-22-core-args.md) uses to bind a bare token to the field. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
 
 ### Standard Library Attributes
 

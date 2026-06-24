@@ -1,0 +1,676 @@
+#![stdlib("core:args")]
+//! Command-line argument parsing (WEP `wep-2026-06-22-core-args.md`).
+//!
+//! `core:args` is a non-self-describing, parse-only `Deserializer` over `argv`,
+//! peer to `core:json_nsd`. Argument types are ordinary `struct`s with
+//! `impl Deserialize for T;` — no bespoke derive. Struct fields become `--long`
+//! options; fields marked `#[serde(positional)]` are filled from bare tokens in
+//! declaration order. Scalar tokens are converted with `LenientFromStr`.
+//!
+//! Usage:
+//!   use { parse } from "core:args";
+//!
+//!   struct Cli {
+//!       #[serde(positional)] input: String,
+//!       jobs: i32 = 1,
+//!       verbose: bool = false,
+//!   }
+//!   impl Deserialize for Cli;
+//!
+//!   let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
+//!
+//! Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
+//! `Option<T> = null`, required/optional/variadic positionals, repeatable
+//! `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
+//! end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
+//!
+//! Long options only: an option value never starts with `--`, so a missing
+//! value (`--name --next`) is reported as `MissingValue` rather than swallowing
+//! the next flag; a single `-` is a value, so negatives like `-5` work. A
+//! repeatable option always takes a value (there is no repeatable flag);
+//! `--flag` with no value is `MissingValue`.
+//!
+//! Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
+//! the leading bare token selects the case (externally tagged) and the rest is
+//! the payload, so `command [global-opts] subcommand [sub-opts]` works and
+//! nesting is free. The tag matches the case's wire name; keep the cases
+//! idiomatic PascalCase and apply `#[serde(rename_all = "kebab-case")]` (or
+//! `rename` per case) for lowercase/kebab subcommands like `add-remote`.
+//!
+//! ## Positional declaration order is not validated
+//!
+//! Positional fields are bound left-to-right by declaration order (rank), and
+//! that binding is greedy. `core:args` does not check the schema for
+//! well-formedness, so a few declarations parse in surprising ways — keep these
+//! invariants yourself (the compiler will not flag a violation; you get a
+//! confusing `MissingArgument`, not a crash):
+//!
+//! - Declare required positionals before optional (defaulted) ones. An optional
+//!   positional placed first greedily takes the token, starving a later required
+//!   one. (This footgun is shared by any ordinal format, e.g. `core:json_nsd`.)
+//! - At most one variadic (`List<T>`) positional, and it must be last. The first
+//!   variadic consumes every remaining bare token, leaving later positionals
+//!   empty or unfilled.
+//! - Do not combine a variadic positional with a subcommand in one struct: the
+//!   variadic would swallow the subcommand tag token.
+//!
+//! Validation is intentionally omitted: it is a CLI-specific well-formedness
+//! rule, not a data-model property, so it stays out of the format-agnostic
+//! compiler layer; and at parse time the deserializer sees only field indices,
+//! not their types or arity, so it cannot self-check (only over-supply —
+//! "too many positionals" — is caught). See the WEP for the rationale.
+
+use {
+    Deserialize,
+    Deserializer,
+    DeserializeSeq,
+    DeserializeMap,
+    DeserializeStruct,
+    DeserializeVariant,
+    FieldSchema,
+    DeserializeError,
+    DeserializeErrorKind,
+    Visitor,
+} from "core:serde";
+
+use { args } from "core:cli";
+
+/// Error categories surfaced by `core:args`.
+pub enum ArgsErrorKind {
+    UnknownOption,
+    MissingValue,
+    MissingArgument,
+    UnknownSubcommand,
+    InvalidValue,
+    TooManyPositionals,
+}
+
+/// A command-line parse failure.
+pub struct ArgsError {
+    pub kind: ArgsErrorKind,
+    pub message: String,
+}
+
+/// The argv `Deserializer`. Holds the token stream and the plumbing that serves
+/// the current field's value to the `deserialize_*` methods.
+pub struct ArgvDeserializer {
+    tokens: List<String>,
+    /// Cursor into `tokens`.
+    pos: i32,
+    /// Whether a `--` end-of-options marker has been seen; after it every token
+    /// is positional.
+    after_dd: bool,
+    /// Set by `next_field`: is the field being read an `--option` (vs a bare
+    /// positional token)?
+    cur_is_option: bool,
+    /// The current option's inline `=value` (`null` for `--name` with no `=`).
+    cur_inline: Option<String>,
+    /// The current option's name, `-`/`_` folded (for matching further
+    /// occurrences of a repeatable option and for error messages).
+    cur_name: String,
+    /// Tokens already claimed by a repeatable option's forward scan, so
+    /// `next_field` and value reads skip them instead of reprocessing.
+    consumed: List<bool>,
+    /// A value injected by a repeatable option's `next_element`, served to the
+    /// next `deserialize_*` instead of reading from `tokens` (`null` when idle).
+    forced: Option<String>,
+    /// First argv-specific error, taking priority over the generated
+    /// `Deserialize` code's `DeserializeError` (which only knows MissingField).
+    err: Option<ArgsError>,
+}
+
+/// A decomposed `--name[=value]` long-option token.
+struct LongOpt {
+    /// The option name as written (after `--`, before `=`).
+    raw: String,
+    /// `raw` with `-` folded to `_`, for `FieldSchema::lookup`.
+    folded: String,
+    /// The inline `=value`, if the token carried one.
+    inline: Option<String>,
+}
+
+impl ArgvDeserializer {
+    /// Decompose a `--name[=value]` token (caller guarantees `tok` starts with
+    /// `--` and is not the bare `--` marker). Folds `-`→`_` only when present.
+    fn split_long(tok: &String) -> LongOpt {
+        let body = tok.substr_bytes(2, tok.len());
+        let mut raw = body;
+        let mut inline: Option<String> = null;
+        if let Some(eq) = body.find("=") {
+            raw = body.substr_bytes(0, eq);
+            inline = Option::Some(body.substr_bytes(eq + 1, body.len()));
+        }
+        let folded = if raw.contains("-") { raw.replace("-", "_") } else { raw };
+        return LongOpt { raw, folded, inline };
+    }
+
+    /// Advance `pos` past tokens already claimed by a repeatable option.
+    fn skip_consumed(&mut self) {
+        while self.pos < self.tokens.len() && self.consumed[self.pos] {
+            self.pos += 1;
+        }
+    }
+
+    /// Pull the next token as the current option's value. Options are always
+    /// `--`-prefixed (long options only), so a value never starts with `--`; a
+    /// single `-` (a negative number like `-5`) is a valid value. A following
+    /// `--`-token or end of input means the option is missing its value.
+    fn pull_option_value(&mut self) -> Result<String, DeserializeError> {
+        self.skip_consumed();
+        if self.pos >= self.tokens.len() || self.tokens[self.pos].starts_with("--") {
+            self.err = Option::Some(ArgsError {
+                kind: ArgsErrorKind::MissingValue,
+                message: `missing value for option --{self.cur_name}`,
+            });
+            return Result::Err(DeserializeError::eof(-1));
+        }
+        let v = self.tokens[self.pos];
+        self.pos += 1;
+        return Result::Ok(v);
+    }
+
+    /// Read the next value token for the field being deserialized: a forced
+    /// value (repeatable option), the inline `=value`, the option's following
+    /// token, or the next positional token.
+    fn take_value(&mut self) -> Result<String, DeserializeError> {
+        if let Some(v) = self.forced {
+            self.forced = null;
+            return Result::Ok(v);
+        }
+        if self.cur_is_option {
+            if let Some(inl) = self.cur_inline {
+                return Result::Ok(inl);
+            }
+            return self.pull_option_value();
+        }
+        self.skip_consumed();
+        if self.pos >= self.tokens.len() {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        let v = self.tokens[self.pos];
+        self.pos += 1;
+        return Result::Ok(v);
+    }
+
+    /// Gather every value of the current repeatable `--option` (`cur_name`):
+    /// its first occurrence's value plus all further `--cur_name` occurrences,
+    /// which are marked consumed so the main loop skips them. Handles
+    /// interspersed occurrences (`--inc a --jobs 4 --inc b`).
+    fn gather_option_values(&mut self) -> Result<List<String>, DeserializeError> {
+        let mut vals: List<String> = [];
+        // First occurrence (the one `next_field` positioned at).
+        if let Some(inl) = self.cur_inline {
+            vals.push(inl);
+        } else {
+            let first = self.pull_option_value()?;
+            vals.push(first);
+        }
+        // Forward-scan for further `--cur_name` occurrences.
+        let n = self.tokens.len();
+        let mut j = self.pos;
+        while j < n {
+            if self.consumed[j] {
+                j += 1;
+                continue;
+            }
+            let t = self.tokens[j];
+            if t == "--" {
+                // End-of-options marker: no `--name` options beyond here.
+                j = n;
+                continue;
+            }
+            if !t.starts_with("--") {
+                j += 1;
+                continue;
+            }
+            let lo = ArgvDeserializer::split_long(&t);
+            if lo.folded != self.cur_name {
+                j += 1;
+                continue;
+            }
+            self.consumed[j] = true;
+            if let Some(inl) = lo.inline {
+                vals.push(inl);
+                j += 1;
+            } else {
+                let k = j + 1;
+                if k >= n || self.tokens[k].starts_with("--") {
+                    self.err = Option::Some(ArgsError {
+                        kind: ArgsErrorKind::MissingValue,
+                        message: `missing value for option --{self.cur_name}`,
+                    });
+                    return Result::Err(DeserializeError::eof(-1));
+                }
+                vals.push(self.tokens[k]);
+                self.consumed[k] = true;
+                j = k + 1;
+            }
+        }
+        return Result::Ok(vals);
+    }
+
+    /// Record an `InvalidValue` and return the matching `DeserializeError`.
+    fn invalid_value(&mut self, token: &String) -> DeserializeError {
+        let msg = `invalid value: '{token}'`;
+        self.err = Option::Some(ArgsError {
+            kind: ArgsErrorKind::InvalidValue,
+            message: msg,
+        });
+        return DeserializeError::invalid_value(msg, -1);
+    }
+}
+
+struct ArgvStructAccess {
+    de: &mut ArgvDeserializer,
+    /// How many positional fields have been returned so far (the rank passed to
+    /// `FieldSchema::positional_at`).
+    pos_rank: i32,
+}
+
+struct ArgvSeqAccess {
+    de: &mut ArgvDeserializer,
+    /// True for a repeatable `--option` list (values pre-gathered in `vals`);
+    /// false for a variadic positional (consumes the bare-token run on demand).
+    is_option_list: bool,
+    /// Pre-gathered values for a repeatable option.
+    vals: List<String>,
+    /// Cursor into `vals`.
+    cursor: i32,
+}
+
+struct ArgvMapAccess {
+    de: &mut ArgvDeserializer,
+}
+
+struct ArgvVariantAccess {
+    de: &mut ArgvDeserializer,
+    /// The leading bare token selecting the case (externally tagged).
+    tag: String,
+}
+
+impl DeserializeStruct for ArgvStructAccess {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        loop {
+            self.de.skip_consumed();
+            if self.de.pos >= self.de.tokens.len() {
+                return Result::Ok(null);
+            }
+            let tok = self.de.tokens[self.de.pos];
+            if !self.de.after_dd && tok.starts_with("--") {
+                if tok == "--" {
+                    self.de.after_dd = true;
+                    self.de.pos += 1;
+                    continue;
+                }
+                self.de.pos += 1;
+                let lo = ArgvDeserializer::split_long(&tok);
+                if lo.raw == "" {
+                    self.de.err = Option::Some(ArgsError {
+                        kind: ArgsErrorKind::UnknownOption,
+                        message: `malformed option: {tok}`,
+                    });
+                    return Result::Err(DeserializeError {
+                        kind: DeserializeErrorKind::Custom,
+                        message: `malformed option: {tok}`,
+                        offset: -1,
+                    });
+                }
+                if let Some(idx) = S::lookup(lo.folded.as_bytes()) {
+                    self.de.cur_is_option = true;
+                    self.de.cur_inline = lo.inline;
+                    self.de.cur_name = lo.folded;
+                    return Result::Ok(Option::Some(idx));
+                }
+                self.de.err = Option::Some(ArgsError {
+                    kind: ArgsErrorKind::UnknownOption,
+                    message: `unknown option --{lo.raw}`,
+                });
+                return Result::Err(DeserializeError {
+                    kind: DeserializeErrorKind::Custom,
+                    message: `unknown option --{lo.raw}`,
+                    offset: -1,
+                });
+            }
+            let rank = self.pos_rank;
+            self.pos_rank += 1;
+            if let Some(idx) = S::positional_at(rank) {
+                self.de.cur_is_option = false;
+                return Result::Ok(Option::Some(idx));
+            }
+            self.de.err = Option::Some(ArgsError {
+                kind: ArgsErrorKind::TooManyPositionals,
+                message: `unexpected argument: {tok}`,
+            });
+            return Result::Err(DeserializeError {
+                kind: DeserializeErrorKind::Custom,
+                message: `unexpected positional argument: {tok}`,
+                offset: -1,
+            });
+        }
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return T::deserialize(self.de);
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        // `next_field` only ever returns indices `lookup`/`positional_at`
+        // resolved, so the generated loop never falls through to `skip`.
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeSeq for ArgvSeqAccess {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        if self.is_option_list {
+            // Force each pre-gathered value through `T`'s scalar conversion.
+            if self.cursor >= self.vals.len() {
+                return Result::Ok(null);
+            }
+            self.de.forced = Option::Some(self.vals[self.cursor]);
+            self.cursor += 1;
+            let v = T::deserialize(self.de)?;
+            return Result::Ok(Option::Some(v));
+        }
+        // A variadic positional stops at the next `--option` or end of input.
+        self.de.skip_consumed();
+        if self.de.pos >= self.de.tokens.len() {
+            return Result::Ok(null);
+        }
+        let tok = self.de.tokens[self.de.pos];
+        if !self.de.after_dd && tok.starts_with("--") {
+            return Result::Ok(null);
+        }
+        let v = T::deserialize(self.de)?;
+        return Result::Ok(Option::Some(v));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeMap for ArgvMapAccess {
+    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+        return Result::Err(unsupported("map"));
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return Result::Err(unsupported("map"));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Err(unsupported("map"));
+    }
+}
+
+impl DeserializeVariant for ArgvVariantAccess {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return Result::Ok(self.tag);
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        // argv selects the case by its name tag (externally tagged), never by a
+        // numeric discriminant. Returning `Err` makes the generated variant
+        // deserializer fall through to the `variant_name` path.
+        return Result::Err(DeserializeError {
+            kind: DeserializeErrorKind::Custom,
+            message: "argv variants are name-tagged",
+            offset: -1,
+        });
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        // The payload parses from the tokens after the tag, continuing from the
+        // shared deserializer state.
+        return T::deserialize(self.de);
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        // The generated variant deserializer decides unit-ness statically, so it
+        // never calls this. argv cannot answer it from the tag alone (it has no
+        // case list), so fail loudly rather than return a guessed answer.
+        return Result::Err(unsupported("unit-variant probing"));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+/// A `DeserializeError` for a serde feature `core:args` does not implement yet.
+fn unsupported(what: String) -> DeserializeError {
+    return DeserializeError {
+        kind: DeserializeErrorKind::Custom,
+        message: `core:args does not support {what} yet`,
+        offset: -1,
+    };
+}
+
+impl Deserializer for ArgvDeserializer {
+    type SeqAccess = ArgvSeqAccess;
+    type MapAccess = ArgvMapAccess;
+    type StructAccess = ArgvStructAccess;
+    type VariantAccess = ArgvVariantAccess;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = i32::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = i64::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = u32::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = u64::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = i128::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = u128::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = f32::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = f64::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        // A bare `--flag` is `true`; an inline `--flag=0`, a positional bool, or
+        // a forced repeatable value is converted leniently.
+        let bare_flag = self.cur_is_option && self.cur_inline matches { None } && self.forced matches { None };
+        if bare_flag {
+            return Result::Ok(true);
+        }
+        let tok = self.take_value()?;
+        if let Ok(v) = bool::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = char::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        return self.take_value();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        // A field is only deserialized when a token for it exists, so a value is
+        // always present (never the null branch of `Option<T>`).
+        return Result::Ok(false);
+    }
+
+    fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> with stores[self] {
+        if self.cur_is_option {
+            let vals = self.gather_option_values()?;
+            return Result::Ok(ArgvSeqAccess {
+                de: self,
+                is_option_list: true,
+                vals,
+                cursor: 0,
+            });
+        }
+        return Result::Ok(ArgvSeqAccess {
+            de: self,
+            is_option_list: false,
+            vals: [],
+            cursor: 0,
+        });
+    }
+
+    fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> with stores[self] {
+        return Result::Err(unsupported("map"));
+    }
+
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<ArgvStructAccess, DeserializeError> with stores[self] {
+        return Result::Ok(ArgvStructAccess {
+            de: self,
+            pos_rank: 0,
+        });
+    }
+
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<ArgvVariantAccess, DeserializeError> with stores[self] {
+        // Externally tagged: the next bare token is the case tag. A subcommand
+        // field is reached as a positional slot (`#[serde(positional)]`), so the
+        // token the outer `next_field` saw is the tag.
+        self.skip_consumed();
+        if self.pos >= self.tokens.len() {
+            self.err = Option::Some(ArgsError {
+                kind: ArgsErrorKind::MissingArgument,
+                message: `missing subcommand for {type_name}`,
+            });
+            return Result::Err(DeserializeError::eof(-1));
+        }
+        let tag = self.tokens[self.pos];
+        self.pos += 1;
+        return Result::Ok(ArgvVariantAccess { de: self, tag });
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return Result::Err(unsupported("dynamic deserialization"));
+    }
+}
+
+/// Map a `DeserializeError` from the generated `Deserialize` code into an
+/// `ArgsError`. Argv-specific failures are recorded in `de.err` and take
+/// priority; this only translates the kinds the generated code itself raises.
+fn map_error(e: DeserializeError) -> ArgsError {
+    let kind = match e.kind {
+        DeserializeErrorKind::MissingField => ArgsErrorKind::MissingArgument,
+        DeserializeErrorKind::InvalidValue => ArgsErrorKind::InvalidValue,
+        DeserializeErrorKind::Overflow => ArgsErrorKind::InvalidValue,
+        DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
+        _ => ArgsErrorKind::InvalidValue,
+    };
+    return ArgsError {
+        kind,
+        message: e.message,
+    };
+}
+
+/// Parse `argv` (excluding the program name) into `T`. Effect-free and testable;
+/// subcommand dispatch and tests inject a `List<String>` directly.
+pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
+    let mut consumed: List<bool> = [];
+    let mut i = 0;
+    while i < argv.len() {
+        consumed.push(false);
+        i += 1;
+    }
+    let mut de = ArgvDeserializer {
+        tokens: argv,
+        pos: 0,
+        after_dd: false,
+        cur_is_option: false,
+        cur_inline: null,
+        cur_name: "",
+        consumed,
+        forced: null,
+        err: null,
+    };
+    let r = T::deserialize(&mut de);
+    if let Some(e) = de.err {
+        return Result::Err(e);
+    }
+    if let Ok(v) = r {
+        return Result::Ok(v);
+    }
+    if let Err(de_err) = r {
+        return Result::Err(map_error(de_err));
+    }
+    unreachable();
+}
+
+/// Parse the process arguments (from `core:cli::args()`, with the program name
+/// dropped) into `T`.
+pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment {
+    let all = args();
+    let mut argv: List<String> = [];
+    let mut i = 1;
+    while i < all.len() {
+        argv.push(all[i]);
+        i += 1;
+    }
+    return parse::<T>(argv);
+}

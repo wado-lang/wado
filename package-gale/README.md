@@ -280,11 +280,12 @@ shorthand). The `use ... with { generator: ... }` above is the usual path; the
 CLI is for ad-hoc generation and debugging.
 
 ```sh
-# Generate a parser to stdout, or to a file with -o.
+# Generate a parser to stdout, or to a file with --output.
 wado run package-gale gen Grammar.g4
-wado run package-gale gen -o Grammar_parser.wado Grammar.g4
+wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 
 # Options:
+#   --output <f>  write the generated parser to <f> instead of stdout
 #   --highlight   emit a syntax-highlighting table in the parser
 #   --trace       emit a parser that logs its recursive descent to stderr
 wado run package-gale gen --trace Grammar.g4

@@ -1,4 +1,6 @@
 use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { Deserialize } from "core:serde";
+use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { Grammar, normalize_caches } from "./ir.wado";
@@ -9,62 +11,64 @@ use { GenContext } from "./gen_context.wado";
 use { render_dump } from "./dump.wado";
 use { build_atn, dump_atn } from "./atn.wado";
 
+// CLI shape, parsed by `core:args` from the `Command` subcommand variant.
+// `grammars` is an optional variadic positional so the "no grammar files given"
+// check stays in `cmd_*` with its specific message; long options only (`-o` is
+// dropped). `rename_all` lower-cases the wire tags (`gen` / `dump`).
+struct GenArgs {
+    highlight: bool = false,
+    trace: bool = false,
+    output: Option<String> = null,
+    #[serde(positional)]
+    grammars: List<String> = [],
+}
+impl Deserialize for GenArgs;
+
+struct DumpArgs {
+    atn: bool = false,
+    #[serde(positional)]
+    grammars: List<String> = [],
+}
+impl Deserialize for DumpArgs;
+
+#[serde(rename_all = "kebab-case")]
+variant Command {
+    Gen(GenArgs),
+    Dump(DumpArgs),
+}
+impl Deserialize for Command;
+
 export fn run() with Stdout, Stderr, Environment, Preopens, Exit {
-    let arguments = args();
-
-    if arguments.len() >= 2 && arguments[0] == "gen" {
-        let mut paths: List<String> = [];
-        let mut output: Option<String> = null;
-        let mut options = GenerateOptions { highlight: false, trace: false };
-        for let mut i = 1; i < arguments.len(); i += 1 {
-            if arguments[i] == "--highlight" {
-                options.highlight = true;
-            } else if arguments[i] == "--trace" {
-                options.trace = true;
-            } else if arguments[i] == "--output" || arguments[i] == "-o" {
-                if i + 1 >= arguments.len() {
-                    eprintln(`gale gen: '{arguments[i]}' needs a file path`);
-                    usage();
-                    exit(1);
-                }
-                i += 1;
-                output = Option::Some(arguments[i]);
-            } else if arguments[i].starts_with("--") {
-                eprintln(`gale gen: unknown flag '{arguments[i]}'`);
-                usage();
-                exit(1);
+    let argv = args();
+    match parse::<Command>(argv) {
+        Ok(Command::Gen(g)) => {
+            let options = GenerateOptions { highlight: g.highlight, trace: g.trace };
+            cmd_gen(g.grammars, &g.output, &options);
+        },
+        Ok(Command::Dump(d)) => {
+            cmd_dump(d.grammars, d.atn);
+        },
+        Err(e) => {
+            // Prefix with the subcommand (`core:args` reports only kind/message;
+            // the program name and `gen`/`dump` context are gale's to add).
+            let ctx = if argv.len() == 0 {
+                "gale";
+            } else if argv[0] == "gen" {
+                "gale gen";
+            } else if argv[0] == "dump" {
+                "gale dump";
             } else {
-                paths.push(arguments[i]);
-            }
-        }
-        cmd_gen(paths, &output, &options);
-        return;
+                "gale";
+            };
+            eprintln(`{ctx}: {e.message}`);
+            usage();
+            exit(1);
+        },
     }
-
-    if arguments.len() >= 2 && arguments[0] == "dump" {
-        let mut paths: List<String> = [];
-        let mut atn = false;
-        for let mut i = 1; i < arguments.len(); i += 1 {
-            if arguments[i] == "--atn" {
-                atn = true;
-            } else if arguments[i].starts_with("--") {
-                eprintln(`gale dump: unknown flag '{arguments[i]}'`);
-                usage();
-                exit(1);
-            } else {
-                paths.push(arguments[i]);
-            }
-        }
-        cmd_dump(paths, atn);
-        return;
-    }
-
-    usage();
-    exit(1);
 }
 
 fn usage() with Stderr {
-    eprintln("Usage: gale gen [--highlight] [--trace] [-o|--output <file>] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("Usage: gale gen [--highlight] [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...]");
     eprintln("       gale dump [--atn] <grammar.g4> [grammar2.g4 ...]");
 }
 
