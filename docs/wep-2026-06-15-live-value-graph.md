@@ -2323,11 +2323,28 @@ The ideal removes the root cause rather than patching symptoms:
       through the inline splice and the `peephole` collapse (the born-as-operands /
       all-pass-maintenance core), not a post-hoc materialiser. The loop-guard
       cluster additionally needs the induction variable resolved.
-- [ ] Migrate the value passes off `value_of` to operand / pool queries, then
-      delete `value_of` and `nir_value_graph::builder` (criterion 3). The
-      loop-var wall dissolves too: with the graph never cleared, the induction
-      variable keeps its `LoopPhi` identity across `cse`'s copies, so guard and
-      check resolve to it without a materialiser.
+- [x] **`value_of` (the persisted expr→value side-table) is DELETED — criterion 3
+      met** (~2174 lines removed). Every value the optimizer reads now comes from a
+      promoted operand (born-as-operands) or pure re-derivation over the value
+      pool; an unpromoted skeleton leaf resolves to `None` (sound — the finest
+      partition, so `cse` / `store_load_forward` / `freeze` skip the expr rather
+      than over-merge). Proven redundant by neutering, in turn, `Engine::value()`'s
+      side-table read and the inline seed read: each left the full e2e green
+      (0 / 3030). Then physically removed: the `ValueGraphBuild` fields
+      `value_of` / `analysis_only` / `call_site_heap` / `config` + `BuildConfig`;
+      the inline `build_scoped` reseed (the graph-preserving gate now governs only
+      `loop_entry_values`); the engine's value_of edit-maintenance
+      (`maintain_value_after_edit` / `local_bound_by` / `drop_local_readers` /
+      `set_value` / `maintain_pure_value`, and the writes in `maintain_pure_node` /
+      `redirect_expr` / `replace_expr_kind`); `value_union` /
+      `rebuild_value_congruence` / `manual_union_applied` (no production caller);
+      the `WADO_VERIFY_VG` oracle; and ~48 value-numbering unit tests. **Kept**: the
+      `Builder`-internal `value_of` working map (still used by `build_scoped` →
+      `scoped_const_reads` → `store_load_forward`) and `loop_entry_values` (licm).
+      Validated: `cargo test --lib` 738/0, e2e (O0+O2) 0 / 3030. `nir_value_graph::builder`
+      itself survives (it computes `loop_entry_values` + the scoped const reads), so
+      that half of the original endpoint is intentionally not removed.
+  Migration notes (the path taken, kept for history):
   - [x] `condition_implication` is **fully off `value_of`** — the first value
         pass migrated. Every BCE recogniser is now **structural** (skeleton/pool
         reads + a position-aware no-write-between scan; no `value_of`, no
