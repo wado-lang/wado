@@ -31,8 +31,6 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// alias collectors the coverage they need.
 fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     f(body, node);
-    // `for_each_child` borrows `body` immutably and `f` reads `&Body`, so recurse
-    // straight through the closure — no per-node child `Vec` to allocate.
     body.for_each_child(node, |c| walk_all(body, c, f));
 }
 
@@ -63,9 +61,7 @@ pub(super) fn build_alias_info(
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    // Per-node hook fused into the body walk, returning an extra local to mark
-    // aliased (the mutating-method receiver scan). Folding it here keeps the
-    // alias build to a single tree traversal instead of two.
+    // Per-node hook fused into the walk; its returned local is marked aliased.
     mut extra_aliased: impl FnMut(&Body, NodeRef) -> Option<u32>,
 ) -> AliasInfo {
     // Seed dense bitsets sized to the function's local count; local indices
@@ -142,14 +138,11 @@ pub(super) fn builder_alias_sets(
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
     call_immutability: &CallImmutability,
 ) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
-    // A mutating method call `recv.m(…)` (`m` takes `&mut self`) takes the
-    // address of `recv` implicitly: the NIR receiver is a bare `Local`, with no
-    // `&mut recv` node for `collect_aliased_node` to see, so `recv` is otherwise
-    // absent from `aliased` and — since `mut_escaped ⊆ aliased` — from
-    // `mut_escaped` too. The value graph then never bumps `recv`'s fields across
-    // the call (`x.bump(); x.value` forwards the pre-call constant — a
-    // miscompile). Flag the receiver root here, fused into the alias-collection
-    // walk so the body is traversed once.
+    // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
+    // the NIR receiver is a bare `Local` with no `&mut recv` node, so
+    // `collect_aliased_node` misses it and the value graph would forward `recv`'s
+    // pre-call fields across the call (`x.bump(); x.value` — a miscompile). Mark
+    // the receiver root via the `build_alias_info` hook, sharing its walk.
     let info = build_alias_info(
         body,
         locals,
