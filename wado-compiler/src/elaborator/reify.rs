@@ -212,6 +212,25 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// caller AST under the wrong perspective. Empty outside a default
     /// walk. See [`Self::reify_pad_args_with_defaults`].
     pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
+    /// Call-site location active while reifying a default-argument
+    /// expression. Location literals (`#file` / `#line` / `#function`) used
+    /// as a default must report the call site, not where the default is
+    /// written (which is the callee module reify swaps to for name
+    /// resolution). Name resolution stays callee-scoped; only these three
+    /// literals consult this override. `None` outside a default walk —
+    /// every other position reports its own location. Save/restore makes
+    /// nested defaults report their own immediate call site. See
+    /// [`Self::reify_pad_args_with_defaults`].
+    pub(crate) call_site_location: Option<CallSiteLocation>,
+}
+
+/// Source location of a call, captured for location literals in
+/// default-argument expressions. See [`Reify::call_site_location`].
+#[derive(Clone)]
+pub(crate) struct CallSiteLocation {
+    pub(crate) module: ModuleSource,
+    pub(crate) span: crate::token::Span,
+    pub(crate) function_name: String,
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
@@ -254,6 +273,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tuple_overlay_visits: IndexMap::default(),
             live_items,
             default_arg_overrides: IndexMap::default(),
+            call_site_location: None,
         }
     }
 
@@ -6471,6 +6491,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
 
+        // Location literals (`#file` / `#line` / `#function`) in a default
+        // report the call site, not the callee module the perspective swap
+        // below moves to. Capture it now, while the caller's perspective is
+        // still live: the caller's module, the call expression's span, and
+        // the calling function's name. Save/restore composes for nested
+        // defaults (each reports its own immediate call site).
+        let saved_call_site = self.call_site_location.replace(CallSiteLocation {
+            module: self.current_module_source.clone(),
+            span: callee.span(),
+            function_name: ctx.function_name.clone(),
+        });
+
         // A default expression otherwise resolves in the *callee's*
         // lexical scope: it may reference items private to the callee
         // module that the caller cannot see (`paint(c = DEFAULT_VALUE)`
@@ -6518,6 +6550,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.sem = sem;
         }
         self.default_arg_overrides = saved_overrides;
+        self.call_site_location = saved_call_site;
     }
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →
@@ -8486,24 +8519,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
             ast::Literal::Null => TirExprKind::Null,
             ast::Literal::Unit => TirExprKind::Unit,
-            ast::Literal::LocationFunction => TirExprKind::StringLiteral(ctx.function_name.clone()),
+            ast::Literal::LocationFunction => {
+                // `#function` — the enclosing function, or, in a default
+                // argument, the calling function (`call_site_location`).
+                let name = match &self.call_site_location {
+                    Some(loc) => loc.function_name.clone(),
+                    None => ctx.function_name.clone(),
+                };
+                TirExprKind::StringLiteral(name)
+            }
             ast::Literal::LocationFile => {
-                // `#file` — current module source as a string.
+                // `#file` — current module source, or, in a default
+                // argument, the caller's module (`call_site_location`).
                 let string_type = self
                     .tysys
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(crate::compiler_item::CompilerItem::String);
-                return TirExpr::new(
-                    TirExprKind::StringLiteral(self.current_module_source.to_string()),
-                    string_type,
-                    lit.span,
-                );
+                let file = match &self.call_site_location {
+                    Some(loc) => loc.module.to_string(),
+                    None => self.current_module_source.to_string(),
+                };
+                return TirExpr::new(TirExprKind::StringLiteral(file), string_type, lit.span);
             }
             ast::Literal::LocationLine => {
                 // `#line` — 1-indexed line number; matches the
-                // elaborator's `I32` typing.
-                let line = lit.span.line as u64;
+                // elaborator's `I32` typing. In a default argument it is
+                // the call site's line (`call_site_location`).
+                let line = match &self.call_site_location {
+                    Some(loc) => loc.span.line as u64,
+                    None => lit.span.line as u64,
+                };
                 return TirExpr::new(
                     TirExprKind::IntLiteral {
                         value: line,

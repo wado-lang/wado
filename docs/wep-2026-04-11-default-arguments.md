@@ -447,16 +447,17 @@ let resp = Fetch::fetch(url, init).read();
 
 ### Interaction with Existing Features
 
-| Feature          | Interaction                                         |
-| ---------------- | --------------------------------------------------- |
-| Effect system    | Default expressions must be pure (no effects)       |
-| Traits           | Only trait definition specifies defaults            |
-| Function types   | Defaults erased — arity fixed                       |
-| Closures         | Defaults rejected — parsed but error in elaborator  |
-| `export fn` (CM) | Defaults rejected — arity must match WIT signature  |
-| Default trait    | Auto-derived for all-defaulted structs              |
-| Serde            | Declared field default → optional on deserialize    |
-| Generics         | Default expressions are monomorphized per call site |
+| Feature           | Interaction                                                    |
+| ----------------- | -------------------------------------------------------------- |
+| Effect system     | Default expressions must be pure (no effects)                  |
+| Traits            | Only trait definition specifies defaults                       |
+| Function types    | Defaults erased — arity fixed                                  |
+| Closures          | Defaults rejected — parsed but error in elaborator             |
+| `export fn` (CM)  | Defaults rejected — arity must match WIT signature             |
+| Default trait     | Auto-derived for all-defaulted structs                         |
+| Serde             | Declared field default → optional on deserialize               |
+| Generics          | Default expressions are monomorphized per call site            |
+| Location literals | `#file`/`#line`/`#function` defaults evaluate at the call site |
 
 ### Not in Scope
 

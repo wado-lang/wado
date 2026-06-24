@@ -41,6 +41,19 @@ Returns the fully specialized name without signature:
 | Generic method | `List<String>::len`          |
 | Closure        | `parent_function::{closure}` |
 
+### Call-Site Evaluation in Default Arguments
+
+`#file`, `#line`, and `#function` evaluate at the call site when used as a function or method [default argument](./wep-2026-04-11-default-arguments.md), reporting the caller rather than where the default is written. This is what makes a defaulted location parameter useful — a logging or assertion helper captures its caller's location (cf. Swift's `#file`/`#line` default parameters, C++ `std::source_location::current()`).
+
+```wado
+pub fn log(msg: String, file: String = #file, line: i32 = #line, fun: String = #function) { ... }
+
+// At app.wado:42, inside `fn run`:
+log("started"); // file = "app.wado", line = 42, fun = "run"
+```
+
+A default argument's name resolution otherwise binds in the callee's scope (a default may reference callee-module-private items). Only these three location literals are redirected to the call site. `#data`, `#include_str`, and `#include_bytes` always refer to the source file that lexically contains them. Struct field defaults are unaffected: their location literals report the field's defining file (the default is materialized once at the struct definition, not per construction site).
+
 ### `#data`
 
 Returns the raw text content of the file's `__DATA__` section as a `String`. Using `#data` in a source file that has no `__DATA__` section is a compile error. This allows programs to embed and access static data inline without a separate data file.

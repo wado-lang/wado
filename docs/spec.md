@@ -1863,6 +1863,25 @@ Returns the fully specialized name without signature:
 | Generic method | `List<String>::len`          |
 | Closure        | `parent_function::{closure}` |
 
+**Call-site evaluation in default arguments:**
+
+When `#file`, `#line`, or `#function` is used as a [default argument](#default-arguments), it evaluates at the call site, not where the default is written. This makes a defaulted location parameter report the caller — the basis for source-tracking helpers, like Swift's `#file`/`#line` default parameters or C++'s `std::source_location::current()`.
+
+```wado
+// logging.wado
+pub fn log(msg: String, file: String = #file, line: i32 = #line, fun: String = #function)
+    with Stdout {
+    println(`[{file}:{line} {fun}] {msg}`);
+}
+
+// app.wado
+fn run() with Stdout {
+    log("started"); // prints `[app.wado:<this line> run] started`
+}
+```
+
+This is specific to these three location literals. A default argument's name resolution otherwise uses the callee's scope (so a default may reference items private to the callee module). Only `#file` / `#line` / `#function` are redirected to the call site; `#data`, `#include_str`, and `#include_bytes` always refer to the source file that contains them. Struct field defaults are unaffected — their location literals always report the field's defining file.
+
 ### Closures
 
 Closures are anonymous function expressions with `|params| body` syntax.
