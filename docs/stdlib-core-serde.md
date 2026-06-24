@@ -24,6 +24,11 @@ struct with `#[serde(rename_all = "...")]`, or per field with
 `rename_all` strategies: `"camelCase"`, `"snake_case"`, `"PascalCase"`,
 `"SCREAMING_SNAKE_CASE"`, `"kebab-case"`, `"SCREAMING-KEBAB-CASE"`.
 
+The same `rename` / `rename_all` overrides apply to `enum` and `variant`
+case names (default: the `PascalCase` name verbatim), e.g.
+`#[serde(rename_all = "kebab-case")]` makes `AddRemote` serialize as
+`"add-remote"`.
+
 ```wado
 // Default — wire keys are the field names as written
 struct User {

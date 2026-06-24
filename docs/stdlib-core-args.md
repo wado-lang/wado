@@ -38,8 +38,9 @@ repeatable option always takes a value (there is no repeatable flag);
 Subcommands are a `#[serde(positional)]` field whose type is a `variant`:
 the leading bare token selects the case (externally tagged) and the rest is
 the payload, so `command [global-opts] subcommand [sub-opts]` works and
-nesting is free. The tag matches the case name verbatim (name a case
-lowercase, e.g. `add`, for a lowercase subcommand).
+nesting is free. The tag matches the case's wire name; keep the cases
+idiomatic PascalCase and apply `#[serde(rename_all = "kebab-case")]` (or
+`rename` per case) for lowercase/kebab subcommands like `add-remote`.
 
 ## Positional declaration order is not validated
 

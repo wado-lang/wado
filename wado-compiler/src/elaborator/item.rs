@@ -873,6 +873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_params: vec![],
             cases: vec![],
             span: variant_decl.span,
+            serde_rename_all: None,
         }
     }
 

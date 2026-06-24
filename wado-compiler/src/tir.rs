@@ -3909,6 +3909,8 @@ pub struct TirEnum {
     pub monomorph_info: Option<MonomorphInfo>,
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    pub serde_rename_all: Option<String>,
 }
 
 /// A case in a TIR enum.
@@ -3918,6 +3920,8 @@ pub struct TirEnumCase {
     pub name: String,
     pub index: u32,
     pub span: Span,
+    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    pub serde_rename: Option<String>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -3955,6 +3959,8 @@ pub struct TirVariantDecl {
     /// Cases of the variant (e.g., Some, None for Option)
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
+    /// `#[serde(rename_all = "...")]` — naming strategy for all cases.
+    pub serde_rename_all: Option<String>,
 }
 
 /// A case in a variant declaration
@@ -3972,6 +3978,8 @@ pub struct TirVariantCase {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub payload: TypeId,
     pub span: Span,
+    /// `#[serde(rename = "...")]` — custom serialized name for this case.
+    pub serde_rename: Option<String>,
 }
 
 #[derive(Debug, Clone)]

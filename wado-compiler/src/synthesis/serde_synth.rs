@@ -345,52 +345,42 @@ fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirS
     })
 }
 
+/// Apply a `rename_all` strategy. `heck` tokenizes any source casing into words,
+/// so this works for both `snake_case` struct fields and `PascalCase` enum/variant
+/// cases (Wado casing is convention, not a rule, so the source form is open).
 fn apply_rename_all(s: &str, strategy: &str) -> String {
+    use heck::{
+        ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
+        ToUpperCamelCase,
+    };
     match strategy {
-        "camelCase" => snake_to_camel(s),
-        "snake_case" => s.to_string(),
-        "PascalCase" => {
-            let mut result = String::with_capacity(s.len());
-            let mut capitalize_next = true;
-            for c in s.chars() {
-                if c == '_' {
-                    capitalize_next = true;
-                } else if capitalize_next {
-                    for upper in c.to_uppercase() {
-                        result.push(upper);
-                    }
-                    capitalize_next = false;
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        "SCREAMING_SNAKE_CASE" => s.to_uppercase(),
-        "kebab-case" => s.replace('_', "-"),
-        "SCREAMING-KEBAB-CASE" => s.replace('_', "-").to_uppercase(),
+        "camelCase" => s.to_lower_camel_case(),
+        "snake_case" => s.to_snake_case(),
+        "PascalCase" => s.to_upper_camel_case(),
+        "SCREAMING_SNAKE_CASE" => s.to_shouty_snake_case(),
+        "kebab-case" => s.to_kebab_case(),
+        "SCREAMING-KEBAB-CASE" => s.to_shouty_kebab_case(),
         // Unrecognized strategy string: fall back to identity (the name as
         // written), matching the no-attribute default.
         _ => s.to_string(),
     }
 }
 
-fn snake_to_camel(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut capitalize_next = false;
-    for c in s.chars() {
-        if c == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            for upper in c.to_uppercase() {
-                result.push(upper);
-            }
-            capitalize_next = false;
-        } else {
-            result.push(c);
-        }
+/// Serialized name of an enum / variant case. `#[serde(rename = "...")]` wins;
+/// otherwise `#[serde(rename_all = "...")]` applies its strategy; otherwise the
+/// case name is used verbatim.
+fn serialized_case_name(
+    name: &str,
+    serde_rename: &Option<String>,
+    rename_all: &Option<String>,
+) -> String {
+    if let Some(r) = serde_rename {
+        return r.clone();
     }
-    result
+    match rename_all {
+        Some(strategy) => apply_rename_all(name, strategy),
+        None => name.to_string(),
+    }
 }
 
 pub fn synthesize_serde(project: &mut Package) {
@@ -2112,6 +2102,14 @@ fn generate_enum_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index))
         .collect();
+    // Rename-applied wire names, aligned with `cases`: the emitted
+    // `serialize_unit_variant` tag, while the match pattern uses the
+    // source-level case name from `cases`.
+    let wire_names: Vec<String> = enum_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .collect();
 
     drop(tt);
 
@@ -2123,7 +2121,7 @@ fn generate_enum_serialize(
 
     // Build match arms: one per enum case calling serialize_unit_variant
     let mut match_arms = Vec::new();
-    for (case_name, case_index) in &cases {
+    for (i, (case_name, case_index)) in cases.iter().enumerate() {
         let call = type_param_method_call(
             local_ref(1, "s", mut_ref_s),
             "S",
@@ -2139,7 +2137,7 @@ fn generate_enum_serialize(
                     span,
                 ),
                 ref_expr(
-                    string_lit(case_name, string_type, span),
+                    string_lit(&wire_names[i], string_type, span),
                     ref_string_type,
                     span,
                 ),
@@ -2283,11 +2281,17 @@ fn generate_enum_deserialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, TypeTable::UNIT))
         .collect();
+    let wire_names = enum_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &enum_def.serde_rename_all))
+        .collect();
     Some(generate_variant_family_deserialize(
         module,
         req,
         names,
         cases,
+        wire_names,
         DeserConstruct::Enum,
     ))
 }
@@ -2302,7 +2306,10 @@ fn generate_variant_family_deserialize(
     module: &TirModule,
     req: &crate::tir::SynthesisRequest,
     names: &SerdeStdlibNames,
+    // `cases` carries the source-level case name (for constructing the value);
+    // `wire_names` is the rename-applied name matched against the input tag.
     cases: Vec<(String, u32, TypeId)>,
+    wire_names: Vec<String>,
     kind: DeserConstruct,
 ) -> TirFunction {
     let span = synth_span();
@@ -2586,14 +2593,16 @@ fn generate_variant_family_deserialize(
     ));
 
     let mut name_then_stmts = Vec::new();
-    for (i, (case_name, _, _)) in cases.iter().enumerate() {
+    for (i, _) in cases.iter().enumerate() {
         let key_ref = ref_expr(
             local_ref(name_local, "__name", string_type),
             ref_string_type,
             span,
         );
+        // Match against the rename-applied wire name; `build_case_arm`
+        // constructs from the source-level name in `cases`.
         let lit_ref = ref_expr(
-            string_lit(case_name, string_type, span),
+            string_lit(&wire_names[i], string_type, span),
             ref_string_type,
             span,
         );
@@ -2784,6 +2793,14 @@ fn generate_variant_serialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, c.payload))
         .collect();
+    // Rename-applied wire names, aligned with `cases`: used for the emitted
+    // `begin_variant`/`serialize_unit_variant` tag, while the match pattern uses
+    // the source-level case name from `cases`.
+    let wire_names: Vec<String> = variant_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .collect();
     let payload_ref_types: Vec<TypeId> = cases
         .iter()
         .map(|(_, _, payload)| tt.make_ref(*payload))
@@ -2823,7 +2840,7 @@ fn generate_variant_serialize(
                         span,
                     ),
                     ref_expr(
-                        string_lit(case_name, string_type, span),
+                        string_lit(&wire_names[i], string_type, span),
                         ref_string_type,
                         span,
                     ),
@@ -2869,7 +2886,7 @@ fn generate_variant_serialize(
                         span,
                     ),
                     ref_expr(
-                        string_lit(case_name, string_type, span),
+                        string_lit(&wire_names[i], string_type, span),
                         ref_string_type,
                         span,
                     ),
@@ -3049,11 +3066,17 @@ fn generate_variant_deserialize(
         .iter()
         .map(|c| (c.name.clone(), c.index, c.payload))
         .collect();
+    let wire_names = variant_def
+        .cases
+        .iter()
+        .map(|c| serialized_case_name(&c.name, &c.serde_rename, &variant_def.serde_rename_all))
+        .collect();
     Some(generate_variant_family_deserialize(
         module,
         req,
         names,
         cases,
+        wire_names,
         DeserConstruct::Variant,
     ))
 }
@@ -3784,11 +3807,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_snake_to_camel() {
-        assert_eq!(snake_to_camel("age"), "age");
-        assert_eq!(snake_to_camel("user_name"), "userName");
-        assert_eq!(snake_to_camel("http_url"), "httpUrl");
-        assert_eq!(snake_to_camel("first_name_last"), "firstNameLast");
-        assert_eq!(snake_to_camel("a"), "a");
+    fn rename_all_from_snake_field() {
+        assert_eq!(apply_rename_all("user_name", "camelCase"), "userName");
+        assert_eq!(apply_rename_all("user_name", "snake_case"), "user_name");
+        assert_eq!(apply_rename_all("user_name", "PascalCase"), "UserName");
+        assert_eq!(apply_rename_all("user_name", "kebab-case"), "user-name");
+        assert_eq!(
+            apply_rename_all("user_name", "SCREAMING_SNAKE_CASE"),
+            "USER_NAME"
+        );
+    }
+
+    #[test]
+    fn rename_all_from_pascal_case() {
+        // Case names are PascalCase; `heck` tokenizes them too.
+        assert_eq!(apply_rename_all("AddRemote", "kebab-case"), "add-remote");
+        assert_eq!(apply_rename_all("AddRemote", "snake_case"), "add_remote");
+        assert_eq!(apply_rename_all("AddRemote", "camelCase"), "addRemote");
+        assert_eq!(apply_rename_all("List", "kebab-case"), "list");
+    }
+
+    #[test]
+    fn serialized_case_name_precedence() {
+        let kebab = Some("kebab-case".to_string());
+        // Explicit per-case rename wins over rename_all.
+        assert_eq!(
+            serialized_case_name("Remove", &Some("rm".to_string()), &kebab),
+            "rm"
+        );
+        // rename_all applies when no per-case rename.
+        assert_eq!(
+            serialized_case_name("AddRemote", &None, &kebab),
+            "add-remote"
+        );
+        // Neither: verbatim.
+        assert_eq!(serialized_case_name("AddRemote", &None, &None), "AddRemote");
     }
 }

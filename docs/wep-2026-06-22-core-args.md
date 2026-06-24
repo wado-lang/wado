@@ -64,12 +64,15 @@ Deferred:
       format-agnostic compiler layer; `core:args` relies on correct declaration
       order. Currently mis-declaration is GIGO; only "too many positionals" is
       caught at runtime.
-- [ ] Case-folding subcommand tags (lowercase `add` → case `Add`). Matching by
-      folded name would need a synthesized per-variant name→case map — CLI-only
-      knowledge that does not belong in the compiler (JSON/CBOR match the case
-      name verbatim too). Name the variant case in the casing you want on the CLI
-      (e.g. `add`) instead.
 - [ ] `--help` / `--version`.
+
+Lowercase / kebab subcommand tags are handled by serde's case rename, not by
+args: `#[serde(rename_all = "kebab-case")]` on the subcommand `variant` (or
+`#[serde(rename = "...")]` per case) makes the wire tag `add-remote` while the
+cases stay idiomatic PascalCase. `core:args` matches the tag against that wire
+name with no special support — the same rename that drives JSON/CBOR. (Case
+_folding_ — accepting `add` for a `PascalCase`-wire `Add` — is intentionally not
+done; the tag must equal the wire name, like every other format.)
 
 ### Entry Points
 

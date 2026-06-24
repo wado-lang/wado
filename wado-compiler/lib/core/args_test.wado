@@ -318,3 +318,26 @@ test "unknown subcommand reports UnknownSubcommand" {
     let r = parse::<App>(["Bogus"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::UnknownSubcommand };
 }
+
+// `#[serde(rename_all)]` on the subcommand variant gives idiomatic lowercase /
+// kebab tags while the cases stay PascalCase — serde-general, no args support.
+#[serde(rename_all = "kebab-case")]
+variant KebabCmd {
+    AddRemote(AddRemoteArgs),
+    List,
+}
+impl Deserialize for KebabCmd;
+
+struct KebabApp {
+    #[serde(positional)] command: KebabCmd,
+}
+impl Deserialize for KebabApp;
+
+test "kebab subcommand tag from rename_all" {
+    let r = parse::<KebabApp>(["add-remote", "origin"]);
+    if let Ok(c) = r {
+        assert c.command matches { AddRemote(a) && a.name == "origin" };
+    } else {
+        panic("expected Ok");
+    }
+}
