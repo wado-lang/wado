@@ -119,6 +119,7 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
     let __local_6_6: ref "core:prelude/string.wado//String";
     let __local_7_7: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
+    let __cond_15: bool;
     let value: i32;
     let _licm_repr_27: ref Array<i32>;
     __inline___initialize_modules_0: block {
@@ -136,8 +137,11 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/run"() {
         l1: loop {
             break_if b0 i >= 100;
             idx = i & 32767;
-            sum = sum + builtin::array_get<i32>(_licm_repr_27, idx);
+            sum = sum + __cond_15 = idx < 32768; block {
+            }; builtin::array_get<i32>(_licm_repr_27, idx);
             value = i;
+            block {
+            };
             builtin::array_set<i32>(_licm_repr_27, idx, value);
             i = i + 1;
             continue l1;
@@ -167,12 +171,12 @@ fn "wado-compiler/tests/fixtures/optimize_bitmask_bce.wado/__cm_export__run"() {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= len;
+    b5: block {
+        l6: loop {
+            break_if b5 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l4;
+            continue l6;
         };
     };
 }
@@ -254,12 +258,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b8: block {
-        l9: loop {
-            break_if b8 t <= 0_i64;
+    b10: block {
+        l11: loop {
+            break_if b10 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l9;
+            continue l11;
         };
     };
     return n;
@@ -268,19 +272,18 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b11: block {
-            l12: loop {
-                break_if b11 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+        b13: block {
+            l14: loop {
+                break_if b13 temp <= 0_i64;
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l12;
+                continue l14;
             };
         };
     }
@@ -320,11 +323,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -393,12 +397,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b21: block {
-        l22: loop {
-            break_if b21 i >= n;
+    b23: block {
+        l24: loop {
+            break_if b23 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l22;
+            continue l24;
         };
     };
 }

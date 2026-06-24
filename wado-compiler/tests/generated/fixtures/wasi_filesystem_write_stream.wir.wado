@@ -329,7 +329,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/run"() with S
 condition: index < self.used
 "), used: 30 }); "core:prelude/string.wado/String::push"(__local_5, 105); "core:prelude/string.wado/String::push"(__local_5, 110); "core:prelude/string.wado/String::push"(__local_5, 100); "core:prelude/string.wado/String::push"(__local_5, 101); "core:prelude/string.wado/String::push"(__local_5, 120); "core:prelude/string.wado/String::push"(__local_5, 58); "core:prelude/string.wado/String::push"(__local_5, 32); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("self.used: "), used: 11 }); __local_6 = "core:prelude/format.wado/Formatter::new"(__local_5); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v1 }, __local_6); "core:prelude/string.wado/String::push"(__local_5, 10); __local_5);
         unreachable;
-    }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_output.txt"), used: 15 }, 9, 3));
+    }; builtin::array_get<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0), 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test_output.txt"), used: 15 }, 1 | 8, 2 | 1));
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(write_result) {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(write_result).payload_0;
         let __pair_temp_1: i64;
@@ -381,6 +381,7 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding_
     let __count: i32;
     let __result: ref "core:prelude//List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
     let __i: i32;
+    let __elem_addr: i32;
     let __lifted_result_6: i32;
     let __lifted_result_7: ref "core:prelude/string.wado//String";
     let ptr: i32;
@@ -393,13 +394,13 @@ fn "wado-compiler/tests/fixtures/wasi_filesystem_write_stream.wado/__cm_binding_
     b5: block {
         l6: loop {
             break_if b5 __i >= __count;
-            __lifted_result_6 = builtin::load_i32((__base + (__i * 12)) + 0);
-            ptr = builtin::load_i32((__base + (__i * 12)) + 4);
-            len_10 = builtin::load_i32(((__base + (__i * 12)) + 4) + 4);
+            __lifted_result_6 = builtin::load_i32(local.tee __elem_addr(__base + (__i * 12)) + 0);
+            ptr = builtin::load_i32(__elem_addr + 4);
+            len_10 = builtin::load_i32((__elem_addr + 4) + 4);
             arr = "core:internal/memory_to_gc_array"(ptr, len_10);
             __lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr, used: len_10 };
             "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>::push"(__result, struct.new "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]" { 0: __lifted_result_6, 1: __lifted_result_7 });
-            drop("mem/realloc"(builtin::load_i32((__base + (__i * 12)) + 4), builtin::load_i32(((__base + (__i * 12)) + 4) + 4), 1, 0));
+            drop("mem/realloc"(builtin::load_i32(__elem_addr + 4), builtin::load_i32((__elem_addr + 4) + 4), 1, 0));
             __i = __i + 1;
             continue l6;
         };
@@ -845,7 +846,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -854,8 +854,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b96: block {
             l97: loop {
                 break_if b96 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l97;
             };
@@ -897,11 +897,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1135,8 +1136,9 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<wasi:filesystem/ty
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String>>";
+    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
+    new_repr = builtin::array_new<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

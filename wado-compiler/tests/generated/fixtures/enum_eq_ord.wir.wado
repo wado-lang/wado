@@ -9,49 +9,47 @@ struct core:prelude/string.wado//String {  // TypeId(1)
     mut used: i32,
 }
 
-enum wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority { Low = 0, Medium = 1, High = 2, Critical = 3 };  // TypeId(2)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/run" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/run" = fn();  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/enum_eq_ord.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(14)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(15)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(16)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(17)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(18)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -69,51 +67,38 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/enum_eq_ord.wado/run"() with Stdout {
-    let a: "wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority";
-    let b: "wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority";
-    let c: "wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority";
-    let h: "wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority";
-    let cr: "wado-compiler/tests/fixtures/enum_eq_ord.wado//enum:Priority";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    a = 0;
-    b = 1;
-    c = 0;
-    if a == c {
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low == low"), used: 10 });
-    }
-    if a != b {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low != medium"), used: 13 });
-    }
-    if a == b {
-        "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("BUG: low == medium"), used: 18 });
-    }
-    if a < b {
+    };
+    block {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium"), used: 12 });
-    }
-    if b > a {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("medium > low"), used: 12 });
-    }
-    if a <= c {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low <= low"), used: 10 });
-    }
-    if a >= c {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low >= low"), used: 10 });
-    }
-    h = 2;
-    cr = 3;
-    if h < cr {
+    };
+    block {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("high < critical"), used: 15 });
-    }
-    if (if a < b -> i32 {
-        b < h;
-    } else {
-        0;
-    }) {
+    };
+    if block -> i32 {
+        1;
+    } {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("low < medium < high"), used: 19 });
     }
 }
