@@ -114,10 +114,10 @@ fn explicit_output_dir_is_relative_to_declaring_file() {
     let root = tmp.path();
     write_project(root);
 
-    // Give feat1 an explicit, declaring-file-relative output_dir.
+    // Give feat1 a `./`-relative output_dir (relative to the declaring file).
     fs::write(
         root.join("src/feat1/mod.wado"),
-        "use { hello } from \"./grammar.g4\"\n    with {\n        generator: {\n            module: \"../gen.wado\",\n            output_dir: \"generated\",\n        },\n    };\n\npub fn v1() -> i32 { return hello(); }\n",
+        "use { hello } from \"./grammar.g4\"\n    with {\n        generator: {\n            module: \"../gen.wado\",\n            output_dir: \"./generated\",\n        },\n    };\n\npub fn v1() -> i32 { return hello(); }\n",
     )
     .unwrap();
 
@@ -127,11 +127,31 @@ fn explicit_output_dir_is_relative_to_declaring_file() {
         .success()
         .stdout(predicate::str::contains("3"));
 
-    // "generated" is relative to src/feat1/mod.wado, so it lands next to it.
+    // `./generated` is relative to src/feat1/mod.wado, so it lands next to it.
     assert!(
         root.join("src/feat1/generated/out.wado").exists(),
-        "explicit output_dir must resolve relative to the declaring .wado file"
+        "`./`-relative output_dir must resolve relative to the declaring .wado file"
     );
+}
+
+#[test]
+fn bare_relative_paths_are_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_project(root);
+
+    // A bare (non-`./`) output_dir is rejected: relative paths must be explicit.
+    fs::write(
+        root.join("src/feat1/mod.wado"),
+        "use { hello } from \"./grammar.g4\"\n    with {\n        generator: {\n            module: \"../gen.wado\",\n            output_dir: \"generated\",\n        },\n    };\n\npub fn v1() -> i32 { return hello(); }\n",
+    )
+    .unwrap();
+
+    wado_in(root)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must be a relative path starting with `./` or `../`"));
 }
 
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

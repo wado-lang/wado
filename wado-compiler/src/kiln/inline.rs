@@ -236,14 +236,28 @@ fn lower_inline(
     // The literal source string keys the loader redirect (frame-independent);
     // `from` is the same path resolved relative to the declaring file.
     let source = InvocationPath::normalize(&use_decl.source);
-    let from = resolve_decl_relative(module_path, &use_decl.source, manifest_root);
+    let from = resolve_or_reject(
+        module_path,
+        &use_decl.source,
+        manifest_root,
+        "from",
+        use_decl,
+        &mut errors,
+    );
     let inputs = match cfg.get("inputs") {
         None => Vec::new(),
         Some(AttrValue::Array(items)) => items
             .iter()
             .enumerate()
             .filter_map(|(i, v)| match v {
-                AttrValue::String(s) => Some(resolve_decl_relative(module_path, s, manifest_root)),
+                AttrValue::String(s) => Some(resolve_or_reject(
+                    module_path,
+                    s,
+                    manifest_root,
+                    &format!("generator.inputs[{i}]"),
+                    use_decl,
+                    &mut errors,
+                )),
                 other => {
                     errors.push(Diagnostic {
                         severity: Severity::Error,
@@ -287,7 +301,14 @@ fn lower_inline(
 
     let output_dir_override = match cfg.get("output_dir") {
         None => None,
-        Some(AttrValue::String(s)) => Some(resolve_decl_relative(module_path, s, manifest_root)),
+        Some(AttrValue::String(s)) => Some(resolve_or_reject(
+            module_path,
+            s,
+            manifest_root,
+            "generator.output_dir",
+            use_decl,
+            &mut errors,
+        )),
         Some(other) => {
             errors.push(Diagnostic {
                 severity: Severity::Error,
@@ -341,15 +362,43 @@ fn lower_inline(
     })
 }
 
-/// Resolve a path written in a `use` clause (`module`, `from`, `inputs`, or
-/// `output_dir`) relative to the declaring file (`module_path`), then re-anchor
-/// it to the manifest root so the provider/pipeline can read it as
-/// `manifest_root.join(path)`. This upholds the rule that every path a `.wado`
-/// file references is relative to that file.
+/// Resolve a `./` or `../` path written in a `use` clause relative to the
+/// declaring file (`module_path`), then re-anchor it to the manifest root so
+/// the provider/pipeline can read it as `manifest_root.join(path)`. Callers
+/// must ensure `raw` is `./`/`../`-prefixed (the `module` form gates on the
+/// prefix; `from`/`inputs`/`output_dir` go through [`resolve_or_reject`]).
 fn resolve_decl_relative(module_path: &str, raw: &str, manifest_root: &str) -> InvocationPath {
     let resolved = crate::name::resolve_module_path(module_path, raw);
     let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
     InvocationPath::normalize(&manifest_relative)
+}
+
+/// Resolve a `from` / `inputs` / `output_dir` path, enforcing the Wado path
+/// convention: a path relative to the declaring file must be written with a
+/// `./` or `../` prefix (matching local module imports). A bare path is
+/// rejected — it is reserved for a future manifest-root sigil. On rejection an
+/// error diagnostic is pushed and the raw path is returned as a placeholder
+/// (the caller bails because the diagnostics list is non-empty).
+fn resolve_or_reject(
+    module_path: &str,
+    raw: &str,
+    manifest_root: &str,
+    field: &str,
+    use_decl: &UseDecl,
+    errors: &mut Vec<Diagnostic>,
+) -> InvocationPath {
+    if raw.starts_with("./") || raw.starts_with("../") {
+        return resolve_decl_relative(module_path, raw, manifest_root);
+    }
+    errors.push(Diagnostic {
+        severity: Severity::Error,
+        code: Code::GeneratorOptionsInvalid,
+        message: format!(
+            "kiln: `{field}` must be a relative path starting with `./` or `../`, got `{raw}`"
+        ),
+        span: Some(span_of(module_path, use_decl)),
+    });
+    InvocationPath::normalize(raw)
 }
 
 /// Lower an inline `module: "<specifier>"` value to a [`GeneratorModule`].
@@ -662,12 +711,11 @@ mod tests {
     }
 
     #[test]
-    fn output_dir_override_is_respected() {
-        // `output_dir`, like every path written in the file, resolves relative
-        // to the declaring file (`src/main.wado`): "generated" → "src/generated".
+    fn output_dir_override_relative_with_dot_slash() {
+        // `./generated` resolves relative to the declaring file (`src/main.wado`).
         let attrs = attr_with_generator(&[
             ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
-            ("output_dir", AttrValue::String("generated".to_string())),
+            ("output_dir", AttrValue::String("./generated".to_string())),
         ]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -682,6 +730,54 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].output_dir.as_str(), "src/generated");
         assert_eq!(result[0].source.as_str(), "schema.proto");
+    }
+
+    #[test]
+    fn bare_output_dir_is_rejected() {
+        // A bare (non-`./`/`../`) path is rejected; relative paths must be
+        // explicit, matching local module imports.
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            (
+                "output_dir",
+                AttrValue::String("tests/generated/calc".to_string()),
+            ),
+        ]);
+        let module = module_with_use("./schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("tests/deep/nested/calc_test.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
+        assert!(errs.iter().any(|d| {
+            d.message.contains("generator.output_dir")
+                && d.message.contains("must be a relative path starting with `./` or `../`")
+        }));
+    }
+
+    #[test]
+    fn bare_from_is_rejected() {
+        let attrs =
+            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+        // `from` without a `./` prefix.
+        let module = module_with_use("schema.proto", attrs);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/main.wado".to_string(), module);
+
+        let errs = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        )
+        .unwrap_err();
+        assert!(
+            errs.iter()
+                .any(|d| d.message.contains("`from` must be a relative path"))
+        );
     }
 
     #[test]
@@ -792,11 +888,12 @@ mod tests {
 
     #[test]
     fn output_dir_override_relative_to_root_entry() {
-        // Regression: entry at the manifest root → manifest_root is `.`; a bare
-        // `output_dir` must stay inside the project, not resolve to `../`.
+        // Regression: entry at the manifest root → manifest_root is `.`; a
+        // `./`-relative `output_dir` must stay inside the project, not resolve
+        // to `../` (the `.` segment must not become a spurious `..`).
         let attrs = attr_with_generator(&[
             ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
-            ("output_dir", AttrValue::String("generated".to_string())),
+            ("output_dir", AttrValue::String("./generated".to_string())),
         ]);
         let module = module_with_use("./schema.g4", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
