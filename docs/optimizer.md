@@ -24,6 +24,21 @@ The fixed-point loop exits early on convergence. The post-loop rewrites the Wasm
 
 ## Architecture
 
+### Live value graph
+
+Pure values are the optimizer's source of truth, not re-derived per pass. Every
+operand position in the skeleton arena is either a skeleton subtree
+(`Operand::Expr`) or a promoted pure value (`Operand::Value`) interned in the
+per-function value pool (`Body::value_graph` / `body.values`), hash-consed so
+congruent values share one `ValueId`. Operand promotion ("born as operands")
+puts a pure leaf's value straight in the operand, so a pass reads it off the
+operand instead of looking it up — there is no `ExprId`→value side-table. The
+graph is built once per function (lazily, on the first value query) and
+maintained in place across passes via e-class union, never rebuilt. Pure-value
+CSE therefore falls out of the pool (congruent values already share a node);
+constant folding (`niri`) reads pooled values, and bounds-check elimination
+(`condition_implication`) recognises them structurally. See [WEP: The Live ValueGraph](./wep-2026-06-15-live-value-graph.md).
+
 ### Worklist rewrite engine
 
 Genuinely-local NIR rewrites run as [`Rule`]s on a worklist engine (`nir_engine.rs`) over one function's arena `Body`: a node is revisited only when an edit might have made it reducible, rather than via repeated whole-tree sweeps. The engine owns the session state (parent map, local use index, worklist) and a mutating edit API (`replace_expr_kind`, `set_block_stmts`, `become_expr`, `alloc_*`, `clone_expr`) that keeps that state coherent. Flow-sensitive passes that need per-block dataflow (`field_scalarize`, `licm`, `tmpl_hoist`, `value_copy_demote`, `store_load_forward`, the flow-sensitive half of `const_folding`) keep their own walkers. See [WEP: NIR Rewrite Engine](./wep-2026-06-05-nir-rewrite-engine-design.md).
@@ -43,8 +58,8 @@ Gating affects only which functions a pass visits, never the IR a visit produces
 `optimize.rs` orchestrates the NIR stages; `wir_optimize.rs` runs the WIR stages.
 
 1. Early DCE — remove unreachable functions/types/globals.
-2. Fixed-point loop (skipped at `-O0`), in order: `container_sroa`, peephole (pre-inline; hosts `match_to_switch` and `value_copy_elide` as rules), `value_copy_demote`, `sroa_param`, `inline`, peephole (post-inline; hosts `ref_elim` and `elide_box_local` as rules), `labeled_block_fusion`, `sroa`, `copy_prop`, `dae`, `drve`, `store_load_forward`, `const_folding`, `licm`, `condition_implication`, `tmpl_hoist`. (`match_to_switch` on global initializers runs once before the loop; `-O0` lowers everything via `match_to_switch_all`.)
-3. Post-loop, once: `field_scalarize`; `branch_prune_final` (flatten `__tmpl:` wrappers); `const_object_globalization` + a final `const_folding`/`const_branch_prune` cleanup.
+2. Fixed-point loop (skipped at `-O0`), in order: `container_sroa`, peephole (pre-inline; hosts `match_to_switch` and `value_copy_elide` as rules), `value_copy_demote`, `sroa_param`, `inline`, peephole (post-inline; hosts `array_literal`, `labeled_block_fusion`, `ref_elim`, and `elide_box_local` as rules), `sroa`, `copy_prop`, `dae`, `drve`, `const_folding`, `licm`, `tmpl_hoist`. (`match_to_switch` on global initializers runs once before the loop; `-O0` lowers everything via `match_to_switch_all`.)
+3. Post-loop, once: `field_scalarize`; `store_load_forward` (fold the scalarization shadow inits); `branch_prune_final` (flatten `__tmpl:` wrappers); `const_object_globalization` + a final `const_folding`/`const_branch_prune`/`condition_implication` cleanup.
 4. Final DCE.
 5. Backend-required rewrites (all levels): `select_lowering`, `multi_value_return`.
 6. WIR-level passes — see [WIR optimizations](#wir-optimizations).
@@ -118,7 +133,7 @@ Shared facility: `optimize/mod_ref.rs` (`ModRef::of_expr`/`of_stmt`) returns a c
 ## Not yet implemented
 
 - [ ] Sparse Conditional Constant Propagation (SCCP) and interprocedural SCCP.
-- [ ] Global Value Numbering — generalized CSE with hash-consing (loop-level CSE exists).
+- [ ] Global Value Numbering across effectful nodes (pure-value hash-consing already exists in the value graph).
 - [ ] Instruction combining — algebraic simplification (`x + 0 → x`, `x * 2 → x << 1`).
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
