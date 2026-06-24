@@ -305,7 +305,6 @@ impl DeserializeStruct for ArgvStructAccess {
                     self.de.pos += 1;
                     continue;
                 }
-                // `--name` or `--name=value`
                 self.de.pos += 1;
                 let lo = ArgvDeserializer::split_long(&tok);
                 if lo.raw == "" {
@@ -319,7 +318,6 @@ impl DeserializeStruct for ArgvStructAccess {
                         offset: -1,
                     });
                 }
-                // `-`/`_` fold before the schema lookup; wire names are unchanged.
                 if let Some(idx) = S::lookup(lo.folded.as_bytes()) {
                     self.de.cur_is_option = true;
                     self.de.cur_inline = lo.inline;
@@ -336,7 +334,6 @@ impl DeserializeStruct for ArgvStructAccess {
                     offset: -1,
                 });
             }
-            // Bare token → next positional field (ordinal).
             let rank = self.pos_rank;
             self.pos_rank += 1;
             if let Some(idx) = S::positional_at(rank) {
@@ -373,8 +370,7 @@ impl DeserializeStruct for ArgvStructAccess {
 impl DeserializeSeq for ArgvSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         if self.is_option_list {
-            // Repeatable `--option`: yield each pre-gathered value, forcing it
-            // through `T`'s scalar conversion.
+            // Force each pre-gathered value through `T`'s scalar conversion.
             if self.cursor >= self.vals.len() {
                 return Result::Ok(null);
             }
@@ -383,8 +379,7 @@ impl DeserializeSeq for ArgvSeqAccess {
             let v = T::deserialize(self.de)?;
             return Result::Ok(Option::Some(v));
         }
-        // A variadic positional (`List<T> = []`) consumes the contiguous run of
-        // bare tokens, stopping at the next `--option` or end of input.
+        // A variadic positional stops at the next `--option` or end of input.
         self.de.skip_consumed();
         if self.de.pos >= self.de.tokens.len() {
             return Result::Ok(null);
@@ -433,9 +428,8 @@ impl DeserializeVariant for ArgvVariantAccess {
     }
 
     fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
-        // The payload parses from the tokens after the tag: a nested struct
-        // continues from the shared deserializer state, so its `--options` and
-        // positionals fall out of the same machinery.
+        // The payload parses from the tokens after the tag, continuing from the
+        // shared deserializer state.
         return T::deserialize(self.de);
     }
 
@@ -531,9 +525,8 @@ impl Deserializer for ArgvDeserializer {
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
-        // A bare `--flag` (option, no inline value) is `true`; an inline
-        // `--flag=0`, a positional bool, or a forced (repeatable) value is
-        // converted leniently.
+        // A bare `--flag` is `true`; an inline `--flag=0`, a positional bool, or
+        // a forced repeatable value is converted leniently.
         let bare_flag =
             self.cur_is_option && self.cur_inline matches { None } && self.forced matches { None };
         if bare_flag {
@@ -566,7 +559,6 @@ impl Deserializer for ArgvDeserializer {
 
     fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> with stores[self] {
         if self.cur_is_option {
-            // Repeatable `--option`: gather all its values up front.
             let vals = self.gather_option_values()?;
             return Result::Ok(ArgvSeqAccess {
                 de: self,
@@ -575,7 +567,6 @@ impl Deserializer for ArgvDeserializer {
                 cursor: 0,
             });
         }
-        // Variadic positional: values are pulled on demand from the bare-token run.
         return Result::Ok(ArgvSeqAccess {
             de: self,
             is_option_list: false,

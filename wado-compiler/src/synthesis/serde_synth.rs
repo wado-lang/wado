@@ -2035,7 +2035,6 @@ fn generate_positional_at_function(
     span: Span,
     compiler_items: &crate::compiler_item::CompilerItems,
 ) -> TirFunction {
-    // Parameter: rank: i32 at local 0.
     let locals = vec![param_local("__rank", TypeTable::I32, false)];
     let next_local: u32 = 1;
 
