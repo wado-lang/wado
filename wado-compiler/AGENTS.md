@@ -10,26 +10,17 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 
 ## NIR Optimize
 
-The NIR optimizer (`optimize.rs` + `optimize/`) runs the value passes over a
-per-function value graph that is **built once and maintained in place** — never
-rebuilt, never cached between passes. Values live as `Operand::Value` (the value
-pool, `body.values`) born during lowering/freeze; the old `value_of` expr→value
-side-table is **deleted**. A consumer reads an operand's value or pure
-re-derivation over the pool; an unpromoted skeleton leaf has no value (`None`,
-sound — the finest partition). BCE recognisers are **structural** (skeleton +
-pool reads, no value graph). Soundness of in-place maintenance is checked by the
-`WADO_VERIFY_VG` oracle (over-merge = panic).
+The per-function value graph is built once and maintained in place. Values live
+as `Operand::Value` in the pool (`body.values`); there is no `ExprId`→value
+side-table (`value_of` is deleted). BCE recognisers are structural.
 
-Do **not** reintroduce:
+Never reintroduce, regardless of perf:
 
-- a **rebuild** of the value graph mid-pipeline (the build-once invariant —
-  `WADO_MEASURE_VG` must report `rebuilds = 0`), or
-- a **cache / side-table** keyed by `ExprId` (`value_of`, `vg_cache`, …). If a
-  pass needs a value, born-as-operands or a scratch scoped walk
-  (`Engine::scoped_const_reads`) provides it — never a persisted derived map.
+- a rebuild of the value graph mid-pipeline (`WADO_MEASURE_VG` must stay `rebuilds = 0`), or
+- an `ExprId`-keyed cache / side-table (`value_of`, `vg_cache`). A pass needing a
+  value uses born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 
-See `docs/wep-2026-06-15-live-value-graph.md` for the full design and the
-retirement history.
+Details: `docs/wep-2026-06-15-live-value-graph.md`.
 
 ## Development Cycle
 
