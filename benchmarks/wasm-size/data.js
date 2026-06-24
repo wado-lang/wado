@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782302458394,
+  "lastUpdate": 1782308763496,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35257,6 +35257,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f159dbfec7fd6f6256add0bcbfad771d5f192768"
         },
         "date": 1782302457922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287917,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "baf7117e6ce9470d4e6eae4db7838fe045cdad61",
+          "message": "Merge pull request #1439 from wado-lang/claude/wado-compiler-optimizer-perf-xs4mmq\n\nperf(optimize): cut per-node allocation churn in alias analysis",
+          "timestamp": "2026-06-24T22:36:09+09:00",
+          "tree_id": "8d29fc98661edaeedb3269342e4adf6228582ad0",
+          "url": "https://github.com/wado-lang/wado/commit/baf7117e6ce9470d4e6eae4db7838fe045cdad61"
+        },
+        "date": 1782308763248,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
