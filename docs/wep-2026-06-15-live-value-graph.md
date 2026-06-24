@@ -19,8 +19,18 @@ met. Every value the optimizer reads now comes from a promoted operand
 (born-as-operands) or pure re-derivation over the value pool; an unpromoted skeleton
 leaf resolves to `None` (sound: `None` is the finest partition, so a consumer skips
 the expr rather than over-merge). Build-once is the default and `rebuilds = 0`
-(criterion 1). Criterion 2 (optimize CPU halved) is the one open item — not yet
-measured.
+(criterion 1).
+
+Criterion 2 (optimize CPU halved) is **measured and not met — and will not be
+pursued further** (decision: 2026-06-24). package-gale optimize phase ≈ **15.7 s**
+(dev build, `rebuilds = 0`), vs the ~7.5 s target. The premise was wrong: with
+build-once the value-graph build is now only ~6 % of the phase (was 20.76 %); the
+real cost is the passes themselves — `peephole` (≈ 4.6 s), the 5-iteration fixpoint,
+`licm`, `inline` — and the added born-as-operands passes (`promote_fields`,
+`cond_impl_post_promote`, …) roughly offset the build-once saving. A 2× win needs
+pass-level work (faster `peephole`, fewer iterations), a separate track from this
+value-graph re-architecture. **The build-once + no-side-table invariants stand
+regardless** (see `wado-compiler/AGENTS.md`): do not reintroduce rebuilds or a cache.
 
 Validated end state: `cargo test --lib` 738/0; full e2e (O0+O2) **0 / 3030**;
 `mise run test` / `mise run test-wado` green. No `WADO_*` promotion gate remains —
@@ -87,8 +97,9 @@ each is a static or measured fact, not a "byte-identical and X% faster" proxy.
       calls rather than pass entries. zlib -O2 under promotion: `builds=139,
       first_builds=139, rebuilds=0`. See the P3 milestone below for the mechanism
       (persist gates + honest measurement + config-aware verify oracle).
-- [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s), measured by the
-      sampling profile and wall time.
+- [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s). Measured: still
+      ~15.7s — **not met, not pursued** (the bottleneck is the passes, not the
+      value-graph build; see Status). Won't-do.
 - [x] **The cache is deleted.** Cache half: `vg_cache`, `carry_vg_cache`,
       `CachedAnalysis`, `run_gated_cached` at zero references (the graph lives on
       `Body::values`). Side-table half: the `value_of` `ExprId → ValueId` map is
