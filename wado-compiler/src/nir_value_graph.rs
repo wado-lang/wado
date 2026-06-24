@@ -771,7 +771,6 @@ impl ValuePool {
         self.intern(ValueKind::Char(value))
     }
 
-
     #[inline]
     pub fn null(&mut self) -> ValueId {
         self.intern(ValueKind::Null)

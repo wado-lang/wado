@@ -1530,7 +1530,10 @@ impl FunctionTranslator<'_, '_> {
         let array_u8_ty = self
             .base
             .struct_fields_map
-            .get(&("String".to_string(), crate::module_source::ModuleSource::string()))
+            .get(&(
+                "String".to_string(),
+                crate::module_source::ModuleSource::string(),
+            ))
             .and_then(|fields| {
                 fields
                     .iter()
@@ -1540,7 +1543,10 @@ impl FunctionTranslator<'_, '_> {
             .expect("String struct (repr field) is always loaded");
         let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(i64::from(len) as u64, crate::tir::TypeTable::I32),
+            crate::nir_value_graph::ValueKind::Int(
+                i64::from(len) as u64,
+                crate::tir::TypeTable::I32,
+            ),
             crate::tir::TypeTable::I32,
         );
         let kind = ExprKind::StructLiteral {
