@@ -106,7 +106,8 @@ fn classify(
             } else if arena_query::is_pure_operand(engine.body, value) {
                 Action::Drop
             } else {
-                Action::Demote(value.as_expr().expect("skeleton operand"))
+                // Not pure ⟹ a skeleton expr (a promoted value is pure → Drop above).
+                value.as_expr().map_or(Action::Drop, Action::Demote)
             }
         }
         // `x = value;` (Assign at stmt position) where `x` is unread. This
@@ -127,7 +128,8 @@ fn classify(
                     return if arena_query::is_pure_operand(engine.body, value) {
                         Action::Drop
                     } else {
-                        Action::Demote(value.as_expr().expect("skeleton operand"))
+                        // Not pure ⟹ a skeleton expr (a promoted value is pure).
+                        value.as_expr().map_or(Action::Drop, Action::Demote)
                     };
                 }
             }

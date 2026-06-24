@@ -1144,7 +1144,8 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } => {
                 let (c, t, e2) = (*condition, *then_block, *else_block);
-                let mut ch = self.reduce_in_place_a(body, c.as_expr().expect("skeleton operand"));
+                // A promoted-value condition is already a reduced pool value.
+                let mut ch = c.as_expr().is_some_and(|ce| self.reduce_in_place_a(body, ce));
                 ch |= self.reduce_in_place_block_a(body, t);
                 if let Some(eb) = e2 {
                     ch |= self.reduce_in_place_block_a(body, eb);
@@ -1225,9 +1226,13 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                let cond_kind = sink.body().exprs[condition.as_expr().expect("skeleton operand")]
-                    .kind
-                    .clone();
+                // `if c { true } else { false }` ≡ `c`. A skeleton condition is
+                // spliced in place; a promoted-value condition has no node to
+                // clone, so leave the `if` for a later pass.
+                let Some(cond_e) = condition.as_expr() else {
+                    return false;
+                };
+                let cond_kind = sink.body().exprs[cond_e].kind.clone();
                 sink.replace_kind(e, cond_kind);
             } else {
                 sink.replace_kind(
@@ -1245,7 +1250,11 @@ impl<'a> Interpreter<'a> {
         if t != ev {
             return false;
         }
-        if !is_speculatable_a(sink.body(), condition.as_expr().expect("skeleton operand")) {
+        // A promoted-value condition is pure, hence speculatable.
+        if !condition
+            .as_expr()
+            .is_none_or(|ce| is_speculatable_a(sink.body(), ce))
+        {
             return false;
         }
         // Promote both-equal arms to the shared constant. The scratch backend

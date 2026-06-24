@@ -311,8 +311,8 @@ fn extract_ref_local(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u3
             op,
             crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
         )
-        && let ExprKind::Local { index, .. } =
-            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(ExprKind::Local { index, .. }) =
+            inner.as_expr().map(|e| &body.exprs[e].kind)
     {
         stores_aliased.insert(*index);
     }
@@ -911,15 +911,11 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
                 unreachable!("candidate must be Let statement");
             };
             let value = *value;
-            expand_struct_let(
-                engine,
-                value.as_expr().expect("skeleton operand"),
-                local_idx,
-                is_mut,
-                span,
-                ctx,
-                &mut new_stmts,
-            );
+            // `candidate_from_stmt` only accepts a skeleton `StructLiteral` value.
+            let Some(value_e) = value.as_expr() else {
+                unreachable!("SROA candidate requires a skeleton StructLiteral value");
+            };
+            expand_struct_let(engine, value_e, local_idx, is_mut, span, ctx, &mut new_stmts);
             continue;
         }
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);

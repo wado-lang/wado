@@ -268,7 +268,8 @@ fn arg_source_root(body: &Body, expr: ExprId) -> Option<u32> {
         | ExprKind::VariantPayload { expr: inner, .. }
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. } => {
-            arg_source_root(body, inner.as_expr().expect("skeleton operand"))
+            // A promoted-operand inner is a fresh pooled value, not a place root.
+            inner.as_expr().and_then(|e| arg_source_root(body, e))
         }
         _ => None,
     }

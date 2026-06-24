@@ -137,8 +137,8 @@ fn candidate_inner(body: &Body, stmt: StmtId) -> Operand {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("guarded by describe_candidate");
     };
-    let ExprKind::StructLiteral { fields, .. } =
-        &body.exprs[value.as_expr().expect("skeleton operand")].kind
+    let Some(ExprKind::StructLiteral { fields, .. }) =
+        value.as_expr().map(|ve| &body.exprs[ve].kind)
     else {
         unreachable!("guarded by describe_candidate");
     };
@@ -160,7 +160,7 @@ fn find_subst_target(
             ..
         } = &body.exprs[id].kind
         && fname == field_name
-        && matches!(&body.exprs[fa_inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. } if *index == candidate)
+        && fa_inner.as_expr().is_some_and(|fi| matches!(&body.exprs[fi].kind, ExprKind::Local { index, .. } if *index == candidate))
     {
         return Some(id);
     }
@@ -216,11 +216,9 @@ fn stats_stmt(body: &Body, stmt: StmtId, stats: &mut IndexMap<u32, LocalStats>) 
         StmtKind::LetDestructure { pattern, value, .. } => {
             let (pattern, value) = (*pattern, *value);
             record_pattern_defs(body, pattern, stats);
-            stats_node(
-                body,
-                NodeRef::Expr(value.as_expr().expect("skeleton operand")),
-                stats,
-            );
+            if let Some(ve) = value.as_expr() {
+                stats_node(body, NodeRef::Expr(ve), stats);
+            }
         }
         _ => {
             let mut kids = Vec::new();
@@ -460,8 +458,8 @@ fn walk_expr_for_leftmost(
         ..
     } = &body.exprs[expr].kind
         && fname == field_name
-        && let ExprKind::Local { index, .. } =
-            &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+        && let Some(ExprKind::Local { index, .. }) =
+            inner.as_expr().map(|ie| &body.exprs[ie].kind)
         && *index == candidate
     {
         return LeftmostWalk::Found;
@@ -562,9 +560,9 @@ fn walk_expr_for_leftmost(
             match op {
                 // Deref may trap on a null receiver; the op itself is
                 // observable.
-                NirUnaryOp::Deref => observable_propagate(walk_expr_for_leftmost(
+                NirUnaryOp::Deref => observable_propagate(walk_operand_for_leftmost(
                     body,
-                    inner.as_expr().expect("skeleton operand"),
+                    inner,
                     candidate,
                     field_name,
                 )),
@@ -578,9 +576,9 @@ fn walk_expr_for_leftmost(
             }
         }
         // `as` lowers to `ref.cast` / numeric narrowing — both may trap.
-        ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
+        ExprKind::Cast { expr: inner, .. } => observable_propagate(walk_operand_for_leftmost(
             body,
-            inner.as_expr().expect("skeleton operand"),
+            *inner,
             candidate,
             field_name,
         )),
@@ -589,12 +587,9 @@ fn walk_expr_for_leftmost(
         // Found in the receiver still anchors at the receiver position
         // (the FieldAccess applies AFTER the substituted inner), but
         // a Pure receiver does NOT make this subtree Pure.
-        ExprKind::FieldAccess { expr: inner, .. } => observable_propagate(walk_expr_for_leftmost(
-            body,
-            inner.as_expr().expect("skeleton operand"),
-            candidate,
-            field_name,
-        )),
+        ExprKind::FieldAccess { expr: inner, .. } => observable_propagate(
+            walk_operand_for_leftmost(body, *inner, candidate, field_name),
+        ),
         // `List<T>::index_value`-shaped Index may trap on a null base
         // and on OOB; the op itself is observable.
         ExprKind::Index { expr: inner, index } => {

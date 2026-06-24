@@ -408,17 +408,16 @@ fn deref_collect_stmt(body: &Body, stmt: StmtId, refs: &mut IndexMap<u32, DerefO
         && let Some(ve) = value.as_expr()
         && let ExprKind::Unary { op, expr } = &body.exprs[ve].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && expr.as_expr().is_some_and(|e| {
-            matches!(
-                body.exprs[e].kind,
-                ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
-            )
-        })
+        && let Some(src_e) = expr.as_expr()
+        && matches!(
+            body.exprs[src_e].kind,
+            ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+        )
     {
         refs.insert(
             *local_index,
             DerefOnlyRef {
-                source_e: expr.as_expr().expect("skeleton operand"),
+                source_e: src_e,
                 eliminable: true,
                 use_count: 0,
             },

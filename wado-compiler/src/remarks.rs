@@ -107,7 +107,8 @@ impl Collector<'_> {
             // array; recover the owning aggregate type from the argument.
             Some("builtin::array_clone" | "builtin::array_clone_shallow") => args
                 .first()
-                .map(|a| clone_source_type(body, a.expr.as_expr().expect("skeleton operand"))),
+                .and_then(|a| a.expr.as_expr())
+                .map(|e| clone_source_type(body, e)),
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
             Some("builtin::copy_value") => Some(node.type_id),

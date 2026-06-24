@@ -457,7 +457,11 @@ fn place_path(body: &Body, receiver: ExprId, local: u32) -> Option<Vec<u32>> {
                 expr, field_index, ..
             } => {
                 path.push(*field_index);
-                cur = expr.as_expr().expect("skeleton operand");
+                // A promoted-operand receiver is not a local place — no path.
+                match expr.as_expr() {
+                    Some(e) => cur = e,
+                    None => return None,
+                }
             }
             _ => return None,
         }
@@ -469,7 +473,7 @@ fn peel_ref(body: &Body, expr: ExprId) -> ExprId {
         ExprKind::Unary {
             op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
             expr: inner,
-        } => peel_ref(body, inner.as_expr().expect("skeleton operand")),
+        } => inner.as_expr().map_or(expr, |e| peel_ref(body, e)),
         _ => expr,
     }
 }

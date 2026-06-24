@@ -953,15 +953,15 @@ impl<'a> Builder<'a> {
                 // can be seeded for store→load forwarding.
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
-                    ExprKind::FieldAccess { expr: recv, .. } => {
-                        let bare_local = matches!(
-                            &self.body.exprs[recv.as_expr().expect("skeleton operand")].kind,
-                            ExprKind::Local { .. }
-                        );
-                        let root = self.receiver_root(recv.as_expr().expect("skeleton operand"));
+                    // A promoted-value receiver has no place to track; fall back
+                    // to no field place (like the bare `Local` case).
+                    ExprKind::FieldAccess { expr: recv, .. } => recv.as_expr().map(|recv_e| {
+                        let bare_local =
+                            matches!(&self.body.exprs[recv_e].kind, ExprKind::Local { .. });
+                        let root = self.receiver_root(recv_e);
                         let recv_v = self.walk_operand(*recv);
-                        Some((root, recv_v, bare_local))
-                    }
+                        (root, recv_v, bare_local)
+                    }),
                     _ => {
                         self.walk_expr(target);
                         None
@@ -1900,12 +1900,11 @@ fn is_builtin_pure_call(func: &FunctionRef) -> bool {
 
 /// Walk down a `local.f.g.…` field chain to its rooted local index, or `None`
 /// if rooted at a non-`Local` (e.g. `(*p).f`).
-fn root_local_of(body: &Body, e: ExprId) -> Option<u32> {
+fn root_local_of(body: &Body, op: Operand) -> Option<u32> {
+    let e = op.as_expr()?;
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::FieldAccess { expr: inner, .. } => {
-            root_local_of(body, inner.as_expr().expect("skeleton operand"))
-        }
+        ExprKind::FieldAccess { expr: inner, .. } => root_local_of(body, *inner),
         _ => None,
     }
 }
@@ -1943,8 +1942,8 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
                 expr: inner,
                 field_index,
                 ..
-            } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Local { index, .. } => {
+            } => match inner.as_expr().map(|ie| &body.exprs[ie].kind) {
+                Some(ExprKind::Local { index, .. }) => {
                     eff.written_fields.insert((*index, *field_index));
                 }
                 // `(*p).f`, `a.b.f` — opaque receiver; aliased state may move.
@@ -1957,19 +1956,19 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-            ExprKind::Local { index, .. } => {
+        } => match inner.as_expr().map(|ie| &body.exprs[ie].kind) {
+            Some(ExprKind::Local { index, .. }) => {
                 eff.mut_borrowed.insert(*index);
             }
-            ExprKind::FieldAccess {
+            Some(ExprKind::FieldAccess {
                 expr: receiver,
                 field_index,
                 ..
-            } => match &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Local { index, .. } => {
+            }) => match receiver.as_expr().map(|re| &body.exprs[re].kind) {
+                Some(ExprKind::Local { index, .. }) => {
                     eff.written_fields.insert((*index, *field_index));
                 }
-                _ => match root_local_of(body, receiver.as_expr().expect("skeleton operand")) {
+                _ => match root_local_of(body, *receiver) {
                     Some(root) => {
                         eff.mut_borrowed.insert(root);
                     }
@@ -1981,8 +1980,8 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
         ExprKind::Call { func, args, .. } => {
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } =
-                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
+                    && let Some(ExprKind::Local { index, .. }) =
+                        arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
                     eff.mut_borrowed.insert(*index);
                 }
@@ -1992,15 +1991,15 @@ fn record_loop_heap_write(body: &Body, e: ExprId, eff: &mut LoopHeapEffects) {
             }
         }
         ExprKind::MethodCall { receiver, args, .. } => {
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[receiver.as_expr().expect("skeleton operand")].kind
+            if let Some(ExprKind::Local { index, .. }) =
+                receiver.as_expr().map(|re| &body.exprs[re].kind)
             {
                 eff.mut_borrowed.insert(*index);
             }
             for arg in args {
                 if arg.is_mut
-                    && let ExprKind::Local { index, .. } =
-                        &body.exprs[arg.expr.as_expr().expect("skeleton operand")].kind
+                    && let Some(ExprKind::Local { index, .. }) =
+                        arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
                     eff.mut_borrowed.insert(*index);
                 }

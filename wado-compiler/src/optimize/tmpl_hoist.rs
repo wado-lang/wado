@@ -542,13 +542,7 @@ fn transform_stmt(
             return;
         }
         // Recurse into the value expression
-        transform_expr(
-            engine,
-            value.as_expr().expect("skeleton operand"),
-            escaping_locals,
-            hoist_stmts,
-            type_table,
-        );
+        transform_expr(engine, ve, escaping_locals, hoist_stmts, type_table);
         return;
     }
 
@@ -603,7 +597,7 @@ fn transform_expr(
     // not hoisted, so only these shapes recurse.
     enum Walk {
         Exprs(Vec<ExprId>),
-        CondBlocks(ExprId, BlockId, Option<BlockId>),
+        CondBlocks(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
@@ -634,11 +628,7 @@ fn transform_expr(
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(
-            condition.as_expr().expect("skeleton operand"),
-            *then_branch,
-            *else_branch,
-        ),
+        } => Walk::CondBlocks(condition.as_expr(), *then_branch, *else_branch),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -649,7 +639,9 @@ fn transform_expr(
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
-            transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            if let Some(cond) = cond {
+                transform_expr(engine, cond, escaping_locals, hoist_stmts, type_table);
+            }
             transform_stmts_in_block(engine, tb, escaping_locals, hoist_stmts, type_table);
             if let Some(eb) = eb {
                 transform_stmts_in_block(engine, eb, escaping_locals, hoist_stmts, type_table);
@@ -686,7 +678,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             let local_index = *local_index;
             let value = *value;
             let type_id = *type_id;
-            let init_value = value.as_expr().expect("skeleton operand");
+            let init_value = value.as_expr()?;
             let value_span = body.exprs[init_value].span;
             // Operand promotion wraps the inlined builder init in a block with a
             // dead capacity binding (`{ let capacity = N; String { … } }`); the
@@ -717,10 +709,11 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                     let repr_field = fields
                         .iter()
                         .find(|f| f.name == SeqField::Backing.field_name())?;
-                    if !array_new_has_capacity(
-                        body,
-                        repr_field.value.as_expr().expect("skeleton operand"),
-                    ) {
+                    if !repr_field
+                        .value
+                        .as_expr()
+                        .is_some_and(|rv| array_new_has_capacity(body, rv))
+                    {
                         return None;
                     }
                     // Verify used field is 0
@@ -730,7 +723,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
                     if body.operand_const_int(used_field.value) != Some(0) {
                         return None;
                     }
-                    (local_index, type_id, value, value_span)
+                    (local_index, type_id, init_value, value_span)
                 } else {
                     return None;
                 }
@@ -748,8 +741,8 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
             label: Some(label),
             value: Some(val),
         } if label == crate::name::TEMPLATE_BLOCK_LABEL => {
-            match &body.exprs[val.as_expr().expect("skeleton operand")].kind {
-                ExprKind::Local { index, .. } if *index == buf_local_index => {}
+            match val.as_expr().map(|ve| &body.exprs[ve].kind) {
+                Some(ExprKind::Local { index, .. }) if *index == buf_local_index => {}
                 _ => return None,
             }
         }
@@ -758,7 +751,7 @@ fn extract_tmpl_candidate(body: &Body, block: BlockId) -> Option<TmplCandidate> 
 
     Some(TmplCandidate {
         buf_local_index,
-        init_value: init_value.as_expr().expect("skeleton operand"),
+        init_value,
         string_type,
         span,
     })
@@ -987,7 +980,7 @@ fn extract_formatter_fields(
             extract_formatter_fields_from_block(
                 body,
                 block,
-                break_value.as_expr().expect("skeleton operand"),
+                break_value.as_expr()?,
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
@@ -1060,8 +1053,7 @@ fn extract_formatter_fields_from_block(
     }
 
     // Trace through intermediate local in the block
-    let buf_inner_local =
-        extract_local_from_ref(body, buf_field.value.as_expr().expect("skeleton operand"))?;
+    let buf_inner_local = extract_local_from_ref(body, buf_field.value.as_expr()?)?;
     for s in &body.blocks[block].stmts {
         match &body.stmts[*s].kind {
             StmtKind::Let {
@@ -1096,14 +1088,14 @@ fn extract_local_from_ref(body: &Body, e: ExprId) -> Option<u32> {
         ExprKind::Unary {
             op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
             expr: inner,
-        } => match &body.exprs[inner.as_expr().expect("skeleton operand")].kind {
-            ExprKind::Local { index, .. } => Some(*index),
+        } => match inner.as_expr().map(|ie| &body.exprs[ie].kind) {
+            Some(ExprKind::Local { index, .. }) => Some(*index),
             _ => None,
         },
         ExprKind::Call { func, args, .. } if func.name.contains("ref.as_non_null") => {
             args.first().and_then(|a| {
-                match &body.exprs[a.expr.as_expr().expect("skeleton operand")].kind {
-                    ExprKind::Local { index, .. } => Some(*index),
+                match a.expr.as_expr().map(|ae| &body.exprs[ae].kind) {
+                    Some(ExprKind::Local { index, .. }) => Some(*index),
                     _ => None,
                 }
             })
@@ -1149,20 +1141,15 @@ fn buf_field_references_local(body: &Body, e: ExprId, local_index: u32) -> bool 
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
-        } => is_local(
-            body,
-            inner.as_expr().expect("skeleton operand"),
-            local_index,
-        ),
+        } => inner.as_expr().is_some_and(|ie| is_local(body, ie, local_index)),
         // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func, args, .. } => {
             func.name.contains("ref.as_non_null")
                 && args.len() == 1
-                && is_local(
-                    body,
-                    args[0].expr.as_expr().expect("skeleton operand"),
-                    local_index,
-                )
+                && args[0]
+                    .expr
+                    .as_expr()
+                    .is_some_and(|ae| is_local(body, ae, local_index))
         }
         _ => false,
     }
@@ -1508,7 +1495,7 @@ fn rename_local_in_expr(
     enum Walk {
         Local,
         Exprs(Vec<ExprId>),
-        CondBlocks(ExprId, BlockId, Option<BlockId>),
+        CondBlocks(Option<ExprId>, BlockId, Option<BlockId>),
         Block(BlockId),
         None,
     }
@@ -1523,7 +1510,7 @@ fn rename_local_in_expr(
             Walk::Exprs(v)
         }
         ExprKind::IndirectCall { callee, args } => {
-            let mut v = vec![callee.as_expr().expect("skeleton operand")];
+            let mut v: Vec<ExprId> = callee.as_expr().into_iter().collect();
             v.extend(args.iter().filter_map(|o| o.as_expr()));
             Walk::Exprs(v)
         }
@@ -1551,11 +1538,7 @@ fn rename_local_in_expr(
             condition,
             then_branch,
             else_branch,
-        } => Walk::CondBlocks(
-            condition.as_expr().expect("skeleton operand"),
-            *then_branch,
-            *else_branch,
-        ),
+        } => Walk::CondBlocks(condition.as_expr(), *then_branch, *else_branch),
         ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
         _ => Walk::None,
     };
@@ -1579,7 +1562,9 @@ fn rename_local_in_expr(
             }
         }
         Walk::CondBlocks(cond, tb, eb) => {
-            rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            if let Some(cond) = cond {
+                rename_local_in_expr(engine, cond, old_index, new_index, new_name);
+            }
             rename_local_in_block(engine, tb, old_index, new_index, new_name);
             if let Some(eb) = eb {
                 rename_local_in_block(engine, eb, old_index, new_index, new_name);

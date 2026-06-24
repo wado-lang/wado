@@ -332,8 +332,12 @@ fn validate_call(
             // If the rewriter drops the receiver, the MethodCall collapses to
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
+            // A promoted (`Operand::Value`) receiver is a pooled-immutable value —
+            // pure, so dropping it is safe.
             if drops_receiver
-                && !arena_query::is_pure_expr(body, receiver.as_expr().expect("skeleton operand"))
+                && !receiver
+                    .as_expr()
+                    .is_none_or(|e| arena_query::is_pure_expr(body, e))
             {
                 rejected.insert(key.clone());
             } else {

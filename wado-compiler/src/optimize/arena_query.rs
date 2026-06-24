@@ -16,12 +16,12 @@ pub(super) fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::FieldAccess { expr: inner, .. } | ExprKind::Index { expr: inner, .. } => {
-            place_root_local(body, inner.as_expr().expect("skeleton operand"))
+            inner.as_expr().and_then(|e| place_root_local(body, e))
         }
         ExprKind::Unary {
             op: NirUnaryOp::Deref,
             expr: inner,
-        } => place_root_local(body, inner.as_expr().expect("skeleton operand")),
+        } => inner.as_expr().and_then(|e| place_root_local(body, e)),
         _ => None,
     }
 }
@@ -204,7 +204,9 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
             then_branch,
             else_branch,
         } => {
-            is_pure_expr(body, condition.as_expr().expect("skeleton operand"))
+            // A promoted (`Operand::Value`) condition is a pooled-immutable value
+            // — pure by construction.
+            condition.as_expr().is_none_or(|e| is_pure_expr(body, e))
                 && is_pure_block(body, *then_branch)
                 && else_branch.is_none_or(|b| is_pure_block(body, b))
         }
