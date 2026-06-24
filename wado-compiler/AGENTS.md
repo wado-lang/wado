@@ -10,9 +10,13 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 
 ## NIR Optimize
 
-The per-function value graph is built once and maintained in place. Values live
-as `Operand::Value` in the pool (`body.values`); there is no `ExprId`→value
-side-table (`value_of` is deleted). BCE recognisers are structural.
+The live value graph is the source of truth for pure values: built once per
+function and rewritten eagerly in place via e-class union (the aegraph model —
+build once, rewrite, extract once), not re-derived per pass. Operand promotion
+("born as operands") makes a pure skeleton position carry its `ValueId` directly
+as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
+the operand instead of looking it up — there is no `ExprId`→value side-table
+(`value_of` is deleted). BCE recognisers are structural.
 
 Never reintroduce, regardless of perf:
 
