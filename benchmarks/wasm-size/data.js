@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782288306903,
+  "lastUpdate": 1782302458394,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35233,6 +35233,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 289392,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f159dbfec7fd6f6256add0bcbfad771d5f192768",
+          "message": "Merge pull request #1437 from wado-lang/claude/live-valuegraph-followup-9rmj34\n\nrefactor(optimizer): make the live value graph the single source of truth for pure values",
+          "timestamp": "2026-06-24T20:51:23+09:00",
+          "tree_id": "bb801918c3f080ad497544e50a05f394ac8ae14e",
+          "url": "https://github.com/wado-lang/wado/commit/f159dbfec7fd6f6256add0bcbfad771d5f192768"
+        },
+        "date": 1782302457922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287917,
             "unit": "bytes"
           }
         ]
