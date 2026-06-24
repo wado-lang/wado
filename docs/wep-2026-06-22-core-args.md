@@ -263,6 +263,13 @@ Unix convention).
 - [ ] `enum`-valued options (`--color red`) once a lenient enum derive lands.
 - [ ] Shell completion from the schema.
 - [ ] `core:cli` helper wiring `from_env` + error printing + exit codes.
+- [ ] Subcommand-aware error context. `ArgsError` carries only `kind` + `message`,
+      so a caller wanting a `myprog gen: ...` prefix must re-derive the active
+      subcommand from `argv[0]` itself (fine for single-level CLIs). A future
+      `ArgsError` could record the subcommand path the parse failed under (the
+      tags seen by `begin_variant`); the program name stays caller-supplied, and
+      nested paths need an accumulated breadcrumb, so this waits until nested
+      subcommand diagnostics are a real pain.
 
 ## References
 
