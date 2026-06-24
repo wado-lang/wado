@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782234793076,
+  "lastUpdate": 1782276410108,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35125,6 +35125,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f6c2188c48ca571e9d5aeb8e1e78bdfa0ea07bda"
         },
         "date": 1782234792428,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1885,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8576,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15385,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289392,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf4d3d0bb95e7a23104fb6453705d2f22e5a7c10",
+          "message": "Merge pull request #1436 from wado-lang/claude/kiln-wado-multiple-files-98puf0\n\nfix(kiln): resolve inline-clause paths relative to the declaring file",
+          "timestamp": "2026-06-24T13:36:27+09:00",
+          "tree_id": "2ac374d67b75ccd0452c16a2a7c67478efad8758",
+          "url": "https://github.com/wado-lang/wado/commit/cf4d3d0bb95e7a23104fb6453705d2f22e5a7c10"
+        },
+        "date": 1782276409455,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
