@@ -1228,9 +1228,8 @@ impl<'a> Interpreter<'a> {
             && t_b != e_b
         {
             if t_b {
-                // `if c { true } else { false }` ≡ `c`. A skeleton condition is
-                // spliced in place; a promoted-value condition has no node to
-                // clone, so leave the `if` for a later pass.
+                // `if c { true } else { false }` ≡ `c`. Splice the skeleton
+                // condition in place; a promoted value has no node to clone.
                 let Some(cond_e) = condition.as_expr() else {
                     return false;
                 };

@@ -718,8 +718,8 @@ impl ElementClean<'_, '_> {
                 }
             }
             ExprKind::Index { expr: base, index } => {
-                // Index read: `x[i]` produces an element copy. A promoted-value
-                // base/index is a constant — not the handle, nothing to recurse.
+                // Index read `x[i]` produces an element copy; a promoted base/index
+                // is a constant, not the handle.
                 let base = *base;
                 let index = *index;
                 if let Some(be) = base.as_expr()
@@ -946,9 +946,8 @@ impl ElementImmutable<'_, '_, '_> {
                 let bad = match &body.exprs[target].kind {
                     ExprKind::FieldAccess { expr: base, .. } => {
                         let base = *base;
-                        // A promoted-value base is a pure constant, never
-                        // self-derived, so `is_self_derived_operand` already
-                        // rules it out before the node lookup.
+                        // A promoted base is never self-derived, so the guard
+                        // short-circuits before the node lookup.
                         is_self_derived_operand(body, base, &self.tainted, tt)
                             && base.as_expr().is_some_and(|be| {
                                 !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })

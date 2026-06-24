@@ -89,13 +89,12 @@ is measured and capped — it shaves a few percent and leaves the graph rebuilt
 The work is done only when all three hold. None is satisfiable by a band-aid;
 each is a static or measured fact, not a "byte-identical and X% faster" proxy.
 
-- [x] **One build per function.** Build-once is now structural: nothing clears
-      `Body::value_graph` back to `None`, so it is built lazily on first query and
-      reused across every pass. Baseline was `builds=4474`, `first_builds=1678`,
-      `rebuilds=2796` — 2.67 builds per function; the `WADO_MEASURE_VG` meter that
-      drove this to `rebuilds = 0` (zlib -O2: `builds=139, rebuilds=0`) has since
-      been removed — the invariant no longer needs a runtime check, only the
-      absence of a clear-and-rebuild path. See the P3 milestone below.
+- [x] **One build per function.** Build-once is structural: nothing clears
+      `Body::value_graph` back to `None`, so it builds lazily on first query and is
+      reused across passes. Baseline was 2.67 builds/function (`builds=4474,
+      first_builds=1678, rebuilds=2796`); the `WADO_MEASURE_VG` meter that drove it
+      to `rebuilds = 0` has been removed — the invariant is now enforced by the
+      absence of a clear-and-rebuild path, not a runtime check.
 - [ ] **`optimize` CPU halved** on package-gale (~15s → ~7.5s). Measured: still
       ~15.7s — **not met, not pursued** (the bottleneck is the passes, not the
       value-graph build; see Status). Won't-do.

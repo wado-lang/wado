@@ -22,8 +22,8 @@ BCE recognisers are structural.
 Never reintroduce, regardless of perf:
 
 - a rebuild of the value graph mid-pipeline. Build-once is structural: nothing
-  clears `Body::value_graph` back to `None`, so it is built at most once; keep it
-  that way by maintaining the graph in place instead of clearing and rebuilding.
+  clears `Body::value_graph`. Keep it that way — maintain the graph in place,
+  never clear-and-rebuild.
 - an `ExprId`-keyed cache / side-table. A pass needing a value uses
   born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
 

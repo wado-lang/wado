@@ -953,12 +953,12 @@ impl<'a> Builder<'a> {
                 // can be seeded for store→load forwarding.
                 let field_place = match &target_kind {
                     ExprKind::Local { .. } => None,
-                    // The target of an assignment is an lvalue, so a `FieldAccess`
-                    // target's receiver is always a skeleton place — never a
-                    // promoted value. `field_place` is therefore `Some` here,
-                    // matching the `expect` in the consumer below.
+                    // An assign target is an lvalue, so its receiver is a place
+                    // (never promoted); `Some` here matches the consumer's `expect`.
                     ExprKind::FieldAccess { expr: recv, .. } => {
-                        let recv_e = recv.as_expr().expect("assign-target field receiver is a place");
+                        let recv_e = recv
+                            .as_expr()
+                            .expect("assign-target field receiver is a place");
                         let bare_local =
                             matches!(&self.body.exprs[recv_e].kind, ExprKind::Local { .. });
                         let root = self.receiver_root(recv_e);

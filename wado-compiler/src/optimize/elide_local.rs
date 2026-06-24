@@ -51,10 +51,8 @@ impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         // Locals read only through a promoted `Operand::Value` are live but
-        // invisible to the use index; treat them as kept. Uses the
-        // over-conservative pool-wide `opaque_local_sources` set: sound (only
-        // keeps more locals live, never drops a still-read one) at the cost of
-        // some missed elisions.
+        // invisible to the use index, so keep them. The pool-wide set is
+        // over-conservative (only ever keeps too many) — sound, costs some elisions.
         let promoted_reads: IndexSet<u32> = engine.body.values.opaque_local_sources().collect();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;

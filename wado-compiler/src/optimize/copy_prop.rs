@@ -250,9 +250,8 @@ fn analyze_function_body(
     result
 }
 
-/// Locals read through a promoted `Operand::Value`. Uses the over-conservative
-/// pool-wide set of opaque local sources: sound (keeps more locals live, never
-/// propagates/eliminates a still-read one), at the cost of a few missed copies.
+/// Locals read through a promoted `Operand::Value`. The pool-wide set is
+/// over-conservative (only ever keeps too many) — sound, costs a few copies.
 fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
     body.values.opaque_local_sources().collect()
 }
@@ -377,9 +376,8 @@ fn analyze_expr(
                 .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
                 .collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
-            // mutate the receiver (`conservative_on_unknown = false`); the
-            // receiver-type guard below still protects value receivers. A promoted
-            // (`Operand::Value`) receiver is a value copy with no place to mutate.
+            // mutate the receiver (`conservative_on_unknown = false`). A promoted
+            // receiver has no place to mutate, so `None` skips the guard.
             if let Some(recv_e) = receiver.as_expr()
                 && super::alias::method_mutates_receiver(
                     body, recv_e, func, fpt, type_table, false, None,
