@@ -99,15 +99,15 @@ use arith from "./Arith.g4"
         generator: {
             module: "../src/generator.wado",   // the Gale generator
             options: { highlight: false },
-            output_dir: "example/generated/arith",
         },
     };
 ```
 
 `arith` is now an ordinary Wado module. It exports `parse`, the parse-tree
 types, and — because the rules are labeled — an `ExprAlt` enum with an
-`expr_alt` accessor. The generated source is written under `output_dir` so you
-can read it (and commit it); it is regenerated when the grammar changes.
+`expr_alt` accessor. The generated source defaults to `build/kiln/<id>/`
+(gitignored, regenerated when the grammar changes); add an `output_dir`
+(resolved relative to this file) to commit it to a tracked path instead.
 
 ### 3. Walking the tree: the interpreter
 
