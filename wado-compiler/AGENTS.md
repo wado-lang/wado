@@ -8,6 +8,27 @@ The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen.
 - Use utilities in `name.rs` to handle name mangling and monomorphization. Other components must not know the details of name formats.
 - If applicable, use visitor utilities instead of walking IR nodes by hand.
 
+## NIR Optimize
+
+The live value graph is the source of truth for pure values: built once per
+function (`Body::value_graph`, set lazily on first query and reused across every
+pass) and rewritten eagerly in place via e-class union (the aegraph model —
+build once, rewrite, extract once), not re-derived per pass. Operand promotion
+("born as operands") makes a pure skeleton position carry its `ValueId` directly
+as `Operand::Value` in the pool (`body.values`), so a pass reads the value off
+the operand instead of looking it up — there is no `ExprId`→value side-table.
+BCE recognisers are structural.
+
+Never reintroduce, regardless of perf:
+
+- a rebuild of the value graph mid-pipeline. Build-once is structural: nothing
+  clears `Body::value_graph`. Keep it that way — maintain the graph in place,
+  never clear-and-rebuild.
+- an `ExprId`-keyed cache / side-table. A pass needing a value uses
+  born-as-operands or a scratch walk (`Engine::scoped_const_reads`).
+
+Details: `docs/wep-2026-06-15-live-value-graph.md`.
+
 ## Development Cycle
 
 Escalate the test scope as the work matures, so the fast feedback stays fast:

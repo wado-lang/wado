@@ -222,14 +222,16 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
     for s in &body.blocks[body.root].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
-            && let ExprKind::StructLiteral { fields, .. } =
-                &body.exprs[v.as_expr().expect("skeleton operand")].kind
+            && let Some(ve) = v.as_expr()
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[ve].kind
         {
             return fields.iter().any(|fld| {
                 fld.name == SeqField::Backing.field_name()
-                    && matches!(&body.exprs[fld.value.as_expr().expect("skeleton operand")].kind,
-                        ExprKind::Call { func, .. }
-                            if builtin_gname(func).as_deref() == Some("builtin::array_clone"))
+                    && fld.value.as_expr().is_some_and(|fe| {
+                        matches!(&body.exprs[fe].kind,
+                            ExprKind::Call { func, .. }
+                                if builtin_gname(func).as_deref() == Some("builtin::array_clone"))
+                    })
             });
         }
     }
@@ -335,7 +337,7 @@ fn arg_source_root(body: &Body, id: ExprId) -> Option<u32> {
         | ExprKind::Cast { expr: inner, .. }
         | ExprKind::Unary { expr: inner, .. }
         | ExprKind::VariantPayload { expr: inner, .. } => {
-            arg_source_root(body, inner.as_expr().expect("skeleton operand"))
+            inner.as_expr().and_then(|ie| arg_source_root(body, ie))
         }
         _ => None,
     }
@@ -684,12 +686,15 @@ impl ElementClean<'_, '_> {
             ExprKind::IndirectCall { callee, args } => {
                 let callee = *callee;
                 let args = args.clone();
-                self.visit_expr(body, callee.as_expr().expect("skeleton operand"));
-                if !self.clean {
-                    return;
+                if let Some(ce) = callee.as_expr() {
+                    self.visit_expr(body, ce);
+                    if !self.clean {
+                        return;
+                    }
                 }
                 for a in args {
-                    self.visit_call_arg(body, a.as_expr().expect("skeleton operand"));
+                    let Some(ae) = a.as_expr() else { continue };
+                    self.visit_call_arg(body, ae);
                     if !self.clean {
                         return;
                     }
@@ -712,21 +717,27 @@ impl ElementClean<'_, '_> {
                 }
             }
             ExprKind::Index { expr: base, index } => {
-                // Index read: `x[i]` produces an element copy.
+                // Index read `x[i]` produces an element copy.
                 let base = *base;
                 let index = *index;
-                if !is_local(body, base.as_expr().expect("skeleton operand"), idx) {
-                    self.visit_expr(body, base.as_expr().expect("skeleton operand"));
+                if let Some(be) = base.as_expr()
+                    && !is_local(body, be, idx)
+                {
+                    self.visit_expr(body, be);
                     if !self.clean {
                         return;
                     }
                 }
-                self.visit_expr(body, index.as_expr().expect("skeleton operand"));
+                if let Some(ie) = index.as_expr() {
+                    self.visit_expr(body, ie);
+                }
             }
             ExprKind::FieldAccess { expr: base, .. } => {
                 let base = *base;
-                if !is_local(body, base.as_expr().expect("skeleton operand"), idx) {
-                    self.visit_expr(body, base.as_expr().expect("skeleton operand"));
+                if let Some(be) = base.as_expr()
+                    && !is_local(body, be, idx)
+                {
+                    self.visit_expr(body, be);
                 }
             }
             ExprKind::Assign { target, value } => {
@@ -933,11 +944,12 @@ impl ElementImmutable<'_, '_, '_> {
                 let bad = match &body.exprs[target].kind {
                     ExprKind::FieldAccess { expr: base, .. } => {
                         let base = *base;
+                        // A promoted base is never self-derived, so the guard
+                        // short-circuits before the node lookup.
                         is_self_derived_operand(body, base, &self.tainted, tt)
-                            && !matches!(
-                                &body.exprs[base.as_expr().expect("skeleton operand")].kind,
-                                ExprKind::Local { index: 0, .. }
-                            )
+                            && base.as_expr().is_some_and(|be| {
+                                !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
+                            })
                     }
                     ExprKind::Index { expr: base, .. } => {
                         is_self_derived_operand(body, *base, &self.tainted, tt)
@@ -953,7 +965,9 @@ impl ElementImmutable<'_, '_, '_> {
                 if !self.clean {
                     return;
                 }
-                self.visit_expr(body, value.as_expr().expect("skeleton operand"));
+                if let Some(ve) = value.as_expr() {
+                    self.visit_expr(body, ve);
+                }
             }
             ExprKind::MethodCall {
                 receiver,
@@ -984,9 +998,11 @@ impl ElementImmutable<'_, '_, '_> {
                         return;
                     }
                 }
-                self.visit_expr(body, receiver.as_expr().expect("skeleton operand"));
-                if !self.clean {
-                    return;
+                if let Some(re) = receiver.as_expr() {
+                    self.visit_expr(body, re);
+                    if !self.clean {
+                        return;
+                    }
                 }
                 for a in args {
                     self.visit_call_arg(body, a);
@@ -1023,7 +1039,9 @@ impl ElementImmutable<'_, '_, '_> {
                             } => *expr,
                             _ => a.into(),
                         };
-                        self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
+                        if let Some(ie) = inner.as_expr() {
+                            self.visit_expr(body, ie);
+                        }
                     } else {
                         self.visit_call_arg(body, a);
                     }
@@ -1050,12 +1068,15 @@ impl ElementImmutable<'_, '_, '_> {
                     self.clean = false;
                     return;
                 }
-                self.visit_expr(body, callee.as_expr().expect("skeleton operand"));
-                if !self.clean {
-                    return;
+                if let Some(ce) = callee.as_expr() {
+                    self.visit_expr(body, ce);
+                    if !self.clean {
+                        return;
+                    }
                 }
                 for a in args {
-                    self.visit_call_arg(body, a.as_expr().expect("skeleton operand"));
+                    let Some(ae) = a.as_expr() else { continue };
+                    self.visit_call_arg(body, ae);
                     if !self.clean {
                         crate::compiler_trace!(
                             "demote",

@@ -24,7 +24,7 @@ use std::cell::Cell;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
@@ -141,6 +141,18 @@ impl ModifiedVars {
         }
         true
     }
+
+    /// Whether `local_idx` (or any alias) is fully modified in the loop — i.e. it
+    /// is **not** loop-invariant. An in-loop `let` counts as a modification
+    /// (`collect_modified_vars` inserts the bound local), so a leaf bound inside
+    /// the loop is correctly non-invariant. This is exactly the invariance the
+    /// `ValueGraph`'s `use-site value == loop-entry value` check computed, so an
+    /// arith-hoist leaf check can read it instead of querying `value_of`.
+    fn local_modified(&self, local_idx: u32) -> bool {
+        self.alias_set(local_idx)
+            .iter()
+            .any(|idx| self.fully.contains(idx))
+    }
 }
 
 /// Apply Loop-Invariant Code Motion to all functions in the project.
@@ -168,7 +180,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let _vg_scope = super::vg_measure::BuildScope::enter(fid.index(), "licm");
         let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
             body,
             locals,
@@ -361,7 +372,7 @@ fn licm_loop(
             // `_licm_end - _licm_start` a scan loop recomputes in its guard
             // every iteration). Runs here, after field-hoisting, so the
             // `_licm_*` locals it created are visible as stable operands.
-            if hoist_invariant_arith(engine, loop_body, &mut all_hoist_stmts) {
+            if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts) {
                 continue;
             }
             break;
@@ -1427,17 +1438,70 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
     }
 }
 
+/// A structural identity key for a hoistable-arith tree: kind / op / leaf-local
+/// / promoted-operand-value, with commutative operands sorted so `a + b` and
+/// `b + a` agree (matching the `ValueGraph` hash-cons). Once a tree's `Local`
+/// leaves are all loop-invariant, two trees with the same key denote the same
+/// value — so this replaces the `value_of` `ValueId` for the hoist dedup.
+fn arith_structural_key(body: &Body, e: ExprId) -> String {
+    let mut s = String::new();
+    push_arith_key(body, e, &mut s);
+    s
+}
+
+fn push_arith_key(body: &Body, e: ExprId, out: &mut String) {
+    match &body.exprs[e].kind {
+        ExprKind::Binary { left, op, right } => {
+            let mut l = String::new();
+            push_operand_key(body, *left, &mut l);
+            let mut r = String::new();
+            push_operand_key(body, *right, &mut r);
+            // Commutative ops: order-independent so `a+b` ≡ `b+a`.
+            if matches!(
+                op,
+                NirBinaryOp::Add
+                    | NirBinaryOp::Mul
+                    | NirBinaryOp::BitAnd
+                    | NirBinaryOp::BitOr
+                    | NirBinaryOp::BitXor
+            ) && r < l
+            {
+                std::mem::swap(&mut l, &mut r);
+            }
+            out.push_str(&format!("B{op:?}({l},{r})"));
+        }
+        ExprKind::Unary { op, expr } => {
+            let mut inner = String::new();
+            push_operand_key(body, *expr, &mut inner);
+            out.push_str(&format!("U{op:?}({inner})"));
+        }
+        ExprKind::Local { index, .. } => out.push_str(&format!("L{index}")),
+        // Any other shape is not part of a hoistable-arith tree; key it by id so
+        // it never spuriously dedups with another node.
+        _ => out.push_str(&format!("E{}", e.index())),
+    }
+}
+
+fn push_operand_key(body: &Body, op: Operand, out: &mut String) {
+    match op {
+        Operand::Expr(e) => push_arith_key(body, e, out),
+        // A promoted operand is a frozen value: equal ids denote equal values.
+        Operand::Value(v) => out.push_str(&format!("V{}", v.index())),
+    }
+}
+
 /// Inputs shared by the arithmetic-hoist candidate walk.
 struct ArithHoist<'a> {
-    /// The loop whose pre-header the candidates move to.
-    loop_body: BlockId,
     /// Locals bound by hoist `let`s whose statements are not in the tree
     /// yet (the caller prepends them after `licm_loop` returns): no entry
     /// value, but read-only pre-header temps are stable by construction.
     pending_hoist_locals: &'a IndexSet<u32>,
-    /// Address-taken locals — the `ValueGraph` does not model writes
-    /// through references, so their use-site values cannot be trusted.
+    /// Address-taken locals — writes through references are not modelled, so
+    /// their use-site values cannot be trusted as loop-invariant.
     address_taken: &'a IndexSet<u32>,
+    /// Loop-modified locals — a leaf is invariant iff none of its aliases are
+    /// here (replaces the `value_of` `use == entry` invariance check).
+    modified: &'a ModifiedVars,
 }
 
 impl ArithHoist<'_> {
@@ -1446,7 +1510,7 @@ impl ArithHoist<'_> {
     /// leaf's use-site value must equal the pre-header entry value, so the
     /// hoisted clone computes what every occurrence reads — cross-iteration
     /// invariance alone would wrongly admit `loop { x = 5; … x + n … }`.
-    fn candidate(&self, engine: &mut Engine, e: ExprId) -> Option<ValueId> {
+    fn candidate(&self, engine: &mut Engine, e: ExprId) -> Option<String> {
         let compound = matches!(
             &engine.body.exprs[e].kind,
             ExprKind::Binary { .. } | ExprKind::Unary { .. }
@@ -1460,25 +1524,26 @@ impl ArithHoist<'_> {
         if leaves.is_empty() {
             return None;
         }
-        for (leaf, idx) in leaves {
+        for (_leaf, idx) in leaves {
             if self.pending_hoist_locals.contains(&idx) {
                 continue;
             }
             if self.address_taken.contains(&idx) {
                 return None;
             }
-            let use_vn = engine.value(leaf);
-            let entry_vn = engine.loop_entry_value(self.loop_body, idx);
-            match (use_vn, entry_vn) {
-                (Some(u), Some(en)) if u == en => {}
-                _ => return None,
+            // The leaf must be loop-invariant. Read it from `modified_vars`
+            // (value-graph-free) instead of `value(leaf) == loop_entry_value`.
+            if self.modified.local_modified(idx) {
+                return None;
             }
         }
-        engine.value(e)
+        // With every `Local` leaf invariant, the structural key is exact
+        // value-identity for the dedup (replaces `engine.value(e)`).
+        Some(arith_structural_key(engine.body, e))
     }
 
     /// Collect the maximal hoistable arithmetic subexpressions in `block`,
-    /// paired with their `ValueId`s. "Maximal" means a hoistable expression
+    /// paired with their structural keys. "Maximal" means a hoistable expression
     /// whose parent is not itself hoistable, so each whole tree is hoisted
     /// once. Nested loops are skipped — the recursive `licm_loop` call
     /// hoists each nested loop's own invariants into that loop's pre-header.
@@ -1486,14 +1551,14 @@ impl ArithHoist<'_> {
         &self,
         engine: &mut Engine,
         block: BlockId,
-        out: &mut Vec<(ExprId, ValueId)>,
+        out: &mut Vec<(ExprId, String)>,
     ) {
         for s in engine.body.blocks[block].stmts.clone() {
             self.collect_in_stmt(engine, s, out);
         }
     }
 
-    fn collect_in_stmt(&self, engine: &mut Engine, s: StmtId, out: &mut Vec<(ExprId, ValueId)>) {
+    fn collect_in_stmt(&self, engine: &mut Engine, s: StmtId, out: &mut Vec<(ExprId, String)>) {
         if matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }) {
             return;
         }
@@ -1505,9 +1570,9 @@ impl ArithHoist<'_> {
         }
     }
 
-    fn collect_in_expr(&self, engine: &mut Engine, e: ExprId, out: &mut Vec<(ExprId, ValueId)>) {
-        if let Some(vn) = self.candidate(engine, e) {
-            out.push((e, vn));
+    fn collect_in_expr(&self, engine: &mut Engine, e: ExprId, out: &mut Vec<(ExprId, String)>) {
+        if let Some(key) = self.candidate(engine, e) {
+            out.push((e, key));
             return; // maximal: do not recurse into a hoisted tree's children.
         }
         for child in expr_child_nodes(engine.body, e) {
@@ -1526,6 +1591,7 @@ impl ArithHoist<'_> {
 fn hoist_invariant_arith(
     engine: &mut Engine,
     loop_body: BlockId,
+    modified: &ModifiedVars,
     all_hoist_stmts: &mut Vec<StmtId>,
 ) -> bool {
     // Earlier hoist rounds may have changed which locals are address-taken;
@@ -1544,34 +1610,34 @@ fn hoist_invariant_arith(
     let address_taken: IndexSet<u32> = engine.body_address_taken().clone();
 
     let walk = ArithHoist {
-        loop_body,
         pending_hoist_locals: &pending_hoist_locals,
         address_taken: &address_taken,
+        modified,
     };
-    let mut found: Vec<(ExprId, ValueId)> = Vec::new();
+    let mut found: Vec<(ExprId, String)> = Vec::new();
     walk.collect_in_block(engine, loop_body, &mut found);
     if found.is_empty() {
         // No skeleton arith trees, but operand promotion may have left the
         // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
         // those.
         let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
-        c |= cse_loop_body(engine, loop_body);
+        c |= cse_loop_body(engine, loop_body, modified);
         return c;
     }
 
-    // Group occurrences by (ValueId, type): equal values of equal type share
-    // one temp. The type key is belt-and-braces — same-`ValueId` trees over
-    // a shared `Local` leaf already agree on types.
-    let mut groups: Vec<(ValueId, TypeId, Vec<ExprId>)> = Vec::new();
-    'next: for (e, vn) in found {
+    // Group occurrences by (structural key, type): structurally-equal invariant
+    // trees of equal type share one temp. The type key is belt-and-braces —
+    // same-key trees over a shared `Local` leaf already agree on types.
+    let mut groups: Vec<(String, TypeId, Vec<ExprId>)> = Vec::new();
+    'next: for (e, key) in found {
         let ty = engine.body.exprs[e].type_id;
         for g in &mut groups {
-            if g.0 == vn && g.1 == ty {
+            if g.0 == key && g.1 == ty {
                 g.2.push(e);
                 continue 'next;
             }
         }
-        groups.push((vn, ty, vec![e]));
+        groups.push((key, ty, vec![e]));
     }
 
     for (_, type_id, occ) in groups {
@@ -1608,7 +1674,7 @@ fn hoist_invariant_arith(
     }
 
     hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts);
-    cse_loop_body(engine, loop_body);
+    cse_loop_body(engine, loop_body, modified);
     true
 }
 
@@ -1704,21 +1770,31 @@ fn cse_operand_in_scope(
 ///   skeleton (a `local.get` of each leaf), so it computes exactly the shared
 ///   value. Trap-prone ops are excluded, so computing it once up front (possibly
 ///   on an iteration a conditional occurrence would have skipped) cannot trap.
-fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
+fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVars) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    // Occurrences of each materialisable value, as (top-level stmt index, expr),
-    // in first-seen order. Nested loops are not descended (their own bodies have
-    // their own dominance / `cse_loop_body` pass).
-    let mut occ: IndexMap<ValueId, Vec<(usize, ExprId)>> = IndexMap::default();
+    // Occurrences of each materialisable arith value, keyed by a value-graph-free
+    // **structural key**, as (top-level stmt index, expr) in first-seen order.
+    // Two structurally-equal trees denote the same value exactly when their
+    // leaves hold the same values at both points; the per-run split below (no
+    // leaf assigned across the span) establishes that without `value_of`,
+    // replacing the value graph's per-point flow-sensitivity. Nested loops are
+    // not descended.
+    let mut occ: IndexMap<String, Vec<(usize, ExprId)>> = IndexMap::default();
     for (i, &s) in stmts.iter().enumerate() {
         let mut exprs = Vec::new();
         collect_stmt_exprs(engine.body, s, &mut exprs);
         for e in exprs {
-            let Some(v) = engine.value(e) else { continue };
-            let rep = engine.body.values.find_imm(v);
-            if is_cse_candidate(&engine.body.values, rep) {
-                occ.entry(rep).or_default().push((i, e));
+            if !is_cse_candidate_expr(engine.body, e) {
+                continue;
             }
+            let mut leaves: Vec<(ExprId, u32)> = Vec::new();
+            collect_arith_local_leaves(engine.body, e, &mut leaves);
+            // A constant-only tree is left to const folding.
+            if leaves.is_empty() {
+                continue;
+            }
+            let key = arith_structural_key(engine.body, e);
+            occ.entry(key).or_default().push((i, e));
         }
     }
 
@@ -1732,69 +1808,115 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId) -> bool {
             _ => None,
         })
         .collect();
+    let address_taken: IndexSet<u32> = engine.body_address_taken().clone();
 
     // (stmt index, let) inserts and per-expr redirects, computed before any
     // mutation so indices stay stable.
     let mut inserts: Vec<(usize, StmtId)> = Vec::new();
-    for (rep, occs) in occ {
+    for (_key, occs) in occ {
         if occs.len() < 2 {
             continue;
         }
-        let Some(ty) = engine.body.values.type_of(rep) else {
-            continue;
-        };
-        let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
-        // Clone an occurrence whose skeleton is in scope at the insertion point
-        // (before `min_i`): every `Local` leaf must be a loop-entry local or
-        // bound by a top-level `let` before `min_i`. The value graph already
-        // proved every occurrence equal, so any in-scope occurrence computes the
-        // right value; cloning a bare alias read of an inner-scope local (e.g.
-        // `let __cse = a` where `a` is bound inside a nested block) would read a
-        // stale loop-carried value. Skip the value if none qualifies.
-        let Some(&(_, src_expr)) = occs
+        // Leaves of this group (same key ⇒ same structure ⇒ same leaf locals).
+        let mut leaves: Vec<(ExprId, u32)> = Vec::new();
+        collect_arith_local_leaves(engine.body, occs[0].1, &mut leaves);
+        let leaf_ids: Vec<u32> = leaves.iter().map(|(_, idx)| *idx).collect();
+        // Address-taken leaves can be mutated through an alias at an unknown
+        // point, which per-statement assignment tracking does not see — so an
+        // address-taken leaf must be loop-**invariant** (never modified) for the
+        // value to be stable. If any is modified, skip the whole group.
+        if leaf_ids
             .iter()
-            .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
-        else {
+            .any(|idx| address_taken.contains(idx) && modified.local_modified(*idx))
+        {
             continue;
-        };
-        let span = engine.body.exprs[src_expr].span;
-        let name = format!("__cse_{}", engine.locals().len());
-        let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
-        // Clone the chosen occurrence's skeleton subtree for the temp's value
-        // (the value itself is a sourceless-Opaque tree the extractor can not
-        // re-emit; the skeleton can).
-        let cloned = engine.clone_expr(src_expr);
-        let let_stmt = engine.alloc_stmt(
-            StmtKind::Let {
-                name: name.clone(),
-                local_index: temp,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ty,
-                value: Operand::Expr(cloned),
-                skip_value_copy: true,
-            },
-            span,
-        );
-        // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
-        // promoted value): the temp is reassigned every iteration, so a value
-        // operand `Opaque(Local(__cse))` would read as loop-invariant to the
-        // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
-        // correctly treated as loop-carried.
-        let mut any = false;
-        for (_, e) in &occs {
-            let lread = engine.alloc_expr(
-                ExprKind::Local {
-                    index: temp,
+        }
+        // Split the occurrences (in statement order) into maximal **runs** within
+        // which no non-address-taken leaf is directly assigned across the span —
+        // each run computes one value, soundly CSE'd into one temp. This replaces
+        // the value graph's per-point flow-sensitivity (`p*p` before `p += 1` is
+        // one value; after, a new one).
+        let mut occs = occs;
+        occs.sort_by_key(|(i, _)| *i);
+        let mut runs: Vec<Vec<(usize, ExprId)>> = Vec::new();
+        for (i, e) in occs {
+            let start_new = match runs.last() {
+                Some(run) => {
+                    let lo = run[0].0;
+                    (lo..=i).any(|si| {
+                        let s = stmts[si];
+                        leaf_ids.iter().any(|idx| {
+                            !address_taken.contains(idx)
+                                && local_assigned_in_stmt(engine.body, s, *idx)
+                        })
+                    })
+                }
+                None => true,
+            };
+            if start_new {
+                runs.push(vec![(i, e)]);
+            } else {
+                runs.last_mut().unwrap().push((i, e));
+            }
+        }
+        for occs in runs {
+            if occs.len() < 2 {
+                continue;
+            }
+            let ty = engine.body.exprs[occs[0].1].type_id;
+            let min_i = occs.iter().map(|(i, _)| *i).min().unwrap();
+            // Clone an occurrence whose skeleton is in scope at the insertion point
+            // (before `min_i`): every `Local` leaf must be a loop-entry local or
+            // bound by a top-level `let` before `min_i`. The value graph already
+            // proved every occurrence equal, so any in-scope occurrence computes the
+            // right value; cloning a bare alias read of an inner-scope local (e.g.
+            // `let __cse = a` where `a` is bound inside a nested block) would read a
+            // stale loop-carried value. Skip the value if none qualifies.
+            let Some(&(_, src_expr)) = occs
+                .iter()
+                .find(|(_, e)| cse_clone_in_scope(engine, *e, min_i, &toplevel_lets, loop_body))
+            else {
+                continue;
+            };
+            let span = engine.body.exprs[src_expr].span;
+            let name = format!("__cse_{}", engine.locals().len());
+            let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
+            // Clone the chosen occurrence's skeleton subtree for the temp's value
+            // (the value itself is a sourceless-Opaque tree the extractor can not
+            // re-emit; the skeleton can).
+            let cloned = engine.clone_expr(src_expr);
+            let let_stmt = engine.alloc_stmt(
+                StmtKind::Let {
                     name: name.clone(),
+                    local_index: temp,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: ty,
+                    value: Operand::Expr(cloned),
+                    skip_value_copy: true,
                 },
-                ty,
                 span,
             );
-            any |= engine.redirect_expr(*e, Operand::Expr(lread));
-        }
-        if any {
-            inserts.push((min_i, let_stmt));
+            // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
+            // promoted value): the temp is reassigned every iteration, so a value
+            // operand `Opaque(Local(__cse))` would read as loop-invariant to the
+            // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
+            // correctly treated as loop-carried.
+            let mut any = false;
+            for (_, e) in &occs {
+                let lread = engine.alloc_expr(
+                    ExprKind::Local {
+                        index: temp,
+                        name: name.clone(),
+                    },
+                    ty,
+                    span,
+                );
+                any |= engine.redirect_expr(*e, Operand::Expr(lread));
+            }
+            if any {
+                inserts.push((min_i, let_stmt));
+            }
         }
     }
     if inserts.is_empty() {
@@ -1849,11 +1971,76 @@ fn collect_expr_exprs(body: &Body, e: ExprId, out: &mut Vec<ExprId>) {
 /// `Binary` / `Unary` with a non-trap-prone op. The leaves need no availability
 /// check here — see [`cse_loop_body`]'s soundness note (shared scope of ≥2
 /// occurrences) — only the root must be a compound, not a bare leaf.
-fn is_cse_candidate(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
-    use crate::nir_value_graph::ValueKind;
-    match pool.kind(v) {
-        ValueKind::Binary { op, .. } => is_hoistable_binop(*op),
-        ValueKind::Unary { op, .. } => {
+/// Whether top-level statement `s` (its subtree, **not** descending nested
+/// `Loop` bodies) directly assigns local `idx`: `idx = …` (an `Assign` rooting
+/// at `idx`) or `let idx = …`. For a **non-address-taken** local this is the
+/// only path that changes its value (no reference can alias it, and a call
+/// cannot reach a non-escaping local) — so a `cse_loop_body` occurrence span
+/// free of such assignments reads the same leaf value at every occurrence.
+fn local_assigned_in_stmt(body: &Body, s: StmtId, idx: u32) -> bool {
+    match &body.stmts[s].kind {
+        StmtKind::Let {
+            local_index, value, ..
+        } => *local_index == idx || operand_assigns_local(body, *value, idx),
+        StmtKind::Expr(op)
+        | StmtKind::Return { value: Some(op) }
+        | StmtKind::Break {
+            value: Some(op), ..
+        } => operand_assigns_local(body, *op, idx),
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            operand_assigns_local(body, *condition, idx)
+                || block_assigns_local(body, *then_block, idx)
+                || else_block.is_some_and(|b| block_assigns_local(body, b, idx))
+        }
+        StmtKind::LabeledBlock { block, .. } => block_assigns_local(body, *block, idx),
+        // A nested `Loop` is not descended (its occurrences are out of this
+        // body's CSE scope); conservatively any local it writes is already in
+        // `modified_vars`, handled by the invariance fallback.
+        StmtKind::Loop { .. }
+        | StmtKind::Continue
+        | StmtKind::Return { value: None }
+        | StmtKind::Break { value: None, .. }
+        | StmtKind::LetDestructure { .. } => false,
+    }
+}
+
+fn block_assigns_local(body: &Body, b: BlockId, idx: u32) -> bool {
+    body.blocks[b]
+        .stmts
+        .iter()
+        .any(|&s| local_assigned_in_stmt(body, s, idx))
+}
+
+fn operand_assigns_local(body: &Body, op: Operand, idx: u32) -> bool {
+    let Some(e) = op.as_expr() else { return false };
+    expr_assigns_local(body, e, idx)
+}
+
+fn expr_assigns_local(body: &Body, e: ExprId, idx: u32) -> bool {
+    if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+        && super::arena_query::projection_root_local(body, *target) == Some(idx)
+    {
+        return true;
+    }
+    let mut found = false;
+    body.for_each_child(NodeRef::Expr(e), |c| {
+        if !found && let NodeRef::Expr(ce) = c {
+            found = expr_assigns_local(body, ce, idx);
+        }
+    });
+    found
+}
+
+/// A hoistable `Binary` / `Unary` arith expression — the CSE candidate shape,
+/// checked structurally (value-graph-free).
+fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {
+    match &body.exprs[e].kind {
+        ExprKind::Binary { op, .. } => is_hoistable_binop(*op),
+        ExprKind::Unary { op, .. } => {
             matches!(op, NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot)
         }
         _ => false,

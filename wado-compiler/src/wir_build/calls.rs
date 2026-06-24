@@ -11,7 +11,7 @@ use crate::wir::{WirInstr, WirType};
 
 use super::context::WirContext;
 use super::translate::FunctionTranslator;
-use crate::nir_arena::{ArenaCallArg, Body, ExprId, Operand};
+use crate::nir_arena::{ArenaCallArg, Body, Operand};
 
 /// The compile-time constant of a SIMD lane operand — a promoted
 /// `Operand::Value` int constant in the function's value pool.
@@ -958,14 +958,15 @@ impl FunctionTranslator<'_, '_> {
     /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
     pub(super) fn translate_indirect_call(
         &mut self,
-        callee: ExprId,
+        callee: Operand,
         args: &[Operand],
         result_type: TypeId,
     ) -> WirInstr {
-        let callee_wir = self.translate_expr(callee);
+        let callee_wir = self.translate_operand(callee);
+        let callee_ty = self.operand_type_id(callee);
 
         // Look up the Function type to get param/result info
-        let fn_type = self.type_table.get(self.body.exprs[callee].type_id);
+        let fn_type = self.type_table.get(callee_ty);
         let (param_types, return_type) = match fn_type {
             crate::tir::ResolvedType::Function {
                 params,
@@ -973,8 +974,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => (params.clone(), *return_type),
             other => panic!(
-                "[WIR] translate_indirect_call: expected Function type, got {other:?} (callee type_id={:?})",
-                self.body.exprs[callee].type_id
+                "[WIR] translate_indirect_call: expected Function type, got {other:?} (callee type_id={callee_ty:?})"
             ),
         };
 
@@ -1078,12 +1078,12 @@ impl FunctionTranslator<'_, '_> {
     /// Translate `ClosureToCanonical` — convert a functor struct to canonical closure.
     pub(super) fn translate_closure_to_canonical(
         &mut self,
-        functor: ExprId,
+        functor: Operand,
         functor_id: u32,
         target_fn_type: TypeId,
         closure_module: &ModuleSource,
     ) -> WirInstr {
-        let functor_instr = self.translate_expr(functor);
+        let functor_instr = self.translate_operand(functor);
 
         // Look up the canonical closure struct type for the target function type
         let fn_resolved = self.type_table.get(target_fn_type);

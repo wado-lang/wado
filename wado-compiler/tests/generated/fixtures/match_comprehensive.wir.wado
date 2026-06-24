@@ -240,15 +240,13 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_variant_comprehe
     let __local_13: ref "core:prelude/format.wado//Formatter";
     let __match_14: ref null "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree";
     let repr: ref "Array<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>";
-    let end: i32;
     let f_45: ref "core:prelude/format.wado//Formatter";
     let self_46: i32;
     let f_50: ref "core:prelude/format.wado//Formatter";
     let self_51: i32;
     __b = struct.new "core:prelude//List<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: array.new_fixed<ref "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree">(struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree" { 2 }, struct.new "wado-compiler/tests/fixtures/match_comprehensive.wado//Tree::Leaf" { discriminant: 0, payload_0: 99 }), used: 4 };
     repr = __b.repr;
-    end = 4;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>" { repr: repr, index: 0, end: 4 };
     b6: block {
         l7: loop {
             __match_14 = "core:prelude/slice.wado/ArrayIter<wado-compiler/tests/fixtures/match_comprehensive.wado/Tree>^Iterator::next"(__iter_2);
@@ -319,12 +317,10 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/match_in_loop"() with 
     let __local_7: ref "core:prelude/format.wado//Formatter";
     let __match_8: ref null "core:prelude/types.wado//Option<i32>";
     let repr: ref "Array<core:prelude/types.wado/Option<i32>>";
-    let end: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 1 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 5 }), used: 5 };
     sum = 0;
     repr = __b.repr;
-    end = 5;
-    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: repr, index: 0, end: end };
+    __iter_3 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: repr, index: 0, end: 5 };
     b14: block {
         l15: loop {
             __match_8 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_3);
@@ -420,11 +416,9 @@ fn "wado-compiler/tests/fixtures/match_comprehensive.wado/if_let_with_else"() wi
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __match_7: ref null "core:prelude/types.wado//Option<i32>";
     let repr: ref "Array<core:prelude/types.wado/Option<i32>>";
-    let end: i32;
     __b = struct.new "core:prelude//List<core:prelude/types.wado/Option<i32>>" { repr: array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 }, struct.new "core:prelude/types.wado//Option<i32>" { 1 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 30 }), used: 3 };
     repr = __b.repr;
-    end = 3;
-    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: repr, index: 0, end: end };
+    __iter_2 = struct.new "core:prelude/slice.wado//ArrayIter<core:prelude/types.wado/Option<i32>>" { repr: repr, index: 0, end: 3 };
     b26: block {
         l27: loop {
             __match_7 = "core:prelude/slice.wado/ArrayIter<core:prelude/types.wado/Option<i32>>^Iterator::next"(__iter_2);
@@ -569,7 +563,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -578,8 +571,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b38: block {
             l39: loop {
                 break_if b38 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l39;
             };
@@ -607,11 +600,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

@@ -122,6 +122,7 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, coun
     let prev: i32;
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5_5: ref "core:prelude/format.wado//Formatter";
+    let self_25: i32;
     let value: ref "tuple//[core:prelude/string.wado/String, i32]";
     let _licm_used_35: i32;
     let _licm_repr_36: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
@@ -135,7 +136,7 @@ fn "wado-compiler/tests/fixtures/temporary_mut_array_arg.wado/helper"(name, coun
                 prev = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_36, i).1;
                 value = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: name, 1: prev + 1 };
                 builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(_licm_repr_36, i, value);
-                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(prev + 1, __local_5_5), __local_4;
+                return __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, "core:prelude/string.wado/String::push_str"(__local_4, name), "core:prelude/string.wado/String::push"(__local_4, 95), __local_5_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_4 }, "core:prelude/primitive.wado/i32::fmt_decimal"(local.tee self_25(prev + 1), __local_5_5), __local_4;
             }
             i = i + 1;
             continue l1;
@@ -268,7 +269,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -277,8 +277,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b11: block {
             l12: loop {
                 break_if b11 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l12;
             };
@@ -306,11 +306,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -505,8 +506,9 @@ fn "core:prelude/list.wado/List<core:prelude/types.wado/Tuple<core:prelude/strin
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref "Array<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,i32>>";
+    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
+    new_repr = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, i32]">(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<ref "tuple//[core:prelude/string.wado/String, i32]">(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

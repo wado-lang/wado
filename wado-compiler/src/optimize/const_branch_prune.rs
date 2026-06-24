@@ -203,15 +203,17 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
             // A value-less `label: { break label }` yields unit but carries no
             // value to promote, so leave it untouched (return `false` so the
             // engine does not spin on it).
-            if let Some(inner) = value
-                && !expr_has_break_to(
-                    engine.body,
-                    inner.as_expr().expect("skeleton operand"),
-                    &label,
-                )
-            {
-                engine.become_expr(id, inner.as_expr().expect("skeleton operand"));
-                return true;
+            if let Some(inner) = value {
+                match inner.as_expr() {
+                    Some(ie) if !expr_has_break_to(engine.body, ie, &label) => {
+                        engine.become_expr(id, ie);
+                        return true;
+                    }
+                    // A promoted-operand result carries no control flow; collapse
+                    // the labeled block straight to it.
+                    None => return engine.redirect_expr(id, inner),
+                    _ => {}
+                }
             }
         }
     }

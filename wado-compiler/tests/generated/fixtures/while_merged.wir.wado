@@ -141,13 +141,12 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_0_break"() {
     let __cond: bool;
     let __local_3: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/format.wado//Formatter";
-    let __cse_5: i32;
     count = 0;
     b0: block {
         l1: loop {
             break_if b0 count >= 10;
-            count = local.tee __cse_5(count + 1);
-            break_if b0 __cse_5 >= 3;
+            count = count + 1;
+            break_if b0 count >= 3;
             continue l1;
         };
     };
@@ -167,15 +166,14 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_1_continue"() {
     let __cond: bool;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
-    let __cse_9: i32;
     sum = 0;
     count = 0;
     b3: block {
         l4: loop {
             break_if b3 count >= 5;
-            count = local.tee __cse_9(count + 1);
-            continue_if l4 __cse_9 == 3;
-            sum = sum + __cse_9;
+            count = count + 1;
+            continue_if l4 count == 3;
+            sum = sum + count;
             continue l4;
         };
     };
@@ -197,11 +195,9 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_2_while_let_basic"() {
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let repr: ref Array<i32>;
-    let end: i32;
     __b = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     repr = __b.repr;
-    end = 3;
-    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: end };
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr, index: 0, end: 3 };
     sum = 0;
     b6: block {
         l7: loop {
@@ -248,17 +244,12 @@ fn "wado-compiler/tests/fixtures/while_merged.wado/__test_3_while_let_chain"() {
     let __local_31: ref "core:prelude/string.wado//String";
     let __local_32: ref "core:prelude/format.wado//Formatter";
     let repr_51: ref Array<i32>;
-    let end_53: i32;
     let repr_73: ref Array<i32>;
-    let end_75: i32;
     let repr_77: ref Array<i32>;
-    let end_79: i32;
     let repr_92: ref Array<i32>;
-    let end_94: i32;
     __b_0 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3, 8, 9), used: 5 };
     repr_51 = __b_0.repr;
-    end_53 = 5;
-    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_51, index: 0, end: end_53 };
+    iter = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_51, index: 0, end: 5 };
     sum = 0;
     b10: block {
         l11: loop {
@@ -288,11 +279,9 @@ condition: sum == 6
     __b_7 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
     __b_9 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     repr_73 = __b_7.repr;
-    end_75 = 3;
-    ix = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_73, index: 0, end: end_75 };
+    ix = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_73, index: 0, end: 3 };
     repr_77 = __b_9.repr;
-    end_79 = 3;
-    iy = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_77, index: 0, end: end_79 };
+    iy = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_77, index: 0, end: 3 };
     total = 0;
     b15: block {
         l16: loop {
@@ -324,8 +313,7 @@ condition: total == 66
     }
     __b_18 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(2, 4, 7, 8), used: 4 };
     repr_92 = __b_18.repr;
-    end_94 = 4;
-    iter3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_92, index: 0, end: end_94 };
+    iter3 = struct.new "core:prelude/slice.wado//ArrayIter<i32>" { repr: repr_92, index: 0, end: 4 };
     count = 0;
     b20: block {
         l21: loop {
@@ -506,7 +494,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -515,8 +502,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b34: block {
             l35: loop {
                 break_if b34 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l35;
             };
@@ -558,11 +545,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

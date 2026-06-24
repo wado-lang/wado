@@ -11,7 +11,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::{FunctionTranslator, LabelEntry};
-use crate::nir_arena::{ArmData, BlockId, Body, ExprId, Operand, PatId, PatKind};
+use crate::nir_arena::{ArmData, BlockId, Body, Operand, PatId, PatKind};
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
 /// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
@@ -218,16 +218,15 @@ impl FunctionTranslator<'_, '_> {
     pub(super) fn translate_let_pattern(
         &mut self,
         pattern: PatId,
-        value: ExprId,
+        value: Operand,
     ) -> Option<WirInstr> {
-        let value_instr = self.translate_expr(value);
+        let value_instr = self.translate_operand(value);
+        let value_ty = self.operand_type_id(value);
         let arena = self.body;
 
         match &arena.pats[pattern].kind {
             PatKind::Tuple(patterns, _) => {
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, arena.exprs[value].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value_ty);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();
 
@@ -1471,11 +1470,12 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate variant test: check if variant is of a specific case.
-    pub(super) fn translate_variant_test(&mut self, inner: ExprId, case_index: u32) -> WirInstr {
-        let val = self.translate_expr(inner);
+    pub(super) fn translate_variant_test(&mut self, inner: Operand, case_index: u32) -> WirInstr {
+        let val = self.translate_operand(inner);
+        let inner_ty = self.operand_type_id(inner);
 
         // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(self.body.exprs[inner].type_id) {
+        let (var_name, var_module) = match self.type_table.get(inner_ty) {
             ResolvedType::Variant {
                 name,
                 module_source,
@@ -1498,9 +1498,7 @@ impl FunctionTranslator<'_, '_> {
             }
             _ => {
                 // Non-variant: compare discriminant directly
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1526,9 +1524,7 @@ impl FunctionTranslator<'_, '_> {
         {
             if case.payload.is_empty() {
                 // Unit variant: check discriminant
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     return WirInstr::I32Eq(
                         Box::new(WirInstr::StructGet {
@@ -1554,9 +1550,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // Fallback: compare discriminant
-        let wir_type = self
-            .ctx
-            .type_id_to_wir_type(self.type_table, self.body.exprs[inner].type_id);
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner_ty);
         if let WirType::Ref { type_id, .. } = wir_type {
             WirInstr::I32Eq(
                 Box::new(WirInstr::StructGet {
@@ -1573,11 +1567,16 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate variant payload extraction.
-    pub(super) fn translate_variant_payload(&mut self, inner: ExprId, case_index: u32) -> WirInstr {
-        let val = self.translate_expr(inner);
+    pub(super) fn translate_variant_payload(
+        &mut self,
+        inner: Operand,
+        case_index: u32,
+    ) -> WirInstr {
+        let val = self.translate_operand(inner);
+        let inner_ty = self.operand_type_id(inner);
 
         // Look up variant type info
-        let (var_name, var_module) = match self.type_table.get(self.body.exprs[inner].type_id) {
+        let (var_name, var_module) = match self.type_table.get(inner_ty) {
             ResolvedType::Variant {
                 name,
                 module_source,

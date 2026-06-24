@@ -933,13 +933,13 @@ condition: index < self.used
             __entries_elem = builtin::array_get<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(_licm_repr_33, __entries_i);
             __packed = "core:internal/cm_lower_string"(__entries_elem.0);
             builtin::store_i32(__entries_addr, builtin::i32_wrap_i64(__packed));
-            builtin::store_i32((__entries_base + (__entries_i * 16)) + 4, builtin::i32_wrap_i64(__packed >> 32_i64));
+            builtin::store_i32(__entries_addr + 4, builtin::i32_wrap_i64(__packed >> 32_i64));
             arr_24 = __entries_elem.1;
             data = arr_24.repr;
             len_26 = arr_24.used;
             __elem_packed = "core:internal/cm_lower_list_u8"(data, len_26);
-            builtin::store_i32((__entries_base + (__entries_i * 16)) + 8, builtin::i32_wrap_i64(__elem_packed));
-            builtin::store_i32(((__entries_base + (__entries_i * 16)) + 8) + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
+            builtin::store_i32(__entries_addr + 8, builtin::i32_wrap_i64(__elem_packed));
+            builtin::store_i32((__entries_addr + 8) + 4, builtin::i32_wrap_i64(__elem_packed >> 32_i64));
             __entries_i = __entries_i + 1;
             continue l65;
         };
@@ -1148,7 +1148,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -1157,8 +1156,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b84: block {
             l85: loop {
                 break_if b84 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l85;
             };
@@ -1210,11 +1209,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

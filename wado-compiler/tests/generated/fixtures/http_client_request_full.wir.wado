@@ -2270,7 +2270,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -2279,8 +2278,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b204: block {
             l205: loop {
                 break_if b204 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l205;
             };
@@ -2335,7 +2334,6 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let digit: i32;
     let ch: i32;
     let shift_u64: u64;
-    let __cse_13: i32;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
@@ -2345,14 +2343,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         b215: block {
             l216: loop {
                 break_if b215 temp == 0_i64;
-                pos = local.tee __cse_13(pos - 1);
+                pos = pos - 1;
                 digit = builtin::i32_wrap_i64(temp & mask64);
                 ch = (if digit < 10 -> i32 {
                     48 + digit;
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 });
-                builtin::array_set_u8(arr, __cse_13, ch & 255);
+                builtin::array_set_u8(arr, pos, ch & 255);
                 shift_u64 = builtin::i64_extend_i32_s(bits_per_digit);
                 temp = temp >>u shift_u64;
                 continue l216;
@@ -2372,6 +2370,12 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
     let b2_10: u8;
     let b3: u8;
     let code_12: u32;
+    let index_16: i32;
+    let index_18: i32;
+    let index_20: i32;
+    let index_22: i32;
+    let index_24: i32;
+    let index_26: i32;
     b0 = builtin::array_get<u8>(bytes.repr, bytes.start + start);
     if @likely(b0 <u 128) {
         return b0, 1, 1;
@@ -2385,7 +2389,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        index_16 = start + 1;
+        b1_4 = builtin::array_get<u8>(bytes.repr, bytes.start + index_16);
         if @unlikely((if b1_4 <u 128 -> i32 {
             1;
         } else {
@@ -2402,7 +2407,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        index_18 = start + 1;
+        b1_6 = builtin::array_get<u8>(bytes.repr, bytes.start + index_18);
         if @unlikely((if (if (if b1_6 <u 128 -> i32 {
             1;
         } else {
@@ -2427,7 +2433,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
+        index_20 = start + 2;
+        b2_7 = builtin::array_get<u8>(bytes.repr, bytes.start + index_20);
         if @unlikely((if b2_7 <u 128 -> i32 {
             1;
         } else {
@@ -2444,7 +2451,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 1, 0;
         }
-        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 1));
+        index_22 = start + 1;
+        b1_9 = builtin::array_get<u8>(bytes.repr, bytes.start + index_22);
         if @unlikely((if (if (if b1_9 <u 128 -> i32 {
             1;
         } else {
@@ -2469,7 +2477,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 2, 0;
         }
-        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 2));
+        index_24 = start + 2;
+        b2_10 = builtin::array_get<u8>(bytes.repr, bytes.start + index_24);
         if @unlikely((if b2_10 <u 128 -> i32 {
             1;
         } else {
@@ -2482,7 +2491,8 @@ fn "core:prelude/string.wado/decode_utf8_scalar"(bytes, start, len) {
             cold_path;
             return 0, 3, 0;
         }
-        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + (start + 3));
+        index_26 = start + 3;
+        b3 = builtin::array_get<u8>(bytes.repr, bytes.start + index_26);
         if @unlikely((if b3 <u 128 -> i32 {
             1;
         } else {
@@ -2622,11 +2632,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -2925,6 +2936,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     let self_14: ref "core:prelude/string.wado//StrCharIter";
     let s_37: ref "core:prelude/string.wado//String";
     let s_51: ref "core:prelude/string.wado//String";
+    let _licm_arith_52: bool;
     limit = __inline_Formatter__resolved_seq_limit_0: block -> i32 {
         if f.precision == -2 {
             break __inline_Formatter__resolved_seq_limit_0: 256;
@@ -2935,13 +2947,14 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     count = 0;
     truncated = 0;
     self_14 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self.repr, used: self.used, byte_index: 0 };
+    _licm_arith_52 = limit >= 0;
     b303: block {
         l304: loop {
             let __sroa___match_10_discriminant: i32;
             let __sroa___match_10_payload_0: char;
             multivalue_bind [__sroa___match_10_discriminant, __sroa___match_10_payload_0] = "core:prelude/string.wado/StrCharIter^Iterator::next"(self_14);
             if __sroa___match_10_discriminant == 0 {
-                if (if limit >= 0 -> i32 {
+                if (if _licm_arith_52 -> i32 {
                     count >= limit;
                 } else {
                     0;
@@ -3049,8 +3062,9 @@ fn "core:prelude/list.wado/List<u8>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

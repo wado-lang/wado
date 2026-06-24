@@ -407,27 +407,24 @@ fn rewrite_callees(
 /// field)` with the bare scalar `Local`, before children are reshaped.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[(u32, String)]) {
     if let NodeRef::Expr(id) = node {
-        let replace = if let ExprKind::FieldAccess {
+        // The SROA'd field access whose inner `Local` should replace it, if any.
+        let local_inner = if let ExprKind::FieldAccess {
             expr: inner,
             field_name,
             ..
         } = &body.exprs[id].kind
         {
-            matches!(&body.exprs[inner.as_expr().expect("skeleton operand")].kind, ExprKind::Local { index, .. }
+            inner.as_expr().filter(|&e| {
+                matches!(&body.exprs[e].kind, ExprKind::Local { index, .. }
                 if affected.iter().any(|(li, fname)| li == index && fname == field_name))
+            })
         } else {
-            false
+            None
         };
-        if replace {
-            let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[id].kind else {
-                unreachable!();
-            };
-            let inner = *inner;
+        if let Some(inner) = local_inner {
             // The node keeps its (field-scalar) type_id / span; its kind becomes
             // the inner Local.
-            body.exprs[id].kind = body.exprs[inner.as_expr().expect("skeleton operand")]
-                .kind
-                .clone();
+            body.exprs[id].kind = body.exprs[inner].kind.clone();
             return;
         }
     }
@@ -560,14 +557,10 @@ fn rewrite_call_expr(
                         continue;
                     }
                     let arg_idx = *pi - 1;
-                    if arg_idx < args.len() {
-                        rewrite_arg(
-                            body,
-                            args[arg_idx].expr.as_expr().expect("skeleton operand"),
-                            info,
-                            scalar_param_struct,
-                            type_table,
-                        );
+                    if arg_idx < args.len()
+                        && let Some(arg_e) = args[arg_idx].expr.as_expr()
+                    {
+                        rewrite_arg(body, arg_e, info, scalar_param_struct, type_table);
                     }
                 }
                 let mut new_args = Vec::with_capacity(args.len() + 1);
@@ -627,7 +620,9 @@ fn rewrite_arg(
     } = &body.exprs[arg].kind
     {
         let inner = *inner;
-        become_expr(body, arg, inner.as_expr().expect("skeleton operand"));
+        if let Some(inner_e) = inner.as_expr() {
+            become_expr(body, arg, inner_e);
+        }
     }
 
     // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap to

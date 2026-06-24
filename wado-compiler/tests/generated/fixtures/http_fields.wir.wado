@@ -384,6 +384,7 @@ global mut global:__modules_initialized: bool = 0;
 fn "wado-compiler/tests/fixtures/http_fields.wado/handle"(request) {
     let fields: i32;
     let has_before: bool;
+    let __cond_4: bool;
     let __b: ref "core:prelude//List<u8>";
     let append_result: ref null "wasi:http/types.wado//HeaderError";
     let has_after: bool;
@@ -391,6 +392,7 @@ fn "wado-compiler/tests/fixtures/http_fields.wado/handle"(request) {
     let cloned_has: bool;
     let delete_result: ref null "wasi:http/types.wado//HeaderError";
     let has_deleted: bool;
+    let __cond_21: bool;
     let cloned_still_has: bool;
     let response_headers: i32;
     let response: i32;
@@ -545,8 +547,8 @@ fn "wado-compiler/tests/fixtures/http_fields.wado/handle"(request) {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    has_before = "wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_has"(local.tee fields("wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 });
-    if @unlikely((has_before == 0) == 0) {
+    __cond_4 = local.tee has_before("wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_has"(local.tee fields("wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 })) == 0;
+    if @unlikely(__cond_4 == 0) {
         cold_path;
         "core:internal/panic"(__local_30 = "core:prelude/string.wado/String::with_capacity"(126); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_30, 104); "core:prelude/string.wado/String::push"(__local_30, 97); "core:prelude/string.wado/String::push"(__local_30, 110); "core:prelude/string.wado/String::push"(__local_30, 100); "core:prelude/string.wado/String::push"(__local_30, 108); "core:prelude/string.wado/String::push"(__local_30, 101); "core:prelude/string.wado/String::push"(__local_30, 32); "core:prelude/string.wado/String::push"(__local_30, 97); "core:prelude/string.wado/String::push"(__local_30, 116); "core:prelude/string.wado/String::push"(__local_30, 32); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_fields.wado"), used: 45 }); "core:prelude/string.wado/String::push"(__local_30, 58); __local_31 = "core:prelude/format.wado/Formatter::new"(__local_30); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, __local_31); "core:prelude/string.wado/String::push_str"(__local_30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !has_before
@@ -584,8 +586,8 @@ condition: cloned_has
         unreachable;
     } else {
     }
-    has_deleted = "wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_has"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 });
-    if @unlikely((has_deleted == 0) == 0) {
+    __cond_21 = local.tee has_deleted("wado-compiler/tests/fixtures/http_fields.wado/__cm_binding__Fields_has"(fields, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-test"), used: 6 })) == 0;
+    if @unlikely(__cond_21 == 0) {
         cold_path;
         "core:internal/panic"(__local_36 = "core:prelude/string.wado/String::with_capacity"(128); "core:prelude/string.wado/String::push_str"(__local_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_36, 104); "core:prelude/string.wado/String::push"(__local_36, 97); "core:prelude/string.wado/String::push"(__local_36, 110); "core:prelude/string.wado/String::push"(__local_36, 100); "core:prelude/string.wado/String::push"(__local_36, 108); "core:prelude/string.wado/String::push"(__local_36, 101); "core:prelude/string.wado/String::push"(__local_36, 32); "core:prelude/string.wado/String::push"(__local_36, 97); "core:prelude/string.wado/String::push"(__local_36, 116); "core:prelude/string.wado/String::push"(__local_36, 32); "core:prelude/string.wado/String::push_str"(__local_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/http_fields.wado"), used: 45 }); "core:prelude/string.wado/String::push"(__local_36, 58); __local_37 = "core:prelude/format.wado/Formatter::new"(__local_36); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 46 }, __local_37); "core:prelude/string.wado/String::push_str"(__local_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: !has_deleted
@@ -1192,7 +1194,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -1201,8 +1202,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b92: block {
             l93: loop {
                 break_if b92 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l93;
             };
@@ -1249,11 +1250,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

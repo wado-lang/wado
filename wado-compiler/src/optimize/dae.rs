@@ -305,7 +305,6 @@ fn validate_call(
                     continue;
                 }
                 let pure = match args.get(i).map(|a| a.expr) {
-                    // A promoted pure value is pure by construction.
                     Some(Operand::Value(_)) => true,
                     Some(Operand::Expr(e)) => arena_query::is_pure_expr(body, e),
                     None => false,
@@ -333,7 +332,9 @@ fn validate_call(
             // a `Call` and the receiver is discarded — it must be pure.
             let drops_receiver = dead.first() == Some(&true);
             if drops_receiver
-                && !arena_query::is_pure_expr(body, receiver.as_expr().expect("skeleton operand"))
+                && !receiver
+                    .as_expr()
+                    .is_none_or(|e| arena_query::is_pure_expr(body, e))
             {
                 rejected.insert(key.clone());
             } else {

@@ -51,21 +51,9 @@ impl Rule for ElideRule<'_> {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         // Locals read only through a promoted `Operand::Value` are live but
-        // invisible to the use index; treat them as kept. Empty (so this is
-        // behavior-neutral) until operand promotion runs.
-        //
-        // Under early promotion (`WADO_PROMOTE_EARLY`) use the **over-conservative**
-        // pool-wide `opaque_local_sources` instead of the precise live-slot walk:
-        // the precise walk has a known gap (a still-read local whose `Opaque(Local)`
-        // source the walk does not reach from a live slot — see WEP), and
-        // over-conserving is sound (it only keeps more locals, never drops a read
-        // one) at the cost of some missed elisions. Flag-off keeps the precise walk,
-        // so the committed default is unchanged.
-        let promoted_reads: IndexSet<u32> = if crate::optimize::promote_active() {
-            engine.body.values.opaque_local_sources().collect()
-        } else {
-            engine.body.locals_read_via_promotion()
-        };
+        // invisible to the use index, so keep them. The pool-wide set is
+        // over-conservative (only ever keeps too many) — sound, costs some elisions.
+        let promoted_reads: IndexSet<u32> = engine.body.values.opaque_local_sources().collect();
         let mut new_stmts = Vec::with_capacity(stmts.len());
         let mut changed = false;
         for stmt in stmts {
@@ -106,7 +94,8 @@ fn classify(
             } else if arena_query::is_pure_operand(engine.body, value) {
                 Action::Drop
             } else {
-                Action::Demote(value.as_expr().expect("skeleton operand"))
+                // Not pure ⟹ a skeleton expr (a promoted value is pure → Drop above).
+                value.as_expr().map_or(Action::Drop, Action::Demote)
             }
         }
         // `x = value;` (Assign at stmt position) where `x` is unread. This
@@ -127,7 +116,8 @@ fn classify(
                     return if arena_query::is_pure_operand(engine.body, value) {
                         Action::Drop
                     } else {
-                        Action::Demote(value.as_expr().expect("skeleton operand"))
+                        // Not pure ⟹ a skeleton expr (a promoted value is pure).
+                        value.as_expr().map_or(Action::Drop, Action::Demote)
                     };
                 }
             }

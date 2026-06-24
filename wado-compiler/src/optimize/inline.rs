@@ -671,6 +671,14 @@ pub fn inline_functions(
 
     let mut changed = false;
 
+    // Purity inputs for the graph-preserving inline gate (the splice site below):
+    // an inlined call that mutates no caller-reachable state lets the caller's
+    // `value_of` survive the splice. Computed once over the project; the
+    // per-call `pure_calls` set is taken per body just before inlining it.
+    let inline_first_param_types = super::alias::first_param_types(project);
+    let inline_type_table = project.type_table.borrow();
+    let inline_call_immutability = super::alias::CallImmutability::new(project, &inline_type_table);
+
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
         let caller_idx = fid.index();
@@ -689,6 +697,18 @@ pub fn inline_functions(
             let mut locals = std::mem::take(&mut func.locals);
             // Counter for generating unique inline labels
             let mut inline_counter: u32 = 0;
+            // Calls in this body that mutate no caller-reachable state, taken
+            // *before* the splice (the call exprs survive as `reval.call_expr`
+            // keys). Drives the graph-preserving gate below.
+            let pure_set = {
+                let body = func.body.as_ref().unwrap();
+                super::alias::pure_calls(
+                    body,
+                    &inline_type_table,
+                    &inline_first_param_types,
+                    &inline_call_immutability,
+                )
+            };
             {
                 let body = func.body.as_mut().unwrap();
                 let root = body.root;
@@ -710,72 +730,24 @@ pub fn inline_functions(
 
             if !inlined_funcs.is_empty() {
                 changed = true;
-                // Inline splices through the arena directly, bypassing the
-                // engine edit API, so the persisted graph is stale here. Method A
-                // — coarsen, then regrow each splice point:
-                //
-                // 1. Coarsen: clear `value_of` / `analysis_only` /
-                //    `loop_entry_values`. The value pool persists, so promoted
-                //    operands still resolve. Keeping any caller entry is unsound,
-                //    even a constant-valued one: a `Local` read pointing at a
-                //    constant is sound only while that constant is its reaching
-                //    def, and inlining can introduce a loop back-edge that makes a
-                //    fresh build see the read as loop-variant — two distinct
-                //    locals sharing a constant init then over-merge
-                //    (`WADO_VERIFY_VG` flags `index`/`init` on the closure / sroa
-                //    fixtures). Sound forwarding across inline is Route B's job
-                //    (flow frozen into operand slots), not a retain here.
-                // 2. Regrow: re-value each inlined block self-contained, seeded
-                //    with its params bound to the call-site arg values and a fresh
-                //    heap, keeping only the resulting constants — the folds inline
-                //    newly exposes (induction bound, formatter operand), which
-                //    equal what a fresh build assigns. The walk runs in a scratch
-                //    pool (see `build_scoped`), never mutating the live graph's
-                //    shared values, and parks no cache.
-                if let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
-                    vg.value_of.clear();
-                    vg.analysis_only.clear();
-                    vg.loop_entry_values.clear();
-                }
-                if !reval.is_empty()
-                    && let Some(body) = func.body.as_mut()
-                    && body.value_graph.is_some()
+                // The splice restructures the body, staling the persisted graph's
+                // `loop_entry_values` (licm's pre-header snapshots — the only
+                // value-graph state any consumer still reads, `value_of` having
+                // been retired). Keep them only for a graph-preserving splice —
+                // every inlined call **pure** (mutates no caller-reachable state)
+                // and **loop-free** (introduces no new back-edge) — otherwise clear
+                // so licm re-derives conservatively (an absent entry is sound). The
+                // value pool and promoted operands carry every value a consumer
+                // reads across the splice.
+                let preserving = func.body.as_ref().is_some_and(|b| {
+                    reval.iter().all(|i| {
+                        pure_set.contains(&i.call_expr) && !block_contains_loop(b, i.block)
+                    })
+                });
+                if !preserving
+                    && let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut())
                 {
-                    // Maximally-conservative alias sets (sound by
-                    // over-approximation; immaterial as only constants are kept).
-                    let all: IndexSet<u32> = (0..local_count).collect();
-                    let tt = project.type_table.borrow();
-                    // One scratch pool, cloned once and reused across every
-                    // inlined block (the walk only grows it with throwaway ids).
-                    // `live_base` marks which scratch ids are shared caller values
-                    // (below it) versus walk-local (at or above), so re-interning a
-                    // scoped value into the live pool stays caller-rooted.
-                    let live_base = body.values.len() as u32;
-                    let mut scratch = body.values.clone();
-                    for info in &reval {
-                        let heap_seed = body
-                            .value_graph
-                            .as_ref()
-                            .and_then(|vg| vg.call_site_heap_for(info.call_expr).cloned());
-                        let vo = crate::nir_value_graph::builder::build_scoped(
-                            body,
-                            info.block,
-                            info.skip,
-                            &info.seed,
-                            &all,
-                            &all,
-                            &all,
-                            Some(&tt),
-                            &mut scratch,
-                            heap_seed.as_ref(),
-                            live_base,
-                        );
-                        let vg = body.value_graph.as_mut().unwrap();
-                        for (e, v) in vo {
-                            vg.value_of.insert(e, v);
-                            vg.analysis_only.insert(e);
-                        }
-                    }
+                    vg.loop_entry_values.clear();
                 }
                 // Only this caller's body changed (callee bodies are copied,
                 // not modified), so report just the caller. The caller's
@@ -1219,28 +1191,29 @@ impl InlineCtx<'_> {
 }
 
 /// A spliced inlined block to re-value at the splice point (Method A): walk
-/// `block` after its `skip` param-binding statements, seeded with each remapped
-/// param local bound to the value of its call-site argument.
+/// A spliced inlined block, recorded so the post-splice graph-preserving gate
+/// can classify it (the call's purity + whether the block introduces a loop).
 pub(super) struct InlineRevalInfo {
     pub block: BlockId,
-    pub skip: usize,
-    pub seed: IndexMap<u32, crate::nir_value_graph::ValueId>,
-    /// The original `Call` expr being inlined, keying its caller-heap snapshot
-    /// (`ValueGraphBuild::call_site_heap`) so the scoped re-valuation seeds the
-    /// callee body with the caller's field versions.
+    /// The original `Call` expr being inlined, keyed against `pure_calls`.
     pub call_expr: ExprId,
 }
 
-/// The value of an operand in `caller`'s graph: a promoted value directly, or a
-/// skeleton expr's recorded value (`None` for an unvalued / impure operand).
-fn operand_value_in(caller: &Body, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
-    match op {
-        Operand::Value(v) => Some(v),
-        Operand::Expr(e) => caller
-            .value_graph
-            .as_ref()
-            .and_then(|vg| vg.value_of.get(&e).copied()),
+/// Whether any node under `block` (statements and nested expression blocks) is a
+/// `Loop`. A loop-free splice introduces no new value-graph back-edge, so the
+/// caller's `loop_entry_values` stay valid across the inline (see the
+/// graph-preserving gate at the splice site).
+fn block_contains_loop(body: &Body, block: BlockId) -> bool {
+    let mut stack = vec![NodeRef::Block(block)];
+    while let Some(n) = stack.pop() {
+        if let NodeRef::Stmt(s) = n
+            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
+        {
+            return true;
+        }
+        body.for_each_child(n, |c| stack.push(c));
     }
+    false
 }
 
 /// Core inlining routine: builds a labeled block (in the caller arena) that
@@ -1279,17 +1252,12 @@ fn build_inlined_labeled_block(
     let callee_local_count = candidate.local_count();
     let new_locals_needed = callee_local_count.saturating_sub(callee_param_count);
 
-    let skip = bindings.len();
-    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(skip);
+    let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
-    let mut seed: IndexMap<u32, crate::nir_value_graph::ValueId> = IndexMap::default();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
         param_to_local.insert(binding.callee_local_index, new_local_index);
-        if let Some(v) = operand_value_in(caller, binding.value) {
-            seed.insert(new_local_index, v);
-        }
         locals.push(NirLocal {
             name: binding.name.clone(),
             type_id: binding.local_type,
@@ -1342,8 +1310,6 @@ fn build_inlined_labeled_block(
     });
     reval.push(InlineRevalInfo {
         block: bid,
-        skip,
-        seed,
         call_expr,
     });
     caller.exprs.push(ExprNode {

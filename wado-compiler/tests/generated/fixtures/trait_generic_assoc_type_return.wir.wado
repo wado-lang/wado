@@ -445,11 +445,7 @@ fn "core:prelude/intparse.wado/parse_signed_prefix_range"(s, start, end) {
     }) {
         return struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Err" { discriminant: 1, payload_0: 1 };
     }
-    value_start = (if has_sign -> i32 {
-        start + 1;
-    } else {
-        start;
-    });
+    value_start = select i32(has_sign, start + 1, start);
     return struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Tuple<bool,i32>,core:prelude/intparse.wado/IntErrorKind>::Ok" { discriminant: 0, payload_0: struct.new "tuple//[bool, i32]" { 0: is_negative, 1: value_start } };
 }
 
@@ -484,12 +480,12 @@ fn "core:prelude/intparse.wado/parse_i64_radix_range"(s, start, end, radix, max,
     return let __sroa___match_scrut_1_discriminant: i32, let __sroa___match_scrut_1_case0_payload_0: u64, let __sroa___match_scrut_1_case1_payload_0: i32, multivalue_bind [__sroa___match_scrut_1_discriminant, __sroa___match_scrut_1_case0_payload_0, __sroa___match_scrut_1_case1_payload_0] = "core:prelude/intparse.wado/parse_u64_digits"(s, digit_start, end, radix), (if __sroa___match_scrut_1_discriminant == 0 -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
         if is_negative -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
             if __sroa___match_scrut_1_case0_payload_0 >u min_abs -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
-                struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(struct.new "core:prelude/intparse.wado//ParseIntError" { kind: local.tee kind_16(3) }) };
+                struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(kind_16 = 3; struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 3 }) };
             } else {
                 struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: 0_i64 - __sroa___match_scrut_1_case0_payload_0 };
             }
         } else if __sroa___match_scrut_1_case0_payload_0 >u max -> ref "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>" {
-            struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(struct.new "core:prelude/intparse.wado//ParseIntError" { kind: local.tee kind_17(2) }) };
+            struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Err" { discriminant: 1, payload_0: ref.as_non_null(kind_17 = 2; struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 }) };
         } else {
             struct.new "core:prelude/types.wado//Result<i64,core:prelude/intparse.wado/ParseIntError>::Ok" { discriminant: 0, payload_0: __sroa___match_scrut_1_case0_payload_0 };
         }
@@ -515,12 +511,12 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
     }
     n = 0;
     t = val;
-    b42: block {
-        l43: loop {
-            break_if b42 t <= 0_i64;
+    b41: block {
+        l42: loop {
+            break_if b41 t <= 0_i64;
             n = n + 1;
             t = t / 10_i64;
-            continue l43;
+            continue l42;
         };
     };
     return n;
@@ -529,19 +525,18 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = abs_val;
-        b45: block {
-            l46: loop {
-                break_if b45 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+        b44: block {
+            l45: loop {
+                break_if b44 temp <= 0_i64;
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
-                continue l46;
+                continue l45;
             };
         };
     }
@@ -567,11 +562,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -636,12 +632,12 @@ fn "core:prelude/format.wado/Formatter::write_char_n"(self, c, n) {
     let _licm_buf_4: ref "core:prelude/string.wado//String";
     i = 0;
     _licm_buf_4 = self.buf;
-    b55: block {
-        l56: loop {
-            break_if b55 i >= n;
+    b54: block {
+        l55: loop {
+            break_if b54 i >= n;
             "core:prelude/string.wado/String::push"(_licm_buf_4, c);
             i = i + 1;
-            continue l56;
+            continue l55;
         };
     };
 }

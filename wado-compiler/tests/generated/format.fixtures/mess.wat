@@ -17,15 +17,19 @@
         (i32.sub
           (local.get 0)
           (local.get 1)))
+      (local.set 3
+        (i32.mul
+          (i32.mul
+            (i32.const 16)
+            (i32.const 1024))
+          (i32.const 1024)))
       (local.set 4
-        (if (result i32) ;; label = @1
+        (select (result i32)
+          (local.get 1)
+          (local.get 3)
           (i32.lt_s
             (local.get 1)
-            (i32.const 16777216))
-          (then
-            (local.get 1))
-          (else
-            (i32.const 16777216))))
+            (local.get 3))))
       (local.set 5
         (if (result i32) ;; label = @1
           (i32.gt_s
@@ -38,9 +42,7 @@
                 (i32.const 32)
                 (i32.clz
                   (i32.sub
-                    (i32.sub
-                      (local.get 0)
-                      (local.get 1))
+                    (local.get 2)
                     (i32.const 1))))))
           (else
             (local.get 4))))

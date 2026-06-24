@@ -668,7 +668,7 @@ condition: _force_array_i64_monomorphization() == 12 as i64
 "), used: 61 }); "core:prelude/string.wado/String::push_str"(__local_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("_force_array_i64_monomorphization(): "), used: 37 }); __local_15 = "core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i64^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i64>" { value: __v0_2 }, __local_15); "core:prelude/string.wado/String::push"(__local_14, 10); __local_14);
         unreachable;
     }
-    __cond_5 = local.tee __v0_4("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/generic_struct_monomorphized"()) == 505_i64;
+    __cond_5 = local.tee __v0_4("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/generic_struct_monomorphized"()) == builtin::i64_extend_i32_s(5 + 500);
     if @unlikely(__cond_5 == 0) {
         cold_path;
         "core:internal/panic"(__local_16 = "core:prelude/string.wado/String::with_capacity"(183); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_16, 114); "core:prelude/string.wado/String::push"(__local_16, 117); "core:prelude/string.wado/String::push"(__local_16, 110); "core:prelude/string.wado/String::push"(__local_16, 32); "core:prelude/string.wado/String::push"(__local_16, 97); "core:prelude/string.wado/String::push"(__local_16, 116); "core:prelude/string.wado/String::push"(__local_16, 32); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_16, 58); __local_17 = "core:prelude/format.wado/Formatter::new"(__local_16); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 132 }, __local_17); "core:prelude/string.wado/String::push_str"(__local_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -692,7 +692,7 @@ condition: single_field_wrapper() == 40
 "), used: 41 }); "core:prelude/string.wado/String::push_str"(__local_20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("single_field_wrapper(): "), used: 24 }); __local_21 = "core:prelude/format.wado/Formatter::new"(__local_20); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_8 }, __local_21); "core:prelude/string.wado/String::push"(__local_20, 10); __local_20);
         unreachable;
     }
-    __cond_11 = local.tee __v0_10("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/three_field_mixed"()) == 888_i64;
+    __cond_11 = local.tee __v0_10("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado/three_field_mixed"()) == builtin::i64_extend_i32_s((8 + 80) + 800);
     if @unlikely(__cond_11 == 0) {
         cold_path;
         "core:internal/panic"(__local_22 = "core:prelude/string.wado/String::with_capacity"(166); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push"(__local_22, 114); "core:prelude/string.wado/String::push"(__local_22, 117); "core:prelude/string.wado/String::push"(__local_22, 110); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push"(__local_22, 97); "core:prelude/string.wado/String::push"(__local_22, 116); "core:prelude/string.wado/String::push"(__local_22, 32); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/opt_container_sroa_edge.wado"), used: 57 }); "core:prelude/string.wado/String::push"(__local_22, 58); __local_23 = "core:prelude/format.wado/Formatter::new"(__local_22); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 138 }, __local_23); "core:prelude/string.wado/String::push_str"(__local_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -851,7 +851,6 @@ fn "core:prelude/primitive.wado/count_digits_i64"(val) {
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digit_count) {
     let pos: i32;
     let temp: i64;
-    let __cse_6: i32;
     pos = offset + digit_count;
     if abs_val == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
@@ -860,8 +859,8 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, abs_val, digi
         b45: block {
             l46: loop {
                 break_if b45 temp <= 0_i64;
-                pos = local.tee __cse_6(pos - 1);
-                builtin::array_set_u8(arr, __cse_6, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
+                pos = pos - 1;
+                builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                 temp = temp / 10_i64;
                 continue l46;
             };
@@ -934,11 +933,12 @@ fn "core:prelude/string.wado/String::grow"(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_5: i32;
+    let a_7: i32;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_5 = select i32((capacity * 2) > min_capacity, capacity * 2, min_capacity); select i32(a_5 > 8, a_5, 8)));
+    new_repr = builtin::array_new<u8>(local.tee new_capacity(a_7 = capacity * 2; a_5 = select i32(a_7 > min_capacity, a_7, min_capacity); select i32(a_5 > 8, a_5, 8)));
     builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1123,8 +1123,9 @@ fn "core:prelude/list.wado/List<i32>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
+    new_repr = builtin::array_new<i32>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }
@@ -1133,8 +1134,9 @@ fn "core:prelude/list.wado/List<i64>::grow"(self) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i64>;
+    let a: i32;
     capacity = builtin::array_len(self.repr);
-    new_repr = builtin::array_new<i64>(local.tee new_capacity(select i32((capacity * 2) > 4, capacity * 2, 4)));
+    new_repr = builtin::array_new<i64>(local.tee new_capacity(a = capacity * 2; select i32(a > 4, a, 4)));
     builtin::array_copy<i64>(new_repr, 0, self.repr, 0, self.used);
     self.repr = new_repr;
 }

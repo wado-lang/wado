@@ -92,7 +92,7 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
         && func.name == "copy_value"
         && args.len() == 1
     {
-        return args[0].expr.as_expr().expect("skeleton operand");
+        return args[0].expr.as_expr().unwrap_or(expr);
     }
     expr
 }
@@ -248,18 +248,10 @@ fn analyze_function_body(
     result
 }
 
-/// Locals read through a promoted `Operand::Value`. Under early promotion
-/// (`WADO_PROMOTE_EARLY`) the precise live-slot walk has a known gap (a still-read
-/// local whose `Opaque(Local)` source it doesn't reach — see WEP / `elide_local`),
-/// so use the over-conservative pool-wide set: sound (keeps more locals live,
-/// never propagates/eliminates a still-read one), at the cost of a few missed
-/// copies. Flag-off keeps the precise walk, so the default is unchanged.
+/// Locals read through a promoted `Operand::Value`. The pool-wide set is
+/// over-conservative (only ever keeps too many) — sound, costs a few copies.
 fn promoted_reads_set(body: &crate::nir_arena::Body) -> crate::hashmap::IndexSet<u32> {
-    if crate::optimize::promote_active() {
-        body.values.opaque_local_sources().collect()
-    } else {
-        body.locals_read_via_promotion()
-    }
+    body.values.opaque_local_sources().collect()
 }
 
 fn analyze_block(
@@ -334,8 +326,8 @@ fn analyze_expr(
                 result.usage.entry(*index).or_default().is_assigned = true;
             }
             if let ExprKind::FieldAccess { expr: inner, .. } = &body.exprs[target].kind
-                && let ExprKind::Local { index, .. } =
-                    &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                && let Some(ExprKind::Local { index, .. }) =
+                    inner.as_expr().map(|e| &body.exprs[e].kind)
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
@@ -382,17 +374,12 @@ fn analyze_expr(
                 .filter_map(|a| a.expr.as_expr().map(|e| (e, a.is_mut)))
                 .collect();
             // Copy propagation: a callee absent from `fpt` is assumed *not* to
-            // mutate the receiver (`conservative_on_unknown = false`); the
-            // receiver-type guard below still protects value receivers.
-            if super::alias::method_mutates_receiver(
-                body,
-                receiver.as_expr().expect("skeleton operand"),
-                func,
-                fpt,
-                type_table,
-                false,
-                None,
-            ) {
+            // mutate the receiver (`conservative_on_unknown = false`).
+            if let Some(recv_e) = receiver.as_expr()
+                && super::alias::method_mutates_receiver(
+                    body, recv_e, func, fpt, type_table, false, None,
+                )
+            {
                 mark_potentially_mutated_local_operand(body, receiver, result);
             }
             analyze_expr_operand(body, receiver, result, type_table, fpt);

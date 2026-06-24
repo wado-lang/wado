@@ -758,22 +758,20 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     let brk_val = *brk_val;
     // Break value must be a zero-argument method call whose receiver is `__b`
     // (possibly wrapped in `&`/`&mut`).
-    let ExprKind::MethodCall { receiver, args, .. } =
-        &body.exprs[brk_val.as_expr().expect("skeleton operand")].kind
-    else {
+    let ExprKind::MethodCall { receiver, args, .. } = &body.exprs[brk_val.as_expr()?].kind else {
         return None;
     };
     if !args.is_empty() {
         return None;
     }
-    let receiver_local = match &body.exprs[receiver.as_expr().expect("skeleton operand")].kind {
-        ExprKind::Local { index, .. } => *index,
-        ExprKind::Unary {
+    let receiver_local = match receiver.as_expr().map(|re| &body.exprs[re].kind) {
+        Some(ExprKind::Local { index, .. }) => *index,
+        Some(ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner_ref,
-        } => {
-            let ExprKind::Local { index, .. } =
-                &body.exprs[inner_ref.as_expr().expect("skeleton operand")].kind
+        }) => {
+            let Some(ExprKind::Local { index, .. }) =
+                inner_ref.as_expr().map(|ir| &body.exprs[ir].kind)
             else {
                 return None;
             };
@@ -784,7 +782,7 @@ fn unwrap_builder_labeled_block(body: &Body, expr: ExprId) -> Option<ExprId> {
     if receiver_local != b_local {
         return None;
     }
-    Some(inner.as_expr().expect("skeleton operand"))
+    inner.as_expr()
 }
 
 /// Look up the `ListMethodKind` of a call target by signature, via the
@@ -973,9 +971,7 @@ impl WhitelistChecker<'_> {
                 }
                 let receiver = *receiver;
                 let arg0 = args[0].expr;
-                let Some(other) =
-                    receiver_local(body, receiver.as_expr().expect("skeleton operand"))
-                else {
+                let Some(other) = receiver_local(body, receiver) else {
                     // Receiver isn't a bare local — recurse normally.
                     self.visit_expr(body, e);
                     return false;
@@ -1034,7 +1030,7 @@ impl WhitelistChecker<'_> {
                 // expression.
                 let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 let kind = list_method_kind(func, self.sig_kinds);
-                if let Some(rec_local) = receiver_local(body, recv_e)
+                if let Some(rec_local) = receiver_local(body, receiver)
                     && self.safe.contains(&rec_local)
                 {
                     match (kind, arg_ops.len()) {
@@ -1105,16 +1101,16 @@ impl WhitelistChecker<'_> {
             // v.IndexReader(i).K — safe read pattern
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
-                let safe_read = if let ExprKind::MethodCall {
-                    receiver,
-                    func,
-                    args,
-                    ..
-                } = &body.exprs[inner.as_expr().expect("skeleton operand")].kind
+                let safe_read = if let Some(inner_e) = inner.as_expr()
+                    && let ExprKind::MethodCall {
+                        receiver,
+                        func,
+                        args,
+                        ..
+                    } = &body.exprs[inner_e].kind
                     && list_method_kind(func, self.sig_kinds) == Some(ListMethodKind::IndexReader)
                     && args.len() == 1
-                    && let Some(rec_local) =
-                        receiver_local(body, receiver.as_expr().expect("skeleton operand"))
+                    && let Some(rec_local) = receiver_local(body, *receiver)
                     && self.safe.contains(&rec_local)
                 {
                     Some((rec_local, args[0].expr))
@@ -1129,7 +1125,9 @@ impl WhitelistChecker<'_> {
                     }
                     return;
                 }
-                self.visit_expr(body, inner.as_expr().expect("skeleton operand"));
+                if let Some(inner_e) = inner.as_expr() {
+                    self.visit_expr(body, inner_e);
+                }
             }
             // Bare Local reference to a candidate → escape.
             ExprKind::Local { index, .. } => {
@@ -1164,23 +1162,19 @@ fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
     }
 }
 
-/// If the expression is `Local { index }` — or `Unary::{Ref,MutRef}` wrapping
-/// a Local — return the index.
-fn receiver_local(body: &Body, e: ExprId) -> Option<u32> {
+/// If the operand is `Local { index }` — or `Unary::{Ref,MutRef}` wrapping a
+/// Local — return the index. A promoted-value operand has no place, so `None`.
+fn receiver_local(body: &Body, op: Operand) -> Option<u32> {
+    let e = op.as_expr()?;
     match &body.exprs[e].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => {
-            if let ExprKind::Local { index, .. } =
-                &body.exprs[inner.as_expr().expect("skeleton operand")].kind
-            {
-                Some(*index)
-            } else {
-                None
-            }
-        }
+        } => match inner.as_expr().map(|ie| &body.exprs[ie].kind) {
+            Some(ExprKind::Local { index, .. }) => Some(*index),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -1295,7 +1289,7 @@ impl Rewriter<'_, '_> {
             ),
             _ => return None,
         };
-        let rec_local = receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))?;
+        let rec_local = receiver_local(engine.body, receiver)?;
         if !ctx.decomposed.contains(&rec_local) {
             return None;
         }
@@ -1430,8 +1424,7 @@ impl Rewriter<'_, '_> {
             } if list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1 =>
             {
-                let other =
-                    receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))?;
+                let other = receiver_local(engine.body, *receiver)?;
                 if !ctx.decomposed.contains(&other) {
                     return None;
                 }
@@ -1547,16 +1540,16 @@ impl Rewriter<'_, '_> {
         {
             let inner = *inner;
             let field_index = *field_index;
-            if let ExprKind::MethodCall {
-                receiver,
-                func,
-                args,
-                ..
-            } = &engine.body.exprs[inner.as_expr().expect("skeleton operand")].kind
+            if let Some(inner_e) = inner.as_expr()
+                && let ExprKind::MethodCall {
+                    receiver,
+                    func,
+                    args,
+                    ..
+                } = &engine.body.exprs[inner_e].kind
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::IndexReader)
                 && args.len() == 1
-                && let Some(rec_local) =
-                    receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
+                && let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
             {
                 sig_key_of(func).map(|sig| (rec_local, field_index, args[0].expr, sig))
@@ -1612,8 +1605,7 @@ impl Rewriter<'_, '_> {
             ..
         } = &engine.body.exprs[e].kind
         {
-            if let Some(rec_local) =
-                receiver_local(engine.body, receiver.as_expr().expect("skeleton operand"))
+            if let Some(rec_local) = receiver_local(engine.body, *receiver)
                 && ctx.decomposed.contains(&rec_local)
                 && args.is_empty()
                 && list_method_kind(func, ctx.sig_kinds) == Some(ListMethodKind::Query)
