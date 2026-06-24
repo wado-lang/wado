@@ -31,11 +31,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 /// alias collectors the coverage they need.
 fn walk_all(body: &Body, node: NodeRef, f: &mut impl FnMut(&Body, NodeRef)) {
     f(body, node);
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        walk_all(body, c, f);
-    }
+    body.for_each_child(node, |c| walk_all(body, c, f));
 }
 
 /// Compute per-function alias annotations for a function body.
@@ -65,6 +61,8 @@ pub(super) fn build_alias_info(
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
+    // Per-node hook fused into the walk; its returned local is marked aliased.
+    mut extra_aliased: impl FnMut(&Body, NodeRef) -> Option<u32>,
 ) -> AliasInfo {
     // Seed dense bitsets sized to the function's local count; local indices
     // are dense (`0..locals.len()`), so membership stays hash-free.
@@ -81,6 +79,9 @@ pub(super) fn build_alias_info(
     }
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
         collect_aliased_node(body, node, &mut aliased);
+        if let Some(r) = extra_aliased(body, node) {
+            aliased.insert(r);
+        }
     });
     // Reference parameters/locals pointing at the same struct may alias the
     // same heap object (Wado references alias, no borrow checker), so a write
@@ -137,39 +138,38 @@ pub(super) fn builder_alias_sets(
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
     call_immutability: &CallImmutability,
 ) -> (IndexSet<u32>, IndexSet<u32>, IndexSet<u32>) {
+    // A mutating method call `recv.m(…)` (`&mut self`) aliases `recv` implicitly:
+    // the NIR receiver is a bare `Local` with no `&mut recv` node, so
+    // `collect_aliased_node` misses it and the value graph would forward `recv`'s
+    // pre-call fields across the call (`x.bump(); x.value` — a miscompile). Mark
+    // the receiver root via the `build_alias_info` hook, sharing its walk.
     let info = build_alias_info(
         body,
         locals,
         address_taken_locals,
         stores_aliased_locals,
         type_table,
+        |body, node| {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
+                && let Some(re) = receiver.as_expr()
+                && method_mutates_receiver(
+                    body,
+                    re,
+                    func,
+                    first_param_types,
+                    type_table,
+                    true,
+                    Some(call_immutability),
+                )
+            {
+                projection_root_local(body, re)
+            } else {
+                None
+            }
+        },
     );
-    let mut aliased: IndexSet<u32> = info.aliased.iter().collect();
-    // A mutating method call `recv.m(…)` (`m` takes `&mut self`) takes the
-    // address of `recv` implicitly: the NIR receiver is a bare `Local`, with no
-    // `&mut recv` node for `collect_aliased_node` to see, so `recv` is otherwise
-    // absent from `aliased` and — since `mut_escaped ⊆ aliased` — from
-    // `mut_escaped` too. The value graph then never bumps `recv`'s fields across
-    // the call (`x.bump(); x.value` forwards the pre-call constant — a
-    // miscompile). Flag the receiver root here so the mutation is modelled.
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::MethodCall { receiver, func, .. } = &body.exprs[e].kind
-            && let Some(re) = receiver.as_expr()
-            && method_mutates_receiver(
-                body,
-                re,
-                func,
-                first_param_types,
-                type_table,
-                true,
-                Some(call_immutability),
-            )
-            && let Some(r) = projection_root_local(body, re)
-        {
-            aliased.insert(r);
-        }
-    });
+    let aliased: IndexSet<u32> = info.aliased.iter().collect();
     let mut_escaped = build_mut_escaped(
         body,
         locals,
