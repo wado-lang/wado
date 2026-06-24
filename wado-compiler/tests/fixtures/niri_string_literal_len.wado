@@ -1,8 +1,9 @@
+// `"hi".len()` (`String::len` reads `.used`) folds to the byte-length constant.
 // String literals lower to `StructLiteral String { repr: PackedArray(bytes),
-// used: <len> }` (no atomic `ValueKind::String`), so `.len()` (`self.used`)
-// folds through the generic struct field-projection — verified by the runtime
-// result below. (Full dead-allocation elimination of the folded literal is a
-// follow-up; see the optimizer cleanup-ordering note.)
+// used: <len> }`, so `.used` folds through the generic struct field-projection
+// (`ref_elim` collapses `&<inline struct>`, `project_struct_literal` projects
+// the field) — no string-specific code. The literal's `String` is then never
+// built (no `array.new_fixed<u8>(104, 105)`) and the dead bounds branch folds.
 
 use { println, Stdout } from "core:cli";
 
@@ -12,7 +13,7 @@ fn string_literal_len() -> i32 {
         acc += "hi".len();
     }
     if "hi".len() != 2 {
-        panic("string len did not fold to 2");
+        panic("dead_str_len_18273");
     }
     return acc;
 }
@@ -24,5 +25,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "10\n"
+    "stdout": "10\n",
+    "wir_not_expect:O2": ["dead_str_len_18273", "array.new_fixed<u8>(104, 105)"]
 }
