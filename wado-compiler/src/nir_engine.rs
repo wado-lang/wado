@@ -126,14 +126,6 @@ pub struct Engine<'a> {
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
-    /// Set once a caller applies a deliberate [`Engine::value_union`] — a
-    /// semantic merge from an external proof (e.g. a guard implying `x ≡ y`),
-    /// not structural congruence. Such a union intentionally coarsens the graph
-    /// beyond what a context-free fresh build derives, so the `WADO_VERIFY_VG`
-    /// refinement oracle (which validates *structural* maintenance) no longer
-    /// applies and is skipped. No production pass unions, so this stays false
-    /// outside the union unit tests.
-    manual_union_applied: bool,
 }
 
 impl<'a> Engine<'a> {
@@ -159,7 +151,6 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             vg_type_table: None,
-            manual_union_applied: false,
         };
         // The value graph lives on `Body` and is built once, then maintained
         // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
@@ -196,11 +187,12 @@ impl<'a> Engine<'a> {
         self.maintain_pure_node(expr)
     }
 
-    /// Re-derive `expr`'s value from its operands for the [`Engine::value`]
-    /// build-once fallback. Operand-determined kinds only (`Binary`, non-address
-    /// `Unary`, `Cast`); every other kind — and any node with an unresolved
-    /// operand — yields `None`. Recurses through [`Engine::operand_value`] so a
-    /// pure subtree over promoted leaves resolves whole; caches in `value_of`.
+    /// Re-derive `expr`'s value from its operands (the sole value source now
+    /// that `value_of` is retired). Operand-determined kinds only (`Binary`,
+    /// non-address `Unary`, `Cast`); every other kind — and any node with an
+    /// unresolved operand — yields `None`. Recurses through
+    /// [`Engine::operand_value`] so a pure subtree over promoted leaves resolves
+    /// whole. Does not cache (there is no side-table to cache into).
     fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
@@ -228,12 +220,6 @@ impl<'a> Engine<'a> {
             }
             _ => return None,
         };
-        self.body
-            .value_graph
-            .as_mut()
-            .unwrap()
-            .value_of
-            .insert(expr, v);
         Some(v)
     }
 
@@ -277,79 +263,6 @@ impl<'a> Engine<'a> {
             .get(&loop_body)?
             .get(&local)
             .copied()
-    }
-
-    /// Record `expr`'s value in the live graph, keeping it current after an
-    /// edit that introduced `expr` or re-pointed it to a known value (e.g. a
-    /// pass that creates a temp bound to an already-computed value). The next
-    /// graph query then resolves `expr` without a rebuild. No-op when the graph
-    /// is not built yet — the lazy build derives the value from the body.
-    pub fn set_value(&mut self, expr: ExprId, vid: crate::nir_value_graph::ValueId) {
-        if let Some(vg) = self.body.value_graph.as_mut() {
-            vg.value_of.insert(expr, vid);
-        }
-    }
-
-    /// Maintain the live graph after a value-preserving edit introduced the pure
-    /// expression `expr`: compute its `ValueId` from its operands' already-recorded
-    /// values, hash-cons it, and record it — no rebuild. Returns the value, or
-    /// `None` when the graph is not built, `expr` is impure, or an operand has no
-    /// recorded value (a flow-sensitive `Local` / `FieldAccess`, conservatively
-    /// skipped — a later query then sees no identity, never a wrong one).
-    ///
-    /// Sound exactly for the nodes whose value is fixed by their operands'
-    /// values — the operand-promotion slots: literals, `Binary`, `Unary` (not the
-    /// address-taking `Ref` / `MutRef` / `Deref`), `Cast`. It does not fold
-    /// (`2 + 3` stays a `Binary` rather than `5`), so the maintained graph is
-    /// never more precise than a fresh build, only equal or conservatively less —
-    /// never wrong. This is the primitive structural passes will call at a splice
-    /// point to grow the graph instead of forcing a rebuild.
-    pub fn maintain_pure_value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
-        self.body.value_graph.as_ref()?;
-        let kind = self.body.exprs[expr].kind.clone();
-        let result_ty = self.body.exprs[expr].type_id;
-        // The pool lives on the body, `value_of` on the cached graph — disjoint
-        // fields, borrowed separately so interning and operand lookups coexist.
-        let v = {
-            let pool = &mut self.body.values;
-            let value_of = &self.body.value_graph.as_ref().unwrap().value_of;
-            // A pure operand resolves to its promoted `ValueId` directly, or
-            // through `value_of` for a skeleton subtree.
-            let operand_value = |op: Operand| match op {
-                Operand::Value(v) => Some(v),
-                Operand::Expr(e) => value_of.get(&e).copied(),
-            };
-            match kind {
-                ExprKind::Binary { left, op, right } => {
-                    let lhs = operand_value(left)?;
-                    let rhs = operand_value(right)?;
-                    pool.binary(op, lhs, rhs, result_ty)
-                }
-                ExprKind::Unary { op, expr: inner } => {
-                    use crate::nir::NirUnaryOp;
-                    if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                        return None;
-                    }
-                    let operand = operand_value(inner)?;
-                    pool.unary(op, operand, result_ty)
-                }
-                ExprKind::Cast {
-                    expr: inner,
-                    target_type,
-                } => {
-                    let operand = operand_value(inner)?;
-                    pool.cast(operand, target_type)
-                }
-                _ => return None,
-            }
-        };
-        self.body
-            .value_graph
-            .as_mut()
-            .unwrap()
-            .value_of
-            .insert(expr, v);
-        Some(v)
     }
 
     /// The reaching constant of every bare scalar read in `scalars`, computed by a
@@ -444,30 +357,6 @@ impl<'a> Engine<'a> {
     ) -> crate::nir_value_graph::ValueId {
         self.ensure_value_graph();
         self.body.values.find(id)
-    }
-
-    /// Prove `a ≡ b` in the session's value graph by merging their classes,
-    /// returning the surviving representative. Call
-    /// [`Engine::rebuild_value_congruence`] after a batch of unions to restore
-    /// congruence (so structurally-equal parents re-merge).
-    ///
-    /// Unions live in the build-once graph and persist with it (there is no
-    /// rebuild that would discard them).
-    pub fn value_union(
-        &mut self,
-        a: crate::nir_value_graph::ValueId,
-        b: crate::nir_value_graph::ValueId,
-    ) -> crate::nir_value_graph::ValueId {
-        self.ensure_value_graph();
-        self.manual_union_applied = true;
-        self.body.values.union(a, b)
-    }
-
-    /// Restore congruence after a batch of [`Engine::value_union`] calls. See
-    /// [`crate::nir_value_graph::ValuePool::rebuild`].
-    pub fn rebuild_value_congruence(&mut self) {
-        self.ensure_value_graph();
-        self.body.values.rebuild();
     }
 
     /// Drop the session's `&local` address-taken scan so the next
@@ -778,122 +667,6 @@ impl<'a> Engine<'a> {
         if let Some(p) = self.parent_of(NodeRef::Expr(id)) {
             self.enqueue(p);
         }
-        // Keep the value graph current through this edit (WEP: maintenance, not
-        // rebuild). Re-derive `id`'s value and propagate up its ancestors.
-        if self.body.value_graph.is_some() {
-            self.maintain_value_after_edit(id);
-        }
-    }
-
-    /// Maintain the value graph after `id`'s kind changed in place: re-derive
-    /// `id`'s value and propagate up its ancestor chain until a value is
-    /// unchanged. An expr whose value can no longer be derived (impure /
-    /// flow-dependent — e.g. a `FieldAccess`, a `Local`, a `Call`) has its
-    /// `value_of` entry *removed* rather than left stale: a later query then
-    /// sees no value identity (conservative), never a wrong one. This keeps the
-    /// graph a sound description of the edited body without a rebuild.
-    fn maintain_value_after_edit(&mut self, id: ExprId) {
-        let mut cur = id;
-        loop {
-            let old = self
-                .body
-                .value_graph
-                .as_ref()
-                .unwrap()
-                .value_of
-                .get(&cur)
-                .copied();
-            // `maintain_pure_value` re-interns a pure kind and updates `value_of`;
-            // for a kind it cannot derive it returns `None` and leaves the (now
-            // stale) entry, which we drop.
-            if self.maintain_pure_value(cur).is_none() {
-                self.body
-                    .value_graph
-                    .as_mut()
-                    .unwrap()
-                    .value_of
-                    .swap_remove(&cur);
-            }
-            let new = self
-                .body
-                .value_graph
-                .as_ref()
-                .unwrap()
-                .value_of
-                .get(&cur)
-                .copied();
-            let changed = new != old;
-            let parent = self.parent_of(NodeRef::Expr(cur));
-            // If `cur` is the value feeding a local binding (`let L = cur` or
-            // `L = cur`) and that value changed, every later read of `L` — and
-            // every value derived from one — may now be stale. The ancestor walk
-            // here never reaches those readers (a `Let`/`Assign` boundary breaks
-            // the chain), so drop them explicitly — otherwise a later read keeps
-            // a stale value and the maintained graph over-merges.
-            if changed && let Some(local) = self.local_bound_by(cur, parent) {
-                self.drop_local_readers(local);
-            }
-            if !changed {
-                break;
-            }
-            match parent {
-                Some(NodeRef::Expr(p)) => cur = p,
-                _ => break,
-            }
-        }
-    }
-
-    /// The local index bound by `cur` when `cur` is the value expression of a
-    /// `let L = cur` statement or an `L = cur` assignment; `None` otherwise.
-    fn local_bound_by(&self, cur: ExprId, parent: Option<NodeRef>) -> Option<u32> {
-        match parent {
-            Some(NodeRef::Stmt(s)) => match &self.body.stmts[s].kind {
-                StmtKind::Let {
-                    local_index,
-                    value: Operand::Expr(v),
-                    ..
-                } if *v == cur => Some(*local_index),
-                _ => None,
-            },
-            Some(NodeRef::Expr(p)) => match &self.body.exprs[p].kind {
-                ExprKind::Assign {
-                    target,
-                    value: Operand::Expr(v),
-                } if *v == cur => match &self.body.exprs[*target].kind {
-                    ExprKind::Local { index, .. } => Some(*index),
-                    _ => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    /// Drop the value-graph entry of every read of `local` and of every value
-    /// derived from such a read (each reader walked up to the root). Called when
-    /// `local`'s bound value changed: those entries were derived from the old
-    /// value and a fresh build would split them, so leaving them is an over-merge.
-    /// Conservatively over-drops (a read's pure ancestors that don't transitively
-    /// depend on it), which only costs a missed optimization — never a wrong merge.
-    fn drop_local_readers(&mut self, local: u32) {
-        let Some(readers) = self.buf.uses.get(&local).map(|u| u.reads.clone()) else {
-            return;
-        };
-        for r in readers {
-            let mut c = r;
-            loop {
-                self.body
-                    .value_graph
-                    .as_mut()
-                    .unwrap()
-                    .value_of
-                    .swap_remove(&c);
-                match self.parent_of(NodeRef::Expr(c)) {
-                    Some(NodeRef::Expr(p)) => c = p,
-                    _ => break,
-                }
-            }
-        }
     }
 
     /// Edit API: promote the folded constant subtree `id` to an `Operand::Value`
@@ -946,23 +719,6 @@ impl<'a> Engine<'a> {
         }
         self.set_parent(NodeRef::Expr(id), None);
         self.enqueue(parent);
-        // A promoted value feeds the parent's value derivation directly through
-        // the swapped operand; re-derive up the ancestor chain. `id` is now
-        // orphaned; its (dead) `value_of` entry is never emitted (the node has no
-        // parent slot, so no walk reaches it; DCE reclaims it).
-        if self.body.value_graph.is_some() {
-            if let Some(vid) = new.as_value() {
-                self.body
-                    .value_graph
-                    .as_mut()
-                    .unwrap()
-                    .value_of
-                    .insert(id, vid);
-            }
-            if let NodeRef::Expr(p) = parent {
-                self.maintain_value_after_edit(p);
-            }
-        }
         true
     }
 
@@ -1594,167 +1350,6 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, ret]
         })
-    }
-
-    #[test]
-    fn set_value_records_a_value_for_a_new_expr() {
-        // Build a graph, then introduce a fresh expr and pin its value, as a
-        // pass would when creating a temp bound to a known value.
-        let mut body = mk_body(|b| {
-            let seven = lit(b, 7);
-            let st = s(b, StmtKind::Expr(seven));
-            vec![st]
-        });
-        // The promoted constant carries its own pool value.
-        let v7 = {
-            let st = body.blocks[body.root].stmts[0];
-            let StmtKind::Expr(Operand::Value(v)) = body.stmts[st].kind else {
-                unreachable!()
-            };
-            v
-        };
-        let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        // A fresh orphan expr has no value in the already-built graph.
-        let fresh = eng.alloc_expr(
-            ExprKind::Local {
-                index: 9,
-                name: "u".to_string(),
-            },
-            TypeTable::I32,
-            Span::default(),
-        );
-        assert_eq!(eng.value(fresh), None);
-        // Pinning it keeps it resolvable without a rebuild.
-        eng.set_value(fresh, v7);
-        assert_eq!(eng.value(fresh), Some(v7));
-    }
-
-    #[test]
-    fn maintain_pure_value_matches_the_built_value_without_rebuild() {
-        // { let x = 1 + 2; return x; } — build the graph, then introduce a fresh
-        // `1 + 2` as a structural pass would and maintain it pointwise. Hash-
-        // consing makes the maintained sum share the original's identity, exactly
-        // what a full rebuild would yield, with no rebuild.
-        let mut body = sample_body();
-        let add = {
-            let st = body.blocks[body.root].stmts[0];
-            let StmtKind::Let { value, .. } = body.stmts[st].kind else {
-                unreachable!()
-            };
-            value
-        };
-        let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let add_e = add.as_expr().unwrap();
-        let v_add = eng.value(add_e).unwrap();
-        // Reuse the original sum's operands (pure-value pool ids): a freshly
-        // spliced `1 + 2` over the same operand values hash-conses to the same
-        // `ValueId` the build produced — pointwise maintenance, no rebuild.
-        let (one, two) = match &eng.body.exprs[add_e].kind {
-            ExprKind::Binary { left, right, .. } => (*left, *right),
-            other => panic!("expected Binary, got {other:?}"),
-        };
-        // The spliced `1 + 2` must carry the same result type as the original —
-        // the result type is part of the value's hash-cons key (width-intrinsic
-        // `Binary`), so an I32 sum and a same-operand sum of another type are
-        // distinct values.
-        let add_ty = eng.body.exprs[add_e].type_id;
-        let sum = eng.alloc_expr(
-            ExprKind::Binary {
-                left: one,
-                op: NirBinaryOp::Add,
-                right: two,
-            },
-            add_ty,
-            Span::default(),
-        );
-        let v_sum = eng.maintain_pure_value(sum).unwrap();
-        assert_eq!(v_sum, v_add);
-        assert_eq!(eng.value(sum), Some(v_add));
-
-        // A flow-sensitive operand (an un-valued `Local`) is conservatively
-        // skipped — no value, never a wrong one.
-        let lx = eng.alloc_expr(
-            ExprKind::Local {
-                index: 9,
-                name: "u".to_string(),
-            },
-            TypeTable::I32,
-            Span::default(),
-        );
-        let mixed = eng.alloc_expr(
-            ExprKind::Binary {
-                left: lx.into(),
-                op: NirBinaryOp::Add,
-                right: two,
-            },
-            TypeTable::I32,
-            Span::default(),
-        );
-        assert_eq!(eng.maintain_pure_value(mixed), None);
-    }
-
-    #[test]
-    fn value_union_and_congruence_through_engine() {
-        // { x + 5; y + 5; } where x,y are local 0,1. The two sums start in
-        // distinct classes; after unioning x≡y and rebuilding, they share one.
-        fn local(body: &mut Body, index: u32) -> ExprId {
-            e(
-                body,
-                ExprKind::Local {
-                    index,
-                    name: format!("v{index}"),
-                },
-            )
-        }
-        let mut body = mk_body(|b| {
-            // Share the `5` operand across both sums: the difference under union
-            // is only `x` vs `y`, isolating the congruence check.
-            let c5 = lit(b, 5);
-            let x = local(b, 0);
-            let f = bin(b, x, NirBinaryOp::Add, c5);
-            let y = local(b, 1);
-            let g = bin(b, y, NirBinaryOp::Add, c5);
-            let sf = s(b, StmtKind::Expr(f.into()));
-            let sg = s(b, StmtKind::Expr(g.into()));
-            vec![sf, sg]
-        });
-        // The two sum expressions are the second-and-third exprs after each
-        // local+literal pair: recover them by walking the root statements.
-        let (f_expr, g_expr, x_expr, y_expr) = {
-            let stmts = &body.blocks[body.root].stmts;
-            let StmtKind::Expr(Operand::Expr(f)) = body.stmts[stmts[0]].kind else {
-                unreachable!()
-            };
-            let StmtKind::Expr(Operand::Expr(g)) = body.stmts[stmts[1]].kind else {
-                unreachable!()
-            };
-            let ExprKind::Binary { left: xf, .. } = body.exprs[f].kind else {
-                unreachable!()
-            };
-            let ExprKind::Binary { left: yg, .. } = body.exprs[g].kind else {
-                unreachable!()
-            };
-            (f, g, xf, yg)
-        };
-        let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
-        let vf = eng.value(f_expr).unwrap();
-        let vg = eng.value(g_expr).unwrap();
-        let vx = eng.value(x_expr.as_expr().unwrap()).unwrap();
-        let vy = eng.value(y_expr.as_expr().unwrap()).unwrap();
-        // x and y are distinct opaques, so the sums start distinct.
-        assert_ne!(eng.value_find(vx), eng.value_find(vy));
-        assert_ne!(eng.value_find(vf), eng.value_find(vg));
-        // Prove x ≡ y; congruence must make the two sums equal.
-        eng.value_union(vx, vy);
-        eng.rebuild_value_congruence();
-        assert_eq!(eng.value_find(vx), eng.value_find(vy));
-        assert_eq!(eng.value_find(vf), eng.value_find(vg));
     }
 
     #[test]
