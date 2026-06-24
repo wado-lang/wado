@@ -495,64 +495,6 @@ fn reintern_live_rooted(
     })
 }
 
-/// Soundness check for conservative per-edit maintenance: the maintained
-/// partition must **refine** the fresh one — every pair the maintained graph
-/// merges, a fresh build also merges. The reverse (a fresh build merges a pair
-/// the maintained graph splits) is allowed: conservative coarsening, a missed
-/// optimization, never a miscompile. `Err` names the first expression pair the
-/// maintained graph merges but a fresh build splits (the only unsound direction).
-pub(crate) fn partition_refines(
-    pool: &mut ValuePool,
-    maintained: &ValueGraphBuild,
-    fresh: &ValueGraphBuild,
-    exprs: &[ExprId],
-) -> Result<(), String> {
-    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    for &e in exprs {
-        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
-            continue;
-        };
-        let rm = pool.find(vm);
-        let rf = pool.find(vf);
-        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
-            if prev_rf != rf {
-                return Err(format!(
-                    "expr {prev_e:?} and expr {e:?} share a value in the maintained graph but a fresh build splits them"
-                ));
-            }
-        } else {
-            m_to_f.insert(rm, (rf, e));
-        }
-    }
-    Ok(())
-}
-
-/// Debug aid: the first `(prev_e, e)` pair the maintained graph merges but a
-/// fresh build splits, for instrumenting a verify failure.
-pub(crate) fn first_overmerge_pair(
-    pool: &mut ValuePool,
-    maintained: &ValueGraphBuild,
-    fresh: &ValueGraphBuild,
-    exprs: &[ExprId],
-) -> Option<(ExprId, ExprId)> {
-    let mut m_to_f: IndexMap<ValueId, (ValueId, ExprId)> = IndexMap::default();
-    for &e in exprs {
-        let (Some(&vm), Some(&vf)) = (maintained.value_of.get(&e), fresh.value_of.get(&e)) else {
-            continue;
-        };
-        let rm = pool.find(vm);
-        let rf = pool.find(vf);
-        if let Some(&(prev_rf, prev_e)) = m_to_f.get(&rm) {
-            if prev_rf != rf {
-                return Some((prev_e, e));
-            }
-        } else {
-            m_to_f.insert(rm, (rf, e));
-        }
-    }
-    None
-}
-
 struct Builder<'a> {
     body: &'a Body,
     pool: ValuePool,
