@@ -375,7 +375,7 @@ fn synthesize_lib_world_info(
     use crate::ast::Item;
     use crate::world_registry::{WorldExportInfo, WorldInfo};
 
-    let exports = entry_module
+    let mut exports: Vec<WorldExportInfo> = entry_module
         .map(|module| {
             module
                 .items
@@ -398,10 +398,44 @@ fn synthesize_lib_world_info(
         })
         .unwrap_or_default();
 
+    // A/B grouping (mirrors the WIT producer, `wit_emit`): if any exported
+    // signature references a user-defined named type, the exports cannot be
+    // bare world functions — a named type reaches consumers only through an
+    // exported interface — so they are grouped into the default interface
+    // (named after the package, i.e. the library world's own FQ). Otherwise
+    // they stay direct world exports.
+    let references_named_type = exports.iter().any(|e| {
+        e.params.iter().any(|(_, ty)| lib_sig_uses_named_type(ty))
+            || e.return_type.as_ref().is_some_and(lib_sig_uses_named_type)
+    });
+    if references_named_type {
+        for export in &mut exports {
+            export.from_interface_fq = Some(fq.to_string());
+        }
+    }
+
     WorldInfo {
         fq_name: fq.to_string(),
         exports,
         imports: Vec::new(),
+    }
+}
+
+/// Whether a `--lib` export signature type references a user-defined named type
+/// (`struct` / `variant` / `enum` / `flags` / type alias), recursing through
+/// containers. CM primitives (`bool`, integers, `f32`/`f64`, `char`, `String`)
+/// and the unit type are not user types.
+fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(named) => {
+            named.name != "()"
+                && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
+        }
+        Type::Generic(g) => g.args.iter().any(lib_sig_uses_named_type),
+        Type::Tuple(elems) => elems.iter().any(lib_sig_uses_named_type),
+        Type::Reference(inner) | Type::MutReference(inner) => lib_sig_uses_named_type(inner),
+        _ => false,
     }
 }
 
@@ -1618,5 +1652,42 @@ export fn id_bool(v: bool) -> bool { return v; }
     fn empty_when_no_entry_module() {
         let world = synthesize_lib_world_info("wado:x/x@0.1.0", None);
         assert!(world.exports.is_empty());
+    }
+
+    #[test]
+    fn groups_into_default_interface_when_named_type_referenced() {
+        // A signature referencing a user named type (here `Point`, even nested
+        // in `List`) forces all exports into the default interface (the B path).
+        let src = r#"
+pub struct Point { x: f64, y: f64 }
+export fn id_point(v: Point) -> Point { return v; }
+export fn id_u32(v: u32) -> u32 { return v; }
+export fn id_points(v: List<Point>) -> List<Point> { return v; }
+"#;
+        let module = super::parse(src).ast;
+        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", Some(&module));
+        assert!(
+            world
+                .exports
+                .iter()
+                .all(|e| e.from_interface_fq.as_deref() == Some("wado:geo/geo@0.1.0")),
+            "all exports group into the default interface when any references a named type",
+        );
+    }
+
+    #[test]
+    fn stays_direct_world_exports_for_containers_of_primitives() {
+        // Containers of primitives reference no user type, so exports stay bare
+        // (the A path) — no default interface.
+        let src = r#"
+export fn id_list(v: List<u8>) -> List<u8> { return v; }
+export fn id_opt(v: Option<String>) -> Option<String> { return v; }
+"#;
+        let module = super::parse(src).ast;
+        let world = synthesize_lib_world_info("wado:c/c@0.1.0", Some(&module));
+        assert!(
+            world.exports.iter().all(|e| e.from_interface_fq.is_none()),
+            "primitive containers do not force an interface",
+        );
     }
 }
