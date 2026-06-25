@@ -1612,11 +1612,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let else_type = if_expr
+                    let mut then_type = self.ast_block_result_type(&if_expr.then_block);
+                    let mut else_type = if_expr
                         .else_block
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+
+                    // Let a numeric-literal branch adopt the sibling branch's
+                    // concrete numeric type (the `let x: T = <branch>`
+                    // coercion); otherwise `if c { a } else { 0 }` with
+                    // `a: u64` rejects the `0` as `i32`.
+                    if then_type != else_type
+                        && let Some(eb) = &if_expr.else_block
+                    {
+                        if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
+                            else_type = t;
+                        } else if let Some(t) =
+                            self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
+                        {
+                            then_type = t;
+                        }
+                    }
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
@@ -1864,6 +1880,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a match expression
+    /// Give a numeric-literal branch tail the concrete numeric type fixed by a
+    /// sibling branch — the coercion `let x: T = <branch>` already performs.
+    /// Without it a `0` arm stays `i32` and conflicts with, say, a `u64`
+    /// sibling. Descends through a block tail; only a bare numeric literal (or
+    /// negated literal) is affected. Returns the coerced type when one applied.
+    fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
+        match expr {
+            ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
+            _ => self.try_coerce_numeric_literal(expr, target).map(|c| c.type_id),
+        }
+    }
+
+    fn coerce_block_numeric_literal_tail(
+        &mut self,
+        block: &ast::Block,
+        target: TypeId,
+    ) -> Option<TypeId> {
+        match block.stmts.last() {
+            Some(ast::Stmt::Expr(e)) => self.coerce_numeric_literal_tail(&e.expr, target),
+            _ => None,
+        }
+    }
+
     pub(super) fn resolve_match_expr(
         &mut self,
         match_expr: &ast::MatchExpr,
@@ -1947,6 +1986,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // skipped.
         if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
             self.report_unresolved_null_match_arms(type_id, match_expr);
+        }
+
+        // Let numeric-literal arms adopt a concrete numeric result type fixed
+        // by a sibling arm (the coercion `let x: T = <arm>` performs), before
+        // the arm-agreement check below would reject the literal's `i32`
+        // default. Only arms whose resolved type still differs are retargeted.
+        for (i, arm) in match_expr.arms.iter().enumerate() {
+            if arm_bodies[i].0 != type_id
+                && let Some(t) = self.coerce_numeric_literal_tail(&arm.body, type_id)
+            {
+                arm_bodies[i].0 = t;
+            }
         }
 
         // Reject arms whose body type disagrees with the match's overall
