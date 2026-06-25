@@ -1,10 +1,11 @@
 //! Logger PoC — validates the `core:log` WEP design against the real compiler.
 //!
-//! The facade is `#[ambient]` (like `log_stdout`), so logging functions need no
-//! `with Log` and are callable anywhere — modelling the ambient-effect
-//! ergonomics. A handler must still be installed (`with Log => &sink do`), else
-//! `Log::*` traps; the ambient-effect extension adds the default-handler
-//! fallback that removes that requirement.
+//! The facade functions are `#[ambient]` (like `log_stdout`), so they perform
+//! `Log` without `with Log` infecting callers and are callable anywhere —
+//! modelling the ambient-effect ergonomics. The level wrappers (`info`, `warn`)
+//! gate on `Log::enabled` and forward to `event`. A handler must still be
+//! installed (`with Log => &sink do`), else `Log::*` traps; the ambient-effect
+//! extension adds the default-handler fallback that removes that requirement.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -75,9 +76,6 @@ pub fn event(
     file: String = #file,
     line: i32 = #line,
 ) {
-    if !Log::enabled(level) {
-        return;
-    }
     let parent = Log::current_span();
     Log::event(Event {
         meta: Metadata { level, target, file, line },
@@ -95,6 +93,9 @@ pub fn info(
     file: String = #file,
     line: i32 = #line,
 ) {
+    if !Log::enabled(Level::Info) {
+        return;
+    }
     event(Level::Info, message, fields, target, file, line);
 }
 
@@ -106,6 +107,9 @@ pub fn warn(
     file: String = #file,
     line: i32 = #line,
 ) {
+    if !Log::enabled(Level::Warn) {
+        return;
+    }
     event(Level::Warn, message, fields, target, file, line);
 }
 
