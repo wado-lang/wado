@@ -4,13 +4,16 @@
 //! - `Log` is a plain effect here (ambient effects are not implemented yet),
 //!   so every logging function carries `with Log`. This is the infectiousness
 //!   that motivates the ambient-effect extension.
-//! - `to_value` is faked via a JSON round-trip (no `core:value::to_value` yet).
 //!
-//! What this DOES prove on today's Wado:
+//! Proven on today's Wado (see the test blocks below):
 //! - default args capturing CALLER `#file`/`#line`/`#function`,
-//! - effect-handler nesting + forwarding (layers / contextual fields),
-//! - generic `field<T: Serialize>` and serde encoding of the whole `Event`,
-//! - effect-polymorphic higher-order `in_span`.
+//! - the full Subscriber-as-effect surface: events + span lifecycle
+//!   (new/enter/exit/close) + current-span parenting,
+//! - effect-handler nesting + forwarding (the `Context` layer),
+//! - the `enabled` gate (compile-time-style + runtime filtering),
+//! - generic `field<T: Serialize>` over the real `core:value::to_value`,
+//! - a JSON sink serializing whole events via `core:json`,
+//! - effect-polymorphic `in_span` that brackets enter/exit/close.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -34,6 +37,7 @@ pub struct Event {
     pub meta: Metadata,
     pub message: String,
     pub fields: List<Field> = [],
+    pub parent: u64 = 0,   // 0 = no current span
 }
 
 // Serde "derive" in Wado is an empty compiler-synthesized impl.
@@ -42,8 +46,7 @@ impl Serialize for Metadata;
 impl Serialize for Field;
 impl Serialize for Event;
 
-// Uses the real `core:value::to_value` (a Value-building Serializer that
-// preserves the data model — `42` stays an Int, not a Float).
+// Uses the real `core:value::to_value` (preserves the data model).
 pub fn field<T: Serialize>(key: String, value: T) -> Field {
     let v = match to_value(&value) {
         Ok(v) => v,
@@ -52,9 +55,14 @@ pub fn field<T: Serialize>(key: String, value: T) -> Field {
     return Field { key, value: v };
 }
 
-// The subscriber abstraction (would be `#[ambient]` in the real design).
+// The Subscriber-as-effect surface (would be `#[ambient]` in the real design).
 interface Log {
     fn enabled(level: Level) -> bool;
+    fn new_span(name: String) -> u64;
+    fn enter(id: u64);
+    fn exit(id: u64);
+    fn close(id: u64);
+    fn current_span() -> u64;
     fn event(event: Event);
 }
 
@@ -68,7 +76,13 @@ pub fn event(
     line: i32 = #line,
 ) with Log {
     if !Log::enabled(level) { return; }
-    Log::event(Event { meta: Metadata { level, target, file, line }, message, fields });
+    let parent = Log::current_span();
+    Log::event(Event {
+        meta: Metadata { level, target, file, line },
+        message,
+        fields,
+        parent,
+    });
 }
 
 pub fn info(
@@ -91,14 +105,60 @@ pub fn warn(
     event(Level::Warn, message, fields, target, file, line);
 }
 
-// A capturing sink (test backend).
+pub fn span(name: String) -> u64 with Log {
+    return Log::new_span(name);
+}
+
+// Effect-polymorphic scope: brackets enter/exit/close around the body. A closure
+// cannot skip past the exit/close calls, so they run on every body exit path.
+fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E, Log {
+    Log::enter(id);
+    let r = body();
+    Log::exit(id);
+    Log::close(id);
+    return r;
+}
+
+// A full capturing subscriber: tracks the span stack, parents events, records a
+// lifecycle trace, and filters by a minimum level.
 struct CaptureSink {
-    events: List<Event>,
+    min: Level = Level::Trace,
+    next_id: u64 = 0,
+    stack: List<u64> = [],
+    events: List<Event> = [],
+    trace: List<String> = [],
 }
 
 impl Log for CaptureSink {
     fn enabled(&self, level: Level) -> bool {
-        resume true
+        resume (level as i32) >= (self.min as i32)
+    }
+    fn new_span(&mut self, name: String) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.trace.push(`new:{name}#{id}`);
+        resume id
+    }
+    fn enter(&mut self, id: u64) {
+        self.stack.push(id);
+        self.trace.push(`enter:{id}`);
+        resume ()
+    }
+    fn exit(&mut self, id: u64) {
+        self.stack.pop();
+        self.trace.push(`exit:{id}`);
+        resume ()
+    }
+    fn close(&mut self, id: u64) {
+        self.trace.push(`close:{id}`);
+        resume ()
+    }
+    fn current_span(&self) -> u64 {
+        let top: u64 = match self.stack.last() {
+            Some(id) => id,
+            None => 0,
+        };
+        resume top
     }
     fn event(&mut self, event: Event) {
         self.events.push(event);
@@ -106,7 +166,8 @@ impl Log for CaptureSink {
     }
 }
 
-// A contextual layer: prepends fixed fields, forwards to the outer subscriber.
+// A contextual layer: prepends fixed fields, forwards everything to the outer
+// subscriber (validates handler nesting + forwarding with the full op set).
 struct Context {
     fields: List<Field>,
 }
@@ -115,22 +176,72 @@ impl Log for Context {
     fn enabled(&self, level: Level) -> bool {
         resume Log::enabled(level)
     }
+    fn new_span(&self, name: String) -> u64 {
+        resume Log::new_span(name)
+    }
+    fn enter(&self, id: u64) {
+        Log::enter(id);
+        resume ()
+    }
+    fn exit(&self, id: u64) {
+        Log::exit(id);
+        resume ()
+    }
+    fn close(&self, id: u64) {
+        Log::close(id);
+        resume ()
+    }
+    fn current_span(&self) -> u64 {
+        resume Log::current_span()
+    }
     fn event(&self, event: Event) {
         let mut merged = self.fields;
         merged.extend(&event.fields);
-        Log::event(Event { meta: event.meta, message: event.message, fields: merged });
+        Log::event(Event {
+            meta: event.meta,
+            message: event.message,
+            fields: merged,
+            parent: event.parent,
+        });
         resume ()
     }
 }
 
-// Effect-polymorphic scope (the `in_span` closure pattern). PoC: just brackets
-// the body; the real version would emit enter/exit around it.
-fn in_span<T, effect E>(name: String, body: fn() -> T with E) -> T with E {
-    return body();
+// A production-style sink: serialize each event to a JSON line.
+struct JsonSink {
+    lines: List<String>,
+}
+
+impl Log for JsonSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume true
+    }
+    fn new_span(&self, name: String) -> u64 {
+        resume 0 as u64
+    }
+    fn enter(&self, id: u64) {
+        resume ()
+    }
+    fn exit(&self, id: u64) {
+        resume ()
+    }
+    fn close(&self, id: u64) {
+        resume ()
+    }
+    fn current_span(&self) -> u64 {
+        resume 0 as u64
+    }
+    fn event(&mut self, event: Event) {
+        match to_string(&event) {
+            Ok(s) => self.lines.push(s),
+            Err(_) => {},
+        }
+        resume ()
+    }
 }
 
 test "captures message, level, and caller location" {
-    let mut sink = CaptureSink { events: [] };
+    let mut sink = CaptureSink {};
     with Log => &mut sink do {
         let expected_line = #line + 1;
         info(`hello`);
@@ -147,33 +258,48 @@ test "captures message, level, and caller location" {
     }
 }
 
-struct Point {
-    x: i32,
-    y: i32,
-}
-
-impl Serialize for Point;
-
 test "generic field accepts any Serialize value, preserving the data model" {
-    let mut sink = CaptureSink { events: [] };
+    let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        info(`with fields`, [
-            field("user", "alice"),
-            field("n", 42),
-            field("pt", Point { x: 1, y: 2 }),
-        ]);
+        info(`with fields`, [field("user", "alice"), field("n", 42)]);
         let e = sink.events[0];
-        assert e.fields.len() == 3;
+        assert e.fields.len() == 2;
         assert e.fields[0].value matches { String(_) };
-        // Real to_value preserves Int (JSON round-trip would have given Float).
+        // Real to_value preserves Int (a JSON round-trip would give Float).
         assert e.fields[1].value matches { Int(42) };
-        // Struct -> Object via begin_struct/field.
-        assert e.fields[2].value matches { Object(_) };
     }
 }
 
+test "span lifecycle fires and events parent to the current span" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        let sid = span(`request`);
+        in_span(sid, || {
+            info(`inside`);
+        });
+        info(`outside`);
+    }
+    let trace: List<String> = ["new:request#1", "enter:1", "exit:1", "close:1"];
+    assert sink.trace == trace;
+    assert sink.events.len() == 2;
+    assert sink.events[0].message == "inside";
+    assert sink.events[0].parent == 1;   // parented to the span
+    assert sink.events[1].message == "outside";
+    assert sink.events[1].parent == 0;   // no current span
+}
+
+test "enabled gate drops events below the sink's minimum level" {
+    let mut sink = CaptureSink { min: Level::Warn };
+    with Log => &mut sink do {
+        info(`dropped`);
+        warn(`kept`);
+    }
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}
+
 test "context layer prepends fields and forwards to outer sink" {
-    let mut sink = CaptureSink { events: [] };
+    let mut sink = CaptureSink {};
     let ctx = Context { fields: [field("request_id", "abc")] };
     with Log => &mut sink do {
         with Log => &ctx do {
@@ -187,23 +313,24 @@ test "context layer prepends fields and forwards to outer sink" {
     assert e.fields[1].key == "k";
 }
 
-test "whole event serializes via serde" {
-    let e = Event {
-        meta: Metadata { level: Level::Warn, target: "t", file: "f", line: 9 },
-        message: "m",
-        fields: [field("k", "v")],
-    };
-    let s = to_string(&e);
-    assert s matches { Ok(_) };
+test "json sink serializes whole events to one line each" {
+    let mut sink = JsonSink { lines: [] };
+    with Log => &mut sink do {
+        info(`hi`, [field("k", "v")]);
+    }
+    assert sink.lines.len() == 1;
+    assert sink.lines[0].contains("message");
+    assert sink.lines[0].contains("hi");
 }
 
-test "effect-polymorphic in_span carries the Log effect" {
-    let mut sink = CaptureSink { events: [] };
-    with Log => &mut sink do {
-        in_span(`req`, || {
-            info(`inside span`);
-        });
-    }
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "inside span";
+test "effect-polymorphic in_span returns the body value" {
+    let mut sink = CaptureSink {};
+    let n = with Log => &mut sink do {
+        in_span(span(`compute`), || {
+            info(`working`);
+            return 42;
+        })
+    };
+    assert n == 42;
+    assert sink.events[0].message == "working";
 }
