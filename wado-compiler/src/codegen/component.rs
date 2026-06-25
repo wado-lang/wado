@@ -13,7 +13,7 @@
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
 use crate::ast::Type;
-use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
+use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
@@ -412,7 +412,7 @@ fn emit_cm_val_type(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    mut shared_type_gen: Option<&mut CmTypeGen>,
     project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
@@ -494,18 +494,20 @@ fn emit_cm_val_type(
                     ))
                 } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
                     // Complex ok types (records, options, variants, etc.) use shared type gen
-                    type_gen.set_next_idx(*local_type_idx);
                     let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                         .iter()
                         .map(|(k, &v)| (k.as_str(), v))
                         .collect();
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: instance_type,
+                        next_idx: local_type_idx,
+                    };
                     let ok_val = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ok,
-                        instance_type,
                         &proj.cm_interface_registry,
                         &resource_exports,
                     );
-                    *local_type_idx = type_gen.next_idx();
                     Some(ok_val)
                 } else {
                     Some(type_to_cm_primitive_with_resources(
@@ -612,19 +614,20 @@ fn emit_cm_val_type(
             }
             // Complex types (e.g. WASI records like Instant) use shared type gen
             if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
-                type_gen.set_next_idx(*local_type_idx);
                 let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                     .iter()
                     .map(|(k, &v)| (k.as_str(), v))
                     .collect();
-                let val = type_gen.ast_type_to_cm(
+                let mut sink = crate::component_model::InstanceSink {
+                    it: instance_type,
+                    next_idx: local_type_idx,
+                };
+                return type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    instance_type,
                     &proj.cm_interface_registry,
                     &resource_exports,
                 );
-                *local_type_idx = type_gen.next_idx();
-                return val;
             }
             type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
         }
@@ -665,7 +668,7 @@ fn build_cm_tuple_types(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    mut shared_type_gen: Option<&mut CmTypeGen>,
     project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
@@ -2070,8 +2073,7 @@ fn generate_cm_imports(
             // `interface_hint` lets `ast_type_to_cm` resolve ambiguous names
             // (e.g. `ErrorCode`, declared independently in multiple WASI
             // packages) against this emitter's owning interface.
-            let mut shared_type_gen =
-                CmInstanceTypeGen::with_interface_hint(local_type_idx, &interface_info.path);
+            let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             for (name, &idx) in &enum_export_indices {
                 shared_type_gen.register_existing(&format!("enum:{name}"), idx);
             }
@@ -2082,8 +2084,7 @@ fn generate_cm_imports(
                         .iter()
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|ty| {
-                                shared_type_gen.set_next_idx(local_type_idx);
-                                let val = emit_cm_val_type(
+                                emit_cm_val_type(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
@@ -2094,9 +2095,7 @@ fn generate_cm_imports(
                                     Some(&mut shared_type_gen),
                                     Some(project),
                                     ctx,
-                                );
-                                local_type_idx = shared_type_gen.next_idx().max(local_type_idx);
-                                val
+                                )
                             });
                             (c.cm_name.as_str(), payload)
                         })
@@ -2218,19 +2217,20 @@ fn generate_cm_imports(
                                     .get_struct_fields_by_source(s, &named.name)
                                     .is_some()
                             }) {
-                            shared_type_gen.set_next_idx(local_type_idx);
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
                                 .map(|(k, &v)| (k.as_str(), v))
                                 .collect();
-                            let val = shared_type_gen.ast_type_to_cm(
+                            let mut sink = crate::component_model::InstanceSink {
+                                it: &mut instance_type,
+                                next_idx: &mut local_type_idx,
+                            };
+                            shared_type_gen.ast_type_to_cm(
+                                &mut sink,
                                 &resolved_ty,
-                                &mut instance_type,
                                 &project.cm_interface_registry,
                                 &resource_exports,
-                            );
-                            local_type_idx = shared_type_gen.next_idx();
-                            val
+                            )
                         } else {
                             wado_type_to_cm_val_type(
                                 project,
@@ -2263,19 +2263,20 @@ fn generate_cm_imports(
                                 .is_some()
                         })
                     {
-                        shared_type_gen.set_next_idx(local_type_idx);
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
                             .map(|(k, &v)| (k.as_str(), v))
                             .collect();
-                        let val = shared_type_gen.ast_type_to_cm(
+                        let mut sink = crate::component_model::InstanceSink {
+                            it: &mut instance_type,
+                            next_idx: &mut local_type_idx,
+                        };
+                        shared_type_gen.ast_type_to_cm(
+                            &mut sink,
                             &resolved_ty,
-                            &mut instance_type,
                             &project.cm_interface_registry,
                             &resource_exports,
-                        );
-                        local_type_idx = shared_type_gen.next_idx();
-                        val
+                        )
                     } else {
                         emit_cm_val_type(
                             &resolved_ty,
@@ -2463,8 +2464,10 @@ fn import_resource_defining_interface(
         // on demand when the parameter/return types are processed.
         // Use interface hint to disambiguate types shared across packages
         // (e.g., ErrorCode exists in http, filesystem, sockets).
-        let resource_count = http_resources.len() as u32;
-        let mut type_gen = CmInstanceTypeGen::with_interface_hint(resource_count, types_fq);
+        // Type indices start after the SubResource exports; the sink shares
+        // this counter with the func-type allocations below.
+        let mut type_idx = http_resources.len() as u32;
+        let mut type_gen = CmTypeGen::with_interface_hint(types_fq);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()
@@ -2494,9 +2497,13 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: &mut instance_type,
+                        next_idx: &mut type_idx,
+                    };
                     let cm_type = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ty,
-                        &mut instance_type,
                         &project.cm_interface_registry,
                         &resource_exports,
                     );
@@ -2505,9 +2512,13 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
+                let mut sink = crate::component_model::InstanceSink {
+                    it: &mut instance_type,
+                    next_idx: &mut type_idx,
+                };
                 type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    &mut instance_type,
                     &project.cm_interface_registry,
                     &resource_exports,
                 )
@@ -2524,7 +2535,8 @@ fn import_resource_defining_interface(
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
-            let func_type_idx = type_gen.alloc_idx();
+            let func_type_idx = type_idx;
+            type_idx += 1;
 
             instance_type.export(
                 &func.wasi_func_name,
@@ -2568,9 +2580,13 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: &mut instance_type,
+                        next_idx: &mut type_idx,
+                    };
                     let cm_type = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ty,
-                        &mut instance_type,
                         &project.cm_interface_registry,
                         &resource_exports,
                     );
@@ -2579,9 +2595,13 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
+                let mut sink = crate::component_model::InstanceSink {
+                    it: &mut instance_type,
+                    next_idx: &mut type_idx,
+                };
                 type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    &mut instance_type,
                     &project.cm_interface_registry,
                     &resource_exports,
                 )
@@ -2598,7 +2618,8 @@ fn import_resource_defining_interface(
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
-            let func_type_idx = type_gen.alloc_idx();
+            let func_type_idx = type_idx;
+            type_idx += 1;
 
             instance_type.export(
                 &func.wasi_func_name,
