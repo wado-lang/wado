@@ -668,18 +668,11 @@ pub(super) fn synthesize_lift_from_flat_params(
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {
-            n if n == names.array
-                && generic.args.len() == 1
-                && matches!(generic.args[0], Type::Named(ref n) if n.name == "u8") =>
-            {
-                // List<u8> flat ABI: (ptr: i32, len: i32) pointing to linear memory
-                let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
-                let lifted = internal_call("memory_to_gc_array", vec![ptr, len], target_type_id);
-                (lifted, 2)
-            }
             n if n == names.array => {
-                // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory
+                // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory.
+                // (A former `List<u8>` fast path via `memory_to_gc_array` produced a
+                // bare `Array<u8>` mislabeled as `List<u8>`; the general path below
+                // builds the real `List<T>` struct, so all element types share it.)
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
                 let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
                 let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
