@@ -1618,10 +1618,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .as_ref()
                         .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
 
-                    // Let a numeric-literal branch adopt the sibling branch's
-                    // concrete numeric type (the `let x: T = <branch>`
-                    // coercion); otherwise `if c { a } else { 0 }` with
-                    // `a: u64` rejects the `0` as `i32`.
+                    // Let a numeric-literal branch adopt the sibling's concrete
+                    // numeric type before the agreement check below.
                     if then_type != else_type
                         && let Some(eb) = &if_expr.else_block
                     {
@@ -1988,10 +1986,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.report_unresolved_null_match_arms(type_id, match_expr);
         }
 
-        // Let numeric-literal arms adopt a concrete numeric result type fixed
-        // by a sibling arm (the coercion `let x: T = <arm>` performs), before
-        // the arm-agreement check below would reject the literal's `i32`
-        // default. Only arms whose resolved type still differs are retargeted.
+        // Retarget literal arms to the unified type before the arm-agreement
+        // check below would reject their `i32`/`f64` default.
         for (i, arm) in match_expr.arms.iter().enumerate() {
             if arm_bodies[i].0 != type_id
                 && let Some(t) = self.coerce_numeric_literal_tail(&arm.body, type_id)

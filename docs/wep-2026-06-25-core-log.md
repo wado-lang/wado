@@ -418,4 +418,3 @@ enumerate the `F` shapes used across the block's dynamic extent.
 - [The Live ValueGraph](./wep-2026-06-15-live-value-graph.md)
 - Rust [`tracing`](https://docs.rs/tracing), [`log`](https://docs.rs/log)
 - Go [`log/slog`](https://pkg.go.dev/log/slog)
-  </content>

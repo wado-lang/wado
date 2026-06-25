@@ -1,19 +1,8 @@
-//! Logger PoC — technical validation for the `core:log` WEP.
+//! Logger PoC — validates the `core:log` WEP design against the real compiler.
 //!
-//! Validates against the real compiler, NOT the eventual API:
-//! - `Log` is a plain effect here (ambient effects are not implemented yet),
-//!   so every logging function carries `with Log`. This is the infectiousness
-//!   that motivates the ambient-effect extension.
-//!
-//! Proven on today's Wado (see the test blocks below):
-//! - default args capturing CALLER `#file`/`#line`/`#function`,
-//! - the full Subscriber-as-effect surface: events + span lifecycle
-//!   (new/enter/exit/close) + current-span parenting,
-//! - effect-handler nesting + forwarding (the `Context` layer),
-//! - the `enabled` gate (compile-time-style + runtime filtering),
-//! - generic `field<T: Serialize>` over the real `core:value::to_value`,
-//! - a JSON sink serializing whole events via `core:json`,
-//! - effect-polymorphic `in_span` that brackets enter/exit/close.
+//! `Log` is a plain effect here (ambient effects aren't implemented yet), so
+//! every logging function carries `with Log` — the infectiousness the
+//! ambient-effect extension removes.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -40,13 +29,12 @@ pub struct Event {
     pub parent: u64 = 0,   // 0 = no current span
 }
 
-// Serde "derive" in Wado is an empty compiler-synthesized impl.
+// Serde derive in Wado is an empty compiler-synthesized impl.
 impl Serialize for Level;
 impl Serialize for Metadata;
 impl Serialize for Field;
 impl Serialize for Event;
 
-// Uses the real `core:value::to_value` (preserves the data model).
 pub fn field<T: Serialize>(key: String, value: T) -> Field {
     let v = match to_value(&value) {
         Ok(v) => v,
@@ -55,7 +43,7 @@ pub fn field<T: Serialize>(key: String, value: T) -> Field {
     return Field { key, value: v };
 }
 
-// The Subscriber-as-effect surface (would be `#[ambient]` in the real design).
+// The subscriber, as an effect (would be `#[ambient]` in the real design).
 interface Log {
     fn enabled(level: Level) -> bool;
     fn new_span(name: String) -> u64;
@@ -68,7 +56,7 @@ interface Log {
     fn event(event: Event);
 }
 
-// Facade. Location defaults resolve at the CALLER (post-rebase behavior).
+// Facade; location defaults resolve at the call site.
 pub fn event(
     level: Level,
     message: String,
@@ -123,8 +111,7 @@ pub fn current() -> u64 with Log {
     return Log::current_span();
 }
 
-// Effect-polymorphic scope: brackets enter/exit/close around the body. A closure
-// cannot skip past the exit/close calls, so they run on every body exit path.
+// A closure can't skip the exit/close calls, so they run on every body exit path.
 fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E, Log {
     Log::enter(id);
     let r = body();
@@ -133,8 +120,7 @@ fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E, Log {
     return r;
 }
 
-// A full capturing subscriber: tracks the span stack, parents events, records a
-// lifecycle trace, and filters by a minimum level.
+// Capturing subscriber: span stack, event parenting, lifecycle trace, level filter.
 struct CaptureSink {
     min: Level = Level::Trace,
     next_id: u64 = 0,
@@ -192,8 +178,7 @@ impl Log for CaptureSink {
     }
 }
 
-// A contextual layer: prepends fixed fields, forwards everything to the outer
-// subscriber (validates handler nesting + forwarding with the full op set).
+// Contextual layer: prepend fixed fields, forward the rest.
 struct Context {
     fields: List<Field>,
 }
@@ -241,7 +226,7 @@ impl Log for Context {
     }
 }
 
-// A production-style sink: serialize each event to a JSON line.
+// JSON sink: one line per event.
 struct JsonSink {
     lines: List<String>,
 }
@@ -280,8 +265,7 @@ impl Log for JsonSink {
     }
 }
 
-// A standalone filter layer (EnvFilter-style): drops below `min`, forwards the
-// rest to the outer subscriber. Validates composing two real layers.
+// Standalone filter layer: drop below `min`, forward the rest.
 struct Filter {
     min: Level,
 }

@@ -185,4 +185,3 @@ for T;` already serves as the explicit-request form when one is wanted.
 - Opt-out spelling (`#[no_derive(...)]` vs other) and whether it is per-trait.
 - Coherence interaction with concrete impls, inherited from the Reflect /
   variadic coherence items.
-  </content>
