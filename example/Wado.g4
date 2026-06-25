@@ -165,7 +165,7 @@ implBlock
 
 implMember
     : 'type' IDENTIFIER '=' typeRef ';'
-    | '..'
+    | '..' ('trap' | 'forward')
     | 'export' 'async'? 'fn' funcSig
     | 'pub'? implPubMember
     ;
@@ -215,7 +215,7 @@ memberName
     | 'reactive' | 'unique' | 'struct' | 'enum' | 'variant' | 'flags'
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
-    | 'stores' | 'true' | 'false' | 'null'
+    | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
     ;
 
 // Optional trailing expression with no `;` is the block's value (`{ 1 }`).
