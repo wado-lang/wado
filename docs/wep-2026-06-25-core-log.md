@@ -112,7 +112,14 @@ pub struct SpanAttrs { pub meta: Metadata, pub fields: List<Field> }
 
 `Field`/`Value` and `to_value` are the baseline field representation; the
 Efficient field passing section below replaces them with a zero-boxing path once
-profiling justifies the `dyn` extension.
+profiling justifies the `dyn` extension. `core:value::to_value` is implemented
+(a direct `Value`-building serializer that preserves the data model).
+
+Each library type that flows through serde (`Level`, `Metadata`, `Field`,
+`Event`) carries an empty compiler-synthesized derive — `impl Serialize for T;`
+(Wado's derive form; there is no `#[derive(...)]`). With bound-driven derivation
+(see [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)) these
+become implicit and the explicit lines disappear.
 
 ### The `Log` effect (Subscriber-as-effect)
 
@@ -210,7 +217,9 @@ pub fn current() -> Option<Span> {
 }
 ```
 
-Entering uses a scoped `with span do` block:
+A span is entered for a scope. v1 uses the closure form `in_span` (see Span
+scoping under Language Extensions — it needs no language change); the illustrative
+native sugar reads:
 
 ```wado
 let s = span(Level::Info, "request", [field("route", route)]);
@@ -220,13 +229,11 @@ with s do {
 }                         // s exits here, on every exit path
 ```
 
-`with span do { B }` desugars to `Log::enter(s.id); B; Log::exit(s.id)`, with the
-`exit` injected before every control-flow exit from `B` (`return` / `break` /
-`continue` / `?`), reusing the effect-handler block's early-exit restore
-machinery. The installed subscriber maintains the current-span stack from
-`enter`/`exit`, so `current()` and event parenting need no separate global.
+Either form emits `Log::enter(s.id)` on entry and `Log::exit(s.id)` on every exit
+path. The installed subscriber maintains the current-span stack from `enter`/`exit`,
+so `current()` and event parenting need no separate global.
 
-Entering is lexical only — there is no free-floating RAII guard. This avoids the
+Entering is lexical/scoped — there is no free-floating RAII guard. This avoids the
 classic "guard held across an await" footgun by construction.
 
 `close` fires when the `Span` value is no longer reachable (GC) or via an
@@ -260,7 +267,7 @@ impl Log for JsonSink {
 }
 
 pub struct NopSink;                              // drops everything; enabled() == false
-pub struct CaptureSink { mut events: List<Event> }   // test sink
+pub struct CaptureSink { events: List<Event> }   // test sink; mutated via &mut self
 
 // Field-context layer (slog `With`): adds fixed fields to every event, forwards.
 pub struct Context { fields: List<Field> }
@@ -362,6 +369,17 @@ current-span is wrong, so:
   addition layered on top once WASI threads / Wasm stack switching stabilize. It
   adds no API surface — the interface above is unchanged when it lands.
 
+### Validated by a PoC
+
+`example/logger_poc.wado` exercises this design on the current compiler (a plain
+`Log` effect stands in for the ambient one, which is not yet implemented). Five
+`wado test` blocks pass, confirming: caller-resolved `#file`/`#line`/`#function`
+through default args; effect-handler nesting + forwarding for the `Context` layer;
+generic `field<T: Serialize>` over the real `core:value::to_value`; serde encoding
+of the whole `Event`; and effect-polymorphic `in_span`. The PoC also pinned down
+the real syntax used above: struct fields take no `mut` qualifier (mutate via
+`&mut self`), and serde derivation is `impl Serialize for T;`.
+
 ## Language Extensions
 
 ### Ambient effects (required)
@@ -399,13 +417,33 @@ when accumulating required sets. Installed handlers' own effects (e.g.
 site. Ambient effects are a general capability (debug/trace/metrics sinks,
 feature-flag oracles), not a logging special case.
 
-### `with span do` span scoping (minor compiler support)
+### Span scoping — no language change required (optional sugar)
 
-`with <span> do { B }` accepts a `Span` value (in addition to the existing
-`with Effect => handler do` form) and desugars to `Log::enter(id); B; Log::exit(id)`
-with `exit` injected on every exit path from `B`, reusing the effect-handler
-block's restore injector. This is a small front-end addition, not a type-system
-change.
+The PoC confirmed the bundled handler form (`with &h do { … }`) and value form
+already work end-to-end, with scoped install and early-exit restore. Layers,
+contextual fields, filters, and sinks therefore need no new syntax — they are
+ordinary `impl Log` values installed with `with`.
+
+Span entry needs enter/exit emitted at scope boundaries, and the dispatch
+desugar has no install/uninstall hook. This is covered today with a closure:
+
+```wado
+pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
+    Log::enter(s.id());
+    let r = body();        // a closure cannot skip past in_span's exit
+    Log::exit(s.id());     // runs even on `?`/`return` inside the closure
+    return r;
+}
+
+let s = span(Level::Info, "request", [field("route", route)]);
+let resp = in_span(&s, || { handle(req) })?;
+```
+
+`in_span` is validated in the PoC. A native `with span do { … }` block (desugaring
+to `Log::enter(id); B; Log::exit(id)` with `exit` injected on every exit path, via
+the effect-handler restore injector) is an optional later ergonomic upgrade — it
+lets control flow escape directly to the enclosing function rather than through
+the closure boundary. It is not required for v1.
 
 ### Deferred (performance-gated): efficient field passing
 
@@ -421,6 +459,9 @@ This needs two further extensions and would retire `Field`/`Value` from the
 logger:
 
 - Anonymous (structural) struct types that auto-derive `Serialize`/`Inspect`.
+  An anonymous struct has no name to write `impl Serialize for …`, so this path
+  also depends on bound-driven derivation
+  ([Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)).
 - Erased serde: a `dyn Serialize` payload (reference + monomorphized serialize
   funcref) carried across the non-generic `Log` operation, bridged through a
   `dyn Serializer` (the `Serialize::serialize<S>` generic method instantiated at
@@ -463,16 +504,20 @@ provided and is treated as a given.)
 ### Prerequisites
 
 - [ ] Language: ambient effects with a default handler.
-- [ ] Compiler: `with <span> do { … }` scoping form (enter/exit desugar via the
-      restore injector).
-- [ ] `core:value`: `pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError>`
-      (serde `to_value` analog) — needed by `field` in the baseline.
+- [x] `core:value`: `pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError>`
+      (serde `to_value` analog) — implemented (direct Value-building serializer).
+- [x] Span scoping via `in_span` closure — works today (no language change).
+- [ ] Optional: native `with <span> do { … }` scoping sugar (enter/exit desugar
+      via the restore injector).
 - [ ] `core:log`: `Level`, `Metadata`, `Field`, `Event`, `Span`, `SpanAttrs`,
       `field`, the `Log` effect, the event facade
       (`trace`/`debug`/`info`/`warn`/`error`/`event`/`enabled`), `span` /
       `current`, sinks (`TextSink`, `JsonSink`, `NopSink`, `CaptureSink`),
       layers (`Context`, `Filter`), the `#[param]` level globals, and
       `default_handler` over `log_stderr`.
+- [ ] Optional (ergonomics): bound-driven serde derivation
+      ([Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)) — drops the
+      `impl Serialize for T;` lines; a prerequisite for the anonymous-struct path.
 - [ ] Deferred (perf-gated): anonymous structs, erased serde (`dyn Serialize` /
       `dyn Serializer`), serde flatten — retiring `Field`/`Value`.
 - [ ] Deferred (async): automatic cross-task current-span propagation.
