@@ -13,8 +13,8 @@
 //! - effect-polymorphic higher-order `in_span`.
 
 use { Serialize } from "core:serde";
-use { Value } from "core:value";
-use { to_string, from_string } from "core:json";
+use { Value, to_value } from "core:value";
+use { to_string } from "core:json";
 
 pub enum Level { Trace, Debug, Info, Warn, Error }
 
@@ -42,22 +42,14 @@ impl Serialize for Metadata;
 impl Serialize for Field;
 impl Serialize for Event;
 
-// PoC stand-in for `core:value::to_value`: round-trip through JSON.
-// NOTE: JSON has no int/float distinction, so `42` comes back as Float.
-// A real `to_value` would be a Value-building Serializer that preserves Int.
-fn to_value<T: Serialize>(x: &T) -> Value {
-    let s = match to_string(x) {
-        Ok(s) => s,
-        Err(_) => return Value::Null,
-    };
-    return match from_string::<Value>(s) {
+// Uses the real `core:value::to_value` (a Value-building Serializer that
+// preserves the data model — `42` stays an Int, not a Float).
+pub fn field<T: Serialize>(key: String, value: T) -> Field {
+    let v = match to_value(&value) {
         Ok(v) => v,
         Err(_) => Value::Null,
     };
-}
-
-pub fn field<T: Serialize>(key: String, value: T) -> Field {
-    return Field { key, value: to_value(&value) };
+    return Field { key, value: v };
 }
 
 // The subscriber abstraction (would be `#[ambient]` in the real design).
@@ -155,16 +147,28 @@ test "captures message, level, and caller location" {
     }
 }
 
-test "generic field accepts any Serialize value" {
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Serialize for Point;
+
+test "generic field accepts any Serialize value, preserving the data model" {
     let mut sink = CaptureSink { events: [] };
     with Log => &mut sink do {
-        info(`with fields`, [field("user", "alice"), field("n", 42)]);
+        info(`with fields`, [
+            field("user", "alice"),
+            field("n", 42),
+            field("pt", Point { x: 1, y: 2 }),
+        ]);
         let e = sink.events[0];
-        assert e.fields.len() == 2;
-        assert e.fields[0].key == "user";
+        assert e.fields.len() == 3;
         assert e.fields[0].value matches { String(_) };
-        // JSON round-trip turns 42 into Float — documents the to_value gap.
-        assert e.fields[1].value matches { Float(_) };
+        // Real to_value preserves Int (JSON round-trip would have given Float).
+        assert e.fields[1].value matches { Int(42) };
+        // Struct -> Object via begin_struct/field.
+        assert e.fields[2].value matches { Object(_) };
     }
 }
 
