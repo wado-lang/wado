@@ -111,6 +111,13 @@ pub struct AtnSim {
     pub rule_first: List<List<i32>>,
     pub rule_first_neg: List<List<i32>>,
     pub rule_first_open: List<bool>,
+    /// Per-state continuation FIRST / nullability: the per-state analogue of
+    /// `rule_*`, cached at decode so the LR loop-entry decision is array
+    /// lookups, not a DFS per call. Empty unless the ATN has precedence edges.
+    pub state_cont_nullable: List<bool>,
+    pub state_cont_first: List<List<i32>>,
+    pub state_cont_first_neg: List<List<i32>>,
+    pub state_cont_first_open: List<bool>,
 }
 
 /// Sentinel return state inside a `PredictionContext`: this branch's
@@ -399,6 +406,10 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
         rule_first: [],
         rule_first_neg: [],
         rule_first_open: [],
+        state_cont_nullable: [],
+        state_cont_first: [],
+        state_cont_first_neg: [],
+        state_cont_first_open: [],
     };
     for let mut r = 0; r < nrules_count; r += 1 {
         sim.rule_nullable.push(false);
@@ -420,8 +431,29 @@ pub fn atn_decode(data: &List<i32>) -> AtnSim {
     }
     if has_precedence {
         atn_compute_first_nullable(&mut sim);
+        atn_compute_state_cont(&mut sim);
     }
     return sim;
+}
+
+/// Cache `state_cont_*` after the rule fixpoint converges (it reads
+/// `rule_first` / `rule_nullable`). Per-state analogue of
+/// `atn_compute_first_nullable`.
+#[allow(dead_code)]
+fn atn_compute_state_cont(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        let mut v1: List<i32> = [];
+        let nullable = atn_cont_nullable(sim, st, &mut v1);
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
+        sim.state_cont_nullable.push(nullable);
+        sim.state_cont_first.push(f);
+        sim.state_cont_first_neg.push(fneg);
+        sim.state_cont_first_open.push(open);
+    }
 }
 
 /// Fill `rule_nullable` / `rule_first` / `rule_first_open` by a monotone
@@ -1002,11 +1034,14 @@ pub fn atn_lr_loop_decision(
             if sim.tr_prec[s + j] < min_prec {
                 continue;
             }
-            let mut v: List<i32> = [];
-            let mut f: List<i32> = [];
-            let mut fneg: List<i32> = [];
-            let open = atn_cont_first(sim, sim.tr_target[s + j], &mut v, &mut f, &mut fneg);
-            if atn_first_admits(&f, open, &fneg, t, eof) {
+            let tgt = sim.tr_target[s + j];
+            if atn_first_admits(
+                &sim.state_cont_first[tgt],
+                sim.state_cont_first_open[tgt],
+                &sim.state_cont_first_neg[tgt],
+                t,
+                eof,
+            ) {
                 return j;
             }
         }
@@ -1026,16 +1061,17 @@ fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -
         if ret < 0 {
             return i == 0 && t == eof;
         }
-        let mut v: List<i32> = [];
-        if atn_cont_nullable(sim, ret, &mut v) {
+        if sim.state_cont_nullable[ret] {
             i -= 1;
             continue;
         }
-        let mut v2: List<i32> = [];
-        let mut f: List<i32> = [];
-        let mut fneg: List<i32> = [];
-        let open = atn_cont_first(sim, ret, &mut v2, &mut f, &mut fneg);
-        return atn_first_admits(&f, open, &fneg, t, eof);
+        return atn_first_admits(
+            &sim.state_cont_first[ret],
+            sim.state_cont_first_open[ret],
+            &sim.state_cont_first_neg[ret],
+            t,
+            eof,
+        );
     }
     return false;
 }
