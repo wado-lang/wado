@@ -16,8 +16,8 @@ for a type `T`:
   writes the empty marker `impl Serialize for T;`. A bare `T: Serialize` bound
   does not bring the impl into being.
 
-This split is ad hoc. The logger PoC (`example/logger_poc.wado`) had to write
-four marker lines — `impl Serialize for Level; … for Metadata; … for Field; …
+This split is ad hoc. The logger PoC (`example/logger_poc.wado`) had to write a
+marker line per type — `impl Serialize for Level; … for Metadata; … for Field; …
 for Event;` — purely to satisfy bounds the compiler could discharge structurally,
 exactly as it already does for `Inspect`. The observation that motivates this WEP:
 `Inspect` / `Display` are effectively _satisfied on demand_ already; serde is the
@@ -128,7 +128,7 @@ which also carries `#[validate]` enforcement) is the main open decision.
 
 - One uniform model replaces the current ad-hoc split; each derivable trait has a
   declared, legible policy.
-- Removes per-type marker boilerplate for serde (the PoC's four `impl … for …;`
+- Removes per-type marker boilerplate for serde (the PoC's `impl … for …;` marker
   lines vanish), matching the zero-ceremony experience of `Inspect`.
 - Unblocks anonymous-struct serialization, a prerequisite for the efficient field
   path in [`core:log`](./wep-2026-06-25-core-log.md).

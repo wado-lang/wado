@@ -389,3 +389,15 @@ test "to_value on a unit variant yields its name" {
 test "to_value on a payload variant yields an object" {
     assert to_value(&ToValueShape::Circle(5)) matches { Ok(Object(_)) };
 }
+
+test "to_value preserves byte strings as Value::Bytes" {
+    let bytes: ByteList = [1, 2, 3];
+    let v = Value::Bytes(bytes);
+    if let Ok(Bytes(b)) = to_value(&v) {
+        assert b.len() == 3;
+        assert b[0] == 1;
+        assert b[2] == 3;
+    } else {
+        panic("expected Value::Bytes");
+    }
+}

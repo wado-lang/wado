@@ -53,8 +53,8 @@ with its own tools.
 The thesis: **a subscriber is an effect, layers and spans are nested handlers,
 the level threshold is a compile-time parameter, and the default sink is the
 existing ambient `log_stderr`.** Everything else is library code over features
-Wado already has, plus one language extension (ambient effects) and one minor
-compiler affordance (`with span do`).
+Wado already has, plus the ambient-effects language extension; span scoping
+already works through a closure, with `with span do` as optional sugar.
 
 ## Decision
 
@@ -96,7 +96,8 @@ pub struct Metadata {
 
 pub struct Field { pub key: String, pub value: Value }   // Value from core:value
 pub fn field<T: Serialize>(key: String, value: T) -> Field {
-    return Field { key, value: value::to_value(&value).unwrap_or(Value::Null) };
+    let v = match value::to_value(&value) { Ok(v) => v, Err(_) => Value::Null };
+    return Field { key, value: v };
 }
 
 pub struct Event {
@@ -372,13 +373,17 @@ current-span is wrong, so:
 ### Validated by a PoC
 
 `example/logger_poc.wado` exercises this design on the current compiler (a plain
-`Log` effect stands in for the ambient one, which is not yet implemented). Five
-`wado test` blocks pass, confirming: caller-resolved `#file`/`#line`/`#function`
-through default args; effect-handler nesting + forwarding for the `Context` layer;
-generic `field<T: Serialize>` over the real `core:value::to_value`; serde encoding
-of the whole `Event`; and effect-polymorphic `in_span`. The PoC also pinned down
-the real syntax used above: struct fields take no `mut` qualifier (mutate via
-`&mut self`), and serde derivation is `impl Serialize for T;`.
+`Log` effect stands in for the ambient one, which is not yet implemented). Its
+`wado test` blocks confirm: caller-resolved `#file`/`#line`/`#function` through
+default args; the span lifecycle (`new`/`enter`/`exit`/`close`) with a
+current-span stack and event parenting, including nested spans and `exit`/`close`
+running on an early return inside `in_span`; effect-handler nesting and forwarding
+through a `Context` field layer and a standalone `Filter` layer; the `enabled`
+gate; `record_fields` / `follows_from` / `current()`; generic `field<T: Serialize>`
+over the real `core:value::to_value`; serde encoding of the whole `Event` through
+a JSON sink; and effect-polymorphic `in_span`. The PoC also pinned down the real
+syntax used above: struct fields take no `mut` qualifier (mutate via `&mut self`),
+and serde derivation is `impl Serialize for T;`.
 
 ## Language Extensions
 
@@ -428,7 +433,7 @@ Span entry needs enter/exit emitted at scope boundaries, and the dispatch
 desugar has no install/uninstall hook. This is covered today with a closure:
 
 ```wado
-pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
+pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E, Log {
     Log::enter(s.id());
     let r = body();        // a closure cannot skip past in_span's exit
     Log::exit(s.id());     // runs even on `?`/`return` inside the closure
@@ -455,7 +460,7 @@ call-site fields this is avoidable by passing an anonymous struct bounded by
 info(`user logged in`, { user_id: id, ip: ip });   // anonymous struct, no Value boxing
 ```
 
-This needs two further extensions and would retire `Field`/`Value` from the
+This needs further extensions and would retire `Field`/`Value` from the
 logger:
 
 - Anonymous (structural) struct types that auto-derive `Serialize`/`Inspect`.
@@ -480,7 +485,7 @@ provided and is treated as a given.)
 ### Benefits
 
 - A full-set logger and tracer — events, spans, layered subscribers, two-axis
-  filtering — built from existing features plus one effect-system extension.
+  filtering — built from existing features plus the ambient-effects extension.
 - Layer composition, scoped context, and automatic context restore come from
   effect-handler nesting, with static dispatch and no dynamic-dispatch
   requirement.

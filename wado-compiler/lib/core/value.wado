@@ -525,6 +525,14 @@ impl Serializer for ValueSerializer {
         *self.out = Value::Null;
         return Result::Ok(());
     }
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        // Preserve byte strings as `Value::Bytes`, not the default seq-of-u8
+        // fallback that would yield `Value::List([Int, …])`.
+        let mut it = v.iter();
+        let bytes = it.collect() as ByteList;
+        *self.out = Value::Bytes(bytes);
+        return Result::Ok(());
+    }
 
     fn begin_seq(&mut self, len: i32) -> Result<ValueSeqSerializer, SerializeError> {
         return Result::Ok(ValueSeqSerializer { out: self.out, items: [] });
