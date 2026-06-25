@@ -334,7 +334,7 @@ pub fn build_component(
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
     // World exports
-    emit_world_exports(&mut builder, &mut ctx, component_plan, result_unit_type);
+    emit_world_exports(&mut builder, &mut ctx, project, component_plan, result_unit_type);
 
     // Test-name custom section: map each test export to its original (lossless)
     // name so `wado test` can display what the user wrote rather than the
@@ -1658,12 +1658,53 @@ fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
     }
 }
 
+/// [`crate::component_model::CmTypeSink`] that emits CM defined types at the
+/// component's top level (via the builder) and records each named type for the
+/// `--lib` default-interface instance. Used for bare world-export value types,
+/// which — unlike interface-instance types — must live in the top-level type
+/// space the lifted func signatures reference.
+struct TopLevelSink<'a> {
+    builder: &'a mut ComponentBuilder,
+    ctx: &'a mut ComponentModelContext,
+}
+
+impl crate::component_model::CmTypeSink for TopLevelSink<'_> {
+    fn define(&mut self, defined: crate::component_model::CmDefined<'_>) -> u32 {
+        // Reserve the ctx index first (mirrors `intern_cm_type`) so it matches
+        // the builder's appended type index.
+        let idx = self.ctx.register_anon_type();
+        let (_, enc) = self.builder.ty(None);
+        crate::component_model::emit_cm_defined(enc.defined_type(), defined);
+        idx
+    }
+
+    fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
+        // Top-level types are not aliased; the instance export names them.
+        self.ctx.push_lib_export_type(cm_name.to_string(), idx);
+        idx
+    }
+}
+
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &NirPackage,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
+    // Shared across all `--lib` exports so a named type (e.g. `point`) is
+    // defined once and reused. The interface hint resolves lib-local named
+    // types against the package's own default-interface FQ in the registry.
+    let lib_iface_fq = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.sync_lift)
+        .and_then(|e| e.from_interface_fq.clone());
+    let mut lib_type_gen = lib_iface_fq
+        .as_deref()
+        .map(crate::component_model::CmTypeGen::with_interface_hint);
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+
     for export in &component_plan.world_exports {
         // The Component Model requires kebab-case extern names. Core export
         // names allow underscores, so a `--lib` export `fn id_bool` is aliased
@@ -1683,34 +1724,84 @@ fn emit_world_exports(
             ExportKind::Func,
         );
 
-        let func_type = ctx.register_type(&func_type_name);
-        {
-            let (_, enc) = builder.ty(Some(&func_type_name));
+        let func_type = if export.sync_lift {
+            // `--lib` export: build the param/result CM value types (and any
+            // named types they reference) top-level from the raw Wado types via
+            // the shared engine, *before* the func type so their indices precede
+            // it. Named types land in `ctx.lib_export_types` for the instance.
+            let type_gen = lib_type_gen
+                .as_mut()
+                .expect("lib type-gen present for sync-lift export");
+            let mut param_vals: Vec<(String, ComponentValType)> = Vec::new();
+            for (pname, pty) in &export.param_types {
+                let resolved = project.cm_interface_registry.resolve_type(pty);
+                let mut sink = TopLevelSink {
+                    builder: &mut *builder,
+                    ctx: &mut *ctx,
+                };
+                let val = type_gen.ast_type_to_cm(
+                    &mut sink,
+                    &resolved,
+                    &project.cm_interface_registry,
+                    &no_resources,
+                );
+                param_vals.push((pname.clone(), val));
+            }
+            let result_val = export.result_type.as_ref().map(|rty| {
+                let resolved = project.cm_interface_registry.resolve_type(rty);
+                let mut sink = TopLevelSink {
+                    builder: &mut *builder,
+                    ctx: &mut *ctx,
+                };
+                type_gen.ast_type_to_cm(
+                    &mut sink,
+                    &resolved,
+                    &project.cm_interface_registry,
+                    &no_resources,
+                )
+            });
 
-            // Resources and variants follow the `{pkg}-{cm-name}` naming
-            // convention emitted by `import_wasi_http_types` /
-            // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
-            // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
-            let param_vals: Vec<(String, ComponentValType)> = export
-                .cm_params
-                .iter()
-                .map(|(name, cm_ty)| {
-                    (
-                        name.clone(),
-                        cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
-                    )
-                })
-                .collect();
-            let param_refs: Vec<(&str, ComponentValType)> = param_vals
-                .iter()
-                .map(|(n, val)| (n.as_str(), *val))
-                .collect();
-            let result_val = cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
+            let func_type = ctx.register_type(&func_type_name);
+            let (_, enc) = builder.ty(Some(&func_type_name));
+            let param_refs: Vec<(&str, ComponentValType)> =
+                param_vals.iter().map(|(n, v)| (n.as_str(), *v)).collect();
             enc.function()
                 .async_(export.is_async)
                 .params(param_refs)
-                .result(Some(result_val));
-        }
+                .result(result_val);
+            func_type
+        } else {
+            let func_type = ctx.register_type(&func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&func_type_name));
+
+                // Resources and variants follow the `{pkg}-{cm-name}` naming
+                // convention emitted by `import_wasi_http_types` /
+                // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
+                // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
+                let param_vals: Vec<(String, ComponentValType)> = export
+                    .cm_params
+                    .iter()
+                    .map(|(name, cm_ty)| {
+                        (
+                            name.clone(),
+                            cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
+                        )
+                    })
+                    .collect();
+                let param_refs: Vec<(&str, ComponentValType)> = param_vals
+                    .iter()
+                    .map(|(n, val)| (n.as_str(), *val))
+                    .collect();
+                let result_val =
+                    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
+                enc.function()
+                    .async_(export.is_async)
+                    .params(param_refs)
+                    .result(Some(result_val));
+            }
+            func_type
+        };
 
         ctx.register_comp_func(cm_name);
         // `realloc` is always supplied to the canon. The Wado runtime always
@@ -3721,11 +3812,17 @@ fn append_interface_instance_exports(
     for (i, (&fq, group)) in groups.iter().enumerate() {
         let instance_idx = base_instance_idx + i as u32;
         let mut type_items: Vec<(String, u32)> = Vec::new();
-        for export in group {
-            for (_, cm_ty) in &export.cm_params {
-                collect_type_items(cm_ty, ctx, &mut type_items);
+        if group.iter().any(|e| e.sync_lift) {
+            // `--lib` default interface: its named types were defined top-level
+            // by `emit_world_exports` and recorded on the context.
+            type_items.extend(ctx.lib_export_types().iter().cloned());
+        } else {
+            for export in group {
+                for (_, cm_ty) in &export.cm_params {
+                    collect_type_items(cm_ty, ctx, &mut type_items);
+                }
+                collect_type_items(&export.cm_result, ctx, &mut type_items);
             }
-            collect_type_items(&export.cm_result, ctx, &mut type_items);
         }
 
         let mut items: Vec<(&str, ComponentExportKind, u32)> = type_items

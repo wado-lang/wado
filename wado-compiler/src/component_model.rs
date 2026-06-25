@@ -2416,21 +2416,7 @@ impl InstanceSink<'_> {
 
 impl CmTypeSink for InstanceSink<'_> {
     fn define(&mut self, defined: CmDefined<'_>) -> u32 {
-        let enc = self.it.ty().defined_type();
-        match defined {
-            CmDefined::Record(fields) => enc.record(fields.iter().copied()),
-            CmDefined::Variant(cases) => enc.variant(cases.iter().copied()),
-            CmDefined::Enum(names) => enc.enum_type(names.iter().copied()),
-            CmDefined::Flags(names) => enc.flags(names.iter().copied()),
-            CmDefined::List(elem) => enc.list(elem),
-            CmDefined::Tuple(elems) => enc.tuple(elems.iter().copied()),
-            CmDefined::Option(inner) => enc.option(inner),
-            CmDefined::Result { ok, err } => enc.result(ok, err),
-            CmDefined::Own(resource) => enc.own(resource),
-            CmDefined::Borrow(resource) => enc.borrow(resource),
-            CmDefined::Future(payload) => enc.future(payload),
-            CmDefined::Stream(payload) => enc.stream(payload),
-        }
+        emit_cm_defined(self.it.ty().defined_type(), defined);
         self.alloc()
     }
 
@@ -2438,6 +2424,28 @@ impl CmTypeSink for InstanceSink<'_> {
         self.it
             .export(cm_name, ComponentTypeRef::Type(TypeBounds::Eq(idx)));
         self.alloc()
+    }
+}
+
+/// Write one [`CmDefined`] shape into a defined-type encoder. Shared by every
+/// [`CmTypeSink`] so the shape → wasm-encoder mapping lives in one place.
+pub(crate) fn emit_cm_defined(
+    enc: wasm_encoder::ComponentDefinedTypeEncoder<'_>,
+    defined: CmDefined<'_>,
+) {
+    match defined {
+        CmDefined::Record(fields) => enc.record(fields.iter().copied()),
+        CmDefined::Variant(cases) => enc.variant(cases.iter().copied()),
+        CmDefined::Enum(names) => enc.enum_type(names.iter().copied()),
+        CmDefined::Flags(names) => enc.flags(names.iter().copied()),
+        CmDefined::List(elem) => enc.list(elem),
+        CmDefined::Tuple(elems) => enc.tuple(elems.iter().copied()),
+        CmDefined::Option(inner) => enc.option(inner),
+        CmDefined::Result { ok, err } => enc.result(ok, err),
+        CmDefined::Own(resource) => enc.own(resource),
+        CmDefined::Borrow(resource) => enc.borrow(resource),
+        CmDefined::Future(payload) => enc.future(payload),
+        CmDefined::Stream(payload) => enc.stream(payload),
     }
 }
 
