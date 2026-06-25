@@ -134,3 +134,4 @@ It may include TODOs on WIP.
 - [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
 - [Structured Logging and Tracing (`core:log`)](./wep-2026-06-25-core-log.md)
 - [Trait Derivation Policy — Bound-Driven Synthesis](./wep-2026-06-25-trait-derivation.md)
+- [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)

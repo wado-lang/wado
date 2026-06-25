@@ -101,37 +101,42 @@ lib = "src/lib.wado"
 
 ### Visibility and Component Boundary
 
-The `export` keyword defines what is visible at the **Component Model boundary** — the package's public API. This is distinct from `pub`, which is project-internal visibility.
+Visibility is two orthogonal axes — the `internal` / `pub` scope ladder and the
+`export` CM flag. See [WEP: Visibility — `internal` / `pub` /
+`export`](./wep-2026-06-25-visibility-internal-pub-export.md) for the full
+model; the package-relevant points:
 
-| Modifier | Scope            | Use                                           |
-| -------- | ---------------- | --------------------------------------------- |
-| (none)   | Module-private   | Implementation details                        |
-| `pub`    | Package-internal | Shared across modules within the same project |
-| `export` | CM boundary      | Package's public API, visible to consumers    |
+| Modifier   | Scope                          | Use                                        |
+| ---------- | ------------------------------ | ------------------------------------------ |
+| (none)     | File-private                   | Implementation details                     |
+| `internal` | Package-internal               | Shared across files within the package     |
+| `pub`      | Library boundary (Wado-native) | The package's public API to Wado packages  |
+| `export`   | + CM boundary (`export ⟹ pub`) | Public API also exposed to any CM consumer |
 
 ```wado
 // src/lib.wado (in the "markdown" package)
-fn tokenize(input: String) -> List<Token> { ... }       // private
-pub fn build_ast(tokens: List<Token>) -> Document { ... } // project-internal
-export fn parse(input: String) -> Document { ... }         // public API
+fn tokenize(input: String) -> List<Token> { ... }            // private
+internal fn build_ast(tokens: List<Token>) -> Document { ... } // package-internal
+pub fn parse(input: String) -> Document { ... }                // library API (Wado-native)
+export fn render(doc: Document) -> String { ... }              // library API + CM boundary
 ```
 
-When another project depends on the `markdown` package (declared `"lib:markdown" = { ... }`, since it has no public namespace), only `export` items from the `lib` entry point are visible:
+When another project depends on the `markdown` package (declared `"lib:markdown" = { ... }`, since it has no public namespace), `pub` and `export` items from the `lib` entry point are visible:
 
 ```wado
-// In a consuming project
-use { parse } from "lib:markdown";        // OK: exported from lib
-// use { build_ast } from "lib:markdown";  // ERROR: pub but not exported
-// use { tokenize } from "lib:markdown";   // ERROR: private
+// In a consuming Wado project
+use { parse, render } from "lib:markdown"; // OK: pub / export
+// use { build_ast } from "lib:markdown";   // ERROR: internal, not part of the API
+// use { tokenize } from "lib:markdown";    // ERROR: private
 ```
 
-When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's interface.
+When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below.
 
-Crossing the package boundary requires `export`: a consumer may import only the `export` items of a dependency's `lib`, never its `pub` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies (rejecting `use` of a non-`export` item) is not yet implemented.
+Crossing the package boundary requires `pub` (or `export`): a consumer may import only the `pub` / `export` items of a dependency's `lib`, never its `internal` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies is not yet implemented.
 
 ### Wado-to-Wado Optimization
 
-Semantically, cross-package references always go through the CM boundary (`export` items only). However, when both producer and consumer are Wado, the compiler can skip the CM canonical ABI (lifting/lowering) and share Wasm GC types directly.
+A cross-package reference resolves against the dependency's library API (`pub` and `export` items). For an `export` item consumed by an arbitrary CM component, the reference goes through the CM Canonical ABI. When both producer and consumer are Wado, the compiler skips the CM ABI (lifting/lowering) and shares Wasm GC types directly — and a `pub`-only item (generic, closure-taking, trait-based) is reachable only on this path, since it has no CM representation.
 
 | Consumer → Producer                               | Path                                         |
 | ------------------------------------------------- | -------------------------------------------- |
@@ -140,7 +145,7 @@ Semantically, cross-package references always go through the CM boundary (`expor
 | Wado → arbitrary `.wasm`                          | CM canonical ABI (lifting/lowering)          |
 | Arbitrary → Wado `.wasm`                          | CM canonical ABI                             |
 
-This optimization is transparent to the developer. The visible API is always determined by `export`, and the semantics are always CM boundary semantics. The optimization only affects performance — cross-package calls between Wado projects have no overhead compared to project-internal calls.
+This optimization is transparent to the developer. For `export` items the observable semantics are CM boundary semantics; the optimization only affects performance — cross-package calls between Wado projects have no overhead compared to project-internal calls.
 
 ### `[registries]`
 

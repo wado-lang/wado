@@ -1,0 +1,103 @@
+# WEP: Visibility — `internal` / `pub` / `export`
+
+## Context
+
+Wado had two visibility keywords: `pub` (visible to other Wado modules in the
+same package) and `export` (visible at the Component Model boundary). `export`
+carried two unrelated jobs at once:
+
+- **Library boundary** — the package's public API, consumed by other _Wado_
+  packages.
+- **CM boundary** — the ABI surface lowered through the Canonical ABI and
+  emitted into WIT.
+
+These are not the same thing. The CM ABI cannot represent closures (`fn`
+values), generics (CM is monomorphic), traits / dynamic dispatch, or effect
+polymorphism (`<effect E>`). Because crossing a package boundary required
+`export`, and those constructs cannot be `export`ed, a generic, higher-order,
+or trait-based library could not be published to other Wado packages at all —
+even though Wado→Wado linking shares Wasm GC types directly and never needs the
+CM ABI (see [Package Manifest](./wep-2026-02-14-package-manifest.md)
+§"Wado-to-Wado Optimization").
+
+The naming also repeated a known Rust friction: `pub` named the in-library
+module boundary, so the genuine library boundary had to borrow the same word.
+
+## Decision
+
+Split the single `export` ladder into two orthogonal axes.
+
+Axis 1 — Wado visibility (a scope ladder):
+
+| Keyword    | Reach                                 | Rust analogue |
+| ---------- | ------------------------------------- | ------------- |
+| (none)     | The defining file                     | (none)        |
+| `internal` | Other files in the same package       | `pub(crate)`  |
+| `pub`      | Other Wado packages (the library API) | `pub`         |
+
+Axis 2 — CM surface (an orthogonal, additive flag):
+
+| Keyword  | Meaning                                                            |
+| -------- | ------------------------------------------------------------------ |
+| `export` | Also lower this item at the CM boundary. Must be CM-representable. |
+
+`export` is the analogue of Rust's `extern "C"` + `#[no_mangle]`: a separate
+ABI surface, not a visibility level. Rules:
+
+- `export ⟹ pub`. A CM export is by definition part of the public API. The
+  former `pub export` collapses to plain `export`.
+- `export` requires CM-representability, checked at the definition site (so the
+  "appears in WIT" guarantee stays static). Closures, generics with non-WIT
+  bounds, and `<effect E>` in an exported signature remain a compile error (see
+  [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)).
+- `pub` (without `export`) carries no CM restriction. Generic, higher-order,
+  and trait-based items become publishable across the Wado library boundary.
+
+```wado
+fn tokenize(s: String) -> List<Token> { ... }              // file-private
+internal fn build_ast(ts: List<Token>) -> Doc { ... }      // package-internal
+pub fn map<T, U>(f: fn(T) -> U, xs: List<T>) -> List<U>    // library API (Wado-native)
+export fn parse(s: String) -> Doc { ... }                  // library API + CM boundary
+```
+
+### Reach of `pub` vs `export`
+
+A `pub`-only item is Wado-native: it reaches any Wado consumer (a source
+dependency, or a `.wasm` with Wado provider metadata, via the GC-sharing path).
+An `export` item additionally reaches any CM consumer through the Canonical
+ABI. A standalone `.wasm` consumed by a non-Wado component therefore exposes
+only `export` items — `pub`-only items are invisible across that boundary.
+This follows directly from the producer/consumer matrix in
+[Package Manifest](./wep-2026-02-14-package-manifest.md) §"Wado-to-Wado
+Optimization"; the only change is that the library API is now `pub`, not
+`export`.
+
+### Why no `pub(crate)` / `pub(super)` family
+
+Wado is flat (1 file = 1 module; a package is a set of modules with no nested
+module privacy). A single `internal` covers every in-package case, so the
+scope-parameterized `pub(...)` forms have nothing to scope to. Unlike Rust,
+`pub` is absolute: a `pub` item is library-public, never gated by an enclosing
+private module.
+
+## Consequences
+
+- Generic / higher-order / trait libraries are publishable across packages
+  (`pub`), which `export` could never express.
+- `export` keeps its 1:1 correspondence with WIT `export`, with one job:
+  the CM boundary.
+- Migration (pre-stable, no shim): former `pub` → `internal`; former `export`
+  and `pub export` → `export`; items that were `pub` only because they are a
+  package's public API and were also `export`ed need no change. `pub use`
+  re-exports gain an `internal use` counterpart for package-internal
+  re-exports.
+- Enforcing "a consumer may import only `pub`/`export` items of a dependency"
+  for Wado-to-Wado source dependencies remains unimplemented, as before.
+
+## References
+
+- [Package Manifest (`wado.toml`)](./wep-2026-02-14-package-manifest.md)
+- [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md)
+- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
+- [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)
+- [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md)

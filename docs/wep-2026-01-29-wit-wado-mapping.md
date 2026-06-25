@@ -19,24 +19,28 @@ Define a clear bidirectional mapping between WIT constructs and Wado language fe
 
 ## Export Principle
 
-Wado distinguishes between module-level visibility (`pub`) and Component Model boundary visibility (`export`):
+Wado separates Wado visibility (`internal` package-scope, `pub` library-scope)
+from the Component Model boundary flag (`export`). See [WEP: Visibility —
+`internal` / `pub` /
+`export`](./wep-2026-06-25-visibility-internal-pub-export.md) for the model;
+only `export` concerns this WEP:
 
-| Keyword  | Scope             | Purpose                              |
-| -------- | ----------------- | ------------------------------------ |
-| `pub`    | Wado modules      | Share across Wado modules internally |
-| `export` | CM world boundary | Expose to external components        |
+| Keyword    | Scope             | Purpose                                 |
+| ---------- | ----------------- | --------------------------------------- |
+| `internal` | Same package      | Share across files within the package   |
+| `pub`      | Wado library API  | Expose to other Wado packages (no CM)   |
+| `export`   | CM world boundary | Expose to external components (`⟹ pub`) |
 
 This separation solves the common problem of "utility modules accidentally becoming public":
 
 ```wado
 // utils.wado - internal utilities
-pub fn helper() { ... }        // visible to other Wado modules
-pub struct Internal { ... }    // visible to other Wado modules
-// → NOT exposed at CM boundary
+internal fn helper() { ... }     // visible within the package only
+internal struct Helper { ... }   // → NOT exposed at CM boundary
 
 // api.wado - public API
-export fn run() { ... }        // exposed at CM boundary
-export struct Point { ... }    // exposed at CM boundary
+export fn run() { ... }          // exposed at CM boundary
+export struct Point { ... }      // exposed at CM boundary
 ```
 
 Only items explicitly marked with `export` appear in the generated WIT and Component Model interface.

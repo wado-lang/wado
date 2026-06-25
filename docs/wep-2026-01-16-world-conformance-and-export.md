@@ -35,17 +35,16 @@ To properly support Component Model worlds, we need:
 
 ### Visibility and Export
 
-Two orthogonal concepts control accessibility:
+Visibility is two orthogonal axes — superseded by [WEP: Visibility —
+`internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md).
+Summary: `internal` (package) and `pub` (library) form a scope ladder; `export`
+is an additive CM-boundary flag with `export ⟹ pub`. This WEP's original
+two-keyword table (`pub` = Wado modules, `export` = CM) is replaced by that
+model; the `contract` and export-mapping syntax below is unaffected.
 
-| Declaration           | From Wado modules | From CM boundary |
-| --------------------- | ----------------- | ---------------- |
-| `fn foo()`            | ❌                | ❌               |
-| `pub fn foo()`        | ✅                | ❌               |
-| `export fn foo()`     | ❌                | ✅               |
-| `pub export fn foo()` | ✅                | ✅               |
-
-- **`pub`**: Makes a declaration visible to other Wado modules
-- **`export`**: Generates Component Model ABI glue code, making it accessible across CM boundary
+- **`export`**: Generates Component Model ABI glue code, making the item
+  accessible across the CM boundary (and, by `export ⟹ pub`, part of the
+  library API).
 
 ### World as First-Class Entity
 
