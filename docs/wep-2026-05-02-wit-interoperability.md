@@ -589,8 +589,8 @@ Each phase ends with green E2E tests for the listed fixtures.
 
 A `.wado` file with only `export` items and no world entry point
 (`fn run` / `fn handle`) is a _library_. It is declared by `[package].lib` in
-`wado.toml` and built with `wado compile --lib`: every `export fn` becomes a
-Component Model export under a world named after the package
+`wado.toml` and built with `wado compile --lib`: the entry module's `export fn`s
+become Component Model exports under a world named after the package
 (`<namespace>:<name>/<name>@<version>`; `[package].namespace` is required for
 `--lib`, and `--lib` is mutually exclusive with `--world`). The library world
 is synthesized from the entry module's export signatures and carried on
@@ -599,11 +599,38 @@ is synthesized from the entry module's export signatures and carried on
 use a synchronous lift (the core function returns the value directly), and the
 default allocator is `freelist`.
 
-Status: plumbing plus the primitive value types compile and validate today
-(milestones 1–2). Containers, the four `result` forms, `string` returns, and
-user-defined named types (record/enum/variant/flags/newtype) are still being
-wired; `package-cm-catalog` is the corpus that enumerates the value-type ABI
-surface and tracks which CM shapes the lift/lower path supports.
+Export grouping follows the same A/B rule the WIT producer applies
+(`wit_emit`, mirroring WEP: WIT and Wado Mapping → "Default Interface"):
+
+- A — no exported signature references a named user type: the `export fn`s are
+  **direct world exports** (`export id: func(...)`), structural types
+  (`list`/`option`/`tuple`/`result`/`string`) inlined.
+- B — any exported signature references a named user type
+  (`struct`/`variant`/`enum`/`flags`/type alias): the exports plus the
+  transitive closure of their named types are grouped into the **default
+  interface** named after `[package].name`, exported as an instance. This is
+  required for reuse — a world export list admits only functions and
+  interfaces, never a bare type, so a named type reaches consumers as a
+  reusable, `use`-able entity only through an exported interface.
+
+The codegen mirrors this without world-specific special-casing:
+
+1. The keystone is registry-driven type resolution. The entry module's
+   exported (and transitively referenced) named types are registered into
+   `CmInterfaceRegistry` under the default-interface FQ. Both the export type
+   plan (`resolve_cm_export_type`) and the CM type emitter resolve named types
+   purely through this registry, so lib-local types need no special path once
+   registered.
+2. The CM value-type emitter is the single recursive engine that already
+   builds the full value surface (`list`/`option`/`tuple`/`result`/`record`/
+   `variant`/`enum`/`flags`/newtype/nested) for WASI imports. It is generalized
+   over a type sink so it emits either into an imported/exported `InstanceType`
+   or as top-level component defined types for direct world exports — one
+   engine, no parallel export-side reimplementation.
+3. `package-cm-catalog` is the corpus enumerating the value-type ABI surface;
+   `tests/cm_catalog.rs` round-trips a crafted value through every `id_*`
+   export (`lift(lower(x)) == x`) at `-O0`/`-O2`, and the same fixture runs
+   under the test world via `e2e.rs`.
 
 `wado wit` (without `--lib`) still wraps a no-entry-point file's interface in
 the resolved default world (an otherwise empty `world`), which keeps its output
@@ -680,11 +707,12 @@ will get one when work starts.
 - [ ] Construct world / interface / resource entries in the existing
       registries directly from parsed WIT, on the same code path as
       stdlib-derived entries.
-- [ ] `wado compile --lib`: export every `export fn` under a package-named
-      library world (the world-less-library path; see Open Design Questions).
-      Plumbing and primitive sync exports landed (M1–M2); containers,
-      `result`/`string` returns, user-defined named-type emission, and
-      default-interface grouping remain. `package-cm-catalog` tracks the surface.
+- [ ] `wado compile --lib`: export the entry module's `export fn`s under a
+      package-named library world, with A/B grouping (direct world exports vs
+      default interface) matching the WIT producer. Plumbing and primitive sync
+      exports landed (M1–M2); containers, `result`/`string` returns, lib-local
+      named-type registration + emission, and default-interface grouping remain.
+      `package-cm-catalog` + `tests/cm_catalog.rs` track and drive the surface.
 - [ ] Close the binding-synthesis gaps for arbitrary exports: container and
       user-named-type lift/lower, `result`/`string` returns, and
       return-via-outptr when flat count exceeds `MAX_FLAT_RESULTS`. Sync export
