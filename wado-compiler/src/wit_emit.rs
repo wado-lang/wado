@@ -18,6 +18,7 @@ use wit_encoder::{
     TypeDef, VariantCase, World, WorldItem,
 };
 
+use crate::component_model::to_kebab;
 use crate::semantics::Semantics;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -1073,41 +1074,6 @@ fn world_local_name(world_fq: &str) -> String {
         .next()
         .unwrap_or(world_fq)
         .to_string()
-}
-
-/// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to WIT
-/// kebab-case.
-fn to_kebab(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut out = String::with_capacity(name.len() + 4);
-    let mut prev_lower_or_digit = false;
-    for (i, &ch) in chars.iter().enumerate() {
-        if ch == '_' {
-            if !out.ends_with('-') && !out.is_empty() {
-                out.push('-');
-            }
-            prev_lower_or_digit = false;
-            continue;
-        }
-        if ch.is_ascii_uppercase() {
-            // Break before an uppercase letter that starts a new word: either
-            // after a lowercase/digit (`myApi` -> `my-api`), or at the end of
-            // an acronym run when the next char is lowercase
-            // (`HTTPServer` -> `http-server`).
-            let acronym_boundary = chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
-                && i > 0
-                && chars[i - 1].is_ascii_uppercase();
-            if (prev_lower_or_digit || acronym_boundary) && !out.is_empty() {
-                out.push('-');
-            }
-            out.push(ch.to_ascii_lowercase());
-            prev_lower_or_digit = false;
-        } else {
-            out.push(ch);
-            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
-        }
-    }
-    out
 }
 
 #[cfg(test)]

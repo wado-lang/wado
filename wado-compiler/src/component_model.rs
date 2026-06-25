@@ -426,6 +426,41 @@ pub struct CmInterfaceRegistry {
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
 }
 
+/// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
+/// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
+pub(crate) fn to_kebab(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::with_capacity(name.len() + 4);
+    let mut prev_lower_or_digit = false;
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '_' {
+            if !out.ends_with('-') && !out.is_empty() {
+                out.push('-');
+            }
+            prev_lower_or_digit = false;
+            continue;
+        }
+        if ch.is_ascii_uppercase() {
+            // Break before an uppercase letter that starts a new word: either
+            // after a lowercase/digit (`myApi` -> `my-api`), or at the end of
+            // an acronym run when the next char is lowercase
+            // (`HTTPServer` -> `http-server`).
+            let acronym_boundary = chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
+                && i > 0
+                && chars[i - 1].is_ascii_uppercase();
+            if (prev_lower_or_digit || acronym_boundary) && !out.is_empty() {
+                out.push('-');
+            }
+            out.push(ch.to_ascii_lowercase());
+            prev_lower_or_digit = false;
+        } else {
+            out.push(ch);
+            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+        }
+    }
+    out
+}
+
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
 /// registration. Two registrations of the same `(interface, name)` pair
 /// indicate a stdlib bug (the same declaration emitted twice) — we want a
@@ -1281,6 +1316,92 @@ impl CmInterfaceRegistry {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    /// Register a `--lib` entry module's own named types under the synthesized
+    /// default-interface FQ.
+    ///
+    /// Unlike [`Self::register_module_decls`], library types carry no
+    /// `#[cm(...)]` attribute — they are the package's own declarations, not WIT
+    /// bindings — so CM names are derived by kebab-casing the Wado identifiers
+    /// and the source interface is the library's default-interface FQ. After
+    /// this runs, both the export type plan (`resolve_cm_export_type`) and the
+    /// CM type emitter (`ast_type_to_cm`) resolve these types through the
+    /// registry exactly like WASI types, with no library-specific path.
+    pub fn register_lib_local_decls(&mut self, module: &crate::ast::Module, iface_fq: &str) {
+        use crate::ast::Item;
+
+        for item in &module.items {
+            match item {
+                Item::Newtype(alias) => register_unique(
+                    &mut self.newtypes,
+                    "newtype",
+                    iface_fq.to_string(),
+                    alias.name.clone(),
+                    alias.ty.clone(),
+                ),
+                Item::Struct(struct_def) => {
+                    let fields: Vec<(String, Type)> = struct_def
+                        .fields
+                        .iter()
+                        .map(|f| (to_kebab(&f.name), f.ty.clone()))
+                        .collect();
+                    let wado_fields: Vec<(String, String, Type)> = struct_def
+                        .fields
+                        .iter()
+                        .map(|f| (f.name.clone(), to_kebab(&f.name), f.ty.clone()))
+                        .collect();
+                    register_unique(
+                        &mut self.structs,
+                        "struct",
+                        iface_fq.to_string(),
+                        struct_def.name.clone(),
+                        (to_kebab(&struct_def.name), fields, wado_fields),
+                    );
+                }
+                Item::Flags(flags_def) => {
+                    let members: Vec<String> =
+                        flags_def.flags.iter().map(|m| to_kebab(&m.name)).collect();
+                    register_unique(
+                        &mut self.flags,
+                        "flags",
+                        iface_fq.to_string(),
+                        flags_def.name.clone(),
+                        (to_kebab(&flags_def.name), members),
+                    );
+                }
+                Item::Enum(enum_def) => {
+                    let variants: Vec<String> =
+                        enum_def.cases.iter().map(|c| to_kebab(&c.name)).collect();
+                    register_unique(
+                        &mut self.enums,
+                        "enum",
+                        iface_fq.to_string(),
+                        enum_def.name.clone(),
+                        (to_kebab(&enum_def.name), variants),
+                    );
+                }
+                Item::Variant(variant_def) => {
+                    let cases: Vec<CmVariantCase> = variant_def
+                        .cases
+                        .iter()
+                        .map(|c| CmVariantCase {
+                            cm_name: to_kebab(&c.name),
+                            wado_name: c.name.clone(),
+                            payload: c.payload.clone(),
+                        })
+                        .collect();
+                    register_unique(
+                        &mut self.variants,
+                        "variant",
+                        iface_fq.to_string(),
+                        variant_def.name.clone(),
+                        (to_kebab(&variant_def.name), cases),
+                    );
+                }
+                _ => {}
             }
         }
     }
