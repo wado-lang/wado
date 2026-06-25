@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782308763496,
+  "lastUpdate": 1782349785249,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35301,6 +35301,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/baf7117e6ce9470d4e6eae4db7838fe045cdad61"
         },
         "date": 1782308763248,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287917,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd9ce24d2918577a193cad741762fcaf4855daa2",
+          "message": "Merge pull request #1441 from wado-lang/claude/special-literals-call-site-ve5wvv\n\nfeat(compiler): evaluate location literals at the call site in default arguments",
+          "timestamp": "2026-06-25T10:00:04+09:00",
+          "tree_id": "886081f85d1b2e586ab053119303d79a27c5d7c7",
+          "url": "https://github.com/wado-lang/wado/commit/dd9ce24d2918577a193cad741762fcaf4855daa2"
+        },
+        "date": 1782349784694,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
