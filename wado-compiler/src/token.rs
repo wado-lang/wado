@@ -37,6 +37,10 @@ pub enum TokenKind {
     In,
     Of,
     Pub,
+    // TODO: package-internal visibility. Reserved as a keyword; the parser
+    // currently accepts it as a nop. See
+    // docs/wep-2026-06-25-visibility-internal-pub-export.md.
+    Internal,
     Effect,
     Interface,
     Reactive,
@@ -264,7 +268,8 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, Caret, CaretEq, CharLit, Colon,
         ColonColon, Comma, Const, Continue, Dot, DotDot, DotDotDot, DotDotEq, DotDotLt, Effect,
         Else, Enum, Eof, Eq, EqEq, Export, False, FatArrow, Flags, Fn, For, From, Global, Gt, GtEq,
-        GtGt, Hash, Ident, If, Impl, Import, In, Interface, LBrace, LBracket, LParen, Let, Loop,
+        GtGt, Hash, Ident, If, Impl, Import, In, Internal, Interface, LBrace, LBracket, LParen, Let,
+        Loop,
         Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Mut, Not, NotEq, Null, NumberLit, Of, Or,
         Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub, Question, RBrace, RBracket, RParen,
         Reactive, Resource, Return, Semicolon, ShlEq, ShrEq, Slash, SlashEq, Star, StarEq, Stores,
@@ -313,6 +318,7 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         In => write_str(out, b'V', "In"),
         Of => write_str(out, b'V', "Of"),
         Pub => write_str(out, b'V', "Pub"),
+        Internal => write_str(out, b'V', "Internal"),
         Effect => write_str(out, b'V', "Effect"),
         Interface => write_str(out, b'V', "Interface"),
         Reactive => write_str(out, b'V', "Reactive"),
