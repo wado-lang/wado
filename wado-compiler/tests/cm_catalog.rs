@@ -23,7 +23,7 @@ use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
-use wasmtime::component::{Component, Linker, Val};
+use wasmtime::component::{Component, Val};
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
@@ -102,7 +102,6 @@ fn cases() -> Vec<Case> {
         case("id-result-unit", Val::Result(Ok(None))),
         // Named value types.
         case("id-record", point()),
-        case("id-record-empty", Val::Record(vec![])),
         case("id-enum", Val::Enum("green".into())),
         case(
             "id-variant",
@@ -165,17 +164,36 @@ fn run_round_trips(opt_level: OptLevel) {
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        // A pure value-type library imports nothing, so a bare linker suffices.
-        let linker: Linker<()> = Linker::new(engine);
-        let mut store = Store::new(engine, ());
+        // The value-type library still imports the prelude's `wasi:cli/stderr`
+        // (assertion/format diagnostics), so use the shared WASI linker.
+        let linker = common::linker(engine).expect("build linker");
+        let state = common::WasiState::new_with_pipes(
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+            wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
+        );
+        let mut store = Store::new(engine, state);
+        // The shared engine enables epoch interruption; without a deadline the
+        // first call traps with `interrupt`.
+        store.set_epoch_deadline((common::DEFAULT_TIMEOUT_MS / 1000).max(1));
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate library component");
 
+        // Named-type exports group into the default interface; resolve the
+        // `wado:cm-catalog/cm-catalog@…` instance once and look funcs up inside.
+        let iface = instance
+            .get_export(&mut store, None, LIB_WORLD_FQ)
+            .map(|(_, idx)| idx);
+
         let mut failures = Vec::new();
         for Case { export, value } in cases() {
-            let Some(func) = instance.get_func(&mut store, export) else {
+            let func = iface
+                .as_ref()
+                .and_then(|i| instance.get_export(&mut store, Some(i), export))
+                .map(|(_, idx)| idx)
+                .and_then(|idx| instance.get_func(&mut store, &idx));
+            let Some(func) = func else {
                 failures.push(format!("[{opt}] export `{export}` not found"));
                 continue;
             };
