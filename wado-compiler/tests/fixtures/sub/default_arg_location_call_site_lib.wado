@@ -1,15 +1,11 @@
-// Helper for `default_arg_location_call_site`. The location-literal defaults
-// (`#file` / `#line` / `#function`) must evaluate at the call site, NOT here
-// where they are written. Returning them lets the caller assert the values.
+// Helper for `default_arg_location_call_site`. Returns its location-literal
+// defaults so the caller can assert they reflect the call site, not this file.
 
 pub fn loc(file: String = #file, line: i32 = #line, fun: String = #function) -> [String, i32, String] {
     return [file, line, fun];
 }
 
-// `wrap` defaults its parameter to a call to `loc`, whose own defaults are
-// location literals. The nested default must still report the OUTERMOST call
-// site (where `wrap()` is written), not this module — every location literal
-// reports the same ultimate caller.
+// Nested default: `loc()` is itself defaulted.
 pub fn wrap(info: [String, i32, String] = loc()) -> [String, i32, String] {
     return info;
 }

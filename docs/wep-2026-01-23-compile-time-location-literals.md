@@ -43,18 +43,15 @@ Returns the fully specialized name without signature:
 
 ### Call-Site Evaluation in Default Arguments
 
-`#file`, `#line`, and `#function` evaluate at the call site when used as a function or method [default argument](./wep-2026-04-11-default-arguments.md), reporting the caller rather than where the default is written. This is what makes a defaulted location parameter useful — a logging or assertion helper captures its caller's location (cf. Swift's `#file`/`#line` default parameters, C++ `std::source_location::current()`).
+As a function or method [default argument](./wep-2026-04-11-default-arguments.md), `#file` / `#line` / `#function` evaluate at the call site, so a defaulted location parameter captures its caller — the basis for logging and assertion helpers (cf. Swift's `#file`/`#line` defaults, C++ `std::source_location::current()`).
 
 ```wado
-pub fn log(msg: String, file: String = #file, line: i32 = #line, fun: String = #function) { ... }
+pub fn log(msg: String, file: String = #file, line: i32 = #line) { ... }
 
-// At app.wado:42, inside `fn run`:
-log("started"); // file = "app.wado", line = 42, fun = "run"
+log("started"); // file/line report this call, not where `log` is defined
 ```
 
-A default argument's name resolution otherwise binds in the callee's scope (a default may reference callee-module-private items). Only these three location literals are redirected to the call site. `#data`, `#include_str`, and `#include_bytes` always refer to the source file that lexically contains them. Struct field defaults are unaffected: their location literals report the field's defining file (the default is materialized once at the struct definition, not per construction site).
-
-When a default expression is itself a defaulted call (`fn outer(x = loc())`, where `loc`'s own defaults are location literals), only the outermost default expansion fixes the call site; the nested expansion inherits it. So every location literal reports the same ultimate call site (where `outer(...)` is written), never the lib where the default or the literal lives. This keeps the three literals consistent and matches the API author's intent — `loc()` as a default captures the caller of `outer`, not `outer`'s own signature.
+A default's name resolution otherwise binds in the callee's scope, so only these three literals are redirected. `#data`, `#include_str`, `#include_bytes` and struct field defaults always report their own defining file. For a nested defaulted call (`fn outer(x = loc())`), only the outermost expansion fixes the call site and inner ones inherit it, so every literal consistently reports `outer(...)`.
 
 ### `#data`
 

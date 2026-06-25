@@ -1250,13 +1250,6 @@ let icon = #include_bytes("./icon.png");   // include file as List<u8>
 
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
-As a default argument, `#file` / `#line` / `#function` evaluate at the call site (the caller), enabling source-tracking helpers. `#data` / `#include_str` / `#include_bytes` and struct field defaults always refer to their own defining file.
-
-```wado
-pub fn log(msg: String, file: String = #file, line: i32 = #line) { /* ... */ }
-log("hi"); // file/line report this call, not where `log` is defined
-```
-
 ## Compile-Time Parameters
 
 `#[param]` on a `global` makes it a build input fed by the `wado` invocation: the type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.

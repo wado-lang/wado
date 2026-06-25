@@ -1,38 +1,31 @@
-// Location literals (`#file` / `#line` / `#function`) used as default arguments
-// must evaluate at the CALL SITE, not where the default is written (the lib
-// module). This mirrors Swift's `#file`/`#line` default parameters and C++'s
-// `std::source_location::current()`. Name resolution in a default still uses
-// the callee's scope — only the location literals are special-cased.
+// `#file` / `#line` / `#function` as default arguments evaluate at the call
+// site, not the lib where the default is written.
 
 use { loc, wrap } from "./sub/default_arg_location_call_site_lib.wado";
 
 fn call_here() -> [String, i32, String] {
-    return loc(); // call site: this is line 10
+    return loc(); // call site: this is line 7
 }
 
 fn nested_here() -> [String, i32, String] {
-    return wrap(); // call site: this is line 14
+    return wrap(); // call site: this is line 11
 }
 
 test "location literal defaults evaluate at the call site" {
     let [file, line, fun] = call_here();
-    // `#file` is the caller's module, not the lib that declares the default.
     assert file.ends_with("default_arg_location_call_site.wado");
     assert !file.contains("lib.wado");
-    // `#line` is the call-site line (10), not the line of `#line` in the lib.
-    assert line == 10;
-    // `#function` is the calling function.
+    assert line == 7;
     assert fun == "call_here";
 }
 
 test "nested default call reports the outermost call site" {
-    // `wrap`'s default is `loc()`, whose own defaults are location literals.
-    // Every location literal reports the outermost call site (this `wrap()`),
-    // never the lib where `loc()` or `#file` are written.
+    // `wrap`'s default is `loc()`, itself defaulted: every literal reports the
+    // outermost `wrap()` call, not the lib.
     let [file, line, fun] = nested_here();
     assert file.ends_with("default_arg_location_call_site.wado");
     assert !file.contains("lib.wado");
-    assert line == 14;
+    assert line == 11;
     assert fun == "nested_here";
 }
 
