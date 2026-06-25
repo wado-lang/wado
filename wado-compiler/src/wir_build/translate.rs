@@ -1610,19 +1610,23 @@ impl FunctionTranslator<'_, '_> {
                             WirInstr::StructNew { fields, .. } => Some(WirInstr::Return {
                                 value: Some(Box::new(WirInstr::Seq(fields))),
                             }),
-                            // Nested control flow (`return match { … }`,
-                            // `return if … `): each branch's leaf
-                            // StructNew is rewritten into its own
-                            // `Return { Seq(fields) }`, and the outer
-                            // expression replaces the whole Return —
-                            // the inner Returns transfer control before
-                            // the outer one would, so leaving an outer
-                            // `Return` here would feed the validator
-                            // an empty stack.
+                            // A scaffolded return value: a sequential block
+                            // (`return { let a = …; [a, b] }`, which inlining
+                            // produces when an element needs a binding), or
+                            // nested control flow (`return match { … }` /
+                            // `return if …`). `lift_struct_new_to_seq` rewrites
+                            // each leaf aggregate `StructNew` into its own
+                            // `Return { Seq(fields) }` in place, so the lifted
+                            // expression replaces the whole `Return`: a block's
+                            // tail returns explicitly, and a branch's leaf
+                            // returns before the outer one would — wrapping the
+                            // outer expression in `Return` instead would feed
+                            // the validator an empty stack for the control-flow
+                            // case.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
-                                lift_struct_new_to_seq(&mut other, false);
+                                lift_struct_new_to_seq(&mut other, true);
                                 Some(other)
                             }
                             other => Some(WirInstr::Return {
