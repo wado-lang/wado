@@ -631,8 +631,33 @@ fn synthesize_lift_list(
     // These are needed by the monomorphizer to instantiate List::with_capacity and .push().
     let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_tid =
-            cm_type_to_type_id(elem_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package);
+        // For a lib-local record element, build the struct TypeId under the
+        // entry module source so it matches the elaborator-registered type
+        // (and the per-element StructLiteral lift); `cm_type_to_type_id` would
+        // fall back to i32, yielding a `List<i32>::push` that rejects the ref.
+        let elem_tid = match elem_ty {
+            Type::Named(n)
+                if ctx
+                    .cm_interface_registry
+                    .resolve_cm_source_for(n, None)
+                    .is_some_and(|s| {
+                        !s.starts_with("wasi:")
+                            && !s.starts_with("core:")
+                            && ctx
+                                .cm_interface_registry
+                                .get_struct_fields_by_source(s, &n.name)
+                                .is_some()
+                    }) =>
+            {
+                let source = ctx
+                    .cm_interface_registry
+                    .resolve_cm_source_for(n, None)
+                    .expect("source present in guard");
+                let ms = ctx.module_source_for(source);
+                tt.make_struct(n.name.clone(), ms)
+            }
+            _ => cm_type_to_type_id(elem_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package),
+        };
         let list_tid = tt.make_list(elem_tid);
         let list_name = tt
             .compiler_items()
