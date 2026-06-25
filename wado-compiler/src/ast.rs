@@ -3181,7 +3181,7 @@ pub struct ImplBlock {
     pub methods: Vec<Function>,
     /// `impl Trait for Type;` — synthesis request (compiler generates the body)
     pub is_synthesize_request: bool,
-    /// `..` rest pattern at the end of an effect handler `impl` block.
+    /// `..trap` rest clause at the end of an effect handler `impl` block.
     /// Indicates that any operation of the trait (effect) not implemented in
     /// `methods` should trap when dispatched. Only meaningful for effect
     /// handler impls; ignored for ordinary trait impls.

@@ -37,7 +37,7 @@ impl Stream<u8> for BaseStream {
         let _ = this;
         resume ()
     }
-    ..
+    ..trap
 }
 
 impl StreamWritable<u8> for BaseStream {
@@ -52,7 +52,7 @@ impl StreamWritable<u8> for BaseStream {
         let _ = this;
         resume ()
     }
-    ..
+    ..trap
 }
 
 // Counts every read / write that flows through it and forwards to
@@ -71,7 +71,7 @@ impl Stream<u8> for LoggingStream {
         let inner = this.read(max);   // -> BaseStream via outer handler
         resume inner
     }
-    ..
+    ..trap
 }
 
 impl StreamWritable<u8> for LoggingStream {
@@ -80,7 +80,7 @@ impl StreamWritable<u8> for LoggingStream {
         this.write(data);             // -> BaseStream via outer handler
         resume ()
     }
-    ..
+    ..trap
 }
 
 export fn run() with Stdout {

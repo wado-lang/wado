@@ -442,6 +442,26 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// The effect-handler `..trap` rest clause round-trips and stays last in the
+/// impl block.
+#[test]
+fn test_format_effect_handler_trap_rest() {
+    let source = r"impl Foo for Bar {
+    fn op(&self) -> i32 {
+        return 1;
+    }
+    ..trap
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("..trap"),
+        "rest clause should round-trip as `..trap`: {formatted}"
+    );
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 #[test]
 fn test_format_preserves_line_comment() {
     let source = r"
