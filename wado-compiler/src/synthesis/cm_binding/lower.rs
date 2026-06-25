@@ -31,19 +31,18 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    binary_add, cm_type_to_type_id, field_access, flatten_param_type, is_unit_type, kebab_to_pascal,
-    variant_tag, variant_test,
+    binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, field_access,
+    flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
-/// Join two CM flat slot types like `component_model::join_val_types` (mismatch
-/// widens to `i64`), so a lowered flat arg matches the core import's signature.
+/// Join two CM flat slot types via the single Canonical ABI join
+/// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
+/// signature: `{i32, f32}` widens to `i32`, any other mismatch to `i64`.
 fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
-    match (a, b) {
-        (Some(a), Some(b)) if a == b => a,
-        (Some(_), Some(_)) => TypeTable::I64,
-        (Some(t), None) | (None, Some(t)) => t,
-        (None, None) => TypeTable::I32,
-    }
+    super::types::cm_val_type_to_type_id(cm_abi::CmValType::join(
+        a.map(cm_val_type_from_type_id),
+        b.map(cm_val_type_from_type_id),
+    ))
 }
 
 /// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
@@ -1101,21 +1100,16 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
                             if i < payload_locals.len() {
                                 let (pl, pt) = payload_locals[i];
-                                // A case may produce a narrower flat than the
-                                // joined slot (e.g. i32 into an i64 slot); cast.
-                                //
-                                // For every WASI variant bound today the cases
-                                // agree on each slot's type, so this cast is a
-                                // no-op. If a future binding mixes kinds/widths
-                                // at one slot, `flatten_param_type` joins to i32
-                                // and `cast` does a *numeric* conversion, not a
-                                // bit reinterpret — revisit this (and the join
-                                // rule) before binding such a variant.
-                                let v = if flat_val.type_id == pt {
-                                    flat_val
-                                } else {
-                                    cast(flat_val, pt)
-                                };
+                                // Join this case's payload flat into the shared
+                                // slot, bit-reinterpreting when the join widened
+                                // the slot to a different core class (e.g. an
+                                // `f32` case sharing an `i32`-joined slot).
+                                let flat_val_ty = flat_val.type_id;
+                                let v = coerce_flat_lower(
+                                    flat_val,
+                                    cm_val_type_from_type_id(flat_val_ty),
+                                    cm_val_type_from_type_id(pt),
+                                );
                                 case_stmts.push(expr_stmt(assign(
                                     local_ref(pl, &format!("{prefix}_p{i}"), pt),
                                     v,

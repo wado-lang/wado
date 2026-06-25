@@ -112,6 +112,16 @@ fn cases() -> Vec<Case> {
             Val::Flags(vec!["read".into(), "execute".into()]),
         ),
         case("id-newtype", Val::Float64(100.0)),
+        // Mixed-core-class variant: the `as-float` arm's f32 payload shares a
+        // slot the join widened to i32, so it must be bit-reinterpreted.
+        case(
+            "id-mixed",
+            Val::Variant("as-float".into(), b(Val::Float32(2.5))),
+        ),
+        case("id-mixed", Val::Variant("as-int".into(), b(Val::U32(7)))),
+        // Mixed-core-class result: the `err` arm's u32 shares an f32-widened slot.
+        case("id-result-fu", Val::Result(Err(b(Val::U32(42))))),
+        case("id-result-fu", Val::Result(Ok(b(Val::Float32(1.5))))),
         // Nested compositions.
         case(
             "id-list-option",

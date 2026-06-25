@@ -40,6 +40,14 @@ pub flags Perms {
 
 pub type Meters = f64;
 
+// A variant whose cases flatten to the same slot size but different core
+// classes (`u32`→i32 vs `f32`→f32). The CM flat-ABI join widens the shared
+// slot to one class, so the other case's payload must be bit-reinterpreted.
+pub variant Mixed {
+    AsInt(u32),
+    AsFloat(f32),
+}
+
 // --- Primitives ---
 
 export fn id_bool(v: bool) -> bool {
@@ -132,6 +140,14 @@ export fn id_flags(v: Perms) -> Perms {
     return v;
 }
 export fn id_newtype(v: Meters) -> Meters {
+    return v;
+}
+export fn id_mixed(v: Mixed) -> Mixed {
+    return v;
+}
+// `result` whose Ok/Err arms flatten to the same slot size but different core
+// classes (`f32` vs `u32`); exercises the join reinterpret on the Err arm.
+export fn id_result_fu(v: Result<f32, u32>) -> Result<f32, u32> {
     return v;
 }
 

@@ -42,8 +42,9 @@ use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
-    compute_export_flat_param_types, export_needs_param_lifting, field_access, find_struct_decl,
+    LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
+    coerce_flat_lower, compute_export_flat_param_types, export_needs_param_lifting, field_access,
+    find_struct_decl,
     find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
     type_id_to_ast_type, variant_payload, variant_tag, variant_test,
 };
@@ -552,10 +553,13 @@ fn lower_to_flat_inner(
                             let (target_local, target_vt, ref target_name) = slot_locals[i];
                             let target_type = cm_val_type_to_type_id(target_vt);
                             let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                            let mut val = local_ref(flat_val.index, "__flat", source_type);
-                            if flat_val.cm_type != target_vt {
-                                val = cast(val, target_type);
-                            }
+                            // Join the case payload into the shared slot,
+                            // bit-reinterpreting on a class mismatch.
+                            let val = coerce_flat_lower(
+                                local_ref(flat_val.index, "__flat", source_type),
+                                flat_val.cm_type,
+                                target_vt,
+                            );
                             arm_stmts.push(expr_stmt(assign(
                                 local_ref(target_local, target_name, target_type),
                                 val,
@@ -1003,10 +1007,20 @@ pub(super) fn synthesize_lift_from_flat_params(
                     let payload = if is_unit_type(payload_ty) {
                         None
                     } else {
-                        let (lifted, _) = synthesize_lift_from_flat_params(
+                        let (payload_locals, payload_types) = coerce_payload_slots(
                             payload_ty,
                             &flat_param_locals[1..],
                             &flat_types[1..],
+                            next_local,
+                            &mut arm_stmts,
+                            locals,
+                            tir_modules,
+                            type_table_cell,
+                        );
+                        let (lifted, _) = synthesize_lift_from_flat_params(
+                            payload_ty,
+                            &payload_locals,
+                            &payload_types,
                             payload_tid,
                             next_local,
                             &mut arm_stmts,
@@ -1105,6 +1119,50 @@ pub(super) fn synthesize_lift_from_flat_params(
     }
 }
 
+/// Re-map a variant/result case's payload flat slots from the declared (joined)
+/// slot types to the case's natural flat types, inserting a bit-preserving
+/// coercion ([`coerce_flat_lift`]) wherever the join widened a slot to a
+/// different core class. Returns `(local_indices, natural_flat_types)` to feed
+/// the recursive payload lift; coercion `let`s are appended to `stmts` so they
+/// run only inside the active case's branch.
+#[allow(clippy::too_many_arguments)]
+fn coerce_payload_slots(
+    payload_ty: &Type,
+    slot_locals: &[u32],
+    slot_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table_cell: &RefCell<TypeTable>,
+) -> (Vec<u32>, Vec<cm_abi::CmValType>) {
+    let natural: Vec<cm_abi::CmValType> = {
+        let tt = type_table_cell.borrow();
+        let mut out = Vec::new();
+        flatten_export_type(payload_ty, &mut out, tir_modules, &tt);
+        out
+    };
+    let mut out_locals = Vec::with_capacity(natural.len());
+    for (j, &want) in natural.iter().enumerate() {
+        let Some(slot_local) = slot_locals.get(j).copied() else {
+            break;
+        };
+        let have = slot_types.get(j).copied().unwrap_or(want);
+        if have == want {
+            out_locals.push(slot_local);
+        } else {
+            let have_tid = cm_val_type_to_type_id(have);
+            let want_tid = cm_val_type_to_type_id(want);
+            let coerced =
+                coerce_flat_lift(local_ref(slot_local, "__p", have_tid), have, want);
+            let l = alloc_local(next_local, locals, want_tid);
+            stmts.push(let_stmt("__coerce", l, want_tid, coerced));
+            out_locals.push(l);
+        }
+    }
+    (out_locals, natural)
+}
+
 /// Lift a named `variant` value from flat CM params.
 ///
 /// The CM `variant` flat ABI is `(disc: i32, ...joined-payload-flats)` where the
@@ -1173,10 +1231,23 @@ fn lift_variant_from_flat_params(
         let payload = if is_unit_type(payload_ty) {
             None
         } else {
-            let (lifted, _) = synthesize_lift_from_flat_params(
+            // Re-map the joined payload slots to this case's natural flat types,
+            // bit-reinterpreting where the join widened the slot to a different
+            // core class.
+            let (payload_locals, payload_types) = coerce_payload_slots(
                 payload_ty,
                 &flat_param_locals[1..],
                 &flat_types[1..],
+                next_local,
+                &mut case_stmts,
+                locals,
+                tir_modules,
+                type_table_cell,
+            );
+            let (lifted, _) = synthesize_lift_from_flat_params(
+                payload_ty,
+                &payload_locals,
+                &payload_types,
                 case.payload,
                 next_local,
                 &mut case_stmts,
@@ -1553,10 +1624,11 @@ pub(super) fn synthesize_result_export_binding(
             if 1 + i < flat_locals.len() {
                 let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                 let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut val = local_ref(flat_val.index, "__flat", source_type);
-                if flat_val.cm_type != flat_return_types[1 + i] {
-                    val = cast(val, target_type);
-                }
+                let val = coerce_flat_lower(
+                    local_ref(flat_val.index, "__flat", source_type),
+                    flat_val.cm_type,
+                    flat_return_types[1 + i],
+                );
                 ok_stmts.push(expr_stmt(assign(
                     local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
@@ -1627,10 +1699,11 @@ pub(super) fn synthesize_result_export_binding(
             if 1 + i < flat_locals.len() {
                 let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                 let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut val = local_ref(flat_val.index, "__flat", source_type);
-                if flat_val.cm_type != flat_return_types[1 + i] {
-                    val = cast(val, target_type);
-                }
+                let val = coerce_flat_lower(
+                    local_ref(flat_val.index, "__flat", source_type),
+                    flat_val.cm_type,
+                    flat_return_types[1 + i],
+                );
                 err_stmts.push(expr_stmt(assign(
                     local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
@@ -1795,10 +1868,11 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 if 1 + i < flat_locals.len() {
                     let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
                     let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                    let mut val = local_ref(flat_val.index, "__flat", source_type);
-                    if flat_val.cm_type != flat_types[1 + i] {
-                        val = cast(val, target_type);
-                    }
+                    let val = coerce_flat_lower(
+                        local_ref(flat_val.index, "__flat", source_type),
+                        flat_val.cm_type,
+                        flat_types[1 + i],
+                    );
                     case_stmts.push(expr_stmt(assign(
                         local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                         val,

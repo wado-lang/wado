@@ -341,19 +341,18 @@ pub enum CmValType {
 }
 
 impl CmValType {
-    /// Join two value types for union flattening (Canonical ABI `join` operation).
-    /// When one side is absent, uses the other. When both present, picks the larger type.
+    /// Join two value types for variant union flattening, per the Canonical ABI
+    /// `join` operation: equal types stay; `{i32, f32}` (either order) widens to
+    /// `i32`; any other mismatch widens to `i64`. This is order-independent —
+    /// picking the "larger" type is wrong, e.g. `join(f32, i32)` must be `i32`,
+    /// not `f32`.
     pub fn join(a: Option<Self>, b: Option<Self>) -> Self {
         match (a, b) {
             (Some(a), None) | (None, Some(a)) => a,
             (None, None) => Self::I32,
-            (Some(a), Some(b)) => {
-                if a.size() >= b.size() {
-                    a
-                } else {
-                    b
-                }
-            }
+            (Some(a), Some(b)) if a == b => a,
+            (Some(a), Some(b)) if a.size() == 4 && b.size() == 4 => Self::I32,
+            (Some(_), Some(_)) => Self::I64,
         }
     }
 
@@ -515,6 +514,26 @@ pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_canonical_join() {
+        use CmValType::*;
+        // Equal types stay.
+        assert_eq!(CmValType::join(Some(I32), Some(I32)), I32);
+        assert_eq!(CmValType::join(Some(F64), Some(F64)), F64);
+        // {i32, f32} widens to i32 — order-independent (the bug was f32-first).
+        assert_eq!(CmValType::join(Some(I32), Some(F32)), I32);
+        assert_eq!(CmValType::join(Some(F32), Some(I32)), I32);
+        // Any other mismatch widens to i64.
+        assert_eq!(CmValType::join(Some(I64), Some(F64)), I64);
+        assert_eq!(CmValType::join(Some(F64), Some(I64)), I64);
+        assert_eq!(CmValType::join(Some(I32), Some(I64)), I64);
+        assert_eq!(CmValType::join(Some(F64), Some(I32)), I64);
+        // Absent side passes the other through.
+        assert_eq!(CmValType::join(Some(F32), None), F32);
+        assert_eq!(CmValType::join(None, Some(I64)), I64);
+        assert_eq!(CmValType::join(None, None), I32);
+    }
 
     #[test]
     fn test_primitive_sizes() {

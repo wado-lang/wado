@@ -7,6 +7,10 @@ interface cm-catalog {
     blue,
   }
   type meters = f64;
+  variant mixed {
+    as-int(u32),
+    as-float(f32),
+  }
   flags perms {
     read,
     write,
@@ -49,6 +53,8 @@ interface cm-catalog {
   id-variant: func(v: shape) -> shape;
   id-flags: func(v: perms) -> perms;
   id-newtype: func(v: meters) -> meters;
+  id-mixed: func(v: mixed) -> mixed;
+  id-result-fu: func(v: result<f32, u32>) -> result<f32, u32>;
   id-list-option: func(v: list<option<u32>>) -> list<option<u32>>;
   id-option-list: func(v: option<list<u8>>) -> option<list<u8>>;
   id-list-record: func(v: list<point>) -> list<point>;

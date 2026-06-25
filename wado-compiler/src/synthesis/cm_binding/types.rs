@@ -17,7 +17,7 @@ use crate::tir::{
     TirVariantDecl, TypeId, TypeTable,
 };
 
-use crate::synthesis::common::{binary, i32_const, i64_const, synth_span};
+use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
 
 /// Snapshot of the stdlib type / variant names the CM binding code
 /// matches against — `String`, `List`, `Option`, `Result` — resolved
@@ -485,6 +485,99 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     )
 }
 
+/// Map a core-value `TypeId` (`i32`/`i64`/`f32`/`f64`) to its `CmValType`.
+/// Non-core TypeIds (which never appear as a flat slot) map to `I32`.
+pub(super) fn cm_val_type_from_type_id(tid: TypeId) -> cm_abi::CmValType {
+    if tid == TypeTable::I64 {
+        cm_abi::CmValType::I64
+    } else if tid == TypeTable::F32 {
+        cm_abi::CmValType::F32
+    } else if tid == TypeTable::F64 {
+        cm_abi::CmValType::F64
+    } else {
+        cm_abi::CmValType::I32
+    }
+}
+
+/// Byte size of a flat CM core value type.
+fn cmval_size(v: cm_abi::CmValType) -> u32 {
+    match v {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::F32 => 4,
+        cm_abi::CmValType::I64 | cm_abi::CmValType::F64 => 8,
+    }
+}
+
+/// Reinterpret a flat value to the same-size integer (`i32`/`i64`), returning
+/// the new expression and its integer `CmValType`.
+fn flat_to_int_bits(value: TirExpr, ty: cm_abi::CmValType) -> (TirExpr, cm_abi::CmValType) {
+    match ty {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::I64 => (value, ty),
+        cm_abi::CmValType::F32 => (
+            builtin_call("i32_reinterpret_f32", vec![value], TypeTable::I32),
+            cm_abi::CmValType::I32,
+        ),
+        cm_abi::CmValType::F64 => (
+            builtin_call("i64_reinterpret_f64", vec![value], TypeTable::I64),
+            cm_abi::CmValType::I64,
+        ),
+    }
+}
+
+/// Reinterpret a same-size integer flat value to the float class of `ty`
+/// (no-op when `ty` is already integral).
+fn flat_from_int_bits(value: TirExpr, ty: cm_abi::CmValType) -> TirExpr {
+    match ty {
+        cm_abi::CmValType::I32 | cm_abi::CmValType::I64 => value,
+        cm_abi::CmValType::F32 => builtin_call("f32_reinterpret_i32", vec![value], TypeTable::F32),
+        cm_abi::CmValType::F64 => builtin_call("f64_reinterpret_i64", vec![value], TypeTable::F64),
+    }
+}
+
+/// Bit-preserving coercion of a flat CM value from its declared joined slot
+/// type `have` to a case's natural type `want` — the Canonical ABI variant
+/// flat-join, lift direction. The join always widens, so `have` is at least as
+/// wide as `want`: a same-size/different-class pair reinterprets; a wider slot
+/// is narrowed by taking its low bits (`i64`→`i32` wrap) before reinterpreting.
+/// A *numeric* cast would corrupt `i32`↔`f32` / `i64`↔`f64` pairs.
+pub(super) fn coerce_flat_lift(
+    value: TirExpr,
+    have: cm_abi::CmValType,
+    want: cm_abi::CmValType,
+) -> TirExpr {
+    if have == want {
+        return value;
+    }
+    let (as_int, int_ty) = flat_to_int_bits(value, have);
+    let sized = if cmval_size(have) > cmval_size(want) {
+        cast(as_int, TypeTable::I32)
+    } else {
+        let _ = int_ty;
+        as_int
+    };
+    flat_from_int_bits(sized, want)
+}
+
+/// Lower direction: coerce a case's natural value `want` into its declared
+/// joined slot type `have`. Inverse of [`coerce_flat_lift`]: reinterpret to the
+/// integer class, zero-extend a narrower value into the wider slot, then
+/// reinterpret to the slot's class.
+pub(super) fn coerce_flat_lower(
+    value: TirExpr,
+    want: cm_abi::CmValType,
+    have: cm_abi::CmValType,
+) -> TirExpr {
+    if have == want {
+        return value;
+    }
+    let (as_int, _int_ty) = flat_to_int_bits(value, want);
+    let sized = if cmval_size(have) > cmval_size(want) {
+        cast(as_int, TypeTable::I64)
+    } else {
+        as_int
+    };
+    flat_from_int_bits(sized, have)
+}
+
 /// Compute the flat ABI parameter types for a WASI function parameter.
 pub fn flatten_param_type(
     ty: &Type,
@@ -542,12 +635,14 @@ pub fn flatten_param_type(
                             .collect();
                         let max_len = case_flats.iter().map(Vec::len).max().unwrap_or(0);
                         for i in 0..max_len {
-                            // Join: if all non-empty cases at position i agree on a type,
-                            // use that type; otherwise use i32 (per CM spec join).
+                            // Single Canonical ABI join over the cases' i-th slots
+                            // ({i32,f32}→i32, other mismatch→i64).
                             let joined = case_flats
                                 .iter()
                                 .filter_map(|f| f.get(i).copied())
-                                .reduce(|a, b| if a == b { a } else { TypeTable::I32 })
+                                .map(cm_val_type_from_type_id)
+                                .reduce(|a, b| cm_abi::CmValType::join(Some(a), Some(b)))
+                                .map(cm_val_type_to_type_id)
                                 .unwrap_or(TypeTable::I32);
                             result.push(joined);
                         }
