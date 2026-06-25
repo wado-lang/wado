@@ -126,10 +126,11 @@ Two independent gates:
 - Closed const aggregate (`is_globalizable_const`). The initializer must be a
   side-effect-free constant with no free locals: literals, nested
   `Struct` / `Tuple` / `Array` / `Enum` / `Variant` constructors, and the
-  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. Strings
-  (`array.new_data`), `BytesLiteral`, calls, and reads of other globals are
-  excluded — a free local or side effect would make hoisting to module scope
-  unsound, and a non-const value cannot promote.
+  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. String
+  and bytes literals qualify too: they lower to a `StructLiteral` over a packed
+  `Array<u8>`, a const aggregate (see the 2026-06-24 update below). Calls and
+  reads of other globals are excluded — a free local or side effect would make
+  hoisting to module scope unsound, and a non-const value cannot promote.
 - Read-only (`is_readonly`). Every use must be a borrowing / reading position.
   Modelled on `value_copy_demote`'s element-immutability walk but stricter:
   because the _whole_ object is shared, even a spine mutation (`push`) corrupts
