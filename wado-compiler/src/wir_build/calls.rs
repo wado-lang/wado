@@ -261,6 +261,45 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
+            // Floats have no dedicated WIR store/load; reinterpret to the
+            // same-width integer and reuse the integer memory ops (byte-identical
+            // to `fN.store` / `fN.load`).
+            "builtin::f32_store" => {
+                let addr = self.translate_operand(args[0].expr);
+                let val = self.translate_operand(args[1].expr);
+                Some(WirInstr::I32Store {
+                    offset: 0,
+                    align: 2,
+                    addr: Box::new(addr),
+                    value: Box::new(WirInstr::I32ReinterpretF32(Box::new(val))),
+                })
+            }
+            "builtin::f64_store" => {
+                let addr = self.translate_operand(args[0].expr);
+                let val = self.translate_operand(args[1].expr);
+                Some(WirInstr::I64Store {
+                    offset: 0,
+                    align: 3,
+                    addr: Box::new(addr),
+                    value: Box::new(WirInstr::I64ReinterpretF64(Box::new(val))),
+                })
+            }
+            "builtin::f32_load" => {
+                let addr = self.translate_operand(args[0].expr);
+                Some(WirInstr::F32ReinterpretI32(Box::new(WirInstr::I32Load {
+                    offset: 0,
+                    align: 2,
+                    addr: Box::new(addr),
+                })))
+            }
+            "builtin::f64_load" => {
+                let addr = self.translate_operand(args[0].expr);
+                Some(WirInstr::F64ReinterpretI64(Box::new(WirInstr::I64Load {
+                    offset: 0,
+                    align: 3,
+                    addr: Box::new(addr),
+                })))
+            }
             "builtin::v128_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::V128Load {

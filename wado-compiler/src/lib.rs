@@ -414,10 +414,55 @@ fn synthesize_lib_world_info(
         }
     }
 
+    // Tag every user named type in the export signatures with the library's
+    // default-interface FQ as its CM source. `register_lib_local_decls` records
+    // these types under that FQ, so the lift/lower machinery (which resolves
+    // named types via `source_interface`) finds them like WASI types.
+    for export in &mut exports {
+        for (_, ty) in &mut export.params {
+            annotate_lib_local_sources(ty, fq);
+        }
+        if let Some(ty) = export.return_type.as_mut() {
+            annotate_lib_local_sources(ty, fq);
+        }
+    }
+
     WorldInfo {
         fq_name: fq.to_string(),
         exports,
         imports: Vec::new(),
+    }
+}
+
+/// Set `source_interface = fq` on every user named type in `ty` (recursing
+/// through containers), so the CM lift/lower machinery resolves library-local
+/// records / variants / enums / flags / newtypes against the package's
+/// default-interface registration. CM primitives and the unit type are left
+/// untouched.
+fn annotate_lib_local_sources(ty: &mut ast::Type, fq: &str) {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(named) => {
+            if named.name != "()"
+                && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
+            {
+                named.source_interface = Some(fq.to_string());
+            }
+        }
+        Type::Generic(g) => {
+            for arg in &mut g.args {
+                annotate_lib_local_sources(arg, fq);
+            }
+        }
+        Type::Tuple(elems) => {
+            for elem in elems {
+                annotate_lib_local_sources(elem, fq);
+            }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            annotate_lib_local_sources(inner, fq);
+        }
+        _ => {}
     }
 }
 
