@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782417604504,
+  "lastUpdate": 1782431358737,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35477,6 +35477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a6071d629d9a0d3621e96d0b6773102e08ce9d36"
         },
         "date": 1782417603871,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf1bd4690db87d8c86aac397a0612f0c29aaaeb4",
+          "message": "Merge pull request #1445 from wado-lang/claude/gale-parser-performance-timeout-i9b44j\n\nperf(gale): cache per-state ATN continuation FIRST/nullability",
+          "timestamp": "2026-06-26T08:39:32+09:00",
+          "tree_id": "d21573e263d09ced6d2a43259a30363a0026230b",
+          "url": "https://github.com/wado-lang/wado/commit/bf1bd4690db87d8c86aac397a0612f0c29aaaeb4"
+        },
+        "date": 1782431358179,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
