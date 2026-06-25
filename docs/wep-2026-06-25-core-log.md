@@ -194,15 +194,18 @@ unreachability or an explicit `span.close()`; fmt sinks usually ignore it.
 ### Subscribers and layers
 
 A sink/layer is `impl Log`; layers nest, each handling what it cares about and
-forwarding the rest (effect forwarding,
-[Effect Handler](./wep-2026-04-11-effect-handler.md)).
+forwarding the rest to the outer layer with `..forward` (effect forwarding,
+[Effect Handler](./wep-2026-04-11-effect-handler.md)). The bootstrap's base sink
+sits at the bottom and implements every op (no rest clause), so a forwarded op
+terminates there instead of trapping. A test sink that must never see an op uses
+`..trap`.
 
 ```wado
 pub struct TextSink { pub timestamp: bool = true, pub seq: bool = true, pub location: bool = false }
 impl Log for TextSink {
     fn enabled(&self, meta: &Metadata) -> bool { resume true }
     fn event(&self, event: &Event) with Stderr, SystemClock { eprintln(render_text(event, self)); resume () }
-    ..   // span ops: no-op or render
+    ..forward   // span-tracking ops forward to the base subscriber
 }
 
 pub struct JsonSink { pub timestamp: bool = true, pub seq: bool = true }   // JSONL via json::to_string
@@ -218,7 +221,14 @@ impl Log for Context {
         Log::event(&Event { meta: event.meta, message: event.message, fields: merged, parent: event.parent });
         resume ()
     }
-    ..
+    ..forward
+}
+
+// Test sink: capture events; a span op reaching it is a test bug.
+impl Log for CaptureSink {
+    fn enabled(&self, meta: &Metadata) -> bool { resume true }
+    fn event(&mut self, event: &Event) { self.events.push(event.clone()); resume () }
+    ..trap
 }
 
 pub struct Filter { directives: List<Directive> }   // runtime EnvFilter-style layer

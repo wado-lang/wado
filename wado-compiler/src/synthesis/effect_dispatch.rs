@@ -36,8 +36,8 @@
 //!    lowered to `Return { value }` — the MVP has no post-resume
 //!    semantics.
 //!
-//! Operations the installed handler does not implement (the `..` rest
-//! pattern in `impl Effect for T`) get a trapping stub closure
+//! Operations the installed handler does not implement (the `..trap` rest
+//! clause in `impl Effect for T`) get a trapping stub closure
 //! populated into the dispatch struct so the dispatch global is
 //! always fully populated.
 
@@ -1674,11 +1674,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             field_index: 0,
         });
         for op in &plan.operations {
-            // The `..` rest pattern in `impl Effect for T` lets a handler
-            // implement only some of the effect's operations; calls to
-            // un-implemented ops trap at runtime. Emit a normal forwarding
-            // closure for ops the impl actually defines and a trapping
-            // stub closure for the rest.
+            // Ops the impl defines get a forwarding closure; the rest (`..trap`)
+            // get a trapping stub.
             let closure_expr = if impl_info.methods.contains_key(&op.name) {
                 build_handler_op_closure(
                     op,

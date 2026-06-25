@@ -8,8 +8,9 @@ The full dispatch protocol — front-end, elaborator/effect-check, synthesis pas
 codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
-- [x] Front-end: `with E => h do { ... }`, `resume value`, and `..` rest in
-      `impl Effect for Type`.
+- [x] Front-end: `with E => h do { ... }`, `resume value`, and a rest clause in
+      `impl Effect for Type` (shipped as bare `..` = trap; being migrated to the
+      explicit `..trap` / `..forward` below).
 - [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
       `TirExprKind::Resume` carry the structure through TIR. The elaborator
       validates effect-decl reference, handler-impls-effect relationship,
@@ -30,8 +31,8 @@ section records only the current state.
       via the global. The wrapper restores `outer` before invoking the
       handler closure, so a handler method calling its own effect's
       operation reaches the outer handler chain rather than recursing
-      through itself. Unimplemented operations (`..` rest) get a trapping
-      stub closure.
+      through itself. Unimplemented operations get a stub closure — a trap
+      (`..trap`) or a forward to the outer handler (`..forward`).
       Fixtures: `effect_handler_cross_function.wado`,
       `effect_handler_nested_same.wado`, `effect_handler_self_delegation.wado`.
 - [x] Early-exit restore. `return v` / `break L: v` / `continue` /
@@ -113,6 +114,11 @@ section records only the current state.
       `synthesis/effect_dispatch.rs`). The statement form is unchanged: a
       `Unit`-tailed body skips the temp entirely. Fixture:
       `effect_handler_value_form.wado`.
+
+- [ ] Replace bare `..` with explicit `..trap` / `..forward`. Drop bare `..`
+      from the parser, add the `forward` / `trap` contextual keywords, emit a
+      forward-to-outer stub for `..forward`, and migrate existing `..` sites
+      (all mocks/tests) to `..trap`.
 
 - [ ] `core:test::MockCM` and handler-bundling helpers (e.g.
       `MockStdout::drain()`). With generic-resource dispatch in place,
@@ -236,9 +242,31 @@ fn test_logging() with Stdout {
 }
 ```
 
-### Handling Granularity and Wildcard
+### Handling Granularity: `..forward` and `..trap`
 
-By default, `impl Effect for Type` must implement all operations of the effect (like a complete trait impl). Use `..` (rest pattern) to opt in to trapping on unimplemented operations:
+By default, `impl Effect for Type` must implement every operation of the effect (like a complete trait impl); a missing operation is a compile error. A trailing rest clause opts the unimplemented operations into one of two behaviours:
+
+- `..forward` — forward each to the outer handler of the same effect (the layer / middleware case).
+- `..trap` — trap if called (the mock / test case).
+
+`forward` and `trap` are contextual keywords, recognised only in this rest position. There is no bare `..`: the choice between forwarding and trapping is always explicit, since silently picking either is a footgun (a forwarded mock leaks to the real outer handler; a trapping layer breaks composition).
+
+A layer overrides the operations it cares about and forwards the rest:
+
+```wado
+struct Filter { min: Level }
+
+impl Log for Filter {
+    fn enabled(&self, meta: &Metadata) -> bool { resume (meta.level as i32) >= (self.min as i32) }
+    fn event(&self, event: &Event) {
+        if (event.meta.level as i32) >= (self.min as i32) { Log::event(event) }
+        resume ()
+    }
+    ..forward  // new_span / enter / exit / record_fields / … → outer Log handler
+}
+```
+
+A mock implements only the operations the test expects, trapping on anything unexpected so a stray call cannot silently reach the real outer handler:
 
 ```wado
 struct MinimalTcp;
@@ -250,11 +278,11 @@ impl TcpSocket for MinimalTcp {
     fn connect(&self, self_: &TcpSocket, addr: IpSocketAddress) -> Result<(), ErrorCode> {
         resume Result::Ok(())
     }
-    ..  // bind, listen, send, receive, etc. — trap if called
+    ..trap  // bind, listen, send, receive, … — trap if called
 }
 ```
 
-`..` is consistent with struct rest patterns (`let { name, .. } = person`).
+`..forward` desugars each missing operation to `fn op(args) { resume Effect::op(args) }`. A handler body runs in the outer scope (see Effect Forwarding), so the call reaches the outer handler, not itself. With no outer handler installed it traps like any unhandled operation — so `..forward` on the outermost handler of an effect behaves like `..trap` for the operations it omits; a leaf sink that wants a no-op must implement that operation explicitly.
 
 ### Resume Keyword
 
@@ -326,7 +354,7 @@ impl Client for CachingClient {
         self.cache[key] = resp;
         resume resp
     }
-    ..
+    ..forward
 }
 
 export fn run() with Stdout, Client {
@@ -625,7 +653,7 @@ impl Client for MockClient {
 
         resume Result::<Response, ErrorCode>::Ok(resp)  // no post-resume
     }
-    ..
+    ..trap
 }
 
 test "http-get fetches and prints" {
@@ -666,7 +694,7 @@ impl Handler for TimingMiddleware {
         let elapsed = MonotonicClock::now() - start;
         self.log.push([path, elapsed]);
     }
-    ..
+    ..forward
 }
 ```
 
@@ -691,7 +719,7 @@ impl Handler for MockHandler {
         resp.set_status_code(self.status);
         resume Result::<Response, ErrorCode>::Ok(resp)
     }
-    ..
+    ..trap
 }
 
 test "timing middleware records elapsed time" {
@@ -816,9 +844,9 @@ Nesting composes naturally — each `with` block links to the previous dispatch 
 
 `resume value` compiles to `return value`. The handler method is a normal function; the dispatch function receives and propagates the return value. Post-resume code (e.g., cleanup after the `do` block) requires Wasm Stack Switching and is deferred.
 
-### Wildcard `..`
+### Rest clause: `..trap` / `..forward`
 
-Unimplemented operations get a trap stub funcref in the dispatch record: `(func $trap (...) (unreachable))`.
+Each unimplemented operation gets a stub funcref in the dispatch record. `..trap` installs a trap stub: `(func $trap (...) (unreachable))`. `..forward` installs a forward stub that calls the operation's wrapper with `outer` already restored, reaching the outer handler — the codegen of `fn op(args) { resume Effect::op(args) }`. With no outer handler the wrapper falls through to the default / CM adapter, or traps if the effect has none.
 
 ### Binary Size
 
@@ -845,7 +873,7 @@ Growth is O(operations), independent of the number of call sites or handler type
 - Handlers satisfy effects locally; unhandled effects forward to the outer scope
 - Handler bodies execute in the outer effect scope, enabling delegation to real implementations
 - World imports are the outermost handler scope; user handlers nest inside
-- `..` wildcard enables partial handling with runtime trap for unimplemented operations
+- `..forward` / `..trap` rest clauses enable partial handling: forward unimplemented operations to the outer handler, or trap on them
 - `resume` without post-processing compiles to `return`; post-processing requires Stack Switching
 - One-shot semantics ensure resource safety
 - CM streams and futures are unbuffered — synchronous handlers need `MockCM` (buffered CM handlers) for data transfer
