@@ -5242,18 +5242,35 @@ impl Parser {
         let mut methods = Vec::new();
         let mut has_rest = false;
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            // Effect-handler rest pattern: `..` denotes "trap on any unimplemented
-            // operation of this effect". Must appear last in the impl block; an
-            // explicit semicolon after `..` is optional.
+            // Effect-handler rest clause: `..trap` traps on any unimplemented
+            // operation of this effect and must be the impl block's last item.
+            // `..forward` (delegate to the outer handler) is not yet implemented.
             if self.check_dot_dot_or_ellipsis() {
                 let dot_span = self.consume_dot_dot()?;
+                match self.peek_kind().as_ident_name() {
+                    Some("trap") => {
+                        self.advance();
+                    }
+                    Some("forward") => {
+                        return Err(self.error_at_span(
+                            dot_span,
+                            "`..forward` is not yet supported; use `..trap`, or implement every operation",
+                        ));
+                    }
+                    _ => {
+                        return Err(self.error_at_span(
+                            dot_span,
+                            "bare `..` is no longer accepted; write `..trap` to trap on unimplemented operations",
+                        ));
+                    }
+                }
                 if self.check(&TokenKind::Semicolon) {
                     self.advance();
                 }
                 if !self.check(&TokenKind::RBrace) {
                     return Err(self.error_at_span(
                         dot_span,
-                        "`..` rest pattern must be the last item in the impl block",
+                        "`..trap` rest clause must be the last item in the impl block",
                     ));
                 }
                 has_rest = true;
@@ -7286,7 +7303,7 @@ line 2
         let source = r"
             impl Foo for Bar {
                 fn op(&self) -> i32 { return 1; }
-                ..
+                ..trap
             }
         ";
         let module = parse(source).unwrap();
@@ -7295,6 +7312,22 @@ line 2
         };
         assert!(impl_block.has_rest);
         assert_eq!(impl_block.methods.len(), 1);
+    }
+
+    #[test]
+    fn parse_impl_block_bare_rest_rejected() {
+        let source = r"
+            impl Foo for Bar {
+                fn op(&self) -> i32 { return 1; }
+                ..
+            }
+        ";
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("bare `..` is no longer accepted"),
+            "unexpected error message: {}",
+            err.message
+        );
     }
 
     #[test]
@@ -7313,10 +7346,9 @@ line 2
 
     #[test]
     fn parse_impl_block_rest_must_be_last() {
-        // `..` followed by another method is rejected.
         let source = r"
             impl Foo for Bar {
-                ..
+                ..trap
                 fn op(&self) -> i32 { return 1; }
             }
         ";

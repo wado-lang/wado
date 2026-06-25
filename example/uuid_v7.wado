@@ -15,8 +15,8 @@ use { SystemClock, Instant } from "wasi:clocks";
 
 // A `Random` handler that replays a fixed byte stream. `resume` hands the bytes
 // back to the suspended call (`Uuid::v7`'s `get_random_bytes`), just as a
-// normal `return` would. The trailing `..` defaults any remaining operations
-// of the effect that this handler does not override.
+// normal `return` would. The trailing `..trap` traps on any remaining
+// operations of the effect that this handler does not override.
 struct SeededRandom {
     data: List<u8>,
     pos: i32,
@@ -35,7 +35,7 @@ impl Random for SeededRandom {
         resume out;
     }
 
-    ..
+    ..trap
 }
 
 // A `SystemClock` handler pinned to a fixed instant.
@@ -48,7 +48,7 @@ impl SystemClock for FixedClock {
         resume self.instant;
     }
 
-    ..
+    ..trap
 }
 
 fn repeat(value: u8, count: i32) -> List<u8> {
