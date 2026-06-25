@@ -1521,17 +1521,20 @@ impl FunctionTranslator<'_, '_> {
     /// sequence struct's definition.
     /// The single `Array<u8>` type that every `String` / `List<u8>` literal uses
     /// for its `repr` field. `String` and `List<u8>` share one canonical backing
-    /// type, so it is read off the always-loaded `String` struct — a bytes-only
-    /// program may never monomorphize `List<u8>` into `struct_fields_map`, but
-    /// `String` is guaranteed present.
+    /// type, so it is read off the always-loaded `String` struct, keyed by the
+    /// compiler-item registry's canonical name/module rather than a `"String"`
+    /// magic literal — a bytes-only program may never monomorphize `List<u8>`
+    /// into `struct_fields_map`, but `String` is guaranteed present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
-        use crate::compiler_item::SeqField;
+        use crate::compiler_item::{CompilerItem, SeqField};
+        let (string_module, string_name) = {
+            let tt = self.base.type_table.borrow();
+            let (module, name) = tt.compiler_items().require_struct(CompilerItem::String);
+            (module.clone(), name.to_string())
+        };
         self.base
             .struct_fields_map
-            .get(&(
-                "String".to_string(),
-                crate::module_source::ModuleSource::string(),
-            ))
+            .get(&(string_name, string_module))
             .and_then(|fields| {
                 fields
                     .iter()
