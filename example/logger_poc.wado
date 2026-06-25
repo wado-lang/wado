@@ -1,8 +1,10 @@
 //! Logger PoC — validates the `core:log` WEP design against the real compiler.
 //!
-//! `Log` is a plain effect here (ambient effects aren't implemented yet), so
-//! every logging function carries `with Log` — the infectiousness the
-//! ambient-effect extension removes.
+//! The facade is `#[ambient]` (like `log_stdout`), so logging functions need no
+//! `with Log` and are callable anywhere — modelling the ambient-effect
+//! ergonomics. A handler must still be installed (`with Log => &sink do`), else
+//! `Log::*` traps; the ambient-effect extension adds the default-handler
+//! fallback that removes that requirement.
 
 use { Serialize } from "core:serde";
 use { Value, to_value } from "core:value";
@@ -43,7 +45,7 @@ pub fn field<T: Serialize>(key: String, value: T) -> Field {
     return Field { key, value: v };
 }
 
-// The subscriber, as an effect (would be `#[ambient]` in the real design).
+// The subscriber, as an effect (an `#[ambient]` effect in the real design).
 interface Log {
     fn enabled(level: Level) -> bool;
     fn new_span(name: String) -> u64;
@@ -56,7 +58,9 @@ interface Log {
     fn event(event: Event);
 }
 
-// Facade; location defaults resolve at the call site.
+// Facade; location defaults resolve at the call site. `#[ambient]` (like
+// `log_stdout`) lets it perform `Log` without `with Log` infecting callers.
+#[ambient]
 pub fn event(
     level: Level,
     message: String,
@@ -64,7 +68,7 @@ pub fn event(
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
-) with Log {
+) {
     if !Log::enabled(level) { return; }
     let parent = Log::current_span();
     Log::event(Event {
@@ -75,44 +79,51 @@ pub fn event(
     });
 }
 
+#[ambient]
 pub fn info(
     message: String,
     fields: List<Field> = [],
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
-) with Log {
+) {
     event(Level::Info, message, fields, target, file, line);
 }
 
+#[ambient]
 pub fn warn(
     message: String,
     fields: List<Field> = [],
     target: String = #function,
     file: String = #file,
     line: i32 = #line,
-) with Log {
+) {
     event(Level::Warn, message, fields, target, file, line);
 }
 
-pub fn span(name: String) -> u64 with Log {
+#[ambient]
+pub fn span(name: String) -> u64 {
     return Log::new_span(name);
 }
 
-pub fn record(id: u64, fields: List<Field>) with Log {
+#[ambient]
+pub fn record(id: u64, fields: List<Field>) {
     Log::record_fields(id, fields);
 }
 
-pub fn follows(id: u64, cause: u64) with Log {
+#[ambient]
+pub fn follows(id: u64, cause: u64) {
     Log::follows_from(id, cause);
 }
 
-pub fn current() -> u64 with Log {
+#[ambient]
+pub fn current() -> u64 {
     return Log::current_span();
 }
 
 // A closure can't skip the exit/close calls, so they run on every body exit path.
-fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E, Log {
+#[ambient]
+fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E {
     Log::enter(id);
     let r = body();
     Log::exit(id);
@@ -144,16 +155,13 @@ impl Log for CaptureSink {
     fn enter(&mut self, id: u64) {
         self.stack.push(id);
         self.trace.push(`enter:{id}`);
-        resume ()
     }
     fn exit(&mut self, id: u64) {
         self.stack.pop();
         self.trace.push(`exit:{id}`);
-        resume ()
     }
     fn close(&mut self, id: u64) {
         self.trace.push(`close:{id}`);
-        resume ()
     }
     fn current_span(&self) -> u64 {
         let top = match self.stack.last() {
@@ -166,15 +174,12 @@ impl Log for CaptureSink {
         for let f of fields {
             self.recorded.push(`record:{id}:{f.key}`);
         }
-        resume ()
     }
     fn follows_from(&mut self, id: u64, cause: u64) {
         self.links.push(`{id}<-{cause}`);
-        resume ()
     }
     fn event(&mut self, event: Event) {
         self.events.push(event);
-        resume ()
     }
 }
 
@@ -192,26 +197,21 @@ impl Log for Context {
     }
     fn enter(&self, id: u64) {
         Log::enter(id);
-        resume ()
     }
     fn exit(&self, id: u64) {
         Log::exit(id);
-        resume ()
     }
     fn close(&self, id: u64) {
         Log::close(id);
-        resume ()
     }
     fn current_span(&self) -> u64 {
         resume Log::current_span()
     }
     fn record_fields(&self, id: u64, fields: List<Field>) {
         Log::record_fields(id, fields);
-        resume ()
     }
     fn follows_from(&self, id: u64, cause: u64) {
         Log::follows_from(id, cause);
-        resume ()
     }
     fn event(&self, event: Event) {
         let mut merged = self.fields;
@@ -222,7 +222,6 @@ impl Log for Context {
             fields: merged,
             parent: event.parent,
         });
-        resume ()
     }
 }
 
@@ -239,29 +238,23 @@ impl Log for JsonSink {
         resume 0
     }
     fn enter(&self, id: u64) {
-        resume ()
     }
     fn exit(&self, id: u64) {
-        resume ()
     }
     fn close(&self, id: u64) {
-        resume ()
     }
     fn current_span(&self) -> u64 {
         resume 0
     }
     fn record_fields(&self, id: u64, fields: List<Field>) {
-        resume ()
     }
     fn follows_from(&self, id: u64, cause: u64) {
-        resume ()
     }
     fn event(&mut self, event: Event) {
         match to_string(&event) {
             Ok(s) => self.lines.push(s),
             Err(_) => {},
         }
-        resume ()
     }
 }
 
@@ -279,32 +272,26 @@ impl Log for Filter {
     }
     fn enter(&self, id: u64) {
         Log::enter(id);
-        resume ()
     }
     fn exit(&self, id: u64) {
         Log::exit(id);
-        resume ()
     }
     fn close(&self, id: u64) {
         Log::close(id);
-        resume ()
     }
     fn current_span(&self) -> u64 {
         resume Log::current_span()
     }
     fn record_fields(&self, id: u64, fields: List<Field>) {
         Log::record_fields(id, fields);
-        resume ()
     }
     fn follows_from(&self, id: u64, cause: u64) {
         Log::follows_from(id, cause);
-        resume ()
     }
     fn event(&self, event: Event) {
         if (event.meta.level as i32) >= (self.min as i32) {
             Log::event(event);
         }
-        resume ()
     }
 }
 
