@@ -1,0 +1,51 @@
+// A numeric literal in one `match` arm / `if` branch adopts the concrete
+// numeric type fixed by a sibling branch, exactly as `let x: T = <branch>`
+// would — no `as` cast needed. Regression for the inference gap where the
+// literal stayed `i32` and conflicted with a `u64`/`i64`/`i128`/`f64` sibling.
+
+test "match arm literal adopts u64 sibling" {
+    let opt: Option<u64> = Option::Some(5);
+    let v = match opt { Some(id) => id, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts i64 sibling" {
+    let opt: Option<i64> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts i128 sibling" {
+    let opt: Option<i128> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts f64 sibling" {
+    let opt: Option<f64> = Option::Some(2.5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 2.5;
+}
+
+test "match arm negated literal adopts i64 sibling" {
+    let opt: Option<i64> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => -1 };
+    assert v == 5;
+}
+
+test "match arm literal in a block tail" {
+    let opt: Option<u64> = null;
+    let v = match opt { Some(x) => x, None => { 0 } };
+    assert v == 0;
+}
+
+test "if-else literal adopts the typed branch (either side)" {
+    let a: u64 = 7;
+    let x = if true { a } else { 0 };
+    let y = if false { 0 } else { a };
+    assert x == 7;
+    assert y == 7;
+}
+
+__DATA__
+{"test": {}}

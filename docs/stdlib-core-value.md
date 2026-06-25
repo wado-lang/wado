@@ -24,6 +24,61 @@ use { from_bytes, to_bytes } from "core:json";
 let v: Value = from_bytes(`{"x": 1, "y": [true, null]}`)?;
 let s = to_bytes::<Value>(&v)?;
 
+## Functions
+
+### `pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError>`
+
+Build a `Value` from any `Serialize` value — the serde `to_value` analog.
+
+Direct: it drives a `Value`-building `Serializer` with no intermediate
+encoding, so it preserves the data model (`Int` vs `UInt` vs `Float`,
+object key order, variant shape) that a round-trip through a text format
+like JSON would flatten.
+
+## Structs
+
+### `pub struct ValueSerializer`
+
+_Fields are private._
+
+#### `impl Serializer for ValueSerializer`
+
+##### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
+
+##### `fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError>`
+
+##### `fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError>`
+
+##### `fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError>`
+
+##### `fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError>`
+
+##### `fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError>`
+
+##### `fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError>`
+
+##### `fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>`
+
+##### `fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>`
+
+##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
+
+##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+
+##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
+
+##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
+
+##### `fn begin_seq(&mut self, len: i32) -> Result<ValueSeqSerializer, SerializeError>`
+
+##### `fn begin_map(&mut self, len: i32) -> Result<ValueMapSerializer, SerializeError>`
+
+##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<ValueStructSerializer, SerializeError>`
+
+##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+
+##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<ValueVariantSerializer, SerializeError>`
+
 ## Variants
 
 ### `pub variant Value`

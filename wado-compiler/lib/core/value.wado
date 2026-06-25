@@ -26,6 +26,10 @@ use {
     Deserialize,
     Serializer,
     Deserializer,
+    SerializeSeq,
+    SerializeMap,
+    SerializeStruct,
+    SerializeVariant,
     DeserializeSeq,
     DeserializeMap,
     SerializeError,
@@ -335,5 +339,248 @@ impl Deserialize for Value {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Value, DeserializeError> {
         let mut visitor = ValueVisitor {};
         return d.deserialize_any::<ValueVisitor>(&mut visitor);
+    }
+}
+
+/// Build a `Value` from any `Serialize` value — the serde `to_value` analog.
+///
+/// Direct: it drives a `Value`-building `Serializer` with no intermediate
+/// encoding, so it preserves the data model (`Int` vs `UInt` vs `Float`,
+/// object key order, variant shape) that a round-trip through a text format
+/// like JSON would flatten.
+pub fn to_value<T: Serialize>(value: &T) -> Result<Value, SerializeError> {
+    let mut out: Value = Value::Null;
+    let mut ser = ValueSerializer { out: &mut out };
+    value.serialize(&mut ser)?;
+    return Result::Ok(out);
+}
+
+pub struct ValueSerializer {
+    out: &mut Value,
+}
+
+struct ValueSeqSerializer {
+    out: &mut Value,
+    items: List<Value>,
+}
+
+struct ValueMapSerializer {
+    out: &mut Value,
+    entries: TreeMap<String, Value>,
+    pending: Option<String>,
+}
+
+struct ValueStructSerializer {
+    out: &mut Value,
+    entries: TreeMap<String, Value>,
+}
+
+struct ValueVariantSerializer {
+    out: &mut Value,
+    name: String,
+    payloads: List<Value>,
+}
+
+fn value_key(v: Value) -> String {
+    return match v {
+        String(s) => s,
+        Int(n) => n.to_string(),
+        UInt(n) => n.to_string(),
+        Bool(b) => b.to_string(),
+        _ => "",
+    };
+}
+
+impl SerializeSeq for ValueSeqSerializer {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut v: Value = Value::Null;
+        let mut ser = ValueSerializer { out: &mut v };
+        value.serialize(&mut ser)?;
+        self.items.push(v);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        *self.out = Value::List(self.items);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeMap for ValueMapSerializer {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        let mut k: Value = Value::Null;
+        let mut ser = ValueSerializer { out: &mut k };
+        key.serialize(&mut ser)?;
+        self.pending = Option::Some(value_key(k));
+        return Result::Ok(());
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut v: Value = Value::Null;
+        let mut ser = ValueSerializer { out: &mut v };
+        value.serialize(&mut ser)?;
+        if let Some(k) = self.pending {
+            self.entries[k] = v;
+        }
+        self.pending = null;
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        *self.out = Value::Object(self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeStruct for ValueStructSerializer {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+        let mut v: Value = Value::Null;
+        let mut ser = ValueSerializer { out: &mut v };
+        value.serialize(&mut ser)?;
+        self.entries[*name] = v;
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        *self.out = Value::Object(self.entries);
+        return Result::Ok(());
+    }
+}
+
+impl SerializeVariant for ValueVariantSerializer {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        let mut v: Value = Value::Null;
+        let mut ser = ValueSerializer { out: &mut v };
+        value.serialize(&mut ser)?;
+        self.payloads.push(v);
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        let payload = if self.payloads.len() == 1 { self.payloads[0] } else { Value::List(self.payloads) };
+        let mut obj = TreeMap::<String, Value>::new();
+        obj[self.name] = payload;
+        *self.out = Value::Object(obj);
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for ValueSerializer {
+    type SeqSerializer = ValueSeqSerializer;
+    type MapSerializer = ValueMapSerializer;
+    type StructSerializer = ValueStructSerializer;
+    type VariantSerializer = ValueVariantSerializer;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        *self.out = Value::Int(v as i64);
+        return Result::Ok(());
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        *self.out = Value::Int(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        *self.out = Value::UInt(v as u64);
+        return Result::Ok(());
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        *self.out = Value::UInt(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        *self.out = Value::Int128(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        *self.out = Value::UInt128(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        *self.out = Value::Float(v as f64);
+        return Result::Ok(());
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        *self.out = Value::Float(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        *self.out = Value::Bool(v);
+        return Result::Ok(());
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        let mut s = String::with_capacity(4);
+        s.push(v);
+        *self.out = Value::String(s);
+        return Result::Ok(());
+    }
+
+    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+        *self.out = Value::String(*v);
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        *self.out = Value::Null;
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        // Preserve byte strings as `Value::Bytes`, not the default seq-of-u8
+        // fallback that would yield `Value::List([Int, …])`.
+        let mut it = v.iter();
+        let bytes = it.collect() as ByteList;
+        *self.out = Value::Bytes(bytes);
+        return Result::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<ValueSeqSerializer, SerializeError> {
+        return Result::Ok(ValueSeqSerializer { out: self.out, items: [] });
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<ValueMapSerializer, SerializeError> {
+        return Result::Ok(ValueMapSerializer {
+            out: self.out,
+            entries: TreeMap::<String, Value>::new(),
+            pending: null,
+        });
+    }
+
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<ValueStructSerializer, SerializeError> {
+        return Result::Ok(ValueStructSerializer {
+            out: self.out,
+            entries: TreeMap::<String, Value>::new(),
+        });
+    }
+
+    fn serialize_unit_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        *self.out = Value::String(*variant_name);
+        return Result::Ok(());
+    }
+
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        variant_name: &String,
+        disc: i32,
+    ) -> Result<ValueVariantSerializer, SerializeError> {
+        return Result::Ok(ValueVariantSerializer {
+            out: self.out,
+            name: *variant_name,
+            payloads: [],
+        });
     }
 }

@@ -1,6 +1,6 @@
-use { Value } from "core:value";
+use { Value, to_value } from "core:value";
 use { to_string, from_string } from "core:json";
-use { DeserializeError } from "core:serde";
+use { Serialize, DeserializeError } from "core:serde";
 use { TreeMap } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
@@ -336,4 +336,68 @@ test "Value eq object" {
     ])) == Value::Object(obj([
         ["k", Value::Bool(false)],
     ])));
+}
+
+struct ToValuePoint {
+    x: i32,
+    y: i32,
+}
+
+impl Serialize for ToValuePoint;
+
+variant ToValueShape {
+    Dot,
+    Circle(i32),
+}
+
+impl Serialize for ToValueShape;
+
+test "to_value preserves the integer/float distinction" {
+    // A text round-trip (JSON) would collapse 42 to a Float; the direct
+    // Value-building serializer keeps it an Int.
+    assert to_value(&42) matches { Ok(Int(42)) };
+    assert to_value(&(7 as u64)) matches { Ok(UInt(7)) };
+    assert to_value(&3.5) matches { Ok(Float(_)) };
+}
+
+test "to_value on scalars" {
+    assert to_value(&true) matches { Ok(Bool(true)) };
+    assert to_value(&"hi") matches { Ok(String(_)) };
+    let n: Option<i32> = null;
+    assert to_value(&n) matches { Ok(Null) };
+}
+
+test "to_value on a list" {
+    let xs: List<i32> = [1, 2, 3];
+    assert to_value(&xs) matches { Ok(List(_)) };
+}
+
+test "to_value on a struct yields an object" {
+    let r = to_value(&ToValuePoint { x: 1, y: 2 });
+    if let Ok(Object(m)) = r {
+        assert m.get("x") matches { Some(Int(1)) };
+        assert m.get("y") matches { Some(Int(2)) };
+    } else {
+        panic("expected object");
+    }
+}
+
+test "to_value on a unit variant yields its name" {
+    assert to_value(&ToValueShape::Dot) matches { Ok(String(_)) };
+}
+
+test "to_value on a payload variant yields an object" {
+    assert to_value(&ToValueShape::Circle(5)) matches { Ok(Object(_)) };
+}
+
+test "to_value preserves byte strings as Value::Bytes" {
+    let bytes: ByteList = [1, 2, 3];
+    let v = Value::Bytes(bytes);
+    if let Ok(Bytes(b)) = to_value(&v) {
+        assert b.len() == 3;
+        assert b[0] == 1;
+        assert b[2] == 3;
+    } else {
+        panic("expected Value::Bytes");
+    }
 }
