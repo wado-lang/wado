@@ -593,26 +593,37 @@ impl ConstFoldVisitor<'_> {
         let Some(recv_e) = recv.as_expr() else {
             return false;
         };
-        let fields: Vec<(String, Operand)> = {
+        // Split the projected field from its siblings within the struct-literal
+        // borrow. `Operand` is `Copy`, so collecting the siblings carries no
+        // `String` clone; the names themselves are only needed for the equality
+        // test here, not afterwards.
+        let mut projected = None;
+        let siblings: Vec<Operand> = {
             let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
                 return false;
             };
-            fields.iter().map(|f| (f.name.clone(), f.value)).collect()
-        };
-        let mut projected = None;
-        for (name, value) in &fields {
-            if *name == field_name {
-                projected = Some(*value);
-            } else if !super::arena_query::is_pure_operand(engine.body, *value) {
-                // A non-projected sibling with an observable effect must keep
-                // the struct so its evaluation is preserved. A pure sibling
-                // (e.g. a `PackedArray` repr) is dropped with the struct.
-                return false;
+            let mut siblings = Vec::with_capacity(fields.len().saturating_sub(1));
+            for f in fields {
+                if f.name == field_name {
+                    projected = Some(f.value);
+                } else {
+                    siblings.push(f.value);
+                }
             }
-        }
+            siblings
+        };
         let Some(proj) = projected else {
             return false;
         };
+        // A non-projected sibling with an observable effect must keep the struct
+        // so its evaluation is preserved. A pure sibling (e.g. a `PackedArray`
+        // repr) is dropped with the struct.
+        if siblings
+            .iter()
+            .any(|op| !super::arena_query::is_pure_operand(engine.body, *op))
+        {
+            return false;
+        }
         engine.redirect_expr(e, proj)
     }
 

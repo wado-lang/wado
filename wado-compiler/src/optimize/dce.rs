@@ -476,9 +476,14 @@ pub fn filter_string_literals(project: &mut NirPackage) {
 /// Filter bytes literals to only include bytes referenced by surviving functions.
 ///
 /// Unlike string literals (which have a `function_strings` map for per-function
-/// tracking), bytes literals are stored inline as `ExprKind::PackedArray(Vec<u8>)`.
-/// This function scans all surviving function bodies to collect referenced bytes,
-/// then retains only matching entries in `project.bytes_literals`.
+/// tracking), bytes literals are tracked only by their inline
+/// `ExprKind::PackedArray(Vec<u8>)` nodes. This scans every surviving function
+/// body for those nodes, then retains only matching entries in
+/// `project.bytes_literals`. Since string literal `repr`s are *also*
+/// `PackedArray` now, the scanned set is a superset that may include string
+/// payloads, but the `retain` only ever drops entries from `bytes_literals`, so
+/// a string payload that coincidentally equals an unused bytes literal at worst
+/// keeps that one extra entry (which dedups to the same shared segment anyway).
 pub fn filter_bytes_literals(project: &mut NirPackage) {
     let mut used_bytes: IndexSet<Vec<u8>> = IndexSet::default();
 
@@ -493,10 +498,10 @@ pub fn filter_bytes_literals(project: &mut NirPackage) {
 }
 
 fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<Vec<u8>>) {
-    // Collect every `BytesLiteral` reachable from `root`, excluding patterns
-    // (the tree walk never descended into `LetDestructure` / match-arm
-    // patterns, so a `BytesLiteral` inside a `ConstantValue` pattern is not
-    // counted).
+    // Collect every `PackedArray` payload reachable from `root` (the `repr` of
+    // any string / bytes literal), excluding patterns (the tree walk never
+    // descended into `LetDestructure` / match-arm patterns, so a payload inside
+    // a `ConstantValue` pattern is not counted).
     let mut stack = vec![NodeRef::Block(root)];
     while let Some(node) = stack.pop() {
         if matches!(node, NodeRef::Pat(_)) {

@@ -35,8 +35,7 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
     register_methods(ctx);
 
     // Step 6: Register data segments for string and bytes literals
-    register_string_data(ctx);
-    register_bytes_data(ctx);
+    register_literal_data(ctx);
 
     // Step 7: Register exports
     register_exports(ctx);
@@ -466,23 +465,19 @@ fn register_single_function(
 /// ones materialize inline as a constant `array.new_fixed<u8>`, so a segment for
 /// them would be dead. String and bytes payloads share one content-keyed map,
 /// so equal bytes dedup to one segment.
-fn register_string_data(ctx: &mut WirContext<'_>) {
+fn register_literal_data(ctx: &mut WirContext<'_>) {
     // `package` is a `&NirPackage` whose lifetime outlives `ctx`, so copying the
     // reference lets us iterate the source literals while calling `&mut self`.
     let package = ctx.package;
-    for s in &package.string_literals {
-        if s.len() > package.string_inline_max_bytes {
-            ctx.register_packed_data(s.as_bytes());
-        }
-    }
-}
-
-/// Register passive data segments for bytes literals (see `register_string_data`).
-fn register_bytes_data(ctx: &mut WirContext<'_>) {
-    let package = ctx.package;
-    for b in &package.bytes_literals {
-        if b.len() > package.string_inline_max_bytes {
-            ctx.register_packed_data(b);
+    let threshold = package.string_inline_max_bytes;
+    let payloads = package
+        .string_literals
+        .iter()
+        .map(String::as_bytes)
+        .chain(package.bytes_literals.iter().map(Vec::as_slice));
+    for payload in payloads {
+        if payload.len() > threshold {
+            ctx.register_packed_data(payload);
         }
     }
 }

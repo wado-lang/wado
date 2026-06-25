@@ -147,8 +147,11 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     // `push_str(&"...")` and template lowering alike — passes the literal
     // through an explicit `Ref`. Match through it to reach the string literal,
     // now a `StructLiteral String { repr: PackedArray(bytes), used }`, and read
-    // the bytes off its packed `repr`.
-    let s = {
+    // the bytes off its packed `repr`. The expansion is byte-wise (each byte
+    // becomes a `push_char`) and only fires for short ASCII literals, so we
+    // gate on the borrowed `&[u8]` directly — no `String`/UTF-8 round-trip —
+    // and copy out only the (bounded) bytes we will actually expand.
+    let bytes: Vec<u8> = {
         let arg0_expr = arg0.as_expr()?;
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
@@ -171,15 +174,15 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
         let ExprKind::PackedArray(bytes) = &engine.body.exprs[repr_e].kind else {
             return None;
         };
-        String::from_utf8(bytes.clone()).ok()?
+        if bytes.is_empty() || bytes.len() > MAX_SHORT_PUSH_STR_LEN || !bytes.is_ascii() {
+            return None;
+        }
+        bytes.clone()
     };
-    if s.is_empty() || s.len() > MAX_SHORT_PUSH_STR_LEN || !s.is_ascii() {
-        return None;
-    }
 
     let span = engine.body.exprs[expr_id].span;
-    let mut stmts = Vec::with_capacity(s.len());
-    for byte in s.bytes() {
+    let mut stmts = Vec::with_capacity(bytes.len());
+    for &byte in &bytes {
         let ch = char::from(byte);
         let recv_clone = engine.clone_expr(receiver_expr);
         let char_arg =

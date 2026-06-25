@@ -107,7 +107,13 @@ impl FunctionTranslator<'_, '_> {
                 elements,
             }
         } else {
-            let data_index = self.ctx.packed_data_map.get(b).copied().unwrap_or(0);
+            // Every payload longer than `string_inline_max_bytes` is registered
+            // by `register_literal_data` under the same threshold, so a miss here
+            // means the two partitions disagreed — fail loudly instead of
+            // silently emitting segment 0 (a different literal's bytes).
+            let data_index = self.ctx.packed_data_map.get(b).copied().expect(
+                "[WIR] PackedArray: long payload missing from packed_data_map (registration must cover every >threshold literal)",
+            );
             let len_i32 = i32::try_from(byte_len).unwrap_or(0);
             WirInstr::ArrayNewData {
                 type_id: array_type_id,

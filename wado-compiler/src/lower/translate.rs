@@ -1519,16 +1519,14 @@ impl FunctionTranslator<'_, '_> {
     /// of `.used`, body globalization) instead of being an opaque value. The
     /// `repr` field's raw-array type and the field indices come from the
     /// sequence struct's definition.
-    fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
+    /// The single `Array<u8>` type that every `String` / `List<u8>` literal uses
+    /// for its `repr` field. `String` and `List<u8>` share one canonical backing
+    /// type, so it is read off the always-loaded `String` struct — a bytes-only
+    /// program may never monomorphize `List<u8>` into `struct_fields_map`, but
+    /// `String` is guaranteed present.
+    fn seq_u8_repr_type(&self) -> tir::TypeId {
         use crate::compiler_item::SeqField;
-        let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
-        // `String` and `List<u8>` share the `{ repr: Array<u8>, used: i32 }`
-        // layout (fixed `SeqField` indices). The raw `Array<u8>` `repr` type is
-        // the same for both; read it off the always-loaded `String` struct,
-        // since a bytes-only program may not monomorphize `List<u8>` into
-        // `struct_fields_map`.
-        let array_u8_ty = self
-            .base
+        self.base
             .struct_fields_map
             .get(&(
                 "String".to_string(),
@@ -1540,7 +1538,13 @@ impl FunctionTranslator<'_, '_> {
                     .find(|f| f.name == SeqField::Backing.field_name())
             })
             .map(|f| f.type_id)
-            .expect("String struct (repr field) is always loaded");
+            .expect("String struct (repr field) is always loaded")
+    }
+
+    fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
+        use crate::compiler_item::SeqField;
+        let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
+        let array_u8_ty = self.seq_u8_repr_type();
         let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
             crate::nir_value_graph::ValueKind::Int(

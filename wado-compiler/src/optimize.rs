@@ -208,7 +208,7 @@ pub fn optimize(
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
     // Decide the short-string inline threshold once, from the opt level. Read
-    // by `wir_build` (`translate_string_literal` / `register_string_data`) to
+    // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
     // which lets a constant string global promote to an eager Wasm constant.
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);

@@ -207,10 +207,9 @@ pub struct ClosureWrapperFuncs {
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a `NirPackage`.
     pub fn new(package: &'a NirPackage) -> Self {
-        // String and bytes literals live on `package`; `register_string_data`
-        // / `register_bytes_data` read them directly and dedup into `data` via
-        // `string_literal_map` / `bytes_literal_map`, so the context keeps no
-        // separate copy.
+        // String and bytes literals live on `package`; `register_literal_data`
+        // reads them directly and dedups into `data` via `packed_data_map`, so
+        // the context keeps no separate copy.
 
         // Compute the per-`(N, Ret)` inspectable gate. After DCE,
         // `package.functions` only contains reachable functions, so the
