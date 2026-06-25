@@ -152,8 +152,6 @@ keyword_registry! {
     "interface" => Interface : StorageType,
     // Storage modifiers: visibility and qualifiers.
     "pub" => Pub : StorageModifier,
-    // TODO: package-internal visibility — nop in the parser for now.
-    // See docs/wep-2026-06-25-visibility-internal-pub-export.md.
     "internal" => Internal : StorageModifier,
     "export" => Export : StorageModifier,
     "mut" => Mut : StorageModifier,

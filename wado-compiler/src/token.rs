@@ -37,8 +37,7 @@ pub enum TokenKind {
     In,
     Of,
     Pub,
-    // TODO: package-internal visibility. Reserved as a keyword; the parser
-    // currently accepts it as a nop. See
+    // Package-internal visibility. See
     // docs/wep-2026-06-25-visibility-internal-pub-export.md.
     Internal,
     Effect,
