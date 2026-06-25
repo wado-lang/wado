@@ -156,7 +156,7 @@ impl Log for CaptureSink {
         resume ()
     }
     fn current_span(&self) -> u64 {
-        let top: u64 = match self.stack.last() {
+        let top = match self.stack.last() {
             Some(id) => id,
             None => 0,
         };
@@ -236,7 +236,7 @@ impl Log for JsonSink {
         resume true
     }
     fn new_span(&self, name: String) -> u64 {
-        resume 0 as u64
+        resume 0
     }
     fn enter(&self, id: u64) {
         resume ()
@@ -248,7 +248,7 @@ impl Log for JsonSink {
         resume ()
     }
     fn current_span(&self) -> u64 {
-        resume 0 as u64
+        resume 0
     }
     fn record_fields(&self, id: u64, fields: List<Field>) {
         resume ()
