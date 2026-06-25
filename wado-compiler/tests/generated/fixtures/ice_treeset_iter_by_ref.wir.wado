@@ -264,6 +264,7 @@ fn "wado-compiler/tests/fixtures/ice_treeset_iter_by_ref.wado/run"() {
     let __local_15: ref "core:prelude/format.wado//Formatter";
     let __match_16: ref null "core:prelude/string.wado//String";
     let __match_17: ref "core:prelude/types.wado//Option<i32>";
+    let value_19: ref "core:prelude/string.wado//String";
     let before_20: i32;
     let before_26: i32;
     let __sroa_set_int_inner: ref "core:collections//TreeMap<i32,()>";
@@ -275,8 +276,9 @@ fn "wado-compiler/tests/fixtures/ice_treeset_iter_by_ref.wado/run"() {
         global:__modules_initialized = 1;
     };
     __sroa_set_str_inner = "core:collections/TreeMap<core:prelude/string.wado/String,()>::new"();
+    value_19 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
     before_20 = __sroa_set_str_inner.size;
-    "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(__sroa_set_str_inner, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
+    "core:collections/TreeMap<core:prelude/string.wado/String,()>::insert"(__sroa_set_str_inner, value_19);
     drop(__sroa_set_str_inner.size > before_20);
     set_str_count = 0;
     __iter_2 = struct.new "core:collections//TreeSetIter<core:prelude/string.wado/String>" { entries: __sroa_set_str_inner.entries, index: 0 };

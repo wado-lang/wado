@@ -495,8 +495,9 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/ref_return_local"() with Stdout {
 fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     let greeting: ref "core:prelude/string.wado//String";
     let n: ref "core:prelude/types.wado//Box<i32>";
-    let r_12: i32;
-    let s_13: ref "core:prelude/string.wado//String";
+    let r_9: i32;
+    let s_10: ref "core:prelude/string.wado//String";
+    let __sroa___deref_val_2_repr: ref Array<u8>;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -509,8 +510,9 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     "wado-compiler/tests/fixtures/ref_1.wado/ref_primitive_types"();
     greeting = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     "core:cli/println"(greeting);
-    greeting.repr = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("goodbye"), used: 7 }.repr;
-    greeting.used = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("goodbye"), used: 7 }.used;
+    __sroa___deref_val_2_repr = array.new_data<u8>("goodbye");
+    greeting.repr = __sroa___deref_val_2_repr;
+    greeting.used = 7;
     "core:cli/println"(greeting);
     "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_struct"();
     "wado-compiler/tests/fixtures/ref_1.wado/ref_deref_assign_variant"();
@@ -524,8 +526,8 @@ fn "wado-compiler/tests/fixtures/ref_1.wado/run"() with Stdout {
     n.value = n.value + 1;
     n.value = n.value + 1;
     n.value = n.value + 1;
-    s_13 = "wado-compiler/tests/fixtures/ref_1.wado/read_and_format"(local.tee r_12(n.value));
-    "core:cli/println"(s_13);
+    s_10 = "wado-compiler/tests/fixtures/ref_1.wado/read_and_format"(local.tee r_9(n.value));
+    "core:cli/println"(s_10);
     "wado-compiler/tests/fixtures/ref_1.wado/ref_return_test"();
     "wado-compiler/tests/fixtures/ref_1.wado/ref_return_local"();
 }

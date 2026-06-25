@@ -132,6 +132,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global global:core::prelude/array.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(91)), used: 1 };
+global global:core::prelude/array.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(array.new_fixed<u8>(93)), used: 1 };
 
 fn "wado-compiler/tests/fixtures/array_inspect_format.wado/make"(a, b, c) {
     let arr: ref Array<i32>;
@@ -458,18 +460,15 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
     let truncated: bool;
     let i: i32;
     let s_9: ref "core:prelude/string.wado//String";
-    let open: ref "core:prelude/string.wado//String";
     let self_23: i32;
     let s_31: ref "core:prelude/string.wado//String";
-    let close: ref "core:prelude/string.wado//String";
     let _licm_arith_39: bool;
     if len == 0 {
         s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_9);
         return;
     }
-    open = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
-    "core:prelude/string.wado/String::push_str"(f.buf, open);
+    "core:prelude/string.wado/String::push_str"(f.buf, global:core::prelude/array.wado::__const_obj_0);
     f.indent = f.indent + 1;
     shown = 0;
     truncated = 0;
@@ -505,11 +504,10 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
         s_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_31);
     }
-    close = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 };
     f.indent = f.indent - 1;
     "core:prelude/string.wado/String::push"(f.buf, 10);
     "core:prelude/format.wado/Formatter::write_indent"(f);
-    "core:prelude/string.wado/String::push_str"(f.buf, close);
+    "core:prelude/string.wado/String::push_str"(f.buf, global:core::prelude/array.wado::__const_obj_1);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {

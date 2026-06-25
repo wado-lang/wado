@@ -2332,6 +2332,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let v_9: f64;
     let __match_10: ref null "core:serde//DeserializeError";
     let v_11: f64;
+    let range_msg: ref "core:prelude/string.wado//String";
     "core:json/JsonDeserializer::skip_whitespace"(self);
     start_1 = builtin::i64_extend_i32_s(self.pos);
     n = struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0, has_frac_or_exp: 0 };
@@ -2362,6 +2363,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
     let __match_scrut_1: ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>";
     __match_scrut_1 = __inline_checked_int_f64_1: block -> ref "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>" {
         v_11 = "core:json/scanned_to_f64"(n);
+        range_msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 };
         if @unlikely(v_11 != builtin::f64_floor(v_11)) {
             cold_path;
             break __inline_checked_int_f64_1: struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("core:serde/DeserializeError::unexpected_type"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start_1)) };
@@ -2372,7 +2374,7 @@ fn "core:json/JsonDeserializer::parse_i32_direct"(self) {
             v_11 >= 2147483648;
         })) {
             cold_path;
-            break __inline_checked_int_f64_1: struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start_1)) };
+            break __inline_checked_int_f64_1: struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Err" { discriminant: 1, payload_0: ref.as_non_null("core:serde/DeserializeError::overflow"(range_msg, start_1)) };
         }
         break __inline_checked_int_f64_1: struct.new "core:prelude/types.wado//Result<f64,core:serde/DeserializeError>::Ok" { discriminant: 0, payload_0: v_11 };
     };

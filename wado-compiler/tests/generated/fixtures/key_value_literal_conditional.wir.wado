@@ -221,6 +221,8 @@ fn "wado-compiler/tests/fixtures/key_value_literal_conditional.wado/run"() with 
     let __local_12: ref "core:prelude/format.wado//Formatter";
     let __local_13: ref "core:prelude/string.wado//String";
     let __local_14: ref "core:prelude/format.wado//Formatter";
+    let key_18: ref "core:prelude/string.wado//String";
+    let key_34: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -228,7 +230,8 @@ fn "wado-compiler/tests/fixtures/key_value_literal_conditional.wado/run"() with 
         global:__modules_initialized = 1;
     };
     __b_1 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1);
+    key_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_1, key_18, 1);
     __cond_5 = local.tee __v0_4("core:collections/TreeMap<core:prelude/string.wado/String,i32>^IndexValue<K>::index_value"(__b_1, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 })) == 1;
     if @unlikely(__cond_5 == 0) {
         cold_path;
@@ -238,7 +241,8 @@ condition: m[\"a\"] == 1
         unreachable;
     }
     __b_7 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 2);
+    key_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_7, key_34, 2);
     __cond_10 = local.tee __v0_9("core:collections/TreeMap<core:prelude/string.wado/String,i32>^IndexValue<K>::index_value"(__b_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })) == 2;
     if @unlikely(__cond_10 == 0) {
         cold_path;

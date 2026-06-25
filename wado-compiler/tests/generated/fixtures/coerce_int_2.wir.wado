@@ -23,43 +23,33 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_chained_comparison" = fn();  // TypeId(10)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128" = fn();  // TypeId(11)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_chained_comparison" = fn();  // TypeId(12)
+type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_export__run" = fn();  // TypeId(12)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(13)
 
-type "functype//wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:cli/write_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(15)
+type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(15)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
+type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(16)
 
-type "functype//core:internal/gc_array_to_memory" = fn(ref Array<u8>, i32, i32);  // TypeId(17)
+type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//core:internal/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
+type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:internal/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
 
-type "functype//core:internal/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//core:internal/cm_lower_list_u8" = fn(ref Array<u8>, i32) -> i64;  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//core:internal/wait_for_blocked" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:internal/cm_stream_write_raw_u8" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
-
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(24)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -68,7 +58,6 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -76,130 +65,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
-
-fn "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128"() with Stdout {
-    let cond_20: bool;
-    let cond_28: bool;
-    let cond_37: bool;
-    let cond_47: bool;
-    let cond_56: bool;
-    let cond_64: bool;
-    let cond_73: bool;
-    let cond_83: bool;
-    let cond_92: bool;
-    let cond_100: bool;
-    let cond_109: bool;
-    let cond_119: bool;
-    cond_20 = (if (65280_i64 & 255_i64) == 0_i64 -> i32 {
-        (0_i64 & 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_20 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 & rhs"), used: 10 });
-        unreachable;
-    }
-    cond_28 = (if (255_i64 & 65280_i64) == 0_i64 -> i32 {
-        (0_i64 & 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_28 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs & u128"), used: 10 });
-        unreachable;
-    }
-    cond_37 = (if (255_i64 & 15_i64) == 15_i64 -> i32 {
-        (0_i64 & 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_37 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 & rhs"), used: 10 });
-        unreachable;
-    }
-    cond_47 = (if (15_i64 & 255_i64) == 15_i64 -> i32 {
-        (0_i64 & 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_47 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs & i128"), used: 10 });
-        unreachable;
-    }
-    cond_56 = (if (65280_i64 | 255_i64) == 65535_i64 -> i32 {
-        (0_i64 | 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_56 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 | rhs"), used: 10 });
-        unreachable;
-    }
-    cond_64 = (if (255_i64 | 65280_i64) == 65535_i64 -> i32 {
-        (0_i64 | 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_64 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs | u128"), used: 10 });
-        unreachable;
-    }
-    cond_73 = (if (255_i64 | 256_i64) == 511_i64 -> i32 {
-        (0_i64 | 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_73 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 | rhs"), used: 10 });
-        unreachable;
-    }
-    cond_83 = (if (256_i64 | 255_i64) == 511_i64 -> i32 {
-        (0_i64 | 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_83 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs | i128"), used: 10 });
-        unreachable;
-    }
-    cond_92 = (if (65280_i64 ^ 65535_i64) == 255_i64 -> i32 {
-        (0_i64 ^ 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_92 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("u128 ^ rhs"), used: 10 });
-        unreachable;
-    }
-    cond_100 = (if (65535_i64 ^ 65280_i64) == 255_i64 -> i32 {
-        (0_i64 ^ 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_100 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs ^ u128"), used: 10 });
-        unreachable;
-    }
-    cond_109 = (if (255_i64 ^ 255_i64) == 0_i64 -> i32 {
-        (0_i64 ^ 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_109 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("i128 ^ rhs"), used: 10 });
-        unreachable;
-    }
-    cond_119 = (if (255_i64 ^ 255_i64) == 0_i64 -> i32 {
-        (0_i64 ^ 0_i64) == 0_i64;
-    } else {
-        0;
-    });
-    if @unlikely(cond_119 == 0) {
-        "core:internal/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("lhs ^ i128"), used: 10 });
-        unreachable;
-    }
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
-}
 
 fn "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_chained_comparison"() with Stdout {
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
@@ -222,7 +87,7 @@ fn "wado-compiler/tests/fixtures/coerce_int_2.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_bitwise_i128"();
+    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wado-compiler/tests/fixtures/coerce_int_2.wado/coerce_int_literal_chained_comparison"();
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
     "wasi/task-return"(0);
@@ -260,48 +125,14 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b25: block {
-        l26: loop {
-            break_if b25 i >= len;
+    b1: block {
+        l2: loop {
+            break_if b1 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l26;
+            continue l2;
         };
     };
-}
-
-fn "core:internal/write_string_to_stream"(tx, message, add_newline) {
-    let bytes: ref Array<u8>;
-    let len: i32;
-    let new_repr: ref Array<u8>;
-    bytes = message.repr;
-    len = message.used;
-    if add_newline {
-        new_repr = builtin::array_new<u8>(len + 1);
-        builtin::array_copy<u8>(new_repr, 0, bytes, 0, len);
-        builtin::array_set_u8(new_repr, len, 10);
-        "core:internal/cm_stream_write_raw_u8"(tx, new_repr, len + 1);
-    } else {
-        "core:internal/cm_stream_write_raw_u8"(tx, bytes, len);
-    }
-    "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:internal/log_stderr"(message) {
-    let future_handle: i32;
-    let __pair_temp_1: i64;
-    __pair_temp_1 = "wasi/stream-new"();
-    let __mv_lo_1: i32;
-    let __mv_hi_1: i32;
-    multivalue_bind [__mv_lo_1, __mv_hi_1] = (builtin::i32_wrap_i64(__pair_temp_1); builtin::i32_wrap_i64(__pair_temp_1 >>u 32_i64));
-    future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(__mv_lo_1);
-    "core:internal/write_string_to_stream"(__mv_hi_1, message, 1);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-}
-
-fn "core:internal/panic"(message) {
-    "core:internal/log_stderr"(message);
-    unreachable;
 }
 
 fn "core:internal/cm_lower_list_u8"(data, len) {

@@ -96,6 +96,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global mut global:__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:__const_obj_1: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
     let label: ref "core:prelude/string.wado//String";
@@ -103,18 +105,16 @@ fn "wado-compiler/tests/fixtures/serde_error_types.wado/run"() with Stdout {
     let __local_5: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/format.wado//Formatter";
     let __local_7: ref "core:prelude/string.wado//String";
-    let __sroa_de_message: ref "core:prelude/string.wado//String";
-    let __sroa_se_message: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    __sroa_se_message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test error"), used: 10 };
-    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeError: "), used: 16 }); "core:prelude/string.wado/String::push_str"(__local_4, __sroa_se_message); __local_4);
-    __sroa_de_message = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("field 'name' is missing"), used: 23 };
-    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(61), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeError: "), used: 18 }); "core:prelude/string.wado/String::push_str"(__local_5, __sroa_de_message); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" at offset "), used: 11 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i64::fmt_decimal"(42_i64, __local_6); __local_5);
+    global:__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("test error"), used: 10 };
+    "core:cli/println"(__local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeError: "), used: 16 }); "core:prelude/string.wado/String::push_str"(__local_4, global:__const_obj_0); __local_4);
+    global:__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("field 'name' is missing"), used: 23 };
+    "core:cli/println"(__local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(61), used: 0 }; "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeError: "), used: 18 }); "core:prelude/string.wado/String::push_str"(__local_5, global:__const_obj_1); "core:prelude/string.wado/String::push_str"(__local_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" at offset "), used: 11 }); __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 }; "core:prelude/primitive.wado/i64::fmt_decimal"(42_i64, __local_6); __local_5);
     label = b0: block -> ref "core:prelude/string.wado//String" {
         b1: block {
             b2: block {

@@ -153,6 +153,8 @@ fn "wado-compiler/tests/fixtures/from_literal_nested_generic.wado/run"() with St
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __b_7: ref "core:prelude//List<core:prelude/string.wado/String>";
     let __b_8: ref "core:prelude//List<i32>";
+    let key_10: ref "core:prelude/string.wado//String";
+    let key_13: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -160,9 +162,11 @@ fn "wado-compiler/tests/fixtures/from_literal_nested_generic.wado/run"() with St
         global:__modules_initialized = 1;
     };
     __b_0 = struct.new "wado-compiler/tests/fixtures/from_literal_nested_generic.wado//NestedMap<core:prelude/list.wado/List<core:prelude/string.wado/String>,i32>" { keys: ref.as_non_null(__b_7 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 }; __b_7), values: ref.as_non_null(__b_8 = struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(0), used: 0 }; __b_8) };
-    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_0.keys, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
+    key_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_0.keys, key_10);
     "core:prelude/list.wado/List<i32>::push"(__b_0.values, 1);
-    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_0.keys, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 });
+    key_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
+    "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b_0.keys, key_13);
     "core:prelude/list.wado/List<i32>::push"(__b_0.values, 2);
     __cond = local.tee __v0(__b_0.keys.used) == 2;
     if @unlikely(__cond == 0) {

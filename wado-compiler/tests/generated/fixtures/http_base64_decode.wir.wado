@@ -534,13 +534,9 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
     let __local_165: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let __local_169: ref null "core:prelude//List<u8>";
-    let encoded_170: ref "core:prelude/string.wado//String";
     let v: ref "core:prelude/string.wado//String";
-    let encoded_174: ref "core:prelude/string.wado//String";
     let repr_178: ref Array<u8>;
-    let end_180: i32;
     let repr_182: ref Array<u8>;
-    let end_184: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -548,8 +544,7 @@ fn "wado-compiler/tests/fixtures/http_base64_decode.wado/handle"(request) {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    encoded_170 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(89, 87, 74, 106), used: 4 };
-    result = "core:base64/decode_impl"(repr_178 = encoded_170.repr; end_180 = encoded_170.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_178, start: 0, end: end_180 });
+    result = "core:base64/decode_impl"(repr_178 = array.new_fixed<u8>(89, 87, 74, 106); struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_178, start: 0, end: 4 });
     __cond = (if ref.is_null(result) == 0 -> bool {
         bytes_2 = ref.as_non_null(result);
         bytes_2.used == 3;
@@ -866,8 +861,7 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    encoded_174 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(89, 87, 74, 106), used: 4 };
-    __local_169 = "core:base64/decode_impl"(repr_182 = encoded_174.repr; end_184 = encoded_174.used; struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_182, start: 0, end: end_184 });
+    __local_169 = "core:base64/decode_impl"(repr_182 = array.new_fixed<u8>(89, 87, 74, 106); struct.new "core:prelude/slice.wado//ArraySlice<u8>" { repr: repr_182, start: 0, end: 4 });
     v = (if ref.is_null(__local_169) == 0 -> ref "core:prelude/string.wado//String" {
         bytes_11 = ref.as_non_null(__local_169);
         "core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/ByteList>"(bytes_11);

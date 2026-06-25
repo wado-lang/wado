@@ -527,18 +527,14 @@ fn "wado-compiler/tests/fixtures/http_response_trailers.wado/handle"(request) {
     let __local_166: i32;
     let __local_167: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let self_171: ref "core:prelude/string.wado//String";
-    let self_172: ref "core:prelude/string.wado//String";
-    let self_173: ref "core:prelude/string.wado//String";
-    let self_174: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee trailers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_171 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc123"), used: 6 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_171.repr, used: self_171.used, index: 0 })));
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_172 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("req-001"), used: 7 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_172.repr, used: self_172.used, index: 0 })));
+    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee trailers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("abc123"), used: 6, index: 0 })));
+    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-request-id"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("req-001"), used: 7, index: 0 })));
     __v0_2 = "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_has"(trailers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-checksum"), used: 10 });
     if @unlikely(__v0_2 == 0) {
         cold_path;
@@ -565,7 +561,7 @@ condition: trailers.has(\"x-request-id\" as FieldName)
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee headers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_173 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_173.repr, used: self_173.used, index: 0 })));
+    drop("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_append"(local.tee headers("wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
     __pattern_temp_2 = "wado-compiler/tests/fixtures/http_response_trailers.wado/__cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __mv_lo_2 }, __mv_lo_1);
     response = __pattern_temp_2.0;
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
@@ -859,7 +855,7 @@ condition: trailers.has(\"x-request-id\" as FieldName)
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_174 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("response body"), used: 13 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_174.repr, used: self_174.used, index: 0 }));
+    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("response body"), used: 13, index: 0 }));
     "wasi/stream-drop-writable"(__mv_hi_2);
     let __fw_write_ptr_3: i32;
     let __fw_result_3: i32;

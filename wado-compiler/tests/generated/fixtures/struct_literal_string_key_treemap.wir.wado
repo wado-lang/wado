@@ -272,6 +272,12 @@ fn "wado-compiler/tests/fixtures/struct_literal_string_key_treemap.wado/run"() w
     let __local_21: ref "core:prelude/format.wado//Formatter";
     let __local_22: ref "core:prelude/string.wado//String";
     let __local_23: ref "core:prelude/format.wado//Formatter";
+    let key_26: ref "core:prelude/string.wado//String";
+    let value_27: ref "core:prelude/string.wado//String";
+    let key_29: ref "core:prelude/string.wado//String";
+    let value_30: ref "core:prelude/string.wado//String";
+    let key_35: ref "core:prelude/string.wado//String";
+    let key_38: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -279,8 +285,12 @@ fn "wado-compiler/tests/fixtures/struct_literal_string_key_treemap.wado/run"() w
         global:__modules_initialized = 1;
     };
     __b_0 = "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::new"();
-    "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(__b_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Content-Type"), used: 12 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 });
-    "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(__b_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X-Request-ID"), used: 12 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc-123"), used: 7 });
+    key_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Content-Type"), used: 12 };
+    value_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(__b_0, key_26, value_27);
+    key_29 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("X-Request-ID"), used: 12 };
+    value_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abc-123"), used: 7 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String>::insert"(__b_0, key_29, value_30);
     __cond_3 = local.tee __v0_2(__b_0.size) == 2;
     if @unlikely(__cond_3 == 0) {
         cold_path;
@@ -308,8 +318,10 @@ condition: headers[\"X-Request-ID\"] == \"abc-123\"
         unreachable;
     }
     __b_8 = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("width"), used: 5 }, 1920);
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max-height"), used: 10 }, 1080);
+    key_35 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("width"), used: 5 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_8, key_35, 1920);
+    key_38 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max-height"), used: 10 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b_8, key_38, 1080);
     __cond_11 = local.tee __v0_10("core:collections/TreeMap<core:prelude/string.wado/String,i32>^IndexValue<K>::index_value"(__b_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("width"), used: 5 })) == 1920;
     if @unlikely(__cond_11 == 0) {
         cold_path;

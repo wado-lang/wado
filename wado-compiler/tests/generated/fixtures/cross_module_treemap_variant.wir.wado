@@ -237,6 +237,7 @@ global mut global:__modules_initialized: bool = 0;
 
 fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with Stdout {
     let map: ref "core:collections//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
+    let key: ref "core:prelude/string.wado//String";
     let value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     let __sroa_obj_value: ref "./sub/cross_module_treemap_variant_helper.wado//Value";
     __inline___initialize_modules_0: block {
@@ -246,8 +247,9 @@ fn "wado-compiler/tests/fixtures/cross_module_treemap_variant.wado/run"() with S
         global:__modules_initialized = 1;
     };
     map = "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::new"();
+    key = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Str" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-    "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, value);
+    "core:collections/TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::insert"(map, key, value);
     __sroa_obj_value = struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map };
     "core:cli/println"("./sub/cross_module_treemap_variant_helper.wado/stringify"(__sroa_obj_value));
 }

@@ -69,6 +69,7 @@ fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_binding__Stdout
 }
 
 fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run"() {
+    let s_2: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -81,7 +82,8 @@ fn "wado-compiler/tests/fixtures/variant_struct_string.wado/__cm_export__run"() 
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
+    s_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    "core:cli/println"(s_2);
     "wasi/task-return"(0);
 }
 
