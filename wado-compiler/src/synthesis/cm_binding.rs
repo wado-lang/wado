@@ -401,6 +401,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
+                            export.return_type.as_ref(),
                             &project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,

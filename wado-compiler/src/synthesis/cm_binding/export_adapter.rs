@@ -1698,6 +1698,7 @@ pub(super) fn synthesize_sync_export_binding(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
+    return_ast: Option<&Type>,
     cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
@@ -1753,9 +1754,64 @@ pub(super) fn synthesize_sync_export_binding(
     // expects the core function to return the *flattened* result: directly when
     // it flattens to a single core value, or — for multi-value results — via a
     // single i32 pointer into linear memory (the out-pointer convention).
+    // Flat count from the canonical ABI: a result flattening to >1 core value
+    // returns via the out-pointer convention.
+    let flat_count = return_ast
+        .map(|ty| {
+            let tt = type_table.borrow();
+            super::types::compute_export_flat_return_types(ty, tir_modules, &tt).len()
+        })
+        .unwrap_or(0);
+
     let adapter_return = if is_unit_return {
         body_stmts.push(expr_stmt(call_user));
         TypeTable::UNIT
+    } else if flat_count > 1 {
+        // Out-pointer return: allocate, lower the result into linear memory,
+        // and return the i32 pointer (the canonical sync-lift convention for
+        // multi-value results — strings, lists, tuples, records, options,
+        // results).
+        let ty = return_ast.expect("multi-flat result implies a return type");
+        let mut next_local = param_count;
+        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
+        body_stmts.push(let_stmt("__result", result_local, user_return_type, call_user));
+
+        let size = crate::component_model::cm_size_with_registry(ty, cm_interface_registry);
+        let align = crate::component_model::cm_align_with_registry(ty, cm_interface_registry);
+        let ptr_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
+        body_stmts.push(let_stmt(
+            "__ret_ptr",
+            ptr_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(align as i32),
+                    i32_const(size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+
+        let store = synthesize_lower_wasi_type_to_memory(
+            ty,
+            local_ref(result_local, "__result", user_return_type),
+            local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
+            &mut next_local,
+            &mut locals,
+            cm_interface_registry,
+            cm_package,
+            type_table,
+        );
+        body_stmts.extend(store);
+        body_stmts.push(return_stmt(Some(local_ref(
+            ptr_local,
+            "__ret_ptr",
+            TypeTable::I32,
+        ))));
+        TypeTable::I32
     } else {
         let mut next_local = param_count;
         let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
@@ -1769,25 +1825,12 @@ pub(super) fn synthesize_sync_export_binding(
             tir_modules,
             lift_ctx,
         );
-        match flat.len() {
-            0 => TypeTable::UNIT,
-            1 => {
-                let f = &flat[0];
+        match flat.first() {
+            None => TypeTable::UNIT,
+            Some(f) => {
                 let tid = cm_val_type_to_type_id(f.cm_type);
                 body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
                 tid
-            }
-            _ => {
-                // Multi-value results return via the canonical out-pointer. Not
-                // yet synthesized for the sync export path; until then this
-                // returns the Wado value, which the validator rejects for these
-                // shapes (tracked: sync-export adapter out-pointer lowering).
-                body_stmts.push(return_stmt(Some(local_ref(
-                    result_local,
-                    "__result",
-                    user_return_type,
-                ))));
-                user_return_type
             }
         }
     };
