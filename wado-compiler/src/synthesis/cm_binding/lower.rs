@@ -1372,6 +1372,22 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             wasi_package,
             type_table,
         ),
+        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+            let inner = cm_interface_registry.resolve_type(&g.args[0]);
+            let mut stmts = Vec::new();
+            synthesize_lower_option_to_memory(
+                &inner,
+                value,
+                addr,
+                next_local,
+                &mut stmts,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts
+        }
         _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
     }
 }
