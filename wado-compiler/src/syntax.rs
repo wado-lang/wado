@@ -124,7 +124,6 @@ macro_rules! operator_registry {
 }
 
 keyword_registry! {
-    // Control flow.
     "if" => If : Control,
     "else" => Else : Control,
     "while" => While : Control,
@@ -134,7 +133,6 @@ keyword_registry! {
     "continue" => Continue : Control,
     "return" => Return : Control,
     "match" => Match : Control,
-    // Storage types: items and bindings.
     "fn" => Fn : StorageType,
     "let" => Let : StorageType,
     "global" => Global : StorageType,
@@ -150,7 +148,6 @@ keyword_registry! {
     "world" => World : StorageType,
     "effect" => Effect : StorageType,
     "interface" => Interface : StorageType,
-    // Storage modifiers: visibility and qualifiers.
     "pub" => Pub : StorageModifier,
     "internal" => Internal : StorageModifier,
     "export" => Export : StorageModifier,
@@ -159,7 +156,6 @@ keyword_registry! {
     "unique" => Unique : StorageModifier,
     "stores" => Stores : StorageModifier,
     "reactive" => Reactive : StorageModifier,
-    // Other keywords.
     "use" => Use : Other,
     "from" => From : Other,
     "import" => Import : Other,
@@ -168,33 +164,28 @@ keyword_registry! {
     "in" => In : Other,
     "of" => Of : Other,
     "assert" => Assert : Other,
-    // Constants.
     "true" => True : Constant,
     "false" => False : Constant,
     "null" => Null : Constant,
-    // Operator keyword.
     "matches" => Matches : Operator,
 }
 
 operator_registry! {
-    // Comparison.
     "==" => EqEq : Comparison : true,
     "!=" => NotEq : Comparison : true,
     "<=" => LtEq : Comparison : true,
     ">=" => GtEq : Comparison : true,
     "<" => Lt : Comparison : true,
     ">" => Gt : Comparison : true,
-    // Logical.
     "&&" => And : Logical : true,
     "||" => Or : Logical : true,
     "!" => Not : Logical : true,
-    // Arithmetic.
     "+" => Plus : Arithmetic : true,
     "-" => Minus : Arithmetic : true,
     "*" => Star : Arithmetic : true,
     "/" => Slash : Arithmetic : true,
     "%" => Percent : Arithmetic : true,
-    // Bitwise. `&` and `|` double as reference and union/closure punctuation,
+    // `&` and `|` double as reference and union/closure punctuation,
     // so they are not highlighted as operators.
     "&" => Ampersand : Bitwise : false,
     "|" => Pipe : Bitwise : false,
@@ -202,7 +193,6 @@ operator_registry! {
     "~" => Tilde : Bitwise : true,
     "<<" => LtLt : Bitwise : true,
     ">>" => GtGt : Bitwise : true,
-    // Assignment.
     "+=" => PlusEq : Assignment : true,
     "-=" => MinusEq : Assignment : true,
     "*=" => StarEq : Assignment : true,
@@ -214,7 +204,7 @@ operator_registry! {
     "<<=" => ShlEq : Assignment : true,
     ">>=" => ShrEq : Assignment : true,
     "=" => Eq : Assignment : true,
-    // Other. Arrows and bounded ranges highlight; paths/try/unbounded ranges
+    // Arrows and bounded ranges highlight; paths/try/unbounded ranges
     // (`::`, `?`, `..`, `...`) are punctuation and do not.
     "->" => Arrow : Other : true,
     "=>" => FatArrow : Other : true,

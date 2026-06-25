@@ -37,8 +37,6 @@ pub enum TokenKind {
     In,
     Of,
     Pub,
-    // Package-internal visibility. See
-    // docs/wep-2026-06-25-visibility-internal-pub-export.md.
     Internal,
     Effect,
     Interface,
