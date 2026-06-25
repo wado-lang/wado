@@ -1863,6 +1863,18 @@ Returns the fully specialized name without signature:
 | Generic method | `List<String>::len`          |
 | Closure        | `parent_function::{closure}` |
 
+**Call-site evaluation in default arguments:**
+
+As a [default argument](#default-arguments), `#file` / `#line` / `#function` evaluate at the call site, so a defaulted location parameter reports the caller (cf. Swift's `#file`/`#line` defaults, C++'s `std::source_location::current()`):
+
+```wado
+pub fn log(msg: String, file: String = #file, line: i32 = #line) { /* ... */ }
+
+log("started"); // file/line report this call, not where `log` is defined
+```
+
+Name resolution in a default otherwise uses the callee's scope; only these three literals are redirected. `#data` / `#include_str` / `#include_bytes` and struct field defaults always report their own defining file. For a nested defaulted call (`fn outer(x = loc())`), every literal reports the outermost call site (`outer(...)`).
+
 ### Closures
 
 Closures are anonymous function expressions with `|params| body` syntax.
