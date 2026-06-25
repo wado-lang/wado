@@ -20,8 +20,8 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    CallArg, FunctionRef, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -31,8 +31,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    binary_add, cm_type_to_type_id, field_access, flatten_param_type, kebab_to_pascal, variant_tag,
-    variant_test,
+    binary_add, cm_type_to_type_id, field_access, flatten_param_type, is_unit_type, kebab_to_pascal,
+    variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types like `component_model::join_val_types` (mismatch
@@ -599,6 +599,138 @@ pub(super) fn synthesize_lower_option_to_memory(
         span,
     );
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+}
+
+/// Lower a `Result<T, E>` (GC value) to a CM `result` at `addr`: a discriminant
+/// byte (0 = ok, 1 = err) plus the active arm's payload lowered at the aligned
+/// payload offset. Unit arms contribute no payload.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn synthesize_lower_result_to_memory(
+    ok_type: &Type,
+    err_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let value_type_id = value.type_id;
+    let (ok_name, ok_index, err_name, err_index, ok_tid, err_tid) = {
+        let tt = type_table.borrow();
+        let (_, _, ok_name, ok_index) = tt
+            .compiler_items()
+            .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = tt
+            .compiler_items()
+            .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        let (ok_tid, err_tid) = match tt.get(value_type_id) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            _ => (TypeTable::UNIT, TypeTable::UNIT),
+        };
+        (
+            ok_name.to_string(),
+            ok_index,
+            err_name.to_string(),
+            err_index,
+            ok_tid,
+            err_tid,
+        )
+    };
+
+    let value_local = alloc_local(next_local, locals, value_type_id);
+    stmts.push(let_stmt("__res_val", value_local, value_type_id, value));
+
+    // disc byte: 1 when Err, 0 when Ok.
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store8",
+        vec![
+            addr.clone(),
+            variant_test(
+                local_ref(value_local, "__res_val", value_type_id),
+                err_index,
+                &err_name,
+            ),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    let ok_align = crate::component_model::cm_align_with_registry(ok_type, cm_interface_registry);
+    let err_align = crate::component_model::cm_align_with_registry(err_type, cm_interface_registry);
+    let payload_offset = cm_abi::align_to(1, ok_align.max(err_align));
+    let payload_addr = if payload_offset == 0 {
+        addr
+    } else {
+        binary_add(addr, i32_const(payload_offset as i32))
+    };
+
+    let arm = |is_ok: bool,
+               arm_name: &str,
+               payload_ty: &Type,
+               payload_tid: TypeId,
+               next_local: &mut u32,
+               locals: &mut Vec<TirLocal>|
+     -> TirMatchArm {
+        let span = synth_span();
+        let is_unit = is_unit_type(payload_ty);
+        let binding_local = alloc_local(next_local, locals, payload_tid);
+        let binding_name = format!("__res_{}_{binding_local}", if is_ok { "ok" } else { "err" });
+        let mut body = Vec::new();
+        if !is_unit {
+            body = synthesize_lower_wasi_type_to_memory(
+                payload_ty,
+                local_ref(binding_local, &binding_name, payload_tid),
+                payload_addr.clone(),
+                next_local,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+        }
+        TirMatchArm {
+            pattern: TirPattern::Variant {
+                enum_type: value_type_id,
+                variant_name: arm_name.to_string(),
+                bindings: if is_unit {
+                    Vec::new()
+                } else {
+                    vec![TirPattern::Binding {
+                        name: binding_name,
+                        local_index: binding_local,
+                        type_id: payload_tid,
+                    }]
+                },
+                payload_type: if is_unit { TypeTable::UNIT } else { payload_tid },
+            },
+            guard: None,
+            body: TirExpr::new(
+                TirExprKind::Block(crate::tir::TirBlock::new(body, span)),
+                TypeTable::UNIT,
+                span,
+            ),
+            span,
+        }
+    };
+
+    let ok_arm = arm(true, &ok_name, ok_type, ok_tid, next_local, locals);
+    let err_arm = arm(false, &err_name, err_type, err_tid, next_local, locals);
+    let _ = (ok_index,);
+    stmts.push(TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(value_local, "__res_val", value_type_id)),
+                arms: vec![ok_arm, err_arm],
+            },
+            TypeTable::UNIT,
+            synth_span(),
+        )),
+        synth_span(),
+    ));
 }
 
 /// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
@@ -1582,6 +1714,31 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 }
                 return stmts;
             }
+            // Named `variant` (sum type with payloads): lower disc + active
+            // case payload via the registry-backed variant helper, keyed on the
+            // same resolved source. Lib-local variants register their cases
+            // under the package's default-interface FQ, like WASI variants.
+            if let Some(src) = source {
+                if cm_interface_registry
+                    .get_variant_cases_by_source(src, &n.name)
+                    .is_some()
+                {
+                    let mut stmts = Vec::new();
+                    synthesize_lower_wasi_variant_to_memory(
+                        n,
+                        src,
+                        value,
+                        addr,
+                        next_local,
+                        &mut stmts,
+                        locals,
+                        cm_interface_registry,
+                        wasi_package,
+                        type_table,
+                    );
+                    return stmts;
+                }
+            }
             // Fall through to synthesize_lower for primitives and simple types
             synthesize_lower(&resolved, value, addr, next_local, locals, &names)
         }
@@ -1622,6 +1779,24 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 wasi_package,
                 type_table,
             )
+        }
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            let ok = cm_interface_registry.resolve_type(&g.args[0]);
+            let err = cm_interface_registry.resolve_type(&g.args[1]);
+            let mut stmts = Vec::new();
+            synthesize_lower_result_to_memory(
+                &ok,
+                &err,
+                value,
+                addr,
+                next_local,
+                &mut stmts,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts
         }
         _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
     }

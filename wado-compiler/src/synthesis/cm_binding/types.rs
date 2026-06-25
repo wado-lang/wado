@@ -1045,18 +1045,27 @@ pub(super) fn type_id_to_ast_type(
         } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
-            name, type_args, ..
+            name,
+            type_args,
+            module_source,
         } => {
             let args: Vec<Type> = type_args
                 .iter()
                 .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
                 .collect();
-            Type::Generic(GenericType {
-                id: AstId::fresh(),
-                name: name.clone(),
-                args,
-                span,
-            })
+            // The tuple family is a `GenericInstance`, but its CM surface is a
+            // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
+            // the tuple arm rather than the generic catch-all.
+            if TypeTable::is_tuple_type(name, module_source) {
+                Type::Tuple(args)
+            } else {
+                Type::Generic(GenericType {
+                    id: AstId::fresh(),
+                    name: name.clone(),
+                    args,
+                    span,
+                })
+            }
         }
         ResolvedType::GenericResource {
             name, type_args, ..
