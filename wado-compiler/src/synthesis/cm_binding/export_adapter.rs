@@ -502,8 +502,23 @@ fn lower_to_flat_inner(
                 }]
             }
         }
+        ResolvedType::Newtype { base_type, .. } => {
+            // Newtypes share their base's representation; lower through the base.
+            let base = *base_type;
+            let base_resolved = ctx.type_table.borrow().get(base).clone();
+            lower_to_flat_inner(
+                cast(value, base),
+                base,
+                &base_resolved,
+                next_local,
+                stmts,
+                locals,
+                tir_modules,
+                ctx,
+            )
+        }
         _ => {
-            // For other types (including complex variants, newtypes, etc.), lower as i32
+            // For other types (including complex variants, etc.), lower as i32
             let local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
             vec![FlatLocal {

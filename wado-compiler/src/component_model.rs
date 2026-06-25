@@ -2887,7 +2887,18 @@ impl CmTypeGen {
                         }
                         let member_refs: Vec<&str> = members.iter().map(String::as_str).collect();
                         let idx = sink.define(CmDefined::Flags(&member_refs));
-                        self.cache.insert(cache_key, idx);
+                        self.cache.insert(cache_key.clone(), idx);
+
+                        // Export to make it a named type (as for record/variant/
+                        // enum) so an exported interface instance can reference it.
+                        if let Some(cm_name) =
+                            cm_interface_registry.get_flags_cm_name_by_source(source, name)
+                        {
+                            let export_idx = sink.name(cm_name, idx);
+                            self.cache.insert(cache_key, export_idx);
+                            return ComponentValType::Type(export_idx);
+                        }
+
                         ComponentValType::Type(idx)
                     } else {
                         panic!("unsupported named type for CM instance: {name} (source={source})")
