@@ -42,7 +42,7 @@ variadic `...any`). Wado reproduces each with its own tools.
 
 Thesis: **a subscriber is an effect, layers and spans are nested handlers, the
 level threshold is a compile-time parameter, and a default sink is installed at
-the entry point.** v1 needs **no new language feature**: the facade uses the
+the entry point.** It needs **no new language feature**: the facade uses the
 existing function-level `#[ambient]` so logging never infects signatures, span
 scoping uses an `in_span` closure (`with span do` is optional sugar), and
 `core:value::to_value` is already in place.
@@ -169,8 +169,8 @@ impl Span {
 pub fn current() -> Option<Span> { ... }
 ```
 
-Entry emits `enter` on entry and `exit` on every exit path. v1 uses the closure
-`in_span` (Span scoping, below); the illustrative native sugar:
+Entry emits `enter` on entry and `exit` on every exit path. Entering uses the
+closure `in_span` (Span scoping, below); the illustrative native sugar:
 
 ```wado
 let s = span(Level::Info, "request", [field("route", route)]);
@@ -269,15 +269,15 @@ The current-span stack rides the effect-dispatch state, process-global today —
 exact within one synchronous scope, wrong across concurrent tasks (HTTP
 requests). So:
 
-- v1 auto current-span propagation is single-scope only.
+- Automatic current-span propagation is single-scope only.
 - Cross-task is explicit: carry the `Span` value and re-enter it (`tracing`'s
-  `Instrument`, by hand) — first-class spans make this expressible now.
-- Auto cross-task propagation (per-task dispatch state) is deferred to when WASI
-  threads / Wasm stack switching stabilize; it adds no API surface.
+  `Instrument`, by hand) — first-class spans make this expressible.
+- Automatic cross-task propagation (per-task dispatch state) waits on WASI
+  threads / Wasm stack switching; it adds no API surface when it lands.
 
 ## Language Notes
 
-v1 requires no new language feature. The pieces it leans on already exist:
+No new language feature is required. The pieces it leans on already exist:
 function-level `#[ambient]` (no `with Log` infection), effect handlers (sinks,
 layers, scoped overrides), default arguments + call-site `#file`/`#line`/`#function`,
 compile-time `#[param]`, and `core:value::to_value`.
@@ -301,9 +301,9 @@ fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
 
 A native `with span do { … }` (desugaring to `enter; B; exit`, with `exit` on
 every exit path via the restore injector) is an optional ergonomic upgrade so
-control flow can escape directly to the enclosing function. Not required for v1.
+control flow can escape directly to the enclosing function. Optional.
 
-### Deferred (performance-gated): efficient field passing
+### Efficient field passing (performance-gated)
 
 `List<Field>` boxes each value into a `core:value::Value`. For fixed call-site
 fields, pass an anonymous struct bounded by `Serialize` instead:
@@ -345,8 +345,9 @@ shows up. Only the field argument changes, so it is an internal swap.
   entry point must install the default sink.
 - Eager message; the optimizer (not a macro) drops it when statically off,
   `enabled()` for runtime-off.
-- Baseline fields box through `core:value`, removed by the deferred path.
-- Auto span propagation is single-scope in v1; cross-task is explicit until the
+- Baseline fields box through `core:value`; the efficient-field path removes that
+  later.
+- Automatic span propagation is single-scope; cross-task is explicit until the
   async story settles.
 
 ### Prerequisites
@@ -361,8 +362,8 @@ shows up. Only the field argument changes, so it is an internal swap.
       installs the default sink at the entry point.
 - [ ] Optional (ergonomics): bound-driven serde derivation
       ([Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)).
-- [ ] Deferred (perf): anonymous structs, erased serde, serde flatten.
-- [ ] Deferred (async): automatic cross-task current-span propagation.
+- [ ] Efficient field passing (perf-gated): anonymous structs, erased serde, serde flatten.
+- [ ] Automatic cross-task current-span propagation (async-gated).
 
 ## Alternatives Considered
 
@@ -389,7 +390,7 @@ default, and a depth-limited drop is the backstop.
 
 The ladder is `Value` (tagged-union tree, allocating) < flat token buffer (one
 allocation, replayable) < erased serde (zero boxing/copy until bytes). The
-baseline uses `Value`; the deferred path jumps to erased serde once profiling
+baseline uses `Value`; the efficient-field path jumps to erased serde once profiling
 justifies it. A generic `Log` op (`event<F: Serialize>`) was rejected as the
 erasure route: the handler vtable is installed at the `with` site, which cannot
 enumerate the `F` shapes used across the block's dynamic extent.
