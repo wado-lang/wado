@@ -448,13 +448,17 @@ fn "wado-compiler/tests/fixtures/parser_synth_id_collision_test.wado/section_hea
 fn "wado-compiler/tests/fixtures/parser_synth_id_collision_test.wado/post_process"(raw) {
     let trimmed: ref "core:prelude/string.wado//String";
     let s: ref "core:prelude/string.wado//String";
+    let from: ref "core:prelude/string.wado//String";
+    let to: ref "core:prelude/string.wado//String";
+    let pat: ref "core:prelude/string.wado//String";
     let capacity: i32;
     trimmed = "core:prelude/string.wado/String::trim_end"("core:prelude/string.wado/String::trim_start"(raw));
     if "core:prelude/string.wado/String::starts_with"(trimmed, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(34, 34, 34), used: 3 }) {
-        return "core:prelude/string.wado/String::replacen"(trimmed, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(34, 34, 34), used: 3 }, struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, -1);
+        return from = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(34, 34, 34), used: 3 }, to = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, "core:prelude/string.wado/String::replacen"(trimmed, from, to, -1);
     }
+    pat = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
     let __match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-    __match_scrut_0 = "core:prelude/string.wado/String::find"(trimmed, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
+    __match_scrut_0 = "core:prelude/string.wado/String::find"(trimmed, pat);
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_0) {
         s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity(trimmed.used + 1)), used: 0 };
         "core:prelude/string.wado/String::push_str"(s, trimmed);

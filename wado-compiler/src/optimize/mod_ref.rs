@@ -278,16 +278,11 @@ impl ModRef {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
             // A promoted constant is a pure leaf except `String`, whose WIR
-            // materialisation (`translate_string_literal`) builds a fresh
-            // `String` heap object with a distinct identity at each use site.
-            Operand::Value(v) => {
-                if matches!(
-                    body.values.kind(v),
-                    crate::nir_value_graph::ValueKind::String(_)
-                ) {
-                    self.allocates = true;
-                }
-            }
+            // A pooled `Operand::Value` is now only a scalar / null / unit
+            // constant — never an allocation. String and bytes literals are
+            // `StructLiteral`s over a packed `Array<u8>` and are accounted for
+            // by the aggregate arms.
+            Operand::Value(_) => {}
         }
     }
 
@@ -521,7 +516,7 @@ impl ModRef {
             // distinct heap object with its own identity. (String literals are
             // promoted to `Operand::Value`; their allocation is recognised in
             // `accumulate_operand`.)
-            ExprKind::BytesLiteral(_) => {
+            ExprKind::PackedArray(_) => {
                 self.allocates = true;
             }
 
@@ -1395,17 +1390,38 @@ mod tests {
     // GC-allocating literals (String / Bytes) — see B1 finding
     // -----------------------------------------------------------------
 
-    // A promoted string literal lives as `Operand::Value(String)`; it has no
-    // `ExprKind`. Returned as the operand a real `&"..."` would reference.
+    // A string literal lowers to `StructLiteral String { repr: PackedArray, used }`
+    // — a fresh GC object at each use site. Returned as the operand a real
+    // `&"..."` would reference.
     fn string_val(body: &mut Body, s: &str) -> Operand {
-        Operand::Value(body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::String(s.to_string()),
+        let repr = pe(body, ExprKind::PackedArray(s.as_bytes().to_vec()));
+        let used = body.values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(s.len() as u64, ty()),
             ty(),
+        );
+        Operand::Expr(pe(
+            body,
+            ExprKind::StructLiteral {
+                struct_type: ty(),
+                struct_name: "String".to_string(),
+                fields: vec![
+                    crate::nir_arena::ArenaStructField {
+                        name: "repr".to_string(),
+                        value: Operand::Expr(repr),
+                        field_index: 0,
+                    },
+                    crate::nir_arena::ArenaStructField {
+                        name: "used".to_string(),
+                        value: Operand::Value(used),
+                        field_index: 1,
+                    },
+                ],
+            },
         ))
     }
 
     fn bytes_lit(body: &mut Body) -> ExprId {
-        pe(body, ExprKind::BytesLiteral(vec![1, 2, 3]))
+        pe(body, ExprKind::PackedArray(vec![1, 2, 3]))
     }
 
     #[test]

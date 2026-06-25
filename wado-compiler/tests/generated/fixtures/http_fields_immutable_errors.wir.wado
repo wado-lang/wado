@@ -617,10 +617,6 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(reque
     let __local_184: i32;
     let __local_185: i32;
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let self_189: ref "core:prelude/string.wado//String";
-    let self_194: ref "core:prelude/string.wado//String";
-    let self_196: ref "core:prelude/string.wado//String";
-    let self_197: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -629,7 +625,7 @@ fn "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/handle"(reque
     };
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_has"(local.tee headers("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Request_get_headers"(request)), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }));
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_get"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }));
-    append_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-new"), used: 5 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_189 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_189.repr, used: self_189.used, index: 0 }));
+    append_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_append"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-new"), used: 5 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("value"), used: 5, index: 0 }));
     __cond_5 = ref.is_null(append_result) == 0;
     if @unlikely(__cond_5 == 0) {
         cold_path;
@@ -638,7 +634,7 @@ condition: append_result matches { Err(_) }
 "), used: 45 }); __local_25);
         unreachable;
     }
-    __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: array.new_fixed<ref "core:prelude//List<u8>">("core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_194 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 97, 108), used: 3 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_194.repr, used: self_194.used, index: 0 })), used: 1 };
+    __b = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: array.new_fixed<ref "core:prelude//List<u8>">("core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(118, 97, 108), used: 3, index: 0 })), used: 1 };
     set_result = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_set"(headers, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 111, 115, 116), used: 4 }, __b);
     __cond_9 = ref.is_null(set_result) == 0;
     if @unlikely(__cond_9 == 0) {
@@ -667,7 +663,7 @@ condition: gad_result matches { Err(_) }
         unreachable;
     }
     drop("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_copy_all"(headers));
-    clone_append = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_append"(local.tee cloned("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_clone"(headers)), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-clone"), used: 7 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_196 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_196.repr, used: self_196.used, index: 0 }));
+    clone_append = "wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_append"(local.tee cloned("wado-compiler/tests/fixtures/http_fields_immutable_errors.wado/__cm_binding__Fields_clone"(headers)), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-clone"), used: 7 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(111, 107), used: 2, index: 0 }));
     __cond_17 = ref.is_null(clone_append);
     if @unlikely(__cond_17 == 0) {
         cold_path;
@@ -979,7 +975,7 @@ condition: clone_append matches { Ok(_) }
         }
         "wasi/task-return"(1, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_197 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_197.repr, used: self_197.used, index: 0 }));
+    "core:internal/cm_stream_write_u8"(__mv_hi_2, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_fixed<u8>(111, 107), used: 2, index: 0 }));
     "wasi/stream-drop-writable"(__mv_hi_2);
     let __fw_write_ptr_3: i32;
     let __fw_result_3: i32;

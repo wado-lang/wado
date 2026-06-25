@@ -865,8 +865,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
         _ => return null_expr(type_id),
     };
     let default_trait_name = type_table
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Default)
+        .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
         .to_string();
     let mut method_info =
         LocalMethodName::new(base_name, Some(default_trait_name), "default".to_string());
@@ -1241,8 +1240,7 @@ fn generate_struct_deserialize(
     // the base instance here matches the trait's `ByteSlice` spelling.
     let key_slice_type = {
         let slice_module = tt
-            .compiler_items()
-            .require_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
+            .compiler_method(crate::compiler_item::CompilerItem::ByteSliceGetUnchecked)
             .0
             .clone();
         tt.make_generic_instance("ArraySlice".to_string(), slice_module, vec![TypeTable::U8])
@@ -3132,8 +3130,7 @@ fn generate_flags_serialize(
     let string_struct_name = module
         .type_table
         .borrow()
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
+        .compiler_struct_name(crate::compiler_item::CompilerItem::String)
         .to_string();
     let mut tt = module.type_table.borrow_mut();
 

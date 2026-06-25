@@ -88,80 +88,16 @@ fn "wado-compiler/tests/fixtures/match_literal_i128_guarded.wado/run"() with Std
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    r1 = (if (if 42_i64 == 42_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer_positive"), used: 15 };
-    } else if (if 42_i64 == 42_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    r1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer_positive"), used: 15 };
     "core:cli/println"(r1);
-    r2 = (if (if (if 42_i64 == 42_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> i32 {
-        0;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should_not_fire"), used: 15 };
-    } else if (if 42_i64 == 42_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    r2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
     "core:cli/println"(r2);
-    r3 = (if (if 7_i64 == 7_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seven_small"), used: 11 };
-    } else if (if 7_i64 == 7_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seven"), used: 5 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    r3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("seven_small"), used: 11 };
     "core:cli/println"(r3);
-    r4 = (if (if (if 7_i64 == 7_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> i32 {
-        0;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("should_not_fire"), used: 15 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
-    });
+    r4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     "core:cli/println"(r4);
     bind = struct.new "core:prelude/int128.wado//i128" { low: 99_i64, high: 0_i64 };
-    r5 = (if (if 99_i64 == 42_i64 -> i32 {
-        0_i64 == 0_i64;
-    } else {
-        0;
-    }) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("answer"), used: 6 };
-    } else if "core:prelude/int128.wado/i128^Ord::cmp"(bind, struct.new "core:prelude/int128.wado//i128" { low: 10_i64, high: 0_i64 }) == 2 -> ref "core:prelude/string.wado//String" {
+    r5 = (if "core:prelude/int128.wado/i128^Ord::cmp"(bind, struct.new "core:prelude/int128.wado//i128" { low: 10_i64, high: 0_i64 }) == 2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 105, 103), used: 3 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
@@ -216,12 +152,12 @@ fn "core:cli/println"(message) with Stdout {
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {
     let i: i32;
     i = 0;
-    b20: block {
-        l21: loop {
-            break_if b20 i >= len;
+    b2: block {
+        l3: loop {
+            break_if b2 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
             i = i + 1;
-            continue l21;
+            continue l3;
         };
     };
 }

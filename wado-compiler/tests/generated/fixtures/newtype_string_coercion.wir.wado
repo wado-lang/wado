@@ -108,6 +108,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global mut global:__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(name) {
     let __local_1: ref "core:prelude/string.wado//String";
@@ -119,7 +120,6 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(name) {
 fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout {
     let label: ref "core:prelude/string.wado//String";
     let greeting: ref "core:prelude/string.wado//String";
-    let x: ref "core:prelude/string.wado//String";
     let __local_4: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -129,7 +129,7 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout
     };
     label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     greeting = "wado-compiler/tests/fixtures/newtype_string_coercion.wado/greet"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
-    x = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+    global:__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
     __local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     "core:prelude/string.wado/String::push"(__local_4, 104);
     "core:prelude/string.wado/String::push"(__local_4, 101);
@@ -137,7 +137,7 @@ fn "wado-compiler/tests/fixtures/newtype_string_coercion.wado/run"() with Stdout
     "core:prelude/string.wado/String::push"(__local_4, 108);
     "core:prelude/string.wado/String::push"(__local_4, 111);
     "core:prelude/string.wado/String::push"(__local_4, 32);
-    "core:prelude/string.wado/String::push_str"(__local_4, x);
+    "core:prelude/string.wado/String::push_str"(__local_4, global:__const_obj_0);
     "core:cli/println"(label);
     "core:cli/println"(greeting);
     "core:cli/println"(__local_4);

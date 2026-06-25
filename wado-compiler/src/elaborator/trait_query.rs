@@ -176,8 +176,7 @@ impl TypeSystem {
         let trait_name = self
             .type_table
             .borrow()
-            .compiler_items()
-            .trait_name(item)
+            .compiler_trait_name(item)
             .to_string();
         Some((trait_name, self.auto_derive_return_type(item)))
     }
@@ -190,8 +189,7 @@ impl TypeSystem {
             let name = self
                 .type_table
                 .borrow()
-                .compiler_items()
-                .trait_name(*item)
+                .compiler_trait_name(*item)
                 .to_string();
             (name == trait_name).then_some(*item)
         })?;
@@ -1224,8 +1222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.get_ultimate_base_type(concrete_type_id);
             let list_name = tt
-                .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::List)
+                .compiler_struct_name(crate::compiler_item::CompilerItem::List)
                 .to_string();
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance {

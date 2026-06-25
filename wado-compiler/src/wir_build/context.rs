@@ -70,10 +70,10 @@ pub struct WirContext<'a> {
     pub exports: Vec<WirExport>,
     /// Data segments (string and bytes literals).
     pub data: Vec<WirData>,
-    /// String literal dedup: string → data segment index.
-    pub string_literal_map: IndexMap<String, u32>,
-    /// Bytes literal dedup: bytes → data segment index.
-    pub bytes_literal_map: IndexMap<Vec<u8>, u32>,
+    /// Packed-array data dedup: byte payload → passive data segment index.
+    /// Shared by `String` and `List<u8>` literal `repr`s, which converge on the
+    /// same `array.new_data` segment when their bytes match.
+    pub packed_data_map: IndexMap<Vec<u8>, u32>,
     /// Name section entries.
     pub names: WirNames,
 
@@ -207,10 +207,9 @@ pub struct ClosureWrapperFuncs {
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a `NirPackage`.
     pub fn new(package: &'a NirPackage) -> Self {
-        // String and bytes literals live on `package`; `register_string_data`
-        // / `register_bytes_data` read them directly and dedup into `data` via
-        // `string_literal_map` / `bytes_literal_map`, so the context keeps no
-        // separate copy.
+        // String and bytes literals live on `package`; `register_literal_data`
+        // reads them directly and dedups into `data` via `packed_data_map`, so
+        // the context keeps no separate copy.
 
         // Compute the per-`(N, Ret)` inspectable gate. After DCE,
         // `package.functions` only contains reachable functions, so the
@@ -271,8 +270,7 @@ impl<'a> WirContext<'a> {
             global_map: IndexMap::default(),
             exports: Vec::new(),
             data: Vec::new(),
-            string_literal_map: IndexMap::default(),
-            bytes_literal_map: IndexMap::default(),
+            packed_data_map: IndexMap::default(),
             names: WirNames {
                 module_name: Some(package.module_name.clone()),
                 ..WirNames::default()
@@ -366,23 +364,10 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
-    /// Register a string literal and return its data segment index.
-    pub fn register_string_literal(&mut self, s: &str) -> u32 {
-        if let Some(&idx) = self.string_literal_map.get(s) {
-            return idx;
-        }
-        let idx = u32::try_from(self.data.len()).expect("too many data segments");
-        self.data.push(WirData {
-            bytes: s.as_bytes().to_vec(),
-            offset: None, // passive segment
-        });
-        self.string_literal_map.insert(s.to_string(), idx);
-        idx
-    }
-
-    /// Register a bytes literal and return its data segment index.
-    pub fn register_bytes_literal(&mut self, b: &[u8]) -> u32 {
-        if let Some(&idx) = self.bytes_literal_map.get(b) {
+    /// Register a packed-array byte payload (a `String` / `List<u8>` literal's
+    /// `repr`) and return its passive data segment index, deduped by content.
+    pub fn register_packed_data(&mut self, b: &[u8]) -> u32 {
+        if let Some(&idx) = self.packed_data_map.get(b) {
             return idx;
         }
         let idx = u32::try_from(self.data.len()).expect("too many data segments");
@@ -390,7 +375,7 @@ impl<'a> WirContext<'a> {
             bytes: b.to_vec(),
             offset: None, // passive segment
         });
-        self.bytes_literal_map.insert(b.to_vec(), idx);
+        self.packed_data_map.insert(b.to_vec(), idx);
         idx
     }
 
@@ -909,8 +894,7 @@ impl<'a> WirContext<'a> {
                             .package
                             .type_table
                             .borrow()
-                            .compiler_items()
-                            .struct_module(crate::compiler_item::CompilerItem::Box)
+                            .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
                             .cloned()
                             .unwrap_or_else(ModuleSource::prelude);
                         let box_sn = StructName::new(box_module, box_name);

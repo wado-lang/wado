@@ -1184,6 +1184,13 @@ impl CompilerItems {
         }
     }
 
+    /// Owned `(module, name)` for a struct item — the borrow-then-clone the
+    /// callers of [`Self::require_struct`] would otherwise repeat inline.
+    pub fn struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
+        let (module, name) = self.require_struct(item);
+        (module.clone(), name.to_string())
+    }
+
     /// Module + variant name of a [`CompilerItemKind::Variant`] item
     /// (`Option`, `Result`).
     pub fn require_variant(&self, item: CompilerItem) -> (&ModuleSource, &str) {
@@ -1216,6 +1223,12 @@ impl CompilerItems {
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Enum", other),
         }
+    }
+
+    /// Owned `(module, name)` for an enum item — see [`Self::struct_owned`].
+    pub fn enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
+        let (module, name) = self.require_enum(item);
+        (module.clone(), name.to_string())
     }
 
     /// Module + trait name of a [`CompilerItemKind::Trait`] item.

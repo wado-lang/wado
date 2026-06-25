@@ -86,11 +86,11 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global mut global:__modules_initialized: bool = 0;
 global global:__const_obj_0: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 3)), used: 3 };
 global global:__const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(array.new_fixed<i32>(1, 2, 4)), used: 3 };
+global mut global:__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:__const_obj_4: ref null "core:prelude/string.wado//String" = ref.null none;
+global mut global:__const_obj_5: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
-    let s1: ref "core:prelude/string.wado//String";
-    let s2: ref "core:prelude/string.wado//String";
-    let s3: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -121,19 +121,19 @@ fn "wado-compiler/tests/fixtures/ordering_basic.wado/run"() with Stdout {
     if "core:prelude/list.wado/List<i32>^Eq::eq"(global:__const_obj_0, global:__const_obj_0) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr1 == arr3"), used: 12 });
     }
-    s1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    s2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
-    s3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
-    if "core:prelude/string.wado/String^Ord::cmp"(s1, s2) == 0 {
+    global:__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    global:__const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 };
+    global:__const_obj_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 };
+    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_3, global:__const_obj_4) == 0 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple < banana"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(s1, s3) != 2 {
+    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_3, global:__const_obj_5) != 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple <= apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Ord::cmp"(s2, s1) == 2 {
+    if "core:prelude/string.wado/String^Ord::cmp"(global:__const_obj_4, global:__const_obj_3) == 2 {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana > apple"), used: 14 });
     }
-    if "core:prelude/string.wado/String^Eq::eq"(s1, s3) {
+    if "core:prelude/string.wado/String^Eq::eq"(global:__const_obj_3, global:__const_obj_5) {
         "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple == apple"), used: 14 });
     }
 }

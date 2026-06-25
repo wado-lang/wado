@@ -532,8 +532,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
         .package
         .type_table
         .borrow()
-        .compiler_items()
-        .struct_module(crate::compiler_item::CompilerItem::Box)
+        .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let struct_name = StructName::new(module_source.clone(), box_name.clone());

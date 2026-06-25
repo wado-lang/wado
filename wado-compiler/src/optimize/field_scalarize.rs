@@ -1031,7 +1031,7 @@ fn visit_expr_for_alias(
             }
             visit_block_for_alias(body, default, type_table, out);
         }
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }
@@ -1410,7 +1410,7 @@ fn count_field_accesses_in_expr(
             }
             count_field_accesses_in_block(body, default, counts, type_table);
         }
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::EnumConstruct { .. } => {}
@@ -2767,7 +2767,7 @@ fn walk_other_expr_kinds(
                 walk_operand(body, aid, states, true, out, ctx);
             }
         }
-        ExprKind::BytesLiteral(_)
+        ExprKind::PackedArray(_)
         | ExprKind::Dead
         | ExprKind::Local { .. }
         | ExprKind::GlobalVarGet { .. }

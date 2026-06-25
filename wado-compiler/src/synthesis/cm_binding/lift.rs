@@ -634,8 +634,7 @@ fn synthesize_lift_list(
             cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let list_tid = tt.make_list(elem_tid);
         let list_name = tt
-            .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::List)
+            .compiler_struct_name(crate::compiler_item::CompilerItem::List)
             .to_string();
         (elem_tid, list_tid, list_name)
     };
@@ -1053,8 +1052,7 @@ fn synthesize_lift_tuple(
 fn string_name_for_free(ctx: &LiftContext<'_>) -> String {
     ctx.type_table
         .borrow()
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
+        .compiler_struct_name(crate::compiler_item::CompilerItem::String)
         .to_string()
 }
 

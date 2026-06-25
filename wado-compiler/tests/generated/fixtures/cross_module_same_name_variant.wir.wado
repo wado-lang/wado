@@ -168,6 +168,7 @@ fn "wado-compiler/tests/fixtures/cross_module_same_name_variant.wado/__test_0_cr
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let n_12: i32;
+    let msg: ref "core:prelude/string.wado//String";
     a = struct.new "./sub/cross_module_same_name_variant_a.wado//Status::Active" { discriminant: 0, payload_0: 42 };
     __cond_2 = local.tee __v0_1((if ref.test "./sub/cross_module_same_name_variant_a.wado//Status::Active"(a) -> i32 {
         local.tee n_12(ref.cast "./sub/cross_module_same_name_variant_a.wado//Status::Active"(a).payload_0);
@@ -181,7 +182,8 @@ condition: status_value(a) == 42
 "), used: 34 }); "core:prelude/string.wado/String::push_str"(__local_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("status_value(a): "), used: 17 }); __local_7 = "core:prelude/format.wado/Formatter::new"(__local_6); "core:prelude/primitive.wado/i32^Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v0_1 }, __local_7); "core:prelude/string.wado/String::push"(__local_6, 10); __local_6);
         unreachable;
     }
-    b = struct.new "./sub/cross_module_same_name_variant_b.wado//Status::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    b = struct.new "./sub/cross_module_same_name_variant_b.wado//Status::Ok" { discriminant: 0, payload_0: msg };
     __v0_4 = "./sub/cross_module_same_name_variant_b.wado/status_msg"(b);
     __cond_5 = "core:prelude/string.wado/String^Eq::eq"(__v0_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 });
     if @unlikely(__cond_5 == 0) {

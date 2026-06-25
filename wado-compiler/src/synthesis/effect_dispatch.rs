@@ -783,22 +783,18 @@ fn build_dispatch_wrapper_function(
         // here anyway, panic with a diagnostic identifying the operation
         // — useful when a future refactor introduces a path that bypasses
         // effect-check.
-        let (string_struct_name, string_module) = {
+        let string_type_id = {
             let tt = type_table.borrow();
-            let (m, n) = tt
-                .compiler_items()
-                .require_struct(crate::compiler_item::CompilerItem::String);
-            (n.to_string(), m.clone())
+            let (string_module, string_struct_name) =
+                tt.compiler_struct_owned(crate::compiler_item::CompilerItem::String);
+            tt.find_struct_type(&string_struct_name, &string_module)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "core:prelude/string.wado String type missing from \
+                         the package type table at effect-dispatch synthesis"
+                    )
+                })
         };
-        let string_type_id = type_table
-            .borrow()
-            .find_struct_type(&string_struct_name, &string_module)
-            .unwrap_or_else(|| {
-                panic!(
-                    "core:prelude/string.wado String type missing from \
-                     the package type table at effect-dispatch synthesis"
-                )
-            });
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
             string_type_id,
@@ -833,8 +829,7 @@ fn build_dispatch_wrapper_function(
     );
     let some_case_name = {
         let tt = type_table.borrow();
-        tt.compiler_items()
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+        tt.compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
             .to_string()
     };
     let pattern = TirPattern::Variant {

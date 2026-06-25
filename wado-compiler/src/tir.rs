@@ -1033,6 +1033,73 @@ impl TypeTable {
         &mut self.compiler_items
     }
 
+    /// Canonical name of a registered struct / trait / variant / enum
+    /// [`CompilerItem`], forwarded from the registry so call sites read
+    /// `tt.compiler_struct_name(item)` instead of chaining through
+    /// `compiler_items()`.
+    pub fn compiler_struct_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+        self.compiler_items.struct_name(item)
+    }
+
+    pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+        self.compiler_items.trait_name(item)
+    }
+
+    pub fn compiler_variant_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+        self.compiler_items.variant_name(item)
+    }
+
+    pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+        self.compiler_items.enum_name(item)
+    }
+
+    /// Owned `(module, name)` for a registered struct / enum item — forwards
+    /// the registry's [`CompilerItems::struct_owned`] so single-expression
+    /// callers query the table directly instead of through `compiler_items()`.
+    pub fn compiler_struct_owned(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> (ModuleSource, String) {
+        self.compiler_items.struct_owned(item)
+    }
+
+    pub fn compiler_enum_owned(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> (ModuleSource, String) {
+        self.compiler_items.enum_owned(item)
+    }
+
+    /// Module source of a registered struct item, if present.
+    pub fn compiler_struct_module(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> Option<&ModuleSource> {
+        self.compiler_items.struct_module(item)
+    }
+
+    /// Case name of a registered variant-case item (e.g. `Option::Some`).
+    pub fn compiler_variant_case_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+        self.compiler_items.variant_case_name(item)
+    }
+
+    /// Module + variant name + case name + discriminant of a registered
+    /// variant-case item.
+    pub fn compiler_variant_case(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> (&ModuleSource, &str, &str, u32) {
+        self.compiler_items.require_variant_case(item)
+    }
+
+    /// Module + owner-type name + method name of a registered method item.
+    pub fn compiler_method(
+        &self,
+        item: crate::compiler_item::CompilerItem,
+    ) -> (&ModuleSource, &str, &str) {
+        self.compiler_items.require_method(item)
+    }
+
     /// Get the module source where the `Default` trait is defined, if
     /// the stdlib has registered it. Thin wrapper around
     /// [`CompilerItems::trait_module`].
@@ -1047,10 +1114,7 @@ impl TypeTable {
     /// does not hard-code either. Panics with a clear ICE message when
     /// the item is not registered or has the wrong kind.
     pub fn make_compiler_struct(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
-        let (module_source, name) = {
-            let (m, n) = self.compiler_items.require_struct(item);
-            (m.clone(), n.to_string())
-        };
+        let (module_source, name) = self.compiler_items.struct_owned(item);
         self.make_struct(name, module_source)
     }
 
@@ -1059,10 +1123,7 @@ impl TypeTable {
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
     pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
-        let (module_source, name) = {
-            let (m, n) = self.compiler_items.require_enum(item);
-            (m.clone(), n.to_string())
-        };
+        let (module_source, name) = self.compiler_items.enum_owned(item);
         self.make_enum(name, module_source)
     }
 

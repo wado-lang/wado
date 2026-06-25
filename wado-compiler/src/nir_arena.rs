@@ -160,7 +160,7 @@ pub enum ExprKind {
     /// reclaimed by DCE. (Distinct from the unit value, which is a pooled
     /// `ValueKind::Unit` operand.)
     Dead,
-    BytesLiteral(Vec<u8>),
+    PackedArray(Vec<u8>),
     Local {
         index: u32,
         name: String,
@@ -1325,7 +1325,7 @@ impl Body {
                 PatKind::ConstantValue { expr } => op_child(*expr, &mut f),
             },
             NodeRef::Expr(e) => match &self.exprs[e].kind {
-                ExprKind::BytesLiteral(_)
+                ExprKind::PackedArray(_)
                 | ExprKind::Dead
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }

@@ -420,10 +420,12 @@ fn "wado-compiler/tests/fixtures/serde_json_synth_enum.wado/__test_2_enum_deseri
     let __cond: bool;
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
+    let input: ref "core:prelude/string.wado//String";
     let __sroa_r_discriminant: i32;
     let __sroa_r_case0_payload_0: i32;
     let __sroa_r_case1_payload_0: ref null "core:serde//DeserializeError";
-    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color,core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"Yellow\""), used: 8 });
+    input = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("\"Yellow\""), used: 8 };
+    multivalue_bind [__sroa_r_discriminant, __sroa_r_case0_payload_0, __sroa_r_case1_payload_0] = "core:json/core/json/from_bytes<wado-compiler/tests/fixtures/serde_json_synth_enum.wado/Color,core:prelude/string.wado/String>"(input);
     if @likely(__sroa_r_discriminant == 1) {
         e = ref.as_non_null(__sroa_r_case1_payload_0);
         __v0 = e.message;

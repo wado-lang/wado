@@ -476,7 +476,6 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     let __local_160: i32;
     let __local_161: ref null "core:prelude/string.wado//String";
     let __pattern_temp_2: ref "tuple//[wasi:http/types.wado/Response, Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
-    let self_165: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -504,7 +503,7 @@ fn "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/handle
     let __mv_lo_2: i32;
     let __mv_hi_2: i32;
     multivalue_bind [__mv_lo_2, __mv_hi_2] = (builtin::i32_wrap_i64(__pair_temp_2); builtin::i32_wrap_i64(__pair_temp_2 >>u 32_i64));
-    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(local.tee resp_headers("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(self_165 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }; struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: self_165.repr, used: self_165.used, index: 0 })));
+    drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_append"(local.tee resp_headers("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Fields_new"()), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("content-type"), used: 12 }, "core:prelude/string.wado/StrUtf8ByteIter^Iterator::collect"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: array.new_data<u8>("text/plain"), used: 10, index: 0 })));
     __pattern_temp_2 = "wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_new"(resp_headers, struct.new "core:prelude/types.wado//Option<Stream<u8>>::Some" { discriminant: 0, payload_0: __mv_lo_2 }, __mv_lo_1);
     drop("wado-compiler/tests/fixtures/http_uninit_string_conditional_trap.wado/__cm_binding__Response_set_status_code"(local.tee response(__pattern_temp_2.0), 200));
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };

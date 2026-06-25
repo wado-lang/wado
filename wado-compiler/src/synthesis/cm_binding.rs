@@ -322,8 +322,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         let user_is_unit =
                             matches!(tt.get(user_func.return_type), ResolvedType::Unit);
                         let result_name = tt
-                            .compiler_items()
-                            .variant_name(crate::compiler_item::CompilerItem::Result)
+                            .compiler_variant_name(crate::compiler_item::CompilerItem::Result)
                             .to_string();
                         let user_is_result = matches!(
                             tt.get(user_func.return_type),
@@ -411,8 +410,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             let user_func = user_func_rc.borrow();
                             let tt = entry_type_table.borrow();
                             let result_name = tt
-                                .compiler_items()
-                                .variant_name(crate::compiler_item::CompilerItem::Result)
+                                .compiler_variant_name(crate::compiler_item::CompilerItem::Result)
                                 .to_string();
                             matches!(
                                 tt.get(user_func.return_type),

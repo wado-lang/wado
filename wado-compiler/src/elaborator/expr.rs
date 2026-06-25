@@ -2308,8 +2308,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .type_table
                             .borrow()
-                            .compiler_items()
-                            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+                            .compiler_variant_case_name(
+                                crate::compiler_item::CompilerItem::OptionNone,
+                            )
                             .to_string(),
                     )
                 } else {
@@ -2341,8 +2342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
             .to_string();
         variant_info
             .cases
@@ -3867,8 +3867,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_name = tt.type_name(target_type);
         let from_name = tt.type_name(from_type);
         let from_trait_name = tt
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
         drop(tt);
 
@@ -3929,8 +3928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
         let check_impl = |impl_block: &ast::ImplBlock| -> bool {
             let impl_target = Self::get_type_name_static(&impl_block.ty);
@@ -4088,8 +4086,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::Ord)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
             .to_string();
         if element_type != TypeTable::ERROR
             && !self.type_implements_trait(&self.annotate_ctx, element_type, &ord_trait_name)
@@ -4132,8 +4129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .compiler_items()
-                    .struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
+                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeExclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
                 ("RangeExclusive".to_string(), ms)
@@ -4143,8 +4139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .compiler_items()
-                    .struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
+                    .compiler_struct_module(crate::compiler_item::CompilerItem::RangeInclusive)
                     .cloned()
                     .unwrap_or_else(ModuleSource::range);
                 ("RangeInclusive".to_string(), ms)

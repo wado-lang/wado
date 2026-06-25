@@ -125,8 +125,13 @@ impl Rule for RefElimRule {
                 let resolved = resolve_via_engine(engine, referent_e, &self.refs);
                 // Replace `r` (the inner Local) with the resolved referent,
                 // keeping `inner`'s type_id / span — the surrounding code was
-                // sized to the ref-type tag `r` had at this position.
-                let kind = engine.body.exprs[resolved].kind.clone();
+                // sized to the ref-type tag `r` had at this position. `resolved`
+                // is a fresh subtree; *move* its kind out (leaving `Dead`) rather
+                // than cloning it, so its child exprs are not shared between the
+                // orphaned `resolved` node and `inner_e`. A shared child would let
+                // a later single-parent rewrite (SROA scalarization, copy-prop
+                // redirect) corrupt one parent while leaving the other dangling.
+                let kind = std::mem::replace(&mut engine.body.exprs[resolved].kind, ExprKind::Dead);
                 engine.replace_expr_kind(inner_e, kind);
                 true
             }
@@ -203,6 +208,15 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
         }
         Step::Leaf => engine.clone_expr(e),
     }
+}
+
+/// A pure inline aggregate (`StructLiteral`) referent: substitutable at each
+/// `r.field` use because it has no observable effect and projecting a field off
+/// it (`project_struct_literal`) drops the rest. Restricted to `&` (shared)
+/// borrows by the caller.
+fn is_inline_pure_aggregate(body: &Body, id: ExprId) -> bool {
+    matches!(&body.exprs[id].kind, ExprKind::StructLiteral { .. })
+        && super::arena_query::is_pure_expr(body, id)
 }
 
 /// An expression is a valid referent if it's a pure read of a local — either
@@ -283,11 +297,17 @@ fn register_let_binding(
     if rebound.contains(&local_index) {
         return;
     }
-    // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent.
+    // Pattern (1): `let r = &E` / `let r = &mut E` with E a pure-read referent,
+    // or `let r = &E` (shared only) with E a pure inline aggregate (e.g. the
+    // inlined `len(&self)` binds `self = &String { … }`). Substituting a pure
+    // aggregate at each `r.field` use lets `project_struct_literal` fold it; a
+    // `&mut` to a temporary aggregate is excluded since separate substituted
+    // copies would not share a write.
     if let ExprKind::Unary { op, expr } = &body.exprs[value].kind
         && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
         && let Some(referent_e) = expr.as_expr()
-        && is_valid_referent(body, referent_e)
+        && (is_valid_referent(body, referent_e)
+            || (matches!(op, NirUnaryOp::Ref) && is_inline_pure_aggregate(body, referent_e)))
     {
         refs.insert(
             local_index,

@@ -220,6 +220,9 @@ fn is_globalizable_const_operand(body: &Body, op: Operand, bound: &mut IndexSet<
 fn is_globalizable_const(body: &Body, expr: ExprId, bound: &mut IndexSet<u32>) -> bool {
     match &body.exprs[expr].kind {
         ExprKind::EnumConstruct { .. } => true,
+        // A packed `Array<u8>` (a `String` / `List<u8>` literal's `repr`) is a
+        // closed constant with no free locals.
+        ExprKind::PackedArray(_) => true,
         ExprKind::Local { index, .. } => bound.contains(index),
         ExprKind::StructLiteral { fields, .. } => {
             let fields: Vec<ExprId> = fields.iter().filter_map(|f| f.value.as_expr()).collect();

@@ -126,10 +126,11 @@ Two independent gates:
 - Closed const aggregate (`is_globalizable_const`). The initializer must be a
   side-effect-free constant with no free locals: literals, nested
   `Struct` / `Tuple` / `Array` / `Enum` / `Variant` constructors, and the
-  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. Strings
-  (`array.new_data`), `BytesLiteral`, calls, and reads of other globals are
-  excluded — a free local or side effect would make hoisting to module scope
-  unsound, and a non-const value cannot promote.
+  builder-temp block (`{ let __b = …; *__b }`) an array literal leaves. String
+  and bytes literals qualify too: they lower to a `StructLiteral` over a packed
+  `Array<u8>`, a const aggregate (see the 2026-06-24 update below). Calls and
+  reads of other globals are excluded — a free local or side effect would make
+  hoisting to module scope unsound, and a non-const value cannot promote.
 - Read-only (`is_readonly`). Every use must be a borrowing / reading position.
   Modelled on `value_copy_demote`'s element-immutability walk but stricter:
   because the _whole_ object is shared, even a spine mutation (`push`) corrupts
@@ -217,3 +218,21 @@ Deferred:
 - [ ] Fold user-immutable globals' reads from their initializers (`niri`
       `GlobalEnv` keyed on `wado_mutable`) — overlaps
       [niri Evolution WEP](./wep-2026-04-27-nir-interpreter.md) (Stage 6).
+
+## Update (2026-06-24): string/bytes literals as constant aggregates
+
+The atomic `ValueKind::String` was removed. A string literal now lowers to
+`StructLiteral String { repr: PackedArray(bytes), used: <len> }` (a bytes literal
+to the same shape over `List<u8>`), where `ExprKind::PackedArray` is a raw
+constant `Array<u8>` — the renamed former NIR `BytesLiteral`, now meaning the
+inner array rather than a `List<u8>` wrapper. The short/long split (the
+`array.new_fixed<u8>` vs `array.new_data<u8>` choice gated on
+`string_inline_max_bytes`) moved from the old `translate_string_literal` onto
+`PackedArray`'s WIR lowering; the `String`/`List` struct wrapping is the generic
+`StructLiteral` lowering.
+
+Consequence: string/bytes literals are now genuine const aggregates, so this
+pass globalizes constant read-only string/bytes bindings with no string-specific
+code (`is_globalizable_const` accepts `PackedArray` as a const leaf), and
+`"x".len()` folds via `project_struct_literal` + `ref_elim` (the latter extended
+to substitute a `&<pure inline aggregate>`).

@@ -157,19 +157,21 @@ fn "wado-compiler/tests/fixtures/serde_deserialize_trait.wado/run"() with Stdout
     let __local_7: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/format.wado//Formatter";
     let __local_9: ref "core:prelude/string.wado//String";
+    let __sroa_d_str_val: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
+    __sroa_d_str_val = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     i = struct.new "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok" { discriminant: 0, payload_0: 42 };
     if ref.test "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok"(i) {
         v_2 = ref.cast "core:prelude/types.wado//Result<i32,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok"(i).payload_0;
         "core:cli/println"(__local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; "core:prelude/string.wado/String::push"(__local_7, 105); "core:prelude/string.wado/String::push"(__local_7, 51); "core:prelude/string.wado/String::push"(__local_7, 50); "core:prelude/string.wado/String::push"(__local_7, 58); "core:prelude/string.wado/String::push"(__local_7, 32); __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 }; "core:prelude/primitive.wado/i32::fmt_decimal"(v_2, __local_8); __local_7);
     } else {
     }
-    s = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
+    s = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok" { discriminant: 0, payload_0: __sroa_d_str_val };
     if ref.test "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok"(s) {
         v_4 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,wado-compiler/tests/fixtures/serde_deserialize_trait.wado/DeserializeError>::Ok"(s).payload_0;
         "core:cli/println"(__local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }; "core:prelude/string.wado/String::push"(__local_9, 83); "core:prelude/string.wado/String::push"(__local_9, 116); "core:prelude/string.wado/String::push"(__local_9, 114); "core:prelude/string.wado/String::push"(__local_9, 105); "core:prelude/string.wado/String::push"(__local_9, 110); "core:prelude/string.wado/String::push"(__local_9, 103); "core:prelude/string.wado/String::push"(__local_9, 58); "core:prelude/string.wado/String::push"(__local_9, 32); "core:prelude/string.wado/String::push_str"(__local_9, v_4); __local_9);

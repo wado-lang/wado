@@ -174,12 +174,14 @@ fn "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado/
     let __local_8: ref "core:prelude/string.wado//String";
     let __local_9: ref "core:prelude/format.wado//Formatter";
     let v: ref "core:prelude/string.wado//String";
+    let __sroa_f_name: ref "core:prelude/string.wado//String";
+    __sroa_f_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Perms"), used: 5 };
     __b = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: builtin::array_new<ref "core:prelude/string.wado//String">(0), used: 0 };
     "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 97, 100), used: 4 });
     "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Write"), used: 5 });
     "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Execute"), used: 7 });
     w = struct.new "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado//CodeWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(65536), used: 0 }, level: 0 };
-    "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado/FlagsSpec::emit"(struct.new "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado//FlagsSpec" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Perms"), used: 5 }, members: __b }, w);
+    "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado/FlagsSpec::emit"(struct.new "wado-compiler/tests/fixtures/hfs_whole_ref_copy_mutated_in_nested_loop.wado//FlagsSpec" { name: __sroa_f_name, members: __b }, w);
     expected = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("flags Perms {
     Read,
     Write,

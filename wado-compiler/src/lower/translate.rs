@@ -889,7 +889,10 @@ impl FunctionTranslator<'_, '_> {
             // from the pool by the extractor): `Null` → `None`/`ref.null`,
             // string → `translate_string_literal`, unit → no runtime value.
             TirExprKind::Null => Some(ValueKind::Null),
-            TirExprKind::StringLiteral(s) => Some(ValueKind::String(s.clone())),
+            // String / bytes literals are no longer atomic pool values; they
+            // lower to a `StructLiteral` over a packed `Array<u8>` repr in
+            // `convert_expr` (`seq_literal`), so they fall through to the
+            // skeleton path here.
             TirExprKind::Unit => Some(ValueKind::Unit),
             _ => None,
         };
@@ -907,6 +910,18 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> ExprId {
+        // String / bytes literals lower to a `StructLiteral` over a packed
+        // `Array<u8>` repr (`seq_literal`), so the generic aggregate machinery
+        // (`.used` field-projection, body globalization) applies.
+        match &expr.kind {
+            TirExprKind::StringLiteral(s) => {
+                return self.seq_literal(expr.type_id, s.as_bytes().to_vec(), expr.span);
+            }
+            TirExprKind::BytesLiteral(b) => {
+                return self.seq_literal(expr.type_id, b.clone(), expr.span);
+            }
+            _ => {}
+        }
         // Wide-int (`i128` / `u128`) `match` → if-else chain.
         if let TirExprKind::Match {
             expr: scrutinee,
@@ -1122,7 +1137,9 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::StringLiteral(_) => {
                 unreachable!("string literals are interned via convert_operand, never convert_expr")
             }
-            TirExprKind::BytesLiteral(b) => ExprKind::BytesLiteral(b.clone()),
+            TirExprKind::BytesLiteral(_) => {
+                unreachable!("bytes literals are lowered via seq_literal in convert_expr")
+            }
             TirExprKind::Null => {
                 unreachable!("Null is interned via convert_operand, never convert_expr")
             }
@@ -1494,6 +1511,68 @@ impl FunctionTranslator<'_, '_> {
             value: self.convert_operand(&field.value),
             field_index: field.field_index,
         }
+    }
+
+    /// Build a `String` / `List<u8>` literal as a `StructLiteral { repr:
+    /// PackedArray(bytes), used: <len> }` over a raw packed `Array<u8>`, so the
+    /// literal flows through the generic aggregate machinery (field-projection
+    /// of `.used`, body globalization) instead of being an opaque value. The
+    /// `repr` field's raw-array type and the field indices come from the
+    /// sequence struct's definition.
+    /// The single `Array<u8>` type that every `String` / `List<u8>` literal uses
+    /// for its `repr` field. `String` and `List<u8>` share one canonical backing
+    /// type, so it is read off the always-loaded `String` struct, keyed by the
+    /// compiler-item registry's canonical name/module rather than a `"String"`
+    /// magic literal — a bytes-only program may never monomorphize `List<u8>`
+    /// into `struct_fields_map`, but `String` is guaranteed present.
+    fn seq_u8_repr_type(&self) -> tir::TypeId {
+        use crate::compiler_item::{CompilerItem, SeqField};
+        let (string_module, string_name) = self
+            .base
+            .type_table
+            .borrow()
+            .compiler_struct_owned(CompilerItem::String);
+        self.base
+            .struct_fields_map
+            .get(&(string_name, string_module))
+            .and_then(|fields| {
+                fields
+                    .iter()
+                    .find(|f| f.name == SeqField::Backing.field_name())
+            })
+            .map(|f| f.type_id)
+            .expect("String struct (repr field) is always loaded")
+    }
+
+    fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
+        use crate::compiler_item::SeqField;
+        let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
+        let array_u8_ty = self.seq_u8_repr_type();
+        let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
+        let used_val = self.arena.borrow_mut().values.alloc_unshared(
+            crate::nir_value_graph::ValueKind::Int(
+                i64::from(len) as u64,
+                crate::tir::TypeTable::I32,
+            ),
+            crate::tir::TypeTable::I32,
+        );
+        let kind = ExprKind::StructLiteral {
+            struct_type: seq_type_id,
+            struct_name: self.base.type_table.borrow().type_name(seq_type_id),
+            fields: vec![
+                ArenaStructField {
+                    name: SeqField::Backing.field_name().to_string(),
+                    value: Operand::Expr(packed),
+                    field_index: SeqField::Backing.index(),
+                },
+                ArenaStructField {
+                    name: SeqField::Len.field_name().to_string(),
+                    value: Operand::Value(used_val),
+                    field_index: SeqField::Len.index(),
+                },
+            ],
+        };
+        self.alloc_expr(kind, seq_type_id, span)
     }
 
     /// Build arena struct-field values for a closure's captures. Each field is

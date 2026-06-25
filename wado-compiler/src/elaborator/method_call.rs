@@ -2562,8 +2562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
         let check_impl = |impl_block: &ast::ImplBlock| -> bool {
             if !impl_block.is_synthesize_request {
@@ -2679,8 +2678,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::From)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
             .to_string();
         let is_from_or_try_from =
             |base: &str| -> bool { base == from_trait_name || base == "TryFrom" };
@@ -2793,8 +2791,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .compiler_items()
-                .trait_name(crate::compiler_item::CompilerItem::Default)
+                .compiler_trait_name(crate::compiler_item::CompilerItem::Default)
                 .to_string();
             return Some(StaticMethodRef::new(
                 self.find_struct_module_source(struct_name),

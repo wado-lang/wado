@@ -1025,7 +1025,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::GlobalVarSet { .. }
             | ExprKind::Local { .. }
             | ExprKind::GlobalVarGet { .. }
-            | ExprKind::BytesLiteral(_)
+            | ExprKind::PackedArray(_)
             | ExprKind::Dead
             | ExprKind::EnumConstruct { .. } => {}
         },

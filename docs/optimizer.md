@@ -77,7 +77,7 @@ Allocation-elimination and aggregate passes:
 - `value_copy_elide` — strip a `$value_copy$T(arg)` wrapper whose target is observably read-only.
 - `value_copy_demote` — demote a deep `List<E>` value-copy to a shallow spine copy when elements are provably never mutated through the binding (element-immutability taint analysis).
 - `labeled_block_fusion` — fuse the inlined-`Option<T>` `let __tmp = label:{… break Some(v)…}; if VariantTest(__tmp,Some)…` shape, deleting the variant allocation.
-- `ref_elim` — drop reference bindings (`let r = &x`) read only via field access, rewriting reads to the original.
+- `ref_elim` — drop reference bindings (`let r = &x`) read only via field access, rewriting reads to the original. Also collapses `let r = &<pure inline aggregate>` (a shared borrow of a `StructLiteral`, e.g. the inlined `len(&self)` binding `self = &String { … }`), substituting the aggregate at each `r.field` use so `const_folding`'s `project_struct_literal` folds the projection — the mechanism that makes `"x".len()` fold to a constant.
 
 Scalar / dataflow passes:
 
@@ -112,6 +112,8 @@ Whole-program / backend passes:
 
 NIR→WIR lowering (`wir_build/`) avoids redundant shapes in a few spots; these fire once during the build at all levels. Notably, exhaustive-match last-arm elision (`wir_build/pattern_match.rs`) treats the final arm of a fully-covering `match` as irrefutable, removing one pattern test and branch per `?` on the hot path.
 
+String / bytes literal representation: a string literal lowers to `StructLiteral String { repr: PackedArray(bytes), used: <len> }` and a bytes literal to the same shape over `List<u8>`, where `ExprKind::PackedArray` is a raw constant `Array<u8>` (no atomic `ValueKind::String`). The struct wrapping is the generic `StructLiteral` lowering; `PackedArray` lowers to `array.new_fixed<u8>` (≤ `string_inline_max_bytes`, a Wasm const so a const string/bytes global promotes eager) or a passive `array.new_data<u8>` segment (longer). Because the literal is now a real aggregate, `.len()`/`.used` folds via `project_struct_literal`, `&"…"` collapses via `ref_elim`, and const string/bytes globals globalize via `const_object_globalization` — all generic aggregate machinery, no string-specific paths.
+
 ## WIR optimizations
 
 `wir_optimize.rs` mutates the `WirPackage` in place after WIR build; phases run in order and may iterate.
@@ -122,7 +124,7 @@ NIR→WIR lowering (`wir_build/`) avoids redundant shapes in a few spots; these 
 4. Library rewrites — short-string append expansion; constant array data promotion (`array.new_fixed` → `array.new_data` for ≥16 primitive constants); large-literal splitting (>256 elements).
 5. Peephole + multi-field struct elimination — Wasm instruction-selection rewrites with no NIR analogue (constant-comparison/dead-`If` folding, `eqz`/negated-comparison folding, branchless increment, byte-mask/sign-extension folding, redundant `ref.cast`/`ref.test` elimination, nullability relaxation, `local.tee` fusion); multi-field struct local elimination; trivial labeled-block copy propagation.
 6. Write-only local elimination — for locals the WIR builder synthesises (`__match_scrut_N`, pair/multi-value temps) that no NIR pass can reach.
-7. Global cleanup — constant global-initializer promotion (`const_global.rs`); trivial init-guard removal.
+7. Global cleanup — constant global-initializer promotion (`const_global.rs`); identical-const-global dedup (`dedupe_const_globals.rs` — merges byte-identical immutable const-expressible globals, e.g. duplicate short-string globals; bails if any `ref.eq` exists); trivial init-guard removal.
 8. Branch hints (`branch_hint.rs`) — `br_if` selection: `if cond { br N }` with an empty else collapses to `br_if N-1`, carrying any branch hint on the condition (runs after `init_guard`, whose matcher keys on the `If { GlobalGet, [Br] }` shape). Then trap-based hint inference: an `if` arm that always reaches an `unreachable` trap is hinted cold, and a `br_if` whose fall-through always traps is hinted likely-taken. Divergence alone (`br` / `return`) never counts as cold, and explicit hints (from `builtin::cold_path()`) always win. Inference also runs at `-O0`, keeping hints independent of the optimization level like the build-time `apply_cold_path_hints`.
 9. Final DCE + compaction — remove unreachable defined functions and unused GC types, then compact and reindex.
 

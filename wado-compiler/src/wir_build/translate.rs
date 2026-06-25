@@ -1610,19 +1610,23 @@ impl FunctionTranslator<'_, '_> {
                             WirInstr::StructNew { fields, .. } => Some(WirInstr::Return {
                                 value: Some(Box::new(WirInstr::Seq(fields))),
                             }),
-                            // Nested control flow (`return match { … }`,
-                            // `return if … `): each branch's leaf
-                            // StructNew is rewritten into its own
-                            // `Return { Seq(fields) }`, and the outer
-                            // expression replaces the whole Return —
-                            // the inner Returns transfer control before
-                            // the outer one would, so leaving an outer
-                            // `Return` here would feed the validator
-                            // an empty stack.
+                            // A scaffolded return value: a sequential block
+                            // (`return { let a = …; [a, b] }`, which inlining
+                            // produces when an element needs a binding), or
+                            // nested control flow (`return match { … }` /
+                            // `return if …`). `lift_struct_new_to_seq` rewrites
+                            // each leaf aggregate `StructNew` into its own
+                            // `Return { Seq(fields) }` in place, so the lifted
+                            // expression replaces the whole `Return`: a block's
+                            // tail returns explicitly, and a branch's leaf
+                            // returns before the outer one would — wrapping the
+                            // outer expression in `Return` instead would feed
+                            // the validator an empty stack for the control-flow
+                            // case.
                             mut other @ (WirInstr::Seq(_)
                             | WirInstr::Block { .. }
                             | WirInstr::If { .. }) => {
-                                lift_struct_new_to_seq(&mut other, false);
+                                lift_struct_new_to_seq(&mut other, true);
                                 Some(other)
                             }
                             other => Some(WirInstr::Return {
@@ -1890,7 +1894,6 @@ impl FunctionTranslator<'_, '_> {
             },
             ValueKind::Bool(b) => WirInstr::I32Const(i32::from(b)),
             ValueKind::Char(c) => WirInstr::I32Const(c as i32),
-            ValueKind::String(s) => self.translate_string_literal(&s),
             ValueKind::Null => {
                 if let Some(inner) = self.type_table.as_option(type_id) {
                     assert!(
@@ -2027,9 +2030,11 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         let expr = &arena.exprs[expr_id];
         match &expr.kind {
-            ExprKind::BytesLiteral(b) => {
-                // Bytes literals are constructed as List<u8> from data segments
-                self.translate_bytes_literal(b)
+            ExprKind::PackedArray(b) => {
+                // A raw constant `Array<u8>` (the `repr` of a `String` / `List<u8>`
+                // literal). The struct wrapping comes from the enclosing
+                // `StructLiteral`.
+                self.translate_packed_array(b)
             }
             // Orphaned tombstone: never materialised (DCE drops it first).
             ExprKind::Dead => WirInstr::Nop,

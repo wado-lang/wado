@@ -71,9 +71,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:__modules_initialized: bool = 0;
+global mut global:__const_obj_0: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "wado-compiler/tests/fixtures/escape_brace.wado/run"() with Stdout {
-    let name: ref "core:prelude/string.wado//String";
     let __local_1: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
@@ -81,8 +81,8 @@ fn "wado-compiler/tests/fixtures/escape_brace.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:__modules_initialized = 1;
     };
-    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
-    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 123); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push_str"(__local_1, name); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push"(__local_1, 125); __local_1);
+    global:__const_obj_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 };
+    "core:cli/println"(__local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }; "core:prelude/string.wado/String::push"(__local_1, 123); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push_str"(__local_1, global:__const_obj_0); "core:prelude/string.wado/String::push"(__local_1, 34); "core:prelude/string.wado/String::push"(__local_1, 125); __local_1);
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"key\": \"value\"}"), used: 16 });
     "core:cli/println"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain { and }"), used: 13 });
 }

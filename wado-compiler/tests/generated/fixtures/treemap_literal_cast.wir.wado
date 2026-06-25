@@ -224,6 +224,9 @@ fn "wado-compiler/tests/fixtures/treemap_literal_cast.wado/run"() with Stdout {
     let __local_11: ref "core:prelude/format.wado//Formatter";
     let __local_12: ref "core:prelude/string.wado//String";
     let __local_13: ref "core:prelude/format.wado//Formatter";
+    let key_17: ref "core:prelude/string.wado//String";
+    let key_20: ref "core:prelude/string.wado//String";
+    let key_23: ref "core:prelude/string.wado//String";
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:__modules_initialized);
         cold_path;
@@ -231,9 +234,12 @@ fn "wado-compiler/tests/fixtures/treemap_literal_cast.wado/run"() with Stdout {
         global:__modules_initialized = 1;
     };
     __b = "core:collections/TreeMap<core:prelude/string.wado/String,i32>::new"();
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1);
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 2);
-    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }, 3);
+    key_17 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, key_17, 1);
+    key_20 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, key_20, 2);
+    key_23 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
+    "core:collections/TreeMap<core:prelude/string.wado/String,i32>::insert"(__b, key_23, 3);
     __cond_3 = local.tee __v0_2(__b.size) == 3;
     if @unlikely(__cond_3 == 0) {
         cold_path;
