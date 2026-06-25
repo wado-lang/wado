@@ -1699,6 +1699,14 @@ impl CmInterfaceRegistry {
         self.find_kiln_struct_source(&named.name)
             .or_else(|| self.find_kiln_variant_source(&named.name))
             .or_else(|| self.find_kiln_enum_source(&named.name))
+            // Lib-local types (`wado compile --lib`) are registered by name
+            // under the package's default-interface FQ (neither `wasi:` nor
+            // `core:`), so the prefix-scoped lookups above miss them. A bare
+            // by-name scan resolves them when the name is unambiguous.
+            .or_else(|| find_unique_source_in(&self.structs, &named.name))
+            .or_else(|| find_unique_source_in(&self.variants, &named.name))
+            .or_else(|| find_unique_source_in(&self.enums, &named.name))
+            .or_else(|| find_unique_source_in(&self.flags, &named.name))
     }
 
     /// Resolve a named type to a source interface within `namespace_prefix`

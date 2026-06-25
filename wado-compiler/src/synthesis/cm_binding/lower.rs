@@ -17,14 +17,17 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::{
-    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern,
+    TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, builtin_call, cast, expr_stmt, i32_const, i64_const,
-    internal_call, let_mut_stmt, let_stmt, local_ref, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
+    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    local_ref, loop_stmt, synth_span,
 };
 
 use super::types::{
@@ -512,9 +515,29 @@ pub(super) fn synthesize_lower_option_to_memory(
     // `Match` arm — canonical post-Phase 10 shape. The None arm is
     // empty; the Match's exhaustiveness on `Option<T>` removes the
     // need for a wildcard else.
+    //
+    // Take the payload TypeId from the Option's own type argument (the
+    // elaborator-registered type, correct module source) rather than
+    // re-deriving it via `cm_type_to_type_id`, which can't resolve a lib-local
+    // struct source and would fall back to i32.
     let inner_type_id = {
-        let mut tt = type_table.borrow_mut();
-        cm_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
+        let tt = type_table.borrow();
+        match tt.get(value_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+                if !type_args.is_empty() =>
+            {
+                type_args[0]
+            }
+            _ => {
+                drop(tt);
+                cm_type_to_type_id(
+                    inner_type,
+                    &mut type_table.borrow_mut(),
+                    cm_interface_registry,
+                    wasi_package,
+                )
+            }
+        }
     };
 
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
@@ -576,6 +599,203 @@ pub(super) fn synthesize_lower_option_to_memory(
         span,
     );
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+}
+
+/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
+/// linear memory plus the `(ptr, len)` pair stored at `addr`.
+///
+/// Allocates `len * elem_size` bytes, then loops lowering each element at its
+/// stride via the full recursive [`synthesize_lower_wasi_type_to_memory`], so
+/// ref-bearing elements (strings, tuples, records, options) lower correctly
+/// rather than being stored as opaque `i32` handles.
+pub(super) fn synthesize_lower_list_to_memory(
+    elem_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) -> Vec<TirStmt> {
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let list_type_id = value.type_id;
+    let elem_resolved = cm_interface_registry.resolve_type(elem_type);
+
+    let elem_size = crate::component_model::cm_size_with_registry_scoped(
+        &elem_resolved,
+        cm_interface_registry,
+        Some(wasi_package),
+    ) as i32;
+    let elem_align = crate::component_model::cm_align_with_registry_scoped(
+        &elem_resolved,
+        cm_interface_registry,
+        Some(wasi_package),
+    ) as i32;
+    // Take the element TypeId from the list's own type arguments — it is the
+    // elaborator-registered type (correct module source), unlike a fresh
+    // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
+    // would fall back to i32.
+    let elem_type_id = {
+        let tt = type_table.borrow();
+        match tt.get(list_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+                type_args[0]
+            }
+            _ => {
+                drop(tt);
+                let mut tt = type_table.borrow_mut();
+                cm_type_to_type_id(&elem_resolved, &mut tt, cm_interface_registry, wasi_package)
+            }
+        }
+    };
+
+    let mut stmts = Vec::new();
+
+    // Materialize the list so we can call len/index_value on it repeatedly.
+    let list_local = alloc_local(next_local, locals, list_type_id);
+    stmts.push(let_stmt("__list_val", list_local, list_type_id, value));
+
+    // __len = List::len(list)
+    let len_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__list_len",
+        len_local,
+        TypeTable::I32,
+        generic_method_call(
+            local_ref(list_local, "__list_val", list_type_id),
+            &names.array,
+            "len",
+            ModuleSource::list(),
+            vec![],
+            TypeTable::I32,
+        ),
+    ));
+
+    // __base = realloc(0, 0, elem_align, __len * elem_size)
+    let base_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__list_base",
+        base_local,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(elem_align),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(len_local, "__list_len", TypeTable::I32),
+                    i32_const(elem_size),
+                    TypeTable::I32,
+                ),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    // __i = 0; loop { if __i >= __len break; lower elem[__i] at __base + __i*size; __i += 1 }
+    let i_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_mut_stmt("__list_i", i_local, TypeTable::I32, i32_const(0)));
+
+    let mut loop_body = Vec::new();
+    loop_body.push(if_stmt(
+        binary(
+            TirBinaryOp::GtEq,
+            local_ref(i_local, "__list_i", TypeTable::I32),
+            local_ref(len_local, "__list_len", TypeTable::I32),
+            TypeTable::BOOL,
+        ),
+        block(vec![break_stmt()]),
+        None,
+    ));
+    let addr_local = alloc_local(next_local, locals, TypeTable::I32);
+    loop_body.push(let_stmt(
+        "__list_addr",
+        addr_local,
+        TypeTable::I32,
+        binary(
+            TirBinaryOp::Add,
+            local_ref(base_local, "__list_base", TypeTable::I32),
+            binary(
+                TirBinaryOp::Mul,
+                local_ref(i_local, "__list_i", TypeTable::I32),
+                i32_const(elem_size),
+                TypeTable::I32,
+            ),
+            TypeTable::I32,
+        ),
+    ));
+    // __elem = list.index_value(__i)
+    let elem_local = alloc_local(next_local, locals, elem_type_id);
+    let iv_info = LocalMethodName::new(
+        names.array.clone(),
+        Some("IndexValue<i32>".to_string()),
+        "index_value".to_string(),
+    );
+    let iv_mangled = iv_info.to_mangled_name();
+    loop_body.push(let_stmt(
+        "__list_elem",
+        elem_local,
+        elem_type_id,
+        TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(local_ref(list_local, "__list_val", list_type_id)),
+                FunctionRef {
+                    module_source: ModuleSource::list(),
+                    name: iv_mangled,
+                    monomorph_info: None,
+                    method_info: Some(iv_info),
+                },
+                vec![],
+                vec![CallArg::new(
+                    local_ref(i_local, "__list_i", TypeTable::I32),
+                    false,
+                )],
+            ),
+            elem_type_id,
+            synth_span(),
+        ),
+    ));
+    loop_body.extend(synthesize_lower_wasi_type_to_memory(
+        &elem_resolved,
+        local_ref(elem_local, "__list_elem", elem_type_id),
+        local_ref(addr_local, "__list_addr", TypeTable::I32),
+        next_local,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    ));
+    loop_body.push(expr_stmt(assign(
+        local_ref(i_local, "__list_i", TypeTable::I32),
+        binary(
+            TirBinaryOp::Add,
+            local_ref(i_local, "__list_i", TypeTable::I32),
+            i32_const(1),
+            TypeTable::I32,
+        ),
+    )));
+    stmts.push(loop_stmt(block(loop_body)));
+
+    // Store (base, len) at addr / addr+4.
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![addr.clone(), local_ref(base_local, "__list_base", TypeTable::I32)],
+        TypeTable::UNIT,
+    )));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(addr, i32_const(4)),
+            local_ref(len_local, "__list_len", TypeTable::I32),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    stmts
 }
 
 /// Flatten a WASI type value (GC ref) to flat CM ABI args (i32/i64/f32/f64).
@@ -1301,7 +1521,10 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // records. Callers (e.g. the `List<T>` element lower)
             // populate `source_interface` via `type_id_to_ast_type` so
             // this lookup does not need a fallback path.
-            let source = n.source_interface.as_deref();
+            // Resolve via the registry so lib-local records (no
+            // `source_interface` on the nested type) are found by name under
+            // their package's default-interface FQ, like WASI/kiln records.
+            let source = cm_interface_registry.resolve_cm_source_for(n, Some(wasi_package));
             if let Some(fields) = source.and_then(|s| {
                 cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
             }) {
@@ -1387,6 +1610,18 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 type_table,
             );
             stmts
+        }
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+            synthesize_lower_list_to_memory(
+                &g.args[0],
+                value,
+                addr,
+                next_local,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            )
         }
         _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
     }
