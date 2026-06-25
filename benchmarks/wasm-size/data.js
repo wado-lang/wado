@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782383407492,
+  "lastUpdate": 1782390368764,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35389,6 +35389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eee865fcd5459016ea1b2c518f5c4bb2ee433f1b"
         },
         "date": 1782383407000,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287917,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d5b7ef9a15a67c9bc458982d32d5eb8e9e938504",
+          "message": "Merge pull request #1444 from wado-lang/claude/stdlib-logger-design-ernk6z\n\nfeat(effect-handler): require `..trap` for the handler rest clause",
+          "timestamp": "2026-06-25T21:16:16+09:00",
+          "tree_id": "6658c135a858e5f59acff0ae2a4ac41faa8d5c46",
+          "url": "https://github.com/wado-lang/wado/commit/d5b7ef9a15a67c9bc458982d32d5eb8e9e938504"
+        },
+        "date": 1782390368152,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
