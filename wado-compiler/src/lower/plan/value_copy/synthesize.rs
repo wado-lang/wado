@@ -295,8 +295,7 @@ fn build_copy_return_expr(
     // (List<T> / tuple) is recovered by the explicit checks below.
     let list_name = type_table
         .borrow()
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::List)
+        .compiler_struct_name(crate::compiler_item::CompilerItem::List)
         .to_string();
     if let ResolvedType::GenericInstance {
         name, type_args, ..

@@ -430,8 +430,7 @@ fn build_template_block(
     let tt = ctx.tt;
     let string_struct_name = tt
         .borrow()
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
+        .compiler_struct_name(CompilerItem::String)
         .to_string();
     let with_capacity_qualified =
         crate::name::MethodName::format_local(&string_struct_name, None, "with_capacity");

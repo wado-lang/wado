@@ -403,12 +403,7 @@ fn result_drop_arm(
     cx: &mut Cx,
 ) -> TirMatchArm {
     let span = synth_span();
-    let case_name = cx
-        .tt
-        .compiler_items()
-        .require_variant_case(case)
-        .2
-        .to_string();
+    let case_name = cx.tt.compiler_variant_case(case).2.to_string();
     let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
     let body_stmts = if drop_payload {
         drop_value(

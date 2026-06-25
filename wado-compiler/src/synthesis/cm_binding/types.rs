@@ -159,8 +159,7 @@ pub fn cm_type_to_type_id(
     wasi_package: &str,
 ) -> TypeId {
     let string_struct_name = type_table
-        .compiler_items()
-        .struct_name(crate::compiler_item::CompilerItem::String)
+        .compiler_struct_name(CompilerItem::String)
         .to_string();
     match ty {
         Type::Named(named) if named.name.as_str() == string_struct_name => {
@@ -198,20 +197,17 @@ pub fn cm_type_to_type_id(
         },
         Type::Generic(g) => {
             let list_name = type_table
-                .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::List)
+                .compiler_struct_name(CompilerItem::List)
                 .to_string();
             if g.name.as_str() == list_name && g.args.len() == 1 {
                 let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
             let option_name = type_table
-                .compiler_items()
-                .variant_name(crate::compiler_item::CompilerItem::Option)
+                .compiler_variant_name(CompilerItem::Option)
                 .to_string();
             let result_name = type_table
-                .compiler_items()
-                .variant_name(crate::compiler_item::CompilerItem::Result)
+                .compiler_variant_name(CompilerItem::Result)
                 .to_string();
             if g.name.as_str() == option_name && g.args.len() == 1 {
                 let inner_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);

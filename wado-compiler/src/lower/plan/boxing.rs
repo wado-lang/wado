@@ -45,8 +45,7 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
     let box_module_source = flat
         .type_table
         .borrow()
-        .compiler_items()
-        .struct_module(crate::compiler_item::CompilerItem::Box)
+        .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let mut builder = TypeBuilder::new(box_module_source);

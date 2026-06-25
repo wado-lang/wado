@@ -170,12 +170,10 @@ impl Lowering {
 
         let type_table = flat.type_table.borrow();
         let eq_trait_name = type_table
-            .compiler_items()
-            .trait_name(crate::compiler_item::CompilerItem::Eq)
+            .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
             .to_string();
         let string_struct_name = type_table
-            .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::String)
+            .compiler_struct_name(crate::compiler_item::CompilerItem::String)
             .to_string();
         Self {
             variant_case_map,

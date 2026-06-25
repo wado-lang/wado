@@ -244,16 +244,14 @@ impl TypeSystem {
             BinaryOp::Eq | BinaryOp::NotEq => Some((
                 self.type_table
                     .borrow()
-                    .compiler_items()
-                    .trait_name(CompilerItem::Eq)
+                    .compiler_trait_name(CompilerItem::Eq)
                     .to_string(),
                 "eq",
             )),
             BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => Some((
                 self.type_table
                     .borrow()
-                    .compiler_items()
-                    .trait_name(CompilerItem::Ord)
+                    .compiler_trait_name(CompilerItem::Ord)
                     .to_string(),
                 "cmp",
             )),

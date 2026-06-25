@@ -1668,8 +1668,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
             .to_string();
         variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
@@ -2330,8 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
             .to_string();
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the

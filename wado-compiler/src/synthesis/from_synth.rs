@@ -26,8 +26,7 @@ pub fn synthesize_from(module: &mut TirModule) {
     let from_trait_name = module
         .type_table
         .borrow()
-        .compiler_items()
-        .trait_name(CompilerItem::From)
+        .compiler_trait_name(CompilerItem::From)
         .to_string();
     let requests: Vec<SynthesisRequest> = module
         .synthesis_requests

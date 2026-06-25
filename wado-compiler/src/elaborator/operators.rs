@@ -332,8 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_items()
-                        .trait_name(CompilerItem::Eq)
+                        .compiler_trait_name(CompilerItem::Eq)
                         .to_string();
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
@@ -374,8 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_items()
-                        .trait_name(CompilerItem::Ord)
+                        .compiler_trait_name(CompilerItem::Ord)
                         .to_string();
                     let Some(resolved) = self.resolve_trait_method_for_op(
                         &struct_name,
@@ -439,8 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_items()
-                        .trait_name(CompilerItem::Eq)
+                        .compiler_trait_name(CompilerItem::Eq)
                         .to_string();
                     let resolved = ResolvedTraitMethod {
                         trait_name: eq_trait_name,
@@ -473,8 +470,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_items()
-                        .trait_name(CompilerItem::Ord)
+                        .compiler_trait_name(CompilerItem::Ord)
                         .to_string();
                     let resolved = ResolvedTraitMethod {
                         trait_name: ord_trait_name,
@@ -787,15 +783,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .tysys
                             .type_table
                             .borrow()
-                            .compiler_items()
-                            .trait_name(CompilerItem::Eq)
+                            .compiler_trait_name(CompilerItem::Eq)
                             .to_string(),
                         BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => self
                             .tysys
                             .type_table
                             .borrow()
-                            .compiler_items()
-                            .trait_name(CompilerItem::Ord)
+                            .compiler_trait_name(CompilerItem::Ord)
                             .to_string(),
                         _ => "?".to_string(),
                     };

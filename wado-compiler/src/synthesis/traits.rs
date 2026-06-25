@@ -750,8 +750,7 @@ fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<
     let default_trait_name = module
         .type_table
         .borrow()
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Default)
+        .compiler_trait_name(CompilerItem::Default)
         .to_string();
     let mut tt = module.type_table.borrow_mut();
 
@@ -856,8 +855,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
     let eq_trait_name = module
         .type_table
         .borrow()
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
     let mut tt = module.type_table.borrow_mut();
 
@@ -967,10 +965,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name
-            == tt
-                .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::String)
+        if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
             continue;
@@ -2082,10 +2077,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
     let struct_infos = collect_struct_visible_fields(module);
 
     for (name, fields, has_hidden, sspan) in &struct_infos {
-        if name
-            == tt
-                .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::String)
+        if name == tt.compiler_struct_name(crate::compiler_item::CompilerItem::String)
             || name == &formatter_name
         {
             continue;
@@ -2908,9 +2900,7 @@ fn generate_fallback_impls(
     };
     let formatter_struct_name = {
         let tt = module.type_table.borrow();
-        tt.compiler_items()
-            .struct_name(CompilerItem::Formatter)
-            .to_string()
+        tt.compiler_struct_name(CompilerItem::Formatter).to_string()
     };
     let mut tt = module.type_table.borrow_mut();
     let formatter_type = tt.make_struct(formatter_struct_name.clone(), ModuleSource::format());
@@ -3678,8 +3668,7 @@ fn eq_call_expr(
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
     let eq_trait_name = tt
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
     trait_call_on_type(
         self_field,
@@ -3710,8 +3699,7 @@ fn cmp_call_expr(
     let ref_type = tt.make_ref(field_type);
     let arg = ref_expr(other_field, ref_type, span);
     let ord_trait_name = tt
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Ord)
+        .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
         .to_string();
     trait_call_on_type(
         self_field,
@@ -4036,8 +4024,7 @@ fn generate_variant_eq_fn(
     span: Span,
 ) -> TirFunction {
     let eq_trait_name = tt
-        .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Eq)
+        .compiler_trait_name(crate::compiler_item::CompilerItem::Eq)
         .to_string();
     let method_info = trait_method_info(variant_name, &eq_trait_name, "eq");
     let qualified_name = method_info.to_mangled_name();

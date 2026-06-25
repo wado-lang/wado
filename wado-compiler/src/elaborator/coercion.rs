@@ -338,8 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .compiler_items()
-                .struct_name(crate::compiler_item::CompilerItem::String)
+                .compiler_struct_name(crate::compiler_item::CompilerItem::String)
                 .to_string();
             let is_string_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),

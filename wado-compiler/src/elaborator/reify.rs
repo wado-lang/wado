@@ -3012,8 +3012,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_items()
-            .variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
             .to_string();
 
         ctx.enter_scope();
@@ -8280,7 +8279,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let make_func_ref = |tysys: &super::tysys::TypeSystem, item: CompilerItem| {
             let (owner_type, method_name) = {
                 let tt = tysys.type_table.borrow();
-                let (_, owner_type, method_name) = tt.compiler_items().require_method(item);
+                let (_, owner_type, method_name) = tt.compiler_method(item);
                 (owner_type.to_string(), method_name.to_string())
             };
             let method_info = crate::name::LocalMethodName::new(owner_type, None, method_name);

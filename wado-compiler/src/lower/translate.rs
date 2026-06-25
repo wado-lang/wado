@@ -1527,11 +1527,11 @@ impl FunctionTranslator<'_, '_> {
     /// into `struct_fields_map`, but `String` is guaranteed present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
         use crate::compiler_item::{CompilerItem, SeqField};
-        let (string_module, string_name) = {
-            let tt = self.base.type_table.borrow();
-            let (module, name) = tt.compiler_items().require_struct(CompilerItem::String);
-            (module.clone(), name.to_string())
-        };
+        let (string_module, string_name) = self
+            .base
+            .type_table
+            .borrow()
+            .compiler_struct_owned(CompilerItem::String);
         self.base
             .struct_fields_map
             .get(&(string_name, string_module))

@@ -1113,13 +1113,11 @@ pub(super) fn synthesize_result_export_binding(
             );
         }
     };
-    let (_, _, ok_case_name, ok_case_index) = tt
-        .compiler_items()
-        .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+    let (_, _, ok_case_name, ok_case_index) =
+        tt.compiler_variant_case(crate::compiler_item::CompilerItem::ResultOk);
     let ok_case_name = ok_case_name.to_string();
-    let (_, _, err_case_name, err_case_index) = tt
-        .compiler_items()
-        .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+    let (_, _, err_case_name, err_case_index) =
+        tt.compiler_variant_case(crate::compiler_item::CompilerItem::ResultErr);
     let err_case_name = err_case_name.to_string();
     drop(tt);
 

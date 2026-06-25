@@ -770,8 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_items()
-                        .trait_name(crate::compiler_item::CompilerItem::From)
+                        .compiler_trait_name(crate::compiler_item::CompilerItem::From)
                         .to_string();
                     let matching_impl = self.current_module_items.iter().any(|item| {
                         if let Item::Impl(impl_block) = item
