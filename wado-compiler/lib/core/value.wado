@@ -457,11 +457,7 @@ impl SerializeVariant for ValueVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        let payload = if self.payloads.len() == 1 {
-            self.payloads[0]
-        } else {
-            Value::List(self.payloads)
-        };
+        let payload = if self.payloads.len() == 1 { self.payloads[0] } else { Value::List(self.payloads) };
         let mut obj = TreeMap::<String, Value>::new();
         obj[self.name] = payload;
         *self.out = Value::Object(obj);
@@ -479,52 +475,64 @@ impl Serializer for ValueSerializer {
         *self.out = Value::Int(v as i64);
         return Result::Ok(());
     }
+
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
         *self.out = Value::Int(v);
         return Result::Ok(());
     }
+
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
         *self.out = Value::UInt(v as u64);
         return Result::Ok(());
     }
+
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
         *self.out = Value::UInt(v);
         return Result::Ok(());
     }
+
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
         *self.out = Value::Int128(v);
         return Result::Ok(());
     }
+
     fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
         *self.out = Value::UInt128(v);
         return Result::Ok(());
     }
+
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
         *self.out = Value::Float(v as f64);
         return Result::Ok(());
     }
+
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
         *self.out = Value::Float(v);
         return Result::Ok(());
     }
+
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         *self.out = Value::Bool(v);
         return Result::Ok(());
     }
+
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
         let mut s = String::with_capacity(4);
         s.push(v);
         *self.out = Value::String(s);
         return Result::Ok(());
     }
+
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
         *self.out = Value::String(*v);
         return Result::Ok(());
     }
+
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
         *self.out = Value::Null;
         return Result::Ok(());
     }
+
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
         // Preserve byte strings as `Value::Bytes`, not the default seq-of-u8
         // fallback that would yield `Value::List([Int, …])`.
