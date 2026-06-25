@@ -73,6 +73,9 @@ let f: f32 = 3.14;             // float literal → f32
 fn foo(n: i64) { ... }
 foo(100);                      // integer literal coerced to i64
 
+// In a match/if branch, a literal adopts a sibling branch's numeric type:
+let g = if cond { n } else { 0 };   // n: u64 → the 0 is u64 too
+
 // Strings
 "Hello"         // String
 `Hello, {name}` // Template string

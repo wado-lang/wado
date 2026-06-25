@@ -1886,7 +1886,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
         match expr {
             ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
-            _ => self.try_coerce_numeric_literal(expr, target).map(|c| c.type_id),
+            _ => self
+                .try_coerce_numeric_literal(expr, target)
+                .map(|c| c.type_id),
         }
     }
 
