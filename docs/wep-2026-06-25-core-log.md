@@ -30,7 +30,7 @@ variadic `...any`). Wado reproduces each with its own tools.
 
 | Concern                   | `tracing` / `slog`             | Wado mechanism                                                         |
 | ------------------------- | ------------------------------ | ---------------------------------------------------------------------- |
-| Backend abstraction       | `Subscriber` / `Handler` (dyn) | the `Log` **ambient effect**; sinks are effect handlers (static)       |
+| Backend abstraction       | `Subscriber` / `Handler` (dyn) | the `Log` effect; sinks are effect handlers (static dispatch)          |
 | Layer composition         | `Layer` stack                  | **nested effect handlers** (`with Log => &layer do`), forward to outer |
 | Spans / scoped context    | spans, `Logger.With`           | first-class `Span` values entered for a scope                          |
 | Compile-time level filter | `max_level_*`                  | **`#[param]` compile-time global** + constant-fold + DCE               |
@@ -41,27 +41,34 @@ variadic `...any`). Wado reproduces each with its own tools.
 | Timestamp                 | subscriber adds it             | sink config (default on), via `wasi:clocks` `SystemClock`              |
 
 Thesis: **a subscriber is an effect, layers and spans are nested handlers, the
-level threshold is a compile-time parameter, and the default sink is the existing
-`log_stderr`.** The rest is library code; the required language extension is
-ambient effects (span scoping already works via a closure, `with span do` is
-optional sugar).
+level threshold is a compile-time parameter, and a default sink is installed at
+the entry point.** v1 needs **no new language feature**: the facade uses the
+existing function-level `#[ambient]` so logging never infects signatures, span
+scoping uses an `in_span` closure (`with span do` is optional sugar), and
+`core:value::to_value` is already in place.
 
 ## Decision
 
-### Two layers: ambient default + rich subscriber
+### Default sink + scoped overrides
 
-With no subscriber installed, the ambient `Log` effect falls back to a
-best-effort default reusing existing ambient output (stderr, leaving stdout for
-program output):
+`Log` is an ordinary effect. The entry point installs a default sink as the
+outermost handler, so `info(...)` works with no per-call setup, and inner
+`with Log => &sink do` blocks override it for a scope:
 
 ```wado
-fn default_handler_event(event: &Event) {
-    core:cli::log_stderr(render_plain(event));
+export fn run() with Stdout, Stderr, SystemClock {
+    with Log => &TextSink {} do {     // default sink, outermost
+        app();
+    }
 }
-// span lifecycle ops default to no-ops.
 ```
 
-So `info(...)` works with zero setup; a real subscriber is opt-in.
+The facade functions are marked `#[ambient]` (the existing function attribute, as
+on `log_stdout`), so performing `Log` adds no `with Log` to callers — logging is
+callable anywhere without infecting signatures. A `Log` operation reached with no
+handler installed (outside any such block) traps, so the entry point owns the
+default install; the stdlib bootstrap can wrap `run`/`handle` to make this
+automatic.
 
 ### Types
 
@@ -101,13 +108,11 @@ those implicit.
 
 ### The `Log` effect (subscriber)
 
-An ambient effect (see Language Extensions) mirroring `tracing`'s `Subscriber`,
-simplified by GC (no span refcounting). All ops return `()` — logging is
-best-effort and never fails the program; sinks swallow their own write/serialize
-errors.
+An effect mirroring `tracing`'s `Subscriber`, simplified by GC (no span
+refcounting). Operations are best-effort and never fail the program; sinks
+swallow their own write/serialize errors.
 
 ```wado
-#[ambient(default = default_handler)]
 pub interface Log {
     fn enabled(meta: &Metadata) -> bool;
     fn current_span() -> Option<SpanId>;
@@ -123,12 +128,13 @@ pub interface Log {
 
 ### Events
 
-Free functions; ambient, so no `with Log` and callable anywhere. Location
-defaults resolve at the caller. The message is an eager `String` (the optimizer
-drops it when the level is statically off; `enabled()` guards the runtime-off hot
-path).
+Free functions marked `#[ambient]`, so performing `Log` adds no `with Log` to
+callers — callable anywhere. Location defaults resolve at the caller. The message
+is an eager `String` (the optimizer drops it when the level is statically off;
+`enabled()` guards the runtime-off hot path).
 
 ```wado
+#[ambient]
 #[inline(always)]
 pub fn event(level: Level, message: String, fields: List<Field> = [],
              target: String = #function, file: String = #file, line: i32 = #line) {
@@ -269,34 +275,12 @@ requests). So:
 - Auto cross-task propagation (per-task dispatch state) is deferred to when WASI
   threads / Wasm stack switching stabilize; it adds no API surface.
 
-## Language Extensions
+## Language Notes
 
-### Ambient effects (required)
-
-An ordinary `Log` effect would force `with Log` through every caller up to `run`
-— the infectiousness [Ambient Logging](./wep-2026-01-12-ambient-logging.md)
-avoided for `log`/`panic`. An ambient effect keeps that while staying overridable:
-
-```wado
-#[ambient(default = default_handler)]
-pub interface Log { /* … */ }
-```
-
-- not added to a function's required-effect set — `Log` ops impose no `with Log`,
-  so the facade is callable anywhere;
-- still installable with `with Log => h do` — layers, spans, and test sinks work
-  as normal;
-- a default handler runs when no subscriber is installed (dispatch global null →
-  call `default` instead of trapping / a CM adapter); it uses the ambient I/O
-  bypass, needing no effects.
-
-A thin addition to existing dispatch
-([Effect Handler](./wep-2026-04-11-effect-handler.md) § Dispatch): the per-op
-dispatch already branches "global null → default path" (the CM adapter for world
-imports; here the declared default). Effect-check skips ambient effects; an
-installed handler's own effects (e.g. `TextSink`'s `Stderr`/`SystemClock`) are
-still checked at the `with` site. Ambient effects are general (debug/trace/metrics
-sinks, feature-flag oracles), not logging-specific.
+v1 requires no new language feature. The pieces it leans on already exist:
+function-level `#[ambient]` (no `with Log` infection), effect handlers (sinks,
+layers, scoped overrides), default arguments + call-site `#file`/`#line`/`#function`,
+compile-time `#[param]`, and `core:value::to_value`.
 
 ### Span scoping — no language change required
 
@@ -306,7 +290,8 @@ entry needs `enter`/`exit` at scope boundaries, and the dispatch desugar has no
 install/uninstall hook — covered by a closure:
 
 ```wado
-pub fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E, Log {
+#[ambient]
+fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
     Log::enter(s.id());
     let r = body();        // the closure cannot skip the exit
     Log::exit(s.id());
@@ -346,16 +331,18 @@ shows up. Only the field argument changes, so it is an internal swap.
 ### Benefits
 
 - A full-set logger and tracer (events, spans, layered subscribers, two-axis
-  filtering) from existing features plus ambient effects.
+  filtering) from existing features — no new language feature.
 - Layer composition, scoped context, and auto context-restore from effect-handler
   nesting — static dispatch, no dynamic dispatch.
-- Zero setup via the ambient default; a real subscriber is opt-in. Caller source
-  location without macros; testable with a capturing sink.
+- `#[ambient]` keeps logging out of signatures; a default sink at the entry gives
+  zero per-call setup. Caller source location without macros; testable with a
+  capturing sink.
 
 ### Trade-offs
 
-- Ambient effects deliberately hide a sink's I/O from signatures — the
-  ambient-logging trade-off, generalized.
+- `#[ambient]` hides a sink's I/O from signatures (the existing ambient-logging
+  trade-off), and a `Log` op reached with no handler installed traps — so the
+  entry point must install the default sink.
 - Eager message; the optimizer (not a macro) drops it when statically off,
   `enabled()` for runtime-off.
 - Baseline fields box through `core:value`, removed by the deferred path.
@@ -364,14 +351,14 @@ shows up. Only the field argument changes, so it is an internal swap.
 
 ### Prerequisites
 
-- [ ] Language: ambient effects with a default handler.
 - [x] `core:value::to_value` (direct Value-building serializer).
 - [x] Span scoping via the `in_span` closure (no language change).
 - [ ] Optional: native `with <span> do { … }` sugar.
-- [ ] `core:log`: the types and `Log` effect above, the facade
+- [ ] `core:log`: the types and `Log` effect above, the `#[ambient]` facade
       (`trace`/`debug`/`info`/`warn`/`error`/`event`/`enabled`), `span`/`current`,
       sinks (`TextSink`, `JsonSink`, `NopSink`, `CaptureSink`), layers (`Context`,
-      `Filter`), the `#[param]` level globals, and `default_handler`.
+      `Filter`), the `#[param]` level globals, and a stdlib bootstrap that
+      installs the default sink at the entry point.
 - [ ] Optional (ergonomics): bound-driven serde derivation
       ([Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md)).
 - [ ] Deferred (perf): anonymous structs, erased serde, serde flatten.
@@ -379,17 +366,18 @@ shows up. Only the field argument changes, so it is an internal swap.
 
 ## Alternatives Considered
 
-### Ordinary (non-ambient) effect
+### Effect without an `#[ambient]` facade
 
-A normal `Log` effect needs no new feature but is infectious across the whole
-call graph — rejected for the reasons the ambient-logging WEP rejected effectful
-`panic`.
+A plain `Log` effect with no `#[ambient]` on the facade forces `with Log` through
+every caller up to `run` — too infectious for a cross-cutting concern. Marking
+the facade `#[ambient]` removes the infection while keeping the effect (handlers,
+scoping, testing). This is the chosen design.
 
 ### Global mutable subscriber
 
-A `global mut` subscriber works without ambient effects, but scoped context
-(spans, layers) then needs a hand-managed global stack with no automatic restore
-on early exit. Ambient effects get scoped, auto-restored context from `with`.
+A `global mut` subscriber avoids the effect entirely, but scoped context (spans,
+layers) then needs a hand-managed global stack with no automatic restore on early
+exit. The effect plus `with` gives scoped, auto-restored context.
 
 ### Panic on reentrancy
 
