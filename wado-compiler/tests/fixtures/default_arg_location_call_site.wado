@@ -1,0 +1,33 @@
+// `#file` / `#line` / `#function` as default arguments evaluate at the call
+// site, not the lib where the default is written.
+
+use { loc, wrap } from "./sub/default_arg_location_call_site_lib.wado";
+
+fn call_here() -> [String, i32, String] {
+    return loc(); // call site: this is line 7
+}
+
+fn nested_here() -> [String, i32, String] {
+    return wrap(); // call site: this is line 11
+}
+
+test "location literal defaults evaluate at the call site" {
+    let [file, line, fun] = call_here();
+    assert file.ends_with("default_arg_location_call_site.wado");
+    assert !file.contains("lib.wado");
+    assert line == 7;
+    assert fun == "call_here";
+}
+
+test "nested default call reports the outermost call site" {
+    // `wrap`'s default is `loc()`, itself defaulted: every literal reports the
+    // outermost `wrap()` call, not the lib.
+    let [file, line, fun] = nested_here();
+    assert file.ends_with("default_arg_location_call_site.wado");
+    assert !file.contains("lib.wado");
+    assert line == 11;
+    assert fun == "nested_here";
+}
+
+__DATA__
+{"test": {}}
