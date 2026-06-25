@@ -953,7 +953,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // from `flat[1..]` and construct the GC `Result` value.
                 let ok_ty = &generic.args[0];
                 let err_ty = &generic.args[1];
-                let (ok_tid, err_tid, ok_flat_len, err_flat_len, ok_name, ok_index, err_name) = {
+                let (ok_tid, err_tid, ok_flat_len, err_flat_len, ok_name, ok_index, err_name, err_index) = {
                     let tt = type_table_cell.borrow();
                     let mut ok_flat = Vec::new();
                     flatten_export_type(ok_ty, &mut ok_flat, tir_modules, &tt);
@@ -968,7 +968,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     let items = tt.compiler_items();
                     let (_, _, ok_n, ok_i) = items
                         .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-                    let (_, _, err_n, _) = items
+                    let (_, _, err_n, err_i) = items
                         .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
                     (
                         ok_tid,
@@ -978,6 +978,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         ok_n.to_string(),
                         ok_i,
                         err_n.to_string(),
+                        err_i,
                     )
                 };
                 let total_flat = 1 + ok_flat_len.max(err_flat_len);
@@ -1033,7 +1034,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     arm_stmts
                 };
 
-                let err_index = ok_index ^ 1;
                 let ok_stmts =
                     build_arm(true, &ok_name, ok_index, ok_ty, ok_tid, next_local, locals);
                 let err_stmts =

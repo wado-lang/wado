@@ -729,6 +729,7 @@ mod tests {
                 type_table: &self.type_table,
                 cm_package: "",
                 interner: &self.interner,
+                lib_module_source: None,
             }
         }
     }
@@ -1063,6 +1064,7 @@ mod tests {
             type_table: &type_table,
             cm_package: "sockets",
             interner: &interner,
+            lib_module_source: None,
         };
         let list_ty = cm_abi::generic_type("List", vec![elem_ty]);
         let mut stmts = Vec::new();
