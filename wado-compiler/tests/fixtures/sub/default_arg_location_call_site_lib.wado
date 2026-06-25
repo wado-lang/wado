@@ -5,3 +5,11 @@
 pub fn loc(file: String = #file, line: i32 = #line, fun: String = #function) -> [String, i32, String] {
     return [file, line, fun];
 }
+
+// `wrap` defaults its parameter to a call to `loc`, whose own defaults are
+// location literals. The nested default must still report the OUTERMOST call
+// site (where `wrap()` is written), not this module — every location literal
+// reports the same ultimate caller.
+pub fn wrap(info: [String, i32, String] = loc()) -> [String, i32, String] {
+    return info;
+}

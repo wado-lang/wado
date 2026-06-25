@@ -1882,6 +1882,8 @@ fn run() with Stdout {
 
 This is specific to these three location literals. A default argument's name resolution otherwise uses the callee's scope (so a default may reference items private to the callee module). Only `#file` / `#line` / `#function` are redirected to the call site; `#data`, `#include_str`, and `#include_bytes` always refer to the source file that contains them. Struct field defaults are unaffected — their location literals always report the field's defining file.
 
+When a default expression is itself a defaulted call (`fn outer(x = loc())`, where `loc` has location-literal defaults), every location literal reports the same outermost call site — where the user wrote `outer(...)`, not the module where the default lives.
+
 ### Closures
 
 Closures are anonymous function expressions with `|params| body` syntax.

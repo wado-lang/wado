@@ -218,8 +218,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// written (which is the callee module reify swaps to for name
     /// resolution). Name resolution stays callee-scoped; only these three
     /// literals consult this override. `None` outside a default walk —
-    /// every other position reports its own location. Save/restore makes
-    /// nested defaults report their own immediate call site. See
+    /// every other position reports its own location. Only the outermost
+    /// default walk sets it; a nested defaulted call inherits it, so every
+    /// location literal reports the same ultimate call site. See
     /// [`Self::reify_pad_args_with_defaults`].
     pub(crate) call_site_location: Option<CallSiteLocation>,
 }
@@ -6495,13 +6496,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // report the call site, not the callee module the perspective swap
         // below moves to. Capture it now, while the caller's perspective is
         // still live: the caller's module, the call expression's span, and
-        // the calling function's name. Save/restore composes for nested
-        // defaults (each reports its own immediate call site).
-        let saved_call_site = self.call_site_location.replace(CallSiteLocation {
-            module: self.current_module_source.clone(),
-            span: callee.span(),
-            function_name: ctx.function_name.clone(),
-        });
+        // the calling function's name. Only the *outermost* default walk
+        // captures — a nested default (a default expression that is itself a
+        // defaulted call, `fn outer(x = loc())`) inherits it, so every
+        // location literal reports the same ultimate call site (where the
+        // user wrote the call) rather than the lib where the default lives.
+        let captured_call_site = self.call_site_location.is_none();
+        if captured_call_site {
+            self.call_site_location = Some(CallSiteLocation {
+                module: self.current_module_source.clone(),
+                span: callee.span(),
+                function_name: ctx.function_name.clone(),
+            });
+        }
 
         // A default expression otherwise resolves in the *callee's*
         // lexical scope: it may reference items private to the callee
@@ -6550,7 +6557,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.sem = sem;
         }
         self.default_arg_overrides = saved_overrides;
-        self.call_site_location = saved_call_site;
+        if captured_call_site {
+            self.call_site_location = None;
+        }
     }
 
     /// Wrap `Ord::cmp` into a `bool`: `<` → `cmp == Less`, `>` →

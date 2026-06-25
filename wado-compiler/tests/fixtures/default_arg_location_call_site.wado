@@ -4,10 +4,14 @@
 // `std::source_location::current()`. Name resolution in a default still uses
 // the callee's scope — only the location literals are special-cased.
 
-use { loc } from "./sub/default_arg_location_call_site_lib.wado";
+use { loc, wrap } from "./sub/default_arg_location_call_site_lib.wado";
 
 fn call_here() -> [String, i32, String] {
     return loc(); // call site: this is line 10
+}
+
+fn nested_here() -> [String, i32, String] {
+    return wrap(); // call site: this is line 14
 }
 
 test "location literal defaults evaluate at the call site" {
@@ -19,6 +23,17 @@ test "location literal defaults evaluate at the call site" {
     assert line == 10;
     // `#function` is the calling function.
     assert fun == "call_here";
+}
+
+test "nested default call reports the outermost call site" {
+    // `wrap`'s default is `loc()`, whose own defaults are location literals.
+    // Every location literal reports the outermost call site (this `wrap()`),
+    // never the lib where `loc()` or `#file` are written.
+    let [file, line, fun] = nested_here();
+    assert file.ends_with("default_arg_location_call_site.wado");
+    assert !file.contains("lib.wado");
+    assert line == 14;
+    assert fun == "nested_here";
 }
 
 __DATA__
