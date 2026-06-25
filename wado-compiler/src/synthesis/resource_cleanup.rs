@@ -185,7 +185,7 @@ fn record_owned_self(func: &TirFunction, tt: &TypeTable, out: &mut IndexSet<Stri
 
 /// Entry point: elaborate resource drops for every function in the project.
 pub fn elaborate_resource_drops(project: &mut Package) {
-    let reg = project.cm_interface_registry;
+    let reg = &project.cm_interface_registry;
     let Some(type_table) = project
         .tir_modules
         .values()

@@ -47,7 +47,7 @@ use super::types::{LiftContext, binary_add, type_id_to_ast_type};
 /// The generated functions are added to the entry module so they can be called
 /// by the CM resource method rewriter.
 pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
-    let cm_interface_registry = project.cm_interface_registry;
+    let cm_interface_registry = &project.cm_interface_registry;
     // Find all non-u8 stream-read element types
     let mut needed_element_types: IndexMap<String, (TypeId, TypeId)> = IndexMap::default();
     for module in project.tir_modules.values() {
@@ -132,7 +132,7 @@ pub(super) fn synthesize_record_stream_reads(project: &mut Package) {
 /// payload with the shared `synthesize_lift`, and wraps it in `Option`. This
 /// replaces the hand-rolled WIR-build lift with its hardcoded CM offsets.
 pub(super) fn synthesize_future_reads(project: &mut Package) {
-    let cm_interface_registry = project.cm_interface_registry;
+    let cm_interface_registry = &project.cm_interface_registry;
     // payload mangle -> (payload_type_id, option_type_id)
     let mut needed: IndexMap<String, (TypeId, TypeId)> = IndexMap::default();
     for module in project.tir_modules.values() {
@@ -896,7 +896,7 @@ fn cm_binding_function(cm_name: &str) -> Option<(&'static str, &'static str)> {
 /// Rewrite all #[cm("...")] resource method calls in the project.
 pub(super) fn rewrite_cm_resource_methods(project: &mut Package) {
     let entry_source = project.entry_module_source.clone();
-    let cm_interface_registry = project.cm_interface_registry;
+    let cm_interface_registry = &project.cm_interface_registry;
     for module in project.tir_modules.values() {
         let type_table = module.type_table.clone();
         for func_rc in &module.functions {
@@ -1000,7 +1000,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // rewrite as a CmRawCall directly (the name is dynamic).
         if is_stream_cm_method(&cm_name) {
             let parameterized =
-                parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry);
+                parameterize_stream_cm_name(&cm_name, expr, self.tt, &self.cm_interface_registry);
             if parameterized != cm_name {
                 rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
                 return;

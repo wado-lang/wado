@@ -265,7 +265,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         let variant_type = tt
             .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
+                canonical_wasi_package(&ctx.cm_interface_registry, &named.name)
                     .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
@@ -288,7 +288,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         let enum_type = tt
             .find_named_type_by_cm_package(&named.name, ctx.cm_package)
             .or_else(|| {
-                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
+                canonical_wasi_package(&ctx.cm_interface_registry, &named.name)
                     .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
             })?;
         drop(tt);
@@ -334,8 +334,8 @@ fn try_lift_wasi_struct(
     let mut max_align = 1u32;
     let mut offsets = Vec::with_capacity(field_types.len());
     for ft in &field_types {
-        let fa = crate::component_model::cm_align_with_registry(ft, ctx.cm_interface_registry);
-        let fs = crate::component_model::cm_size_with_registry(ft, ctx.cm_interface_registry);
+        let fa = crate::component_model::cm_align_with_registry(ft, &ctx.cm_interface_registry);
+        let fs = crate::component_model::cm_size_with_registry(ft, &ctx.cm_interface_registry);
         offset = cm_abi::align_to(offset, fa);
         offsets.push(offset);
         offset += fs;
@@ -446,7 +446,7 @@ fn synthesize_lift_wasi_variant(
         .map(|ty| {
             crate::component_model::cm_align_with_registry_scoped(
                 ty,
-                ctx.cm_interface_registry,
+                &ctx.cm_interface_registry,
                 Some(ctx.cm_package),
             )
         })
@@ -617,12 +617,12 @@ fn synthesize_lift_list(
 ) -> TirExpr {
     let elem_size = crate::component_model::cm_size_with_registry_scoped(
         elem_ty,
-        ctx.cm_interface_registry,
+        &ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let elem_align = crate::component_model::cm_align_with_registry_scoped(
         elem_ty,
-        ctx.cm_interface_registry,
+        &ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
 
@@ -631,7 +631,7 @@ fn synthesize_lift_list(
     let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
         let elem_tid =
-            cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_type_to_type_id(elem_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package);
         let list_tid = tt.make_list(elem_tid);
         let list_name = tt
             .compiler_items()
@@ -789,7 +789,7 @@ fn synthesize_lift_option_inner(
 ) -> TirExpr {
     let layout = cm_abi::layout_option_with_registry_scoped(
         inner_ty,
-        ctx.cm_interface_registry,
+        &ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let payload_offset = layout.offsets[1];
@@ -799,7 +799,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let inner_type_id =
-            cm_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_type_to_type_id(inner_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package);
         tt.make_option(inner_type_id)
     };
 
@@ -877,7 +877,7 @@ fn synthesize_lift_result_inner(
     let layout = cm_abi::layout_result_with_registry_scoped(
         ok_ty,
         err_ty,
-        ctx.cm_interface_registry,
+        &ctx.cm_interface_registry,
         Some(ctx.cm_package),
     );
     let payload_offset = layout.offsets[1];
@@ -896,9 +896,9 @@ fn synthesize_lift_result_inner(
     let (result_type_id, ok_name, ok_index, err_name, err_index) = {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id =
-            cm_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_type_to_type_id(ok_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package);
         let err_type_id =
-            cm_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_type_to_type_id(err_ty, &mut tt, &ctx.cm_interface_registry, ctx.cm_package);
         let result_type_id = tt.make_result(ok_type_id, err_type_id);
         let items = tt.compiler_items();
         let (_, _, ok_n, ok_i) =
@@ -1021,7 +1021,7 @@ fn synthesize_lift_tuple(
         let mut tt = ctx.type_table.borrow_mut();
         let elem_type_ids: Vec<TypeId> = elems
             .iter()
-            .map(|t| cm_type_to_type_id(t, &mut tt, ctx.cm_interface_registry, ctx.cm_package))
+            .map(|t| cm_type_to_type_id(t, &mut tt, &ctx.cm_interface_registry, ctx.cm_package))
             .collect();
         tt.make_tuple(elem_type_ids)
     };

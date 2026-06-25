@@ -993,13 +993,27 @@ impl CmInterfaceRegistry {
     ///
     /// Parses the embedded wasi:* modules and registers their interface methods.
     /// Also collects newtypes and world definitions.
-    pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
-        use std::sync::OnceLock;
+    /// The stdlib registries, shared via `Arc`. Built once (the parse + register
+    /// bootstrap is expensive) and handed out as cheap `Arc` clones. A `--lib`
+    /// compile augments its own clone with the package's local types via
+    /// `Arc::make_mut`, so the shared stdlib copy is never mutated.
+    pub fn build_from_stdlib() -> (
+        std::sync::Arc<Self>,
+        std::sync::Arc<crate::world_registry::WorldRegistry>,
+    ) {
+        use std::sync::{Arc, OnceLock};
 
-        static INSTANCE: OnceLock<(CmInterfaceRegistry, crate::world_registry::WorldRegistry)> =
-            OnceLock::new();
+        static INSTANCE: OnceLock<(
+            Arc<CmInterfaceRegistry>,
+            Arc<crate::world_registry::WorldRegistry>,
+        )> = OnceLock::new();
 
-        INSTANCE.get_or_init(Self::build_from_stdlib_inner)
+        INSTANCE
+            .get_or_init(|| {
+                let (cm, world) = Self::build_from_stdlib_inner();
+                (Arc::new(cm), Arc::new(world))
+            })
+            .clone()
     }
 
     fn build_from_stdlib_inner() -> (Self, crate::world_registry::WorldRegistry) {

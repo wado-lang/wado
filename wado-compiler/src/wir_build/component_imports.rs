@@ -26,7 +26,7 @@ pub fn resolve_import_plan(
     project: &NirPackage,
     needed_canonicals: &IndexSet<CanonicalIntrinsic>,
 ) -> Vec<ImportEntry> {
-    let registry = project.cm_interface_registry;
+    let registry = &project.cm_interface_registry;
     let mut entries: Vec<ImportEntry> = Vec::new();
     // Dedup by FQ alone — one import per interface, the first kind pushed wins.
     // An interface that both defines resources and exposes a getter (e.g.

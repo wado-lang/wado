@@ -200,8 +200,8 @@ impl Semantics {
     /// `wado compile --embed-wit=…`) and by world-shape decisions in
     /// codegen / DCE (see [`crate::flat_package::FlatPackage`]).
     #[must_use]
-    pub fn world_registry(&self) -> Option<&'static WorldRegistry> {
-        self.state.as_ref().map(|s| s.world_registry)
+    pub fn world_registry(&self) -> Option<&WorldRegistry> {
+        self.state.as_ref().map(|s| &*s.world_registry)
     }
 
     /// Component Model interface registry produced during annotate.
@@ -215,8 +215,8 @@ impl Semantics {
     /// Returns `None` under the same conditions as
     /// [`Self::world_registry`].
     #[must_use]
-    pub fn cm_interface_registry(&self) -> Option<&'static CmInterfaceRegistry> {
-        self.state.as_ref().map(|s| s.tysys.cm_interface_registry)
+    pub fn cm_interface_registry(&self) -> Option<&CmInterfaceRegistry> {
+        self.state.as_ref().map(|s| &*s.tysys.cm_interface_registry)
     }
 
     /// Construct an empty [`Semantics`] holding only the bookkeeping that

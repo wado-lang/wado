@@ -116,11 +116,11 @@ fn semantics_exposes_world_and_cm_interface_registries() {
         .cm_interface_registry()
         .expect("cm_interface_registry is populated when annotate completes");
     assert!(
-        std::ptr::eq(cm_interface_registry, expected_cm_interface),
+        std::ptr::eq(cm_interface_registry, &*expected_cm_interface),
         "cm_interface_registry accessor returns the build_from_stdlib singleton",
     );
     assert!(
-        std::ptr::eq(world_registry, expected_world),
+        std::ptr::eq(world_registry, &*expected_world),
         "world_registry accessor returns the build_from_stdlib singleton",
     );
 }

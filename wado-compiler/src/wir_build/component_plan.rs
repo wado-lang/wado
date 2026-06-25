@@ -500,21 +500,21 @@ mod tests {
 
         // Bare unit forms
         assert!(matches!(
-            resolve_cm_export_type(&unit_named(), registry, None),
+            resolve_cm_export_type(&unit_named(), &registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&empty_tuple(), registry, None),
+            resolve_cm_export_type(&empty_tuple(), &registry, None),
             CmExportType::Unit
         ));
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         assert!(matches!(
-            resolve_cm_export_type(&result_of(unit_named(), unit_named()), registry, None),
+            resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), registry, None),
+            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), &registry, None),
             CmExportType::Unit
         ));
     }
@@ -527,7 +527,7 @@ mod tests {
         // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
         // http world scope. The arms resolve to wasi:http/types.
         let http = result_of(named("Response"), named("ErrorCode"));
-        match resolve_cm_export_type(&http, registry, Some("wasi:http/")) {
+        match resolve_cm_export_type(&http, &registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert!(
                     matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -545,7 +545,7 @@ mod tests {
         // exists in wasi:http; the kiln world scope must resolve it to
         // core:kiln/types rather than the http resource.
         let kiln = result_of(named("Response"), named("Error"));
-        match resolve_cm_export_type(&kiln, registry, Some("core:kiln/")) {
+        match resolve_cm_export_type(&kiln, &registry, Some("core:kiln/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert!(
                     matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -566,7 +566,7 @@ mod tests {
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), registry, None) {
+        match resolve_cm_export_type(&named("Request"), &registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -590,7 +590,7 @@ mod tests {
 
         // `RawRequest` is a struct declared in `core:kiln/types` — exercises
         // the `find_kiln_*` half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("RawRequest"), registry, None) {
+        match resolve_cm_export_type(&named("RawRequest"), &registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

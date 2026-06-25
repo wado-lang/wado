@@ -186,15 +186,15 @@ fn lower_to_flat_inner(
             let elem_type_id = type_args[0];
             let elem_ast_type = {
                 let tt = ctx.type_table.borrow();
-                type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
+                type_id_to_ast_type(elem_type_id, &tt, &ctx.cm_interface_registry)
             };
             let elem_size = crate::component_model::cm_size_with_registry(
                 &elem_ast_type,
-                ctx.cm_interface_registry,
+                &ctx.cm_interface_registry,
             );
             let elem_align = crate::component_model::cm_align_with_registry(
                 &elem_ast_type,
-                ctx.cm_interface_registry,
+                &ctx.cm_interface_registry,
             );
 
             // __arr = value
@@ -333,7 +333,7 @@ fn lower_to_flat_inner(
                 local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
                 next_local,
                 locals,
-                ctx.cm_interface_registry,
+                &ctx.cm_interface_registry,
                 ctx.cm_package,
                 ctx.type_table,
             ));
@@ -590,7 +590,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                             .fields
                             .iter()
                             .map(|f| {
-                                type_id_to_ast_type(f.type_id, &tt, lift_ctx.cm_interface_registry)
+                                type_id_to_ast_type(f.type_id, &tt, &lift_ctx.cm_interface_registry)
                             })
                             .collect();
                         // Prefer the already-registered TypeId so the WIR

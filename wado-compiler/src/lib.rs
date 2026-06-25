@@ -598,6 +598,14 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .map(|fq| synthesize_lib_world_info(fq, sem.modules.get(&sem.entry_module_source)));
 
+    // For `--lib`, capture the entry module so its own named types can be
+    // registered into the CM interface registry (cloned before `sem` is
+    // destructured below).
+    let lib_entry_module = options
+        .lib_world
+        .as_ref()
+        .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
+
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -621,7 +629,17 @@ fn compile_after_load<H: CompilerHost>(
     // synthesis. The `debug_assert!` below makes that contract loud at
     // the leak site instead of one stage later.
     let world_registry = state.world_registry;
-    let tysys = state.tysys;
+    let mut tysys = state.tysys;
+
+    // For `--lib`, augment the shared stdlib CM registry with the package's own
+    // named types. `Arc::make_mut` copies-on-write — the stdlib snapshot still
+    // holds a reference — so the shared copy is never mutated; only this
+    // compilation's registry gains the local types.
+    if let (Some(fq), Some(entry)) = (options.lib_world.as_ref(), lib_entry_module.as_ref()) {
+        std::sync::Arc::make_mut(&mut tysys.cm_interface_registry)
+            .register_lib_local_decls(entry, fq);
+    }
+
     debug_assert_eq!(
         std::sync::Arc::strong_count(&tysys.trait_env),
         1,

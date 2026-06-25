@@ -502,7 +502,7 @@ fn emit_cm_val_type(
                     let ok_val = type_gen.ast_type_to_cm(
                         ok,
                         instance_type,
-                        proj.cm_interface_registry,
+                        &proj.cm_interface_registry,
                         &resource_exports,
                     );
                     *local_type_idx = type_gen.next_idx();
@@ -620,7 +620,7 @@ fn emit_cm_val_type(
                 let val = type_gen.ast_type_to_cm(
                     ty,
                     instance_type,
-                    proj.cm_interface_registry,
+                    &proj.cm_interface_registry,
                     &resource_exports,
                 );
                 *local_type_idx = type_gen.next_idx();
@@ -1891,12 +1891,12 @@ fn generate_cm_imports(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &mut needed_resources,
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(ty, &project.cm_interface_registry, &mut needed_resources);
             }
         }
 
@@ -2226,7 +2226,7 @@ fn generate_cm_imports(
                             let val = shared_type_gen.ast_type_to_cm(
                                 &resolved_ty,
                                 &mut instance_type,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &resource_exports,
                             );
                             local_type_idx = shared_type_gen.next_idx();
@@ -2271,7 +2271,7 @@ fn generate_cm_imports(
                         let val = shared_type_gen.ast_type_to_cm(
                             &resolved_ty,
                             &mut instance_type,
-                            project.cm_interface_registry,
+                            &project.cm_interface_registry,
                             &resource_exports,
                         );
                         local_type_idx = shared_type_gen.next_idx();
@@ -2497,7 +2497,7 @@ fn import_resource_defining_interface(
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2508,7 +2508,7 @@ fn import_resource_defining_interface(
                 type_gen.ast_type_to_cm(
                     ty,
                     &mut instance_type,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2571,7 +2571,7 @@ fn import_resource_defining_interface(
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2582,7 +2582,7 @@ fn import_resource_defining_interface(
                 type_gen.ast_type_to_cm(
                     ty,
                     &mut instance_type,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2708,7 +2708,7 @@ fn component_type_idx_for_signature_type(
     project: &NirPackage,
     ty: &Type,
 ) -> u32 {
-    let registry = project.cm_interface_registry;
+    let registry = &project.cm_interface_registry;
     match ty {
         Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
             component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
@@ -3229,7 +3229,7 @@ fn resource_using_references_defining_interface(
     import_plan: &[crate::wir::ImportEntry],
     iface_fq: &str,
 ) -> bool {
-    let registry = project.cm_interface_registry;
+    let registry = &project.cm_interface_registry;
     let Some(iface) = registry.interfaces().find(|i| i.path == iface_fq) else {
         return false;
     };
@@ -3315,12 +3315,12 @@ fn import_resource_using_interfaces(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &mut needed_resources,
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(ty, &project.cm_interface_registry, &mut needed_resources);
             }
         }
 
@@ -3608,10 +3608,10 @@ fn lower_wasi_functions(
                 crate::component_model::return_type_requires_outptr(&resolved)
                     || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                     )
             });
-            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry)
+            let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
                 || returns_via_outptr;
             let needs_realloc = needs_memory;
 

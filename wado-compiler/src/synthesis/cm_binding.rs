@@ -128,7 +128,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 collect_effect_calls_in_block(
                     body,
                     &mut seen_effects,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                 );
             }
         }
@@ -166,7 +166,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
                 let produced = synthesize_adapter(
                     &func_info,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &entry_type_table,
                     &project.interner,
                     &owner_module,
@@ -198,7 +198,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         body,
                         &adapters,
                         &entry_source,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &entry_type_table,
                     );
                 }
@@ -374,7 +374,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             );
@@ -386,7 +386,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.cm_interface_registry,
+                            &project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -401,7 +401,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.cm_interface_registry,
+                            &project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -439,7 +439,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             )
@@ -469,7 +469,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
-                                    project.cm_interface_registry,
+                                    &project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
                                 )
@@ -789,11 +789,11 @@ mod tests {
     fn flatten_param_newtype_u64() {
         let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
         assert_eq!(
-            flatten_param_type(&named_type("Duration"), reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&named_type("Duration"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
         assert_eq!(
-            flatten_param_type(&named_type("Mark"), reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&named_type("Mark"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }
@@ -1047,7 +1047,7 @@ mod tests {
         let elem_ty = named_type("IpAddress");
         let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
             &elem_ty,
-            registry,
+            &registry,
             Some("sockets"),
         ));
         // Sanity: registry-derived size differs from the 4-byte fallback.
@@ -1058,7 +1058,7 @@ mod tests {
         let type_table = std::cell::RefCell::new(tt);
         let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {
-            cm_interface_registry: registry,
+            cm_interface_registry: &registry,
             type_table: &type_table,
             cm_package: "sockets",
             interner: &interner,
