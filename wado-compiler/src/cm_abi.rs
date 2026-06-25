@@ -256,6 +256,43 @@ pub fn layout_option_with_registry_scoped(
     }
 }
 
+/// Registry-aware layout for a tuple (positional elements).
+pub fn layout_tuple_with_registry(
+    elements: &[Type],
+    registry: &crate::component_model::CmInterfaceRegistry,
+) -> CmLayout {
+    layout_tuple_with_registry_scoped(elements, registry, None)
+}
+
+/// Package-scoped registry-aware layout for a tuple. Unlike [`layout_tuple`],
+/// element sizes/alignments are resolved through the registry, so a tuple
+/// carrying a named record/variant/newtype lays out at the correct offsets.
+pub fn layout_tuple_with_registry_scoped(
+    elements: &[Type],
+    registry: &crate::component_model::CmInterfaceRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
+    let mut offset: u32 = 0;
+    let mut max_align: u32 = 1;
+    let mut offsets = Vec::with_capacity(elements.len());
+    for ty in elements {
+        let field_align =
+            crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package);
+        let field_size =
+            crate::component_model::cm_size_with_registry_scoped(ty, registry, wasi_package);
+        offset = align_to(offset, field_align);
+        offsets.push(offset);
+        offset += field_size;
+        max_align = max_align.max(field_align);
+    }
+    let size = align_to(offset, max_align);
+    CmLayout {
+        size,
+        align: max_align,
+        offsets,
+    }
+}
+
 /// Registry-aware layout for result<T, E>.
 pub fn layout_result_with_registry(
     ok: &Type,

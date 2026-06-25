@@ -136,6 +136,29 @@ fn cases() -> Vec<Case> {
             "id-assoc-array",
             Val::List(vec![Val::Tuple(vec![Val::String("k".into()), Val::U32(1)])]),
         ),
+        // Tuples carrying aggregate (non-primitive) elements.
+        case(
+            "id-tuple-record",
+            Val::Tuple(vec![point(), Val::U32(7)]),
+        ),
+        case(
+            "id-tuple-option",
+            Val::Tuple(vec![Val::Option(b(Val::U32(9))), Val::U8(3)]),
+        ),
+        case(
+            "id-tuple-list",
+            Val::Tuple(vec![
+                Val::List(vec![Val::String("a".into()), Val::String("bb".into())]),
+                Val::U32(5),
+            ]),
+        ),
+        case(
+            "id-list-tuple-record",
+            Val::List(vec![
+                Val::Tuple(vec![point(), Val::U32(1)]),
+                Val::Tuple(vec![point(), Val::U32(2)]),
+            ]),
+        ),
     ]
 }
 

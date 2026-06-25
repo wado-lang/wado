@@ -3566,6 +3566,9 @@ pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
             }
             _ => crate::cm_abi::cm_size(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry(elems, registry).size
+        }
         _ => crate::cm_abi::cm_size(ty),
     }
 }
@@ -3606,6 +3609,9 @@ pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 
                 .max(cm_align_with_registry(&g.args[1], registry)),
             _ => crate::cm_abi::cm_align(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry(elems, registry).align
+        }
         _ => crate::cm_abi::cm_align(ty),
     }
 }
@@ -3726,6 +3732,9 @@ pub fn cm_size_with_registry_scoped(
             }
             _ => crate::cm_abi::cm_size(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).size
+        }
         _ => crate::cm_abi::cm_size(ty),
     }
 }
@@ -3786,6 +3795,9 @@ pub fn cm_align_with_registry_scoped(
                 )),
             _ => crate::cm_abi::cm_align(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).align
+        }
         _ => crate::cm_abi::cm_align(ty),
     }
 }

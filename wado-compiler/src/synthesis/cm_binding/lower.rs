@@ -254,10 +254,21 @@ pub(super) fn synthesize_lower_tuple(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
-    let layout = cm_abi::layout_tuple(elems);
+    let layout = cm_abi::layout_tuple_with_registry_scoped(
+        elems,
+        cm_interface_registry,
+        Some(wasi_package),
+    );
     let mut stmts = Vec::new();
+
+    // Element TypeIds come from the tuple's own type arguments — the
+    // elaborator-registered types with correct module sources. Re-deriving them
+    // via `cm_type_to_type_id` can't resolve a lib-local struct's source and
+    // would fall back to i32, breaking FieldAccess on aggregate elements.
+    let elem_type_ids = type_table
+        .borrow()
+        .as_tuple(value.type_id)
+        .unwrap_or_default();
 
     // Materialize the tuple value into a local so we can access fields
     let tuple_local = *next_local;
@@ -273,11 +284,12 @@ pub(super) fn synthesize_lower_tuple(
             binary_add(addr.clone(), i32_const(offset))
         };
 
-        // Determine the type_id for this field
-        let field_type_id = {
+        // Prefer the registered element TypeId; fall back only if the tuple
+        // type lacks args (shouldn't happen for a well-formed tuple value).
+        let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = type_table.borrow_mut();
             cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
-        };
+        });
 
         // Extract the i-th field from the tuple using FieldAccess
         let field_expr = TirExpr::new(
@@ -294,22 +306,20 @@ pub(super) fn synthesize_lower_tuple(
             synth_span(),
         );
 
-        // Recursively lower: for tuples use synthesize_lower_tuple, otherwise synthesize_lower
-        let field_stmts = if let Type::Tuple(sub_elems) = elem_ty {
-            synthesize_lower_tuple(
-                sub_elems,
-                field_expr,
-                field_addr,
-                next_local,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            )
-        } else {
-            synthesize_lower(elem_ty, field_expr, field_addr, next_local, locals, &names)
-        };
-        stmts.extend(field_stmts);
+        // Recursively lower each element through the full registry-aware
+        // memory lowerer so aggregate elements (records, variants, options,
+        // lists, results, nested tuples) lay out their payload correctly
+        // rather than being stored as an opaque i32 GC ref.
+        stmts.extend(synthesize_lower_wasi_type_to_memory(
+            elem_ty,
+            field_expr,
+            field_addr,
+            next_local,
+            locals,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        ));
     }
 
     stmts

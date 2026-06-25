@@ -161,6 +161,78 @@ impl LiftContext<'_> {
         }
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
     }
+
+    /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware.
+    ///
+    /// Unlike [`cm_type_to_type_id`], a lib-local named struct/variant (source
+    /// FQ neither `wasi:` nor `core:`) is resolved through the `--lib` entry
+    /// `ModuleSource`, so it yields the concrete GC `TypeId` the rest of the
+    /// pipeline expects rather than falling back to `i32`. Container types
+    /// (tuple/list/option/result) recurse through this method so nested
+    /// lib-local elements resolve too.
+    pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        match ty {
+            Type::Named(n) => {
+                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
+                    && !src.starts_with("wasi:")
+                    && !src.starts_with("core:")
+                {
+                    if self
+                        .cm_interface_registry
+                        .get_struct_fields_by_source(src, &n.name)
+                        .is_some()
+                    {
+                        let ms = self.module_source_for(src);
+                        return tt.make_struct(n.name.clone(), ms);
+                    }
+                    if self
+                        .cm_interface_registry
+                        .get_variant_cases_by_source(src, &n.name)
+                        .is_some()
+                    {
+                        let ms = self.module_source_for(src);
+                        return tt.make_variant(n.name.clone(), ms);
+                    }
+                }
+                cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package)
+            }
+            Type::Tuple(elems) if !elems.is_empty() => {
+                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_type_id(e, tt)).collect();
+                tt.make_tuple(ids)
+            }
+            Type::Generic(g) => {
+                let (list_name, option_name, result_name) = {
+                    let items = tt.compiler_items();
+                    (
+                        items
+                            .struct_name(crate::compiler_item::CompilerItem::List)
+                            .to_string(),
+                        items
+                            .variant_name(crate::compiler_item::CompilerItem::Option)
+                            .to_string(),
+                        items
+                            .variant_name(crate::compiler_item::CompilerItem::Result)
+                            .to_string(),
+                    )
+                };
+                if g.name == list_name && g.args.len() == 1 {
+                    let elem = self.cm_type_id(&g.args[0], tt);
+                    return tt.make_list(elem);
+                }
+                if g.name == option_name && g.args.len() == 1 {
+                    let inner = self.cm_type_id(&g.args[0], tt);
+                    return tt.make_option(inner);
+                }
+                if g.name == result_name && g.args.len() == 2 {
+                    let ok = self.cm_type_id(&g.args[0], tt);
+                    let err = self.cm_type_id(&g.args[1], tt);
+                    return tt.make_result(ok, err);
+                }
+                cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package)
+            }
+            _ => cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package),
+        }
+    }
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
