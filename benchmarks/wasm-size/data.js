@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782349785249,
+  "lastUpdate": 1782383407492,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35345,6 +35345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dd9ce24d2918577a193cad741762fcaf4855daa2"
         },
         "date": 1782349784694,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287917,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eee865fcd5459016ea1b2c518f5c4bb2ee433f1b",
+          "message": "Merge pull request #1443 from wado-lang/claude/stdlib-logger-design-ernk6z\n\nfeat(core:log): structured logging/tracing design, core:value::to_value, and a match/if literal-coercion fix",
+          "timestamp": "2026-06-25T19:20:24+09:00",
+          "tree_id": "1eafea2a45b4d2fd0fdb4d762e8c779001e057bf",
+          "url": "https://github.com/wado-lang/wado/commit/eee865fcd5459016ea1b2c518f5c4bb2ee433f1b"
+        },
+        "date": 1782383407000,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
