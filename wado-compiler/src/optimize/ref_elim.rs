@@ -125,8 +125,13 @@ impl Rule for RefElimRule {
                 let resolved = resolve_via_engine(engine, referent_e, &self.refs);
                 // Replace `r` (the inner Local) with the resolved referent,
                 // keeping `inner`'s type_id / span — the surrounding code was
-                // sized to the ref-type tag `r` had at this position.
-                let kind = engine.body.exprs[resolved].kind.clone();
+                // sized to the ref-type tag `r` had at this position. `resolved`
+                // is a fresh subtree; *move* its kind out (leaving `Dead`) rather
+                // than cloning it, so its child exprs are not shared between the
+                // orphaned `resolved` node and `inner_e`. A shared child would let
+                // a later single-parent rewrite (SROA scalarization, copy-prop
+                // redirect) corrupt one parent while leaving the other dangling.
+                let kind = std::mem::replace(&mut engine.body.exprs[resolved].kind, ExprKind::Dead);
                 engine.replace_expr_kind(inner_e, kind);
                 true
             }

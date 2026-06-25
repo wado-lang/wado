@@ -1,0 +1,25 @@
+// Regression: `ref_elim` substitutes a `&<inline struct literal>` referent at
+// each `r.field` use. When two or more fields are read (here `.lo` and `.hi`)
+// and the literal's fields are themselves reads of another SROA-scalarized
+// local (`src.lo` / `src.hi`), resolving the referent must *move* the fresh
+// subtree into each use site, not clone its kind and leave an orphan sharing
+// the field child exprs. A shared child let a later single-parent rewrite (SROA
+// scalarization, copy-prop redirect) drop a scalar's definition while a use
+// survived, reading garbage — the assert then tripped only under `-Os`, where
+// bare asserts shrink the use count enough for the scalar to be eliminated.
+
+struct Wide { lo: u64, hi: u64 }
+
+fn eq_both(a: &Wide, b: &Wide) -> bool {
+    return a.lo == b.lo && a.hi == b.hi;
+}
+
+test "ref to reconstructed inline aggregate reads multiple fields" {
+    let src = Wide { lo: 18446744073709551615, hi: 18446744073709551615 };
+    // `eq_both` inlines to `a = &Wide { lo: src.lo, hi: src.hi }` with `a.lo`
+    // and `a.hi` read; `src` is scalarized and its field reads are shared.
+    assert eq_both(&Wide { lo: src.lo, hi: src.hi }, &src);
+}
+
+__DATA__
+{"test": {}}
