@@ -30,7 +30,7 @@ fn resolve_use_decl_module_source(
     invocations: &crate::kiln::InvocationIndex,
 ) -> Option<ModuleSource> {
     if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
-        return resolve_wasm_asset_path(from, &use_decl.source)
+        return resolve_wasm_asset_path(from, &use_decl.source, &crate::name::entry_dir_of(entry))
             .ok()
             .map(|path| interner.wasm(&path, kind));
     }

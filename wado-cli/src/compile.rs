@@ -546,10 +546,13 @@ pub(crate) async fn maybe_run_pipeline(
         no_cache,
     )
     .await?;
-    // The index is keyed by `decl_site.module` (the harvest key, a full path);
-    // rewrite those keys to the loader identities so a redirect from a
-    // transitively-imported module matches.
-    remap_index_decl_files(&mut outcome.invocations, &identities);
+    // The harvested index is keyed by full path; remap to loader identities.
+    let conflict_errors = remap_and_report_conflicts(&mut outcome.invocations, &identities, host);
+    if conflict_errors > 0 {
+        return Err(crate::kiln_driver::PipelineError::RedirectConflict(
+            conflict_errors,
+        ));
+    }
     Ok(outcome)
 }
 
@@ -665,23 +668,12 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
 /// must be discovered here; otherwise that module's grammar `use` falls through
 /// to the Wado lexer.
 ///
-/// Two distinct module identities are at play, and a non-entry module needs a
-/// different one for each:
-///
-/// - The **harvest key** keys `decl_site.module`, which Kiln resolves the
-///   `module` / `output_dir` paths against (relative to the manifest root). It
-///   must be the module's full path, exactly as the entry's is — so it is built
-///   by `resolve_module_path` chaining from the entry's full path.
-/// - The **loader identity** is the `ModuleSource::Local.path` the loader feeds
-///   into `InvocationIndex::redirect`. The loader resolves the entry's own
-///   imports through its `EntryPoint` branch (`normalize_module_path`) and
-///   deeper imports through its `Local` branch (`resolve_module_path`), so the
-///   identity is base-path-relative (`./eval.wado`), not the full path.
-///
-/// The returned map is `harvest_key → loader_identity`; the caller rewrites the
-/// generated index's `decl_file` keys through it (see `remap_index_decl_files`).
-/// For the entry the two coincide (its `EntryPoint.filename` is the full path),
-/// so it maps to itself.
+/// Returns the invocations plus a `harvest_key → loader_identity` map: the
+/// harvest keys `decl_site.module` by full path, but the loader presents a
+/// base-relative identity at resolve time, so the caller rewrites the index's
+/// keys through this map (see `remap_index_decl_files`). The loader identity is
+/// canonical (see [`wado_compiler::name::canonical_local_path`]), so the map is
+/// single-valued.
 pub(crate) fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     manifest_root: &Path,
@@ -691,7 +683,9 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
     Vec<wado_compiler::Diagnostic>,
 ) {
     use std::collections::VecDeque;
-    use wado_compiler::name::{normalize_module_path, resolve_module_path};
+    use wado_compiler::name::{
+        canonical_local_path, normalize_module_path, resolve_local_identity, resolve_module_path,
+    };
 
     let mut modules =
         wado_compiler::hashmap::IndexMap::<String, wado_compiler::ast::Module>::default();
@@ -706,7 +700,14 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
     // `resolve_module_path` (used for children below) is panic-free on its own,
     // so a path with URI-unsafe characters no longer crashes (#1417).
     let entry_key = entry_file.to_string_lossy().to_string();
-    queue.push_back((entry_key.clone(), entry_key, entry_file.to_path_buf(), true));
+    let entry_dir = wado_compiler::name::module_parent_dir(&entry_key).to_string();
+    identities.insert(entry_key.clone(), entry_key.clone());
+    queue.push_back((
+        entry_key.clone(),
+        entry_key.clone(),
+        entry_file.to_path_buf(),
+        true,
+    ));
 
     while let Some((key, loader_id, fs_path, is_entry)) = queue.pop_front() {
         if modules.contains_key(&key) {
@@ -742,16 +743,20 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
                 continue;
             }
             let child_key = resolve_module_path(&key, src);
+            // Must match the loader's identity derivation (entry vs deeper).
             let child_loader_id = if is_entry {
-                normalize_module_path(src)
+                canonical_local_path(&entry_dir, &normalize_module_path(src))
             } else {
-                resolve_module_path(&loader_id, src)
+                resolve_local_identity(&entry_dir, &loader_id, src)
             };
+            // Don't overwrite the entry's pinned identity (back-refs fold to it).
+            if child_key != entry_key {
+                identities.insert(child_key.clone(), child_loader_id.clone());
+            }
             if !modules.contains_key(&child_key) {
                 queue.push_back((child_key, child_loader_id, parent_dir.join(src), false));
             }
         }
-        identities.insert(key.clone(), loader_id);
         modules.insert(key, ast);
     }
 
@@ -770,14 +775,17 @@ pub(crate) fn collect_inline_invocations_for_entry_with_identities(
     (invocations, identities, diagnostics)
 }
 
-/// Rewrite the redirect index's `decl_file` keys from the harvest key (a
-/// module's full path) to the loader identity the loader will present at
-/// resolve time. Entries whose `decl_file` is not in `identities` (the entry
-/// itself, or anything already in loader form) pass through unchanged.
+/// Rewrite the index's `decl_file` keys from harvest keys to loader identities
+/// (keys absent from `identities` pass through). Returns a diagnostic for each
+/// *conflict* — two keys resolving to the same `(loader_identity, from)` but
+/// different targets — instead of silently dropping a redirect (last-write-wins);
+/// matching targets are a harmless duplicate. Unreachable with canonical
+/// identities; guards against a future identity-scheme regression.
+#[must_use]
 pub(crate) fn remap_index_decl_files(
     index: &mut wado_compiler::kiln::InvocationIndex,
     identities: &wado_compiler::hashmap::IndexMap<String, String>,
-) {
+) -> Vec<wado_compiler::Diagnostic> {
     let rewritten: Vec<(String, String, String)> = index
         .entries()
         .map(|(decl, from, uri)| {
@@ -785,11 +793,51 @@ pub(crate) fn remap_index_decl_files(
             (decl.to_string(), from.to_string(), uri.to_string())
         })
         .collect();
+
+    let mut diagnostics = Vec::new();
     let mut fresh = wado_compiler::kiln::InvocationIndex::new();
     for (decl, from, uri) in rewritten {
+        // `redirect` normalizes `from` identically to `insert`, so this sees
+        // the key `insert` would write.
+        if let Some(existing) = fresh.redirect(&decl, &from)
+            && existing != uri
+        {
+            diagnostics.push(wado_compiler::Diagnostic {
+                severity: wado_compiler::Severity::Error,
+                code: wado_compiler::Code::KilnRedirectConflict,
+                message: format!(
+                    "kiln: two generator invocations for `use ... from {from:?}` in `{decl}` \
+                     redirect to different generated modules (`{existing}` and `{uri}`); \
+                     a module cannot resolve one import to two generated entries",
+                ),
+                span: None,
+            });
+            continue;
+        }
         fresh.insert(&decl, &from, &uri);
     }
     *index = fresh;
+    diagnostics
+}
+
+/// Remap `index` to loader identities via [`remap_index_decl_files`], emit any
+/// conflict diagnostics through `host`, and return the count of `Error`-severity
+/// conflicts. Shared by `compile` and `check`, which differ only in how a
+/// non-zero count maps to their own error type.
+pub(crate) fn remap_and_report_conflicts(
+    index: &mut wado_compiler::kiln::InvocationIndex,
+    identities: &wado_compiler::hashmap::IndexMap<String, String>,
+    host: &FilesystemCompilerHost,
+) -> usize {
+    let conflicts = remap_index_decl_files(index, identities);
+    let errors = conflicts
+        .iter()
+        .filter(|d| d.severity == wado_compiler::Severity::Error)
+        .count();
+    for d in conflicts {
+        wado_compiler::CompilerHost::emit_diagnostic(host, d);
+    }
+    errors
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns
@@ -1021,6 +1069,89 @@ mod kiln_dir_module_tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    // #1423: a module reached directly and via a `../`-chained sibling above the
+    // entry dir must collapse to one canonical identity.
+    #[test]
+    fn escape_diamond_canonicalizes_to_one_loader_identity() {
+        let root = unique_tmp("escape-diamond");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src/gen")).unwrap();
+        std::fs::create_dir_all(root.join("shared")).unwrap();
+        std::fs::write(
+            root.join("src/main.wado"),
+            "use { p } from \"./gen/parser.wado\";\nuse { h } from \"../shared/helper.wado\";\nexport fn run() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("src/gen/parser.wado"),
+            "use x from \"./G.g4\" with { generator: { module: \"../../tool/gen.wado\" } };\npub fn p() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("shared/helper.wado"),
+            "use { p } from \"../src/gen/parser.wado\";\npub fn h() {}\n",
+        )
+        .unwrap();
+
+        let entry = root.join("src/main.wado");
+        let (invs, identities, _d) =
+            collect_inline_invocations_for_entry_with_identities(&entry, &root);
+        assert_eq!(invs.len(), 1);
+        let parser_key = &invs[0].decl_site.module;
+        assert_eq!(
+            identities.get(parser_key).map(String::as_str),
+            Some("./gen/parser.wado"),
+            "escape-reentry must canonicalize to the direct spelling",
+        );
+
+        let mut idx = wado_compiler::kiln::InvocationIndex::new();
+        idx.insert(parser_key, "./G.g4", "kiln:file:///g/parser.wado");
+        let conflicts = remap_index_decl_files(&mut idx, &identities);
+        assert!(conflicts.is_empty());
+        assert_eq!(
+            idx.redirect("./gen/parser.wado", "./G.g4"),
+            Some("kiln:file:///g/parser.wado"),
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // A `../`-chained back-reference to the entry folds onto `EntryPoint`, so
+    // the entry keeps a single identity.
+    #[test]
+    fn entry_backref_folds_to_single_identity() {
+        let root = unique_tmp("entry-backref");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("shared")).unwrap();
+        std::fs::write(
+            root.join("src/main.wado"),
+            "use g from \"./G.g4\" with { generator: { module: \"../tool/gen.wado\" } };\nuse { h } from \"../shared/helper.wado\";\nexport fn run() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("shared/helper.wado"),
+            "use { run } from \"../src/main.wado\";\npub fn h() {}\n",
+        )
+        .unwrap();
+
+        let entry = root.join("src/main.wado");
+        let entry_key = entry.to_string_lossy().to_string();
+        let (_invs, identities, _d) =
+            collect_inline_invocations_for_entry_with_identities(&entry, &root);
+        assert_eq!(
+            identities.get(&entry_key).map(String::as_str),
+            Some(entry_key.as_str()),
+            "the entry maps to itself only",
+        );
+        assert!(
+            !identities.values().any(|v| v == "./main.wado"),
+            "a back-reference must not introduce a relative entry identity: {identities:?}",
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn remap_index_decl_files_swaps_to_loader_identity() {
         use wado_compiler::kiln::InvocationIndex;
@@ -1038,7 +1169,8 @@ mod kiln_dir_module_tests {
             "./eval.wado".to_string(),
         );
 
-        remap_index_decl_files(&mut idx, &identities);
+        let conflicts = remap_index_decl_files(&mut idx, &identities);
+        assert!(conflicts.is_empty(), "no conflict for a single mapping");
 
         assert!(
             idx.redirect("/abs/example/eval.wado", "./Arith.g4")
@@ -1050,5 +1182,100 @@ mod kiln_dir_module_tests {
             Some("kiln:file:///g/arith.wado"),
             "the loader identity must redirect to the same URI"
         );
+    }
+
+    // Two keys collapsing onto one `(identity, from)` with different targets
+    // must be reported, not silently resolved last-write-wins (#1423).
+    #[test]
+    fn remap_index_decl_files_reports_conflict_on_identity_collision() {
+        use wado_compiler::kiln::InvocationIndex;
+
+        let mut idx = InvocationIndex::new();
+        idx.insert("/abs/a.wado", "./G.g4", "kiln:file:///g/from_a.wado");
+        idx.insert("/abs/b.wado", "./G.g4", "kiln:file:///g/from_b.wado");
+
+        let mut identities = wado_compiler::hashmap::IndexMap::default();
+        identities.insert("/abs/a.wado".to_string(), "./shared.wado".to_string());
+        identities.insert("/abs/b.wado".to_string(), "./shared.wado".to_string());
+
+        let conflicts = remap_index_decl_files(&mut idx, &identities);
+        assert_eq!(conflicts.len(), 1, "the collision must be reported");
+        assert_eq!(conflicts[0].code, wado_compiler::Code::KilnRedirectConflict);
+        assert_eq!(conflicts[0].severity, wado_compiler::Severity::Error);
+        // The first redirect survives; the conflicting second is dropped.
+        assert_eq!(
+            idx.redirect("./shared.wado", "./G.g4"),
+            Some("kiln:file:///g/from_a.wado"),
+        );
+    }
+
+    // Same identity *and* target is a benign duplicate: no diagnostic.
+    #[test]
+    fn remap_index_decl_files_allows_duplicate_identical_target() {
+        use wado_compiler::kiln::InvocationIndex;
+
+        let mut idx = InvocationIndex::new();
+        idx.insert("/abs/a.wado", "./G.g4", "kiln:file:///g/shared.wado");
+        idx.insert("/abs/b.wado", "./G.g4", "kiln:file:///g/shared.wado");
+
+        let mut identities = wado_compiler::hashmap::IndexMap::default();
+        identities.insert("/abs/a.wado".to_string(), "./shared.wado".to_string());
+        identities.insert("/abs/b.wado".to_string(), "./shared.wado".to_string());
+
+        let conflicts = remap_index_decl_files(&mut idx, &identities);
+        assert!(conflicts.is_empty(), "identical target is not a conflict");
+        assert_eq!(
+            idx.redirect("./shared.wado", "./G.g4"),
+            Some("kiln:file:///g/shared.wado"),
+        );
+    }
+
+    // An in-directory diamond already collapses to one canonical identity.
+    #[test]
+    fn diamond_import_yields_single_canonical_identity() {
+        let root = unique_tmp("diamond");
+        let _ = std::fs::remove_dir_all(&root);
+        let ex = root.join("example");
+        std::fs::create_dir_all(ex.join("a")).unwrap();
+        std::fs::create_dir_all(ex.join("b")).unwrap();
+        // `b/bar.wado` re-imports `a/foo.wado` via `../a/foo.wado`.
+        std::fs::write(
+            ex.join("main.wado"),
+            "use { f } from \"./a/foo.wado\";\nuse { g } from \"./b/bar.wado\";\nexport fn run() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            ex.join("a/foo.wado"),
+            "use x from \"./G.g4\" with { generator: { module: \"../../src/gen.wado\" } };\npub fn f() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            ex.join("b/bar.wado"),
+            "use { f } from \"../a/foo.wado\";\npub fn g() {}\n",
+        )
+        .unwrap();
+
+        let entry = ex.join("main.wado");
+        let (invs, identities, _d) =
+            collect_inline_invocations_for_entry_with_identities(&entry, &root);
+
+        assert_eq!(invs.len(), 1, "the generator clause is harvested once");
+        let foo_key = &invs[0].decl_site.module;
+        assert_eq!(
+            identities.get(foo_key).map(String::as_str),
+            Some("./a/foo.wado"),
+            "diamond must collapse to one canonical loader identity",
+        );
+
+        let mut idx = wado_compiler::kiln::InvocationIndex::new();
+        idx.insert(foo_key, "./G.g4", "kiln:file:///g/foo.wado");
+        let conflicts = remap_index_decl_files(&mut idx, &identities);
+        assert!(conflicts.is_empty());
+        assert_eq!(
+            idx.redirect("./a/foo.wado", "./G.g4"),
+            Some("kiln:file:///g/foo.wado"),
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

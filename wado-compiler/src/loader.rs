@@ -395,6 +395,7 @@ pub fn wasm_asset_kind_from_attrs(
 pub fn resolve_wasm_asset_path(
     from: &ModuleSource,
     import_source: &str,
+    entry_dir: &str,
 ) -> Result<String, LoadError> {
     if !import_source.starts_with("./") && !import_source.starts_with("../") {
         return Err(LoadError::InvalidModulePath {
@@ -410,11 +411,17 @@ pub fn resolve_wasm_asset_path(
             "wasi:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } | ModuleSource::Dependency { path } => {
-            Ok(resolve_module_path(path, import_source))
-        }
+        ModuleSource::Local { path } => Ok(crate::name::resolve_local_identity(
+            entry_dir,
+            path,
+            import_source,
+        )),
+        ModuleSource::Dependency { path } => Ok(resolve_module_path(path, import_source)),
         ModuleSource::Remote { url } => Ok(resolve_module_path(url, import_source)),
-        ModuleSource::EntryPoint { .. } => Ok(normalize_module_path(import_source)),
+        ModuleSource::EntryPoint { .. } => Ok(crate::name::canonical_local_path(
+            entry_dir,
+            &normalize_module_path(import_source),
+        )),
         ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
         ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
@@ -993,6 +1000,10 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     entry_module_source: Option<ModuleSource>,
     /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
     entry_canonical_name: Option<String>,
+    /// Entry directory: the anchor for canonicalizing local module identities
+    /// (see [`crate::name::canonical_local_path`]). Empty until the entry is
+    /// loaded, or when the entry filename has no parent.
+    entry_dir: String,
     /// Kiln invocation redirects: `(decl_file, from_path)` → generated entry
     /// module path. Consulted by `resolve_import` so a bare `use { X } from
     /// "<schema>"` picks up the generator's output.
@@ -1017,6 +1028,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             pending_implicit_wasm_imports: Vec::new(),
             entry_module_source: None,
             entry_canonical_name: None,
+            entry_dir: String::new(),
             invocations: crate::kiln::InvocationIndex::new(),
         }
     }
@@ -1094,6 +1106,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
         self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
+        self.entry_dir = crate::name::entry_dir_of(Some(&entry_module_source));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
@@ -1257,7 +1270,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         kind: WasmAssetKind,
         use_decl: &crate::ast::UseDecl,
     ) -> Result<(), LoadError> {
-        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source)?;
+        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &self.entry_dir)?;
         let source = self.interner.wasm(&path, kind);
 
         let _ = use_decl; // accepted for both wildcard and named forms; the
@@ -1481,9 +1494,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if import_source.starts_with("./") || import_source.starts_with("../") {
             // For relative imports, resolve against from_module_source
             if let ModuleSource::Local { path: from_file } = from_module_source {
-                let resolved = resolve_module_path(from_file, import_source);
-                // If the resolved path matches the entry module's canonical name,
-                // return the EntryPoint source to avoid duplicate module identity.
+                let resolved =
+                    crate::name::resolve_local_identity(&self.entry_dir, from_file, import_source);
+                // Fold a back-reference to the entry onto its EntryPoint identity.
                 if let Some(ref entry_canonical) = self.entry_canonical_name
                     && resolved == *entry_canonical
                     && let Some(ref entry_ms) = self.entry_module_source
@@ -1502,7 +1515,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 let resolved = resolve_module_path(path, import_source);
                 return Ok(self.interner.dependency(&resolved));
             }
-            // Entry point or stdlib: treat as relative to project root
+            // Entry imports canonicalize against the entry dir; stdlib / bare
+            // relative imports are not anchored there, so they only normalize.
+            if matches!(from_module_source, ModuleSource::EntryPoint { .. }) {
+                let resolved = crate::name::canonical_local_path(
+                    &self.entry_dir,
+                    &normalize_module_path(import_source),
+                );
+                return Ok(self.interner.local(&resolved));
+            }
             let canonical = normalize_module_path(import_source);
             return Ok(self.interner.local(&canonical));
         }

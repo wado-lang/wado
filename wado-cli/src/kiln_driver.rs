@@ -802,6 +802,11 @@ pub enum PipelineError {
     /// (e.g. a bare, non-`./` path). The per-clause diagnostics have already
     /// been emitted through the host; this carries the count for the summary.
     InlineClause(usize),
+    /// One or more generator invocations resolve to the same loader identity
+    /// and `from` schema but redirect to different generated modules. The
+    /// per-conflict diagnostics have already been emitted through the host;
+    /// this carries the count for the summary.
+    RedirectConflict(usize),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -822,6 +827,9 @@ impl std::fmt::Display for PipelineError {
             }
             PipelineError::InlineClause(n) => {
                 write!(f, "kiln: {n} invalid inline generator clause(s)")
+            }
+            PipelineError::RedirectConflict(n) => {
+                write!(f, "kiln: {n} conflicting generator redirect(s)")
             }
         }
     }
