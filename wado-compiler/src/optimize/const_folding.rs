@@ -615,13 +615,19 @@ impl ConstFoldVisitor<'_> {
         let Some(proj) = projected else {
             return false;
         };
-        // A non-projected sibling with an observable effect must keep the struct
-        // so its evaluation is preserved. A pure sibling (e.g. a `PackedArray`
-        // repr) is dropped with the struct.
-        if siblings
-            .iter()
-            .any(|op| !super::arena_query::is_pure_operand(engine.body, *op))
-        {
+        // Drop the struct only when every non-projected sibling is trivially
+        // discardable: a pooled value, or a `PackedArray` repr (a `String` /
+        // `List<u8>` literal's backing bytes). A broader "any pure operand"
+        // gate also folds siblings like a `field as u64` cast, which combined
+        // with ref-substitution and `-Os` bare-assert DCE leaves a scalarized
+        // multi-field struct (i128/u128 reinterpret) with dangling field reads.
+        let droppable = |op: Operand| {
+            op.as_value().is_some()
+                || op
+                    .as_expr()
+                    .is_some_and(|e| matches!(engine.body.exprs[e].kind, ExprKind::PackedArray(_)))
+        };
+        if siblings.iter().any(|&op| !droppable(op)) {
             return false;
         }
         engine.redirect_expr(e, proj)
