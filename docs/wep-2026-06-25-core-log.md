@@ -128,23 +128,33 @@ pub interface Log {
 
 ### Events
 
-Free functions; location defaults resolve at the caller. The message is an eager
-`String` (the optimizer drops it when the level is statically off; `enabled()`
-guards the runtime-off hot path).
+Free functions; location defaults resolve at the caller. The level wrappers
+(`trace`/`debug`/`info`/`warn`/`error`) own the filtering: each knows its level
+as a compile-time literal, so it gates on both axes before forwarding to the raw
+`event` emitter. The message is an eager `String` (the optimizer drops it when
+the level is statically off; `enabled()` guards the runtime-off hot path).
 
 ```wado
+// Level wrappers: #[ambient], with the level fixed at compile time.
 #[ambient]
-#[inline(always)]
+pub fn info(message: String, fields: List<Field> = [],
+            target: String = #function, file: String = #file, line: i32 = #line) {
+    if (Level::Info as i32) < LOG_MAX_LEVEL { return; }   // compile-time gate (folds)
+    if !enabled(Level::Info, target) { return; }           // runtime filter
+    event(Level::Info, message, fields, target, file, line);
+}
+// trace / debug / warn / error are identical with their own level.
+
+// Raw emitter: no gating; builds the event and dispatches. Direct callers
+// (e.g. a dynamic `level`) opt out of the wrappers' static gate.
+#[ambient]
 pub fn event(level: Level, message: String, fields: List<Field> = [],
              target: String = #function, file: String = #file, line: i32 = #line) {
-    if (level as i32) < LOG_MAX_LEVEL { return; }   // compile-time gate (folded)
-    let meta = Metadata { level, target, name: "", file, line };
-    if !Log::enabled(&meta) { return; }              // runtime filter
-    Log::event(&Event { meta, message, fields, parent: null });
+    Log::event(&Event { meta: Metadata { level, target, name: "", file, line },
+                        message, fields, parent: null });
 }
-// info / debug / warn / error wrap `event` with their level.
 
-pub fn enabled(level: Level, target: String = #function) -> bool { ... }   // expensive-field guard
+pub fn enabled(level: Level, target: String = #function) -> bool { ... }   // runtime filter; expensive-field guard
 ```
 
 ```wado
@@ -238,10 +248,10 @@ global LOG_LEVEL: String = "info";
 global LOG_MAX_LEVEL: i32 = level_from_str(&LOG_LEVEL);
 ```
 
-Below `LOG_MAX_LEVEL` is stripped everywhere (Zero-cost). A `Filter` layer adds
-runtime `EnvFilter`-style directives (`target=level`, `mod::path=debug`,
-span/field predicates) via `enabled(meta)`. This mirrors `tracing`'s
-`max_level_*` plus `EnvFilter`.
+Each level wrapper carries this gate, so below `LOG_MAX_LEVEL` is stripped
+everywhere (zero-cost). A `Filter` layer adds runtime `EnvFilter`-style
+directives (`target=level`, `mod::path=debug`, span/field predicates) via
+`enabled(meta)`. This mirrors `tracing`'s `max_level_*` plus `EnvFilter`.
 
 ### Error handling and reentrancy
 
@@ -254,11 +264,14 @@ handler.
 
 ### Zero-cost when disabled
 
-`LOG_MAX_LEVEL` is constant, so the gate folds; with `#[inline(always)]` a
-statically-off call inlines to `if true { return }` and DCE removes the body and
-the pure argument expressions (message, `field(...)`) over the
-[Live ValueGraph](./wep-2026-06-15-live-value-graph.md). Side-effecting arguments
-are not eliminable — guard those with `enabled()`.
+A wrapper's level is a compile-time literal and `LOG_MAX_LEVEL` is constant, so
+its `(Level::X as i32) < LOG_MAX_LEVEL` gate folds. When statically off the
+wrapper body reduces to an early return, making the call a pure no-op;
+interprocedural DCE over the
+[Live ValueGraph](./wep-2026-06-15-live-value-graph.md) then removes the call and
+its pure argument expressions (message, `field(...)`) at every call site — no
+`#[inline(always)]` needed. Side-effecting arguments are not eliminable — guard
+those with `enabled()`.
 
 ### Async semantics
 
