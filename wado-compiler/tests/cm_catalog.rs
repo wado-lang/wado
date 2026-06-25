@@ -21,9 +21,9 @@ mod common;
 
 use std::path::Path;
 
+use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
 use wasmtime::component::{Component, Linker, Val};
-use wado_compiler::{CompilerOptions, OptLevel};
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
@@ -95,7 +95,10 @@ fn cases() -> Vec<Case> {
         // `result` in all four WIT forms.
         case("id-result-both", Val::Result(Ok(b(Val::U32(5))))),
         case("id-result-ok", Val::Result(Ok(b(Val::U32(6))))),
-        case("id-result-err", Val::Result(Err(b(Val::String("boom".into()))))),
+        case(
+            "id-result-err",
+            Val::Result(Err(b(Val::String("boom".into())))),
+        ),
         case("id-result-unit", Val::Result(Ok(None))),
         // Named value types.
         case("id-record", point()),
@@ -123,10 +126,7 @@ fn cases() -> Vec<Case> {
         case("id-option-record", Val::Option(b(point()))),
         case(
             "id-list-tuple",
-            Val::List(vec![Val::Tuple(vec![
-                Val::U32(1),
-                Val::String("a".into()),
-            ])]),
+            Val::List(vec![Val::Tuple(vec![Val::U32(1), Val::String("a".into())])]),
         ),
         case(
             "id-result-list",
@@ -135,10 +135,7 @@ fn cases() -> Vec<Case> {
         // Association list (the CM map idiom `list<tuple<k, v>>`).
         case(
             "id-assoc-array",
-            Val::List(vec![Val::Tuple(vec![
-                Val::String("k".into()),
-                Val::U32(1),
-            ])]),
+            Val::List(vec![Val::Tuple(vec![Val::String("k".into()), Val::U32(1)])]),
         ),
     ]
 }
