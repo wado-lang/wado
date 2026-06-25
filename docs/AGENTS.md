@@ -132,3 +132,4 @@ It may include TODOs on WIP.
 - [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
 - [Command-Line Argument Parsing (`core:args`)](./wep-2026-06-22-core-args.md)
 - [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
+- [Structured Logging and Tracing (`core:log`)](./wep-2026-06-25-core-log.md)
