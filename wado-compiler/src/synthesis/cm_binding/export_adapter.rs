@@ -1734,12 +1734,47 @@ pub(super) fn synthesize_sync_export_binding(
     let is_unit_return = matches!(tt.get(user_return_type), ResolvedType::Unit);
     drop(tt);
 
+    // Lower the user result into the canonical lifted form. The sync canon lift
+    // expects the core function to return the *flattened* result: directly when
+    // it flattens to a single core value, or — for multi-value results — via a
+    // single i32 pointer into linear memory (the out-pointer convention).
     let adapter_return = if is_unit_return {
         body_stmts.push(expr_stmt(call_user));
         TypeTable::UNIT
     } else {
-        body_stmts.push(return_stmt(Some(call_user)));
-        user_return_type
+        let mut next_local = param_count;
+        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
+        body_stmts.push(let_stmt("__result", result_local, user_return_type, call_user));
+        let flat = synthesize_lower_to_flat(
+            local_ref(result_local, "__result", user_return_type),
+            user_return_type,
+            &mut next_local,
+            &mut body_stmts,
+            &mut locals,
+            tir_modules,
+            lift_ctx,
+        );
+        match flat.len() {
+            0 => TypeTable::UNIT,
+            1 => {
+                let f = &flat[0];
+                let tid = cm_val_type_to_type_id(f.cm_type);
+                body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
+                tid
+            }
+            _ => {
+                // Multi-value results return via the canonical out-pointer. Not
+                // yet synthesized for the sync export path; until then this
+                // returns the Wado value, which the validator rejects for these
+                // shapes (tracked: sync-export adapter out-pointer lowering).
+                body_stmts.push(return_stmt(Some(local_ref(
+                    result_local,
+                    "__result",
+                    user_return_type,
+                ))));
+                user_return_type
+            }
+        }
     };
 
     let body = block(body_stmts);

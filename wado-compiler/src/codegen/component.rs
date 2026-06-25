@@ -1695,14 +1695,20 @@ fn emit_world_exports(
     // Shared across all `--lib` exports so a named type (e.g. `point`) is
     // defined once and reused. The interface hint resolves lib-local named
     // types against the package's own default-interface FQ in the registry.
+    let is_lib_world = component_plan.world_exports.iter().any(|e| e.sync_lift);
     let lib_iface_fq = component_plan
         .world_exports
         .iter()
         .find(|e| e.sync_lift)
         .and_then(|e| e.from_interface_fq.clone());
-    let mut lib_type_gen = lib_iface_fq
-        .as_deref()
-        .map(crate::component_model::CmTypeGen::with_interface_hint);
+    // One engine shared across all lib exports (dedups named types). The
+    // interface hint resolves lib-local named types against the package's
+    // default-interface FQ; a functions-only (direct-export) lib has no named
+    // types and needs no hint.
+    let mut lib_type_gen = is_lib_world.then(|| match lib_iface_fq.as_deref() {
+        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+        None => crate::component_model::CmTypeGen::new(),
+    });
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
 
     for export in &component_plan.world_exports {
