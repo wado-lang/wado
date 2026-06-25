@@ -1,0 +1,205 @@
+//! Logger PoC — technical validation for the `core:log` WEP.
+//!
+//! Validates against the real compiler, NOT the eventual API:
+//! - `Log` is a plain effect here (ambient effects are not implemented yet),
+//!   so every logging function carries `with Log`. This is the infectiousness
+//!   that motivates the ambient-effect extension.
+//! - `to_value` is faked via a JSON round-trip (no `core:value::to_value` yet).
+//!
+//! What this DOES prove on today's Wado:
+//! - default args capturing CALLER `#file`/`#line`/`#function`,
+//! - effect-handler nesting + forwarding (layers / contextual fields),
+//! - generic `field<T: Serialize>` and serde encoding of the whole `Event`,
+//! - effect-polymorphic higher-order `in_span`.
+
+use { Serialize } from "core:serde";
+use { Value } from "core:value";
+use { to_string, from_string } from "core:json";
+
+pub enum Level { Trace, Debug, Info, Warn, Error }
+
+pub struct Metadata {
+    pub level: Level,
+    pub target: String,
+    pub file: String,
+    pub line: i32,
+}
+
+pub struct Field {
+    pub key: String,
+    pub value: Value,
+}
+
+pub struct Event {
+    pub meta: Metadata,
+    pub message: String,
+    pub fields: List<Field> = [],
+}
+
+// Serde "derive" in Wado is an empty compiler-synthesized impl.
+impl Serialize for Level;
+impl Serialize for Metadata;
+impl Serialize for Field;
+impl Serialize for Event;
+
+// PoC stand-in for `core:value::to_value`: round-trip through JSON.
+// NOTE: JSON has no int/float distinction, so `42` comes back as Float.
+// A real `to_value` would be a Value-building Serializer that preserves Int.
+fn to_value<T: Serialize>(x: &T) -> Value {
+    let s = match to_string(x) {
+        Ok(s) => s,
+        Err(_) => return Value::Null,
+    };
+    return match from_string::<Value>(s) {
+        Ok(v) => v,
+        Err(_) => Value::Null,
+    };
+}
+
+pub fn field<T: Serialize>(key: String, value: T) -> Field {
+    return Field { key, value: to_value(&value) };
+}
+
+// The subscriber abstraction (would be `#[ambient]` in the real design).
+interface Log {
+    fn enabled(level: Level) -> bool;
+    fn event(event: Event);
+}
+
+// Facade. Location defaults resolve at the CALLER (post-rebase behavior).
+pub fn event(
+    level: Level,
+    message: String,
+    fields: List<Field> = [],
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) with Log {
+    if !Log::enabled(level) { return; }
+    Log::event(Event { meta: Metadata { level, target, file, line }, message, fields });
+}
+
+pub fn info(
+    message: String,
+    fields: List<Field> = [],
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) with Log {
+    event(Level::Info, message, fields, target, file, line);
+}
+
+pub fn warn(
+    message: String,
+    fields: List<Field> = [],
+    target: String = #function,
+    file: String = #file,
+    line: i32 = #line,
+) with Log {
+    event(Level::Warn, message, fields, target, file, line);
+}
+
+// A capturing sink (test backend).
+struct CaptureSink {
+    events: List<Event>,
+}
+
+impl Log for CaptureSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume true
+    }
+    fn event(&mut self, event: Event) {
+        self.events.push(event);
+        resume ()
+    }
+}
+
+// A contextual layer: prepends fixed fields, forwards to the outer subscriber.
+struct Context {
+    fields: List<Field>,
+}
+
+impl Log for Context {
+    fn enabled(&self, level: Level) -> bool {
+        resume Log::enabled(level)
+    }
+    fn event(&self, event: Event) {
+        let mut merged = self.fields;
+        merged.extend(&event.fields);
+        Log::event(Event { meta: event.meta, message: event.message, fields: merged });
+        resume ()
+    }
+}
+
+// Effect-polymorphic scope (the `in_span` closure pattern). PoC: just brackets
+// the body; the real version would emit enter/exit around it.
+fn in_span<T, effect E>(name: String, body: fn() -> T with E) -> T with E {
+    return body();
+}
+
+test "captures message, level, and caller location" {
+    let mut sink = CaptureSink { events: [] };
+    with Log => &mut sink do {
+        let expected_line = #line + 1;
+        info(`hello`);
+        assert sink.events.len() == 1;
+        let e = sink.events[0];
+        assert e.message == "hello";
+        assert e.meta.level matches { Info };
+        assert e.meta.line == expected_line;
+        assert e.meta.file.contains("logger_poc.wado");
+
+        warn(`heads up`, [field("code", 1)]);
+        assert sink.events.len() == 2;
+        assert sink.events[1].meta.level matches { Warn };
+    }
+}
+
+test "generic field accepts any Serialize value" {
+    let mut sink = CaptureSink { events: [] };
+    with Log => &mut sink do {
+        info(`with fields`, [field("user", "alice"), field("n", 42)]);
+        let e = sink.events[0];
+        assert e.fields.len() == 2;
+        assert e.fields[0].key == "user";
+        assert e.fields[0].value matches { String(_) };
+        // JSON round-trip turns 42 into Float — documents the to_value gap.
+        assert e.fields[1].value matches { Float(_) };
+    }
+}
+
+test "context layer prepends fields and forwards to outer sink" {
+    let mut sink = CaptureSink { events: [] };
+    let ctx = Context { fields: [field("request_id", "abc")] };
+    with Log => &mut sink do {
+        with Log => &ctx do {
+            info(`x`, [field("k", "v")]);
+        }
+    }
+    assert sink.events.len() == 1;
+    let e = sink.events[0];
+    assert e.fields.len() == 2;
+    assert e.fields[0].key == "request_id";
+    assert e.fields[1].key == "k";
+}
+
+test "whole event serializes via serde" {
+    let e = Event {
+        meta: Metadata { level: Level::Warn, target: "t", file: "f", line: 9 },
+        message: "m",
+        fields: [field("k", "v")],
+    };
+    let s = to_string(&e);
+    assert s matches { Ok(_) };
+}
+
+test "effect-polymorphic in_span carries the Log effect" {
+    let mut sink = CaptureSink { events: [] };
+    with Log => &mut sink do {
+        in_span(`req`, || {
+            info(`inside span`);
+        });
+    }
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "inside span";
+}
