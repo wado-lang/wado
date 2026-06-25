@@ -1039,8 +1039,6 @@ impl<'a> Unparser<'a> {
                 this.last_source_line = method.span.end_line();
             }
 
-            // Effect-handler rest clause: `..trap` opts the impl in to trapping
-            // on any operation of the trait/effect that is not implemented above.
             if i.has_rest {
                 if !i.methods.is_empty() {
                     this.output.push('\n');

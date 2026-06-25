@@ -5242,11 +5242,9 @@ impl Parser {
         let mut methods = Vec::new();
         let mut has_rest = false;
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            // Effect-handler rest clause: `..trap` denotes "trap on any
-            // unimplemented operation of this effect". Must appear last in the
-            // impl block; an explicit semicolon after it is optional. (`..forward`,
-            // which delegates to the outer handler, is not yet implemented; bare
-            // `..` is no longer accepted.)
+            // Effect-handler rest clause: `..trap` traps on any unimplemented
+            // operation of this effect and must be the impl block's last item.
+            // `..forward` (delegate to the outer handler) is not yet implemented.
             if self.check_dot_dot_or_ellipsis() {
                 let dot_span = self.consume_dot_dot()?;
                 match self.peek_kind().as_ident_name() {
@@ -7318,7 +7316,6 @@ line 2
 
     #[test]
     fn parse_impl_block_bare_rest_rejected() {
-        // Bare `..` is no longer accepted; only `..trap` is.
         let source = r"
             impl Foo for Bar {
                 fn op(&self) -> i32 { return 1; }
@@ -7349,7 +7346,6 @@ line 2
 
     #[test]
     fn parse_impl_block_rest_must_be_last() {
-        // `..trap` followed by another method is rejected.
         let source = r"
             impl Foo for Bar {
                 ..trap

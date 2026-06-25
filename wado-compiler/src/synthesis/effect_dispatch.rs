@@ -1674,11 +1674,8 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             field_index: 0,
         });
         for op in &plan.operations {
-            // The `..trap` rest clause in `impl Effect for T` lets a handler
-            // implement only some of the effect's operations; calls to
-            // un-implemented ops trap at runtime. Emit a normal forwarding
-            // closure for ops the impl actually defines and a trapping
-            // stub closure for the rest.
+            // Ops the impl defines get a forwarding closure; the rest (`..trap`)
+            // get a trapping stub.
             let closure_expr = if impl_info.methods.contains_key(&op.name) {
                 build_handler_op_closure(
                     op,

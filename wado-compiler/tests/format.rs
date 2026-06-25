@@ -442,8 +442,6 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
-/// The effect-handler `..trap` rest clause round-trips and stays last in the
-/// impl block.
 #[test]
 fn test_format_effect_handler_trap_rest() {
     let source = r"impl Foo for Bar {
