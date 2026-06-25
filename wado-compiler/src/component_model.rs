@@ -2747,6 +2747,8 @@ impl CmTypeGen {
             Type::Named(named) => match named.name.as_str() {
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
+                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
                 "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
                 "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
                 "u8" => ComponentValType::Primitive(PrimitiveValType::U8),

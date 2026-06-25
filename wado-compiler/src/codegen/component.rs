@@ -3836,10 +3836,13 @@ fn append_interface_instance_exports(
             .map(|(name, idx)| (name.as_str(), ComponentExportKind::Type, *idx))
             .collect();
         for export in group {
+            // The instance item name and the lifted-func lookup both use the
+            // kebab CM name (`emit_world_exports` registers under it); the
+            // underscore `export.name` is only the core-module symbol.
             items.push((
-                export.name.as_str(),
+                export.cm_export_name.as_str(),
                 ComponentExportKind::Func,
-                ctx.comp_func_idx(&export.name),
+                ctx.comp_func_idx(&export.cm_export_name),
             ));
         }
 
