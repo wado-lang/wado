@@ -128,10 +128,9 @@ pub interface Log {
 
 ### Events
 
-Free functions marked `#[ambient]`, so performing `Log` adds no `with Log` to
-callers — callable anywhere. Location defaults resolve at the caller. The message
-is an eager `String` (the optimizer drops it when the level is statically off;
-`enabled()` guards the runtime-off hot path).
+Free functions; location defaults resolve at the caller. The message is an eager
+`String` (the optimizer drops it when the level is statically off; `enabled()`
+guards the runtime-off hot path).
 
 ```wado
 #[ambient]
@@ -215,12 +214,10 @@ impl Log for Context {
 pub struct Filter { directives: List<Directive> }   // runtime EnvFilter-style layer
 ```
 
-Install by nesting `with`:
+Compose layers by nesting `with` (a filter outside a formatter):
 
 ```wado
-export fn run() with Stdout, Stderr, SystemClock {
-    with Log => &Filter { directives: parse_env() }, Log => &TextSink { location: true } do { app(); }
-}
+with Log => &Filter { directives: parse_env() }, Log => &TextSink {} do { app(); }
 ```
 
 ### Timestamp
@@ -277,10 +274,11 @@ requests). So:
 
 ## Language Notes
 
-No new language feature is required. The pieces it leans on already exist:
-function-level `#[ambient]` (no `with Log` infection), effect handlers (sinks,
-layers, scoped overrides), default arguments + call-site `#file`/`#line`/`#function`,
-compile-time `#[param]`, and `core:value::to_value`.
+The core logger needs no new language feature (it reuses `#[ambient]`, effect
+handlers, default arguments + call-site location literals, `#[param]`, and
+`core:value::to_value`). Two notes follow: span scoping, also achievable today;
+and an optional efficient-field-passing path that is the one part needing new
+language features.
 
 ### Span scoping — no language change required
 
@@ -299,9 +297,9 @@ fn in_span<T, effect E>(s: &Span, body: fn() -> T with E) -> T with E {
 }
 ```
 
-A native `with span do { … }` (desugaring to `enter; B; exit`, with `exit` on
-every exit path via the restore injector) is an optional ergonomic upgrade so
-control flow can escape directly to the enclosing function. Optional.
+A native `with span do { … }` (desugaring to `enter; B; exit` with `exit` on
+every exit path via the restore injector) is an optional ergonomic upgrade,
+letting control flow escape directly to the enclosing function.
 
 ### Efficient field passing (performance-gated)
 
