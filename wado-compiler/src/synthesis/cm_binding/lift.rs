@@ -24,7 +24,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LiftContext, binary_add, canonical_wasi_package, cm_flags_byte_size, cm_type_to_type_id,
-    is_unit_type, kebab_to_pascal, module_source_for_cm_interface,
+    is_unit_type, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -348,9 +348,10 @@ fn try_lift_wasi_struct(
     // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
-        let mut tt = ctx.type_table.borrow_mut();
-        let module_source = module_source_for_cm_interface(&mut ctx.interner.borrow_mut(), source);
-        tt.make_struct(named.name.clone(), module_source)
+        let module_source = ctx.module_source_for(source);
+        ctx.type_table
+            .borrow_mut()
+            .make_struct(named.name.clone(), module_source)
     };
 
     // Lift each field — Wado field names come directly from this interface's

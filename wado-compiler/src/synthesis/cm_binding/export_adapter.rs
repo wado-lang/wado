@@ -991,6 +991,7 @@ pub(super) fn synthesize_result_export_binding(
         type_table,
         cm_package,
         interner,
+        lib_module_source: None,
     };
 
     // Build adapter params and call args
@@ -1568,6 +1569,7 @@ pub(super) fn synthesize_general_export_binding(
         type_table,
         cm_package,
         interner,
+        lib_module_source: None,
     };
 
     let (adapter_params, call_args, param_count) = build_export_adapter_params(
@@ -1707,6 +1709,7 @@ pub(super) fn synthesize_sync_export_binding(
         type_table,
         cm_package,
         interner,
+        lib_module_source: Some(entry_source),
     };
 
     let (adapter_params, call_args, param_count) = build_export_adapter_params(
@@ -1908,6 +1911,7 @@ pub(super) fn synthesize_async_export_binding(
             type_table,
             cm_package,
             interner,
+            lib_module_source: None,
         };
         for (i, (_name, param_ty)) in world_params.iter().enumerate() {
             let user_type_id = user_func_ref

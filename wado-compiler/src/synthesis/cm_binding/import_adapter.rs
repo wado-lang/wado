@@ -328,6 +328,7 @@ fn synthesize_async_lift_function(
             type_table,
             cm_package: &func_info.package,
             interner,
+            lib_module_source: None,
         };
         let lifted = synthesize_lift(
             &resolved,
@@ -1427,6 +1428,7 @@ pub(super) fn synthesize_adapter(
             type_table,
             cm_package: &func_info.package,
             interner,
+            lib_module_source: None,
         };
         let lifted = synthesize_lift(
             &resolved,
@@ -1498,6 +1500,7 @@ pub(super) fn synthesize_adapter(
                 type_table,
                 cm_package: &func_info.package,
                 interner,
+                lib_module_source: None,
             };
             let lifted = synthesize_lift_flat_result(
                 &resolved,

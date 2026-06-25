@@ -136,6 +136,31 @@ pub struct LiftContext<'a> {
     /// into `synthesize_lift` or its helpers. The lift path itself only
     /// borrows transiently inside `module_source_for_cm_interface`.
     pub interner: &'a RefCell<ModuleSourceInterner>,
+    /// Entry module source for a `--lib` compile. Lib-local named types
+    /// (`struct`/`variant`/`enum`/`flags`) are registered in the type table
+    /// under the entry module's `ModuleSource`, but their CM interface FQ
+    /// (`wado:pkg/iface@ver`) is neither `wasi:` nor `core:`, so
+    /// `module_source_for_cm_interface` cannot derive it. Synthesized lifts of
+    /// such types use this source so the struct/variant `TypeId` matches the
+    /// elaborator-registered one (and resolves to a concrete WIR ref).
+    /// `None` for WASI/kiln bindings.
+    pub lib_module_source: Option<&'a ModuleSource>,
+}
+
+impl LiftContext<'_> {
+    /// Resolve the `ModuleSource` for a CM named type declared by `source` (its
+    /// interface FQ). WASI/kiln types derive it from the FQ; lib-local types
+    /// (FQ neither `wasi:` nor `core:`) use the `--lib` entry source so the
+    /// resulting `TypeId` matches the elaborator-registered struct/variant.
+    pub(super) fn module_source_for(&self, source: &str) -> ModuleSource {
+        if !source.starts_with("wasi:")
+            && !source.starts_with("core:")
+            && let Some(entry) = self.lib_module_source
+        {
+            return entry.clone();
+        }
+        module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
+    }
 }
 
 /// Convert a WASI AST `Type` to a `TypeId` in the type table.
