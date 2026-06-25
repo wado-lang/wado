@@ -63,6 +63,8 @@ interface Log {
     fn exit(id: u64);
     fn close(id: u64);
     fn current_span() -> u64;
+    fn record_fields(id: u64, fields: List<Field>);
+    fn follows_from(id: u64, cause: u64);
     fn event(event: Event);
 }
 
@@ -109,6 +111,18 @@ pub fn span(name: String) -> u64 with Log {
     return Log::new_span(name);
 }
 
+pub fn record(id: u64, fields: List<Field>) with Log {
+    Log::record_fields(id, fields);
+}
+
+pub fn follows(id: u64, cause: u64) with Log {
+    Log::follows_from(id, cause);
+}
+
+pub fn current() -> u64 with Log {
+    return Log::current_span();
+}
+
 // Effect-polymorphic scope: brackets enter/exit/close around the body. A closure
 // cannot skip past the exit/close calls, so they run on every body exit path.
 fn in_span<T, effect E>(id: u64, body: fn() -> T with E) -> T with E, Log {
@@ -127,6 +141,8 @@ struct CaptureSink {
     stack: List<u64> = [],
     events: List<Event> = [],
     trace: List<String> = [],
+    recorded: List<String> = [],
+    links: List<String> = [],
 }
 
 impl Log for CaptureSink {
@@ -159,6 +175,16 @@ impl Log for CaptureSink {
             None => 0,
         };
         resume top
+    }
+    fn record_fields(&mut self, id: u64, fields: List<Field>) {
+        for let f of fields {
+            self.recorded.push(`record:{id}:{f.key}`);
+        }
+        resume ()
+    }
+    fn follows_from(&mut self, id: u64, cause: u64) {
+        self.links.push(`{id}<-{cause}`);
+        resume ()
     }
     fn event(&mut self, event: Event) {
         self.events.push(event);
@@ -193,6 +219,14 @@ impl Log for Context {
     }
     fn current_span(&self) -> u64 {
         resume Log::current_span()
+    }
+    fn record_fields(&self, id: u64, fields: List<Field>) {
+        Log::record_fields(id, fields);
+        resume ()
+    }
+    fn follows_from(&self, id: u64, cause: u64) {
+        Log::follows_from(id, cause);
+        resume ()
     }
     fn event(&self, event: Event) {
         let mut merged = self.fields;
@@ -231,10 +265,60 @@ impl Log for JsonSink {
     fn current_span(&self) -> u64 {
         resume 0 as u64
     }
+    fn record_fields(&self, id: u64, fields: List<Field>) {
+        resume ()
+    }
+    fn follows_from(&self, id: u64, cause: u64) {
+        resume ()
+    }
     fn event(&mut self, event: Event) {
         match to_string(&event) {
             Ok(s) => self.lines.push(s),
             Err(_) => {},
+        }
+        resume ()
+    }
+}
+
+// A standalone filter layer (EnvFilter-style): drops below `min`, forwards the
+// rest to the outer subscriber. Validates composing two real layers.
+struct Filter {
+    min: Level,
+}
+
+impl Log for Filter {
+    fn enabled(&self, level: Level) -> bool {
+        resume (level as i32) >= (self.min as i32) && Log::enabled(level)
+    }
+    fn new_span(&self, name: String) -> u64 {
+        resume Log::new_span(name)
+    }
+    fn enter(&self, id: u64) {
+        Log::enter(id);
+        resume ()
+    }
+    fn exit(&self, id: u64) {
+        Log::exit(id);
+        resume ()
+    }
+    fn close(&self, id: u64) {
+        Log::close(id);
+        resume ()
+    }
+    fn current_span(&self) -> u64 {
+        resume Log::current_span()
+    }
+    fn record_fields(&self, id: u64, fields: List<Field>) {
+        Log::record_fields(id, fields);
+        resume ()
+    }
+    fn follows_from(&self, id: u64, cause: u64) {
+        Log::follows_from(id, cause);
+        resume ()
+    }
+    fn event(&self, event: Event) {
+        if (event.meta.level as i32) >= (self.min as i32) {
+            Log::event(event);
         }
         resume ()
     }
@@ -333,4 +417,78 @@ test "effect-polymorphic in_span returns the body value" {
     };
     assert n == 42;
     assert sink.events[0].message == "working";
+}
+
+test "in_span runs exit and close even when the body returns early" {
+    let mut sink = CaptureSink {};
+    let n = with Log => &mut sink do {
+        in_span(span(`early`), || {
+            if true {
+                return 7;
+            }
+            info(`unreachable`);
+            return 0;
+        })
+    };
+    assert n == 7;
+    // exit/close still fired despite the early return inside the closure.
+    let trace: List<String> = ["new:early#1", "enter:1", "exit:1", "close:1"];
+    assert sink.trace == trace;
+    assert sink.events.is_empty();
+}
+
+test "nested spans parent to the innermost span" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        let outer = span(`outer`);
+        in_span(outer, || {
+            info(`in outer`);
+            let inner = span(`inner`);
+            in_span(inner, || {
+                info(`in inner`);
+            });
+            info(`back in outer`);
+        });
+    }
+    assert sink.events[0].parent == 1;   // in outer
+    assert sink.events[1].parent == 2;   // in inner (innermost)
+    assert sink.events[2].parent == 1;   // back in outer
+}
+
+test "current() reports the active span and 0 outside" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        assert current() == 0;
+        in_span(span(`s`), || {
+            assert current() == 1;
+        });
+        assert current() == 0;
+    }
+}
+
+test "record_fields and follows_from reach the subscriber" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        let a = span(`a`);
+        let b = span(`b`);
+        record(a, [field("user", "alice"), field("ip", "127.0.0.1")]);
+        follows(b, a);
+    }
+    let recorded: List<String> = ["record:1:user", "record:1:ip"];
+    let links: List<String> = ["2<-1"];
+    assert sink.recorded == recorded;
+    assert sink.links == links;
+}
+
+test "a filter layer composes over a sink" {
+    let mut sink = CaptureSink {};            // passes everything
+    let filt = Filter { min: Level::Warn };
+    with Log => &mut sink do {
+        with Log => &filt do {
+            info(`drop`);
+            warn(`keep`);
+        }
+    }
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "keep";
 }
