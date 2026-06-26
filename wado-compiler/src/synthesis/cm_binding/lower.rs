@@ -324,19 +324,24 @@ pub(super) fn synthesize_lower_tuple(
     stmts
 }
 
-/// Lower a WASI variant (GC struct) to a linear memory buffer at the given address.
+/// A variant case for memory lowering: its Wado (Pascal) case name and, for a
+/// payload-bearing case, the payload's CM AST `Type` and GC `TypeId`.
+pub(super) type CmMemCase = (String, Option<(Type, TypeId)>);
+
+/// Lower a variant GC value to a linear-memory buffer at `addr`, given its cases.
 ///
-/// Memory layout (Canonical ABI):
-/// - discriminant byte at offset 0
-/// - payload at `align_to(1, payload_align)`, lowered using `synthesize_lower`
-///
-/// For each variant case with a payload, generates:
-///   if `variant_test(value`, `case_i`) { `store_payload(payload_addr`, `variant_payload(value`, i)) }
-pub(super) fn synthesize_lower_wasi_variant_to_memory(
-    named: &NamedType,
-    source: &str,
+/// Memory layout (Canonical ABI): a 1-byte discriminant at offset 0, then the
+/// active case's payload at `align_to(1, max_payload_align)`; each case lowers
+/// via a `Match` arm. `disc_of` builds the discriminant byte from the
+/// materialised value — registry variants use `variant_tag` (the full tag),
+/// while `Result` uses `variant_test` on its Err case. Shared by the
+/// registry-backed variant path and the `Result` path; `Option` keeps its own
+/// helper (its `None` is a null ref that would trap `variant_tag`).
+fn synthesize_lower_variant_to_memory(
     value: TirExpr,
     addr: TirExpr,
+    cases: Vec<CmMemCase>,
+    disc_of: impl Fn(TirExpr) -> TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -344,72 +349,45 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let name = named.name.as_str();
-    let cases = if let Some(c) = cm_interface_registry.get_variant_cases_by_source(source, name) {
-        c.to_vec()
-    } else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
-
     let value_type_id = value.type_id;
 
-    // Materialize value into a local so we can reference it multiple times
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("__variant_val", value_local, value_type_id, value));
 
-    // Store discriminant byte
     stmts.push(expr_stmt(builtin_call(
         "i32_store8",
         vec![
             addr.clone(),
-            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
+            disc_of(local_ref(value_local, "__variant_val", value_type_id)),
         ],
         TypeTable::UNIT,
     )));
 
-    // Compute payload offset (aligned to max payload alignment)
     let mut max_payload_align = 1u32;
-    for case in &cases {
-        if let Some(payload_ty) = &case.payload {
+    for (_, payload) in &cases {
+        if let Some((payload_ty, _)) = payload {
             max_payload_align = max_payload_align.max(
                 crate::component_model::cm_align_with_registry(payload_ty, cm_interface_registry),
             );
         }
     }
     let payload_offset = cm_abi::align_to(1, max_payload_align);
-
     let payload_addr = if payload_offset == 0 {
         addr
     } else {
         binary_add(addr, i32_const(payload_offset as i32))
     };
 
-    // Build a single Match over the materialised value with one arm
-    // per case. Payload-bearing arms bind the payload to a fresh
-    // local and run the recursive memory-lowering helper on it;
-    // unit-payload arms have an empty body. Variant `Match` is
-    // exhaustive at TIR level, so no wildcard arm is needed.
     let span = synth_span();
     let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
-    for case in &cases {
-        let case_name = kebab_to_pascal(&case.cm_name);
-        if let Some(payload_ty) = &case.payload {
-            let payload_type_id = {
-                let mut tt = type_table.borrow_mut();
-                cm_type_to_type_id(payload_ty, &mut tt, cm_interface_registry, wasi_package)
-            };
+    for (case_name, payload) in cases {
+        if let Some((payload_ty, payload_type_id)) = payload {
             let binding_local = alloc_local(next_local, locals, payload_type_id);
             let binding_name = format!("__variant_payload_{binding_local}");
             let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
             let case_stmts = synthesize_lower_wasi_type_to_memory(
-                payload_ty,
+                &payload_ty,
                 payload_expr,
                 payload_addr.clone(),
                 next_local,
@@ -467,6 +445,59 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         );
         stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
     }
+}
+
+/// Lower a registry-backed variant (WASI or lib-local) GC value to memory.
+/// Resolves the cases from the registry, then delegates to
+/// [`synthesize_lower_variant_to_memory`].
+pub(super) fn synthesize_lower_wasi_variant_to_memory(
+    named: &NamedType,
+    source: &str,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let name = named.name.as_str();
+    let Some(cases) = cm_interface_registry.get_variant_cases_by_source(source, name) else {
+        // Fallback: store as i32
+        stmts.push(expr_stmt(builtin_call(
+            "i32_store8",
+            vec![addr, variant_tag(value)],
+            TypeTable::UNIT,
+        )));
+        return;
+    };
+    let mem_cases: Vec<CmMemCase> = cases
+        .to_vec()
+        .into_iter()
+        .map(|case| {
+            let payload = case.payload.map(|ty| {
+                let tid = {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(&ty, &mut tt, cm_interface_registry, wasi_package)
+                };
+                (ty, tid)
+            });
+            (kebab_to_pascal(&case.cm_name), payload)
+        })
+        .collect();
+    synthesize_lower_variant_to_memory(
+        value,
+        addr,
+        mem_cases,
+        variant_tag,
+        next_local,
+        stmts,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
 }
 
 /// Lower an `Option<T>` value to linear memory at the given address.
@@ -610,9 +641,10 @@ pub(super) fn synthesize_lower_option_to_memory(
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
 }
 
-/// Lower a `Result<T, E>` (GC value) to a CM `result` at `addr`: a discriminant
-/// byte (0 = ok, 1 = err) plus the active arm's payload lowered at the aligned
-/// payload offset. Unit arms contribute no payload.
+/// Lower a `Result<T, E>` (GC value) to a CM `result` at `addr`. `Result` is a
+/// 2-case variant (Ok=0, Err=1), so it shares [`synthesize_lower_variant_to_memory`]:
+/// build its case list (Ok/Err names from compiler items, payload types from the
+/// instance's type args; unit arms carry no payload) and delegate.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn synthesize_lower_result_to_memory(
     ok_type: &Type,
@@ -650,94 +682,33 @@ pub(super) fn synthesize_lower_result_to_memory(
         )
     };
 
-    let value_local = alloc_local(next_local, locals, value_type_id);
-    stmts.push(let_stmt("__res_val", value_local, value_type_id, value));
-
-    // disc byte: 1 when Err, 0 when Ok.
-    stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
-        vec![
-            addr.clone(),
-            variant_test(
-                local_ref(value_local, "__res_val", value_type_id),
-                err_index,
-                &err_name,
-            ),
-        ],
-        TypeTable::UNIT,
-    )));
-
-    let ok_align = crate::component_model::cm_align_with_registry(ok_type, cm_interface_registry);
-    let err_align = crate::component_model::cm_align_with_registry(err_type, cm_interface_registry);
-    let payload_offset = cm_abi::align_to(1, ok_align.max(err_align));
-    let payload_addr = if payload_offset == 0 {
-        addr
-    } else {
-        binary_add(addr, i32_const(payload_offset as i32))
-    };
-
-    let arm = |is_ok: bool,
-               arm_name: &str,
-               payload_ty: &Type,
-               payload_tid: TypeId,
-               next_local: &mut u32,
-               locals: &mut Vec<TirLocal>|
-     -> TirMatchArm {
-        let span = synth_span();
-        let is_unit = is_unit_type(payload_ty);
-        let binding_local = alloc_local(next_local, locals, payload_tid);
-        let binding_name = format!("__res_{}_{binding_local}", if is_ok { "ok" } else { "err" });
-        let mut body = Vec::new();
-        if !is_unit {
-            body = synthesize_lower_wasi_type_to_memory(
-                payload_ty,
-                local_ref(binding_local, &binding_name, payload_tid),
-                payload_addr.clone(),
-                next_local,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            );
-        }
-        TirMatchArm {
-            pattern: TirPattern::Variant {
-                enum_type: value_type_id,
-                variant_name: arm_name.to_string(),
-                bindings: if is_unit {
-                    Vec::new()
-                } else {
-                    vec![TirPattern::Binding {
-                        name: binding_name,
-                        local_index: binding_local,
-                        type_id: payload_tid,
-                    }]
-                },
-                payload_type: if is_unit { TypeTable::UNIT } else { payload_tid },
-            },
-            guard: None,
-            body: TirExpr::new(
-                TirExprKind::Block(crate::tir::TirBlock::new(body, span)),
-                TypeTable::UNIT,
-                span,
-            ),
-            span,
+    let arm = |name: String, ty: &Type, tid: TypeId| -> CmMemCase {
+        if is_unit_type(ty) {
+            (name, None)
+        } else {
+            (name, Some((ty.clone(), tid)))
         }
     };
+    let cases = vec![
+        arm(ok_name, ok_type, ok_tid),
+        arm(err_name.clone(), err_type, err_tid),
+    ];
 
-    let ok_arm = arm(true, &ok_name, ok_type, ok_tid, next_local, locals);
-    let err_arm = arm(false, &err_name, err_type, err_tid, next_local, locals);
-    stmts.push(TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(local_ref(value_local, "__res_val", value_type_id)),
-                arms: vec![ok_arm, err_arm],
-            },
-            TypeTable::UNIT,
-            synth_span(),
-        )),
-        synth_span(),
-    ));
+    // disc byte: `variant_test(Err)` → 1 when Err, 0 when Ok. (`variant_tag`,
+    // used for registry variants, mis-resolves the generic `Result` struct.)
+    let disc_of = move |v: TirExpr| variant_test(v, err_index, &err_name);
+    synthesize_lower_variant_to_memory(
+        value,
+        addr,
+        cases,
+        disc_of,
+        next_local,
+        stmts,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
 }
 
 /// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in

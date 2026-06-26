@@ -29,7 +29,7 @@ use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirVariantDecl, TypeId, TypeTable,
+    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -950,116 +950,26 @@ pub(super) fn synthesize_lift_from_flat_params(
                 )
             }
             "Result" if generic.args.len() == 2 => {
-                // result<T, E> flat ABI: (disc: i32, ...joined-payload-flats).
-                // disc 0 = Ok, 1 = Err. The Ok and Err payloads share the joined
-                // payload slots positionally; lift the active arm recursively
-                // from `flat[1..]` and construct the GC `Result` value.
-                let ok_ty = &generic.args[0];
-                let err_ty = &generic.args[1];
-                let (ok_tid, err_tid, ok_flat_len, err_flat_len, ok_name, ok_index, err_name, err_index) = {
-                    let tt = type_table_cell.borrow();
-                    let mut ok_flat = Vec::new();
-                    flatten_export_type(ok_ty, &mut ok_flat, tir_modules, &tt);
-                    let mut err_flat = Vec::new();
-                    flatten_export_type(err_ty, &mut err_flat, tir_modules, &tt);
-                    let (ok_tid, err_tid) = match tt.get(target_type_id) {
-                        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
-                            (type_args[0], type_args[1])
-                        }
-                        _ => (TypeTable::UNIT, TypeTable::UNIT),
-                    };
-                    let items = tt.compiler_items();
-                    let (_, _, ok_n, ok_i) = items
-                        .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-                    let (_, _, err_n, err_i) = items
-                        .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-                    (
-                        ok_tid,
-                        err_tid,
-                        ok_flat.len(),
-                        err_flat.len(),
-                        ok_n.to_string(),
-                        ok_i,
-                        err_n.to_string(),
-                        err_i,
-                    )
-                };
-                let total_flat = 1 + ok_flat_len.max(err_flat_len);
-
-                let result_local = alloc_local(next_local, locals, target_type_id);
-                stmts.push(let_mut_stmt(
-                    "__res_lift",
-                    result_local,
+                // `Result<T, E>` is a 2-case variant (Ok=0, Err=1) — lift it
+                // through the shared variant path with a synthetic decl carrying
+                // the concrete arm TypeIds.
+                let decl = synthetic_result_variant_decl(
+                    &type_table_cell.borrow(),
                     target_type_id,
-                    null_expr(target_type_id),
-                ));
-
-                let build_arm = |case_name: &str,
-                                 case_index: u32,
-                                 payload_ty: &Type,
-                                 payload_tid: TypeId,
-                                 next_local: &mut u32,
-                                 locals: &mut Vec<TirLocal>|
-                 -> Vec<TirStmt> {
-                    let mut arm_stmts: Vec<TirStmt> = Vec::new();
-                    let payload = if is_unit_type(payload_ty) {
-                        None
-                    } else {
-                        let (payload_locals, payload_types) = coerce_payload_slots(
-                            payload_ty,
-                            &flat_param_locals[1..],
-                            &flat_types[1..],
-                            next_local,
-                            &mut arm_stmts,
-                            locals,
-                            tir_modules,
-                            type_table_cell,
-                        );
-                        let (lifted, _) = synthesize_lift_from_flat_params(
-                            payload_ty,
-                            &payload_locals,
-                            &payload_types,
-                            payload_tid,
-                            next_local,
-                            &mut arm_stmts,
-                            locals,
-                            tir_modules,
-                            type_table_cell,
-                            lift_ctx,
-                        );
-                        Some(Box::new(lifted))
-                    };
-                    arm_stmts.push(expr_stmt(assign(
-                        local_ref(result_local, "__res_lift", target_type_id),
-                        TirExpr::new(
-                            TirExprKind::VariantConstruct {
-                                variant_type: target_type_id,
-                                case_index,
-                                case_name: case_name.to_string(),
-                                payload,
-                            },
-                            target_type_id,
-                            synth_span(),
-                        ),
-                    )));
-                    arm_stmts
-                };
-
-                let ok_stmts = build_arm(&ok_name, ok_index, ok_ty, ok_tid, next_local, locals);
-                let err_stmts =
-                    build_arm(&err_name, err_index, err_ty, err_tid, next_local, locals);
-
-                let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                stmts.push(if_stmt(
-                    binary(TirBinaryOp::Eq, disc, i32_const(ok_index as i32), TypeTable::BOOL),
-                    block(ok_stmts),
-                    Some(block(err_stmts)),
-                ));
-
-                (
-                    local_ref(result_local, "__res_lift", target_type_id),
-                    total_flat,
-                )
+                );
+                return lift_variant_from_flat_params(
+                    &decl.name.clone(),
+                    &decl,
+                    flat_param_locals,
+                    flat_types,
+                    target_type_id,
+                    next_local,
+                    stmts,
+                    locals,
+                    tir_modules,
+                    type_table_cell,
+                    lift_ctx,
+                );
             }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
             _ => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
@@ -1112,6 +1022,48 @@ pub(super) fn synthesize_lift_from_flat_params(
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
             0,
         ),
+    }
+}
+
+/// Build a synthetic `TirVariantDecl` for a concrete `Result<T, E>` so it can be
+/// lifted/lowered through the shared named-variant path. `Result` is a 2-case
+/// variant (Ok=0, Err=1); its arm payload types are the instance's type args.
+fn synthetic_result_variant_decl(
+    type_table: &TypeTable,
+    result_type_id: TypeId,
+) -> TirVariantDecl {
+    let (ok_tid, err_tid) = match type_table.get(result_type_id) {
+        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            (type_args[0], type_args[1])
+        }
+        _ => (TypeTable::UNIT, TypeTable::UNIT),
+    };
+    let items = type_table.compiler_items();
+    let (_, _, ok_name, ok_index) =
+        items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+    let (_, _, err_name, err_index) =
+        items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+    let result_name = items
+        .variant_name(crate::compiler_item::CompilerItem::Result)
+        .to_string();
+    let case = |name: &str, index: u32, payload: TypeId| TirVariantCase {
+        name: name.to_string(),
+        index,
+        payload,
+        span: synth_span(),
+        serde_rename: None,
+    };
+    TirVariantDecl {
+        name: result_name,
+        module_source: ModuleSource::default(),
+        is_pub: true,
+        type_params: Vec::new(),
+        cases: vec![
+            case(ok_name, ok_index, ok_tid),
+            case(err_name, err_index, err_tid),
+        ],
+        span: synth_span(),
+        serde_rename_all: None,
     }
 }
 
