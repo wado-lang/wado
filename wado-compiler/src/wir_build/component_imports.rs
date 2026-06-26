@@ -140,7 +140,10 @@ pub fn resolve_import_plan(
                 .get_resource_source_interface(resource)
                 .is_some_and(|src| src != interface_info.path)
         });
-        let kind = if uses_external_resources {
+        let kind = if registry.is_component_interface(&interface_info.path) {
+            // A linked CM component is satisfied by embedding, not a host import.
+            ImportKind::Component
+        } else if uses_external_resources {
             ImportKind::ResourceUsingInterface
         } else {
             ImportKind::FunctionInterface

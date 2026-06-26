@@ -434,6 +434,13 @@ pub struct CmInterfaceRegistry {
     /// absent here; their `ModuleSource` is derived from the FQ by the canonical
     /// naming convention (`module_source_for_cm_interface`).
     lib_interface_sources: IndexMap<String, ModuleSource>,
+
+    /// FQ names of interfaces imported from a linked CM component (via
+    /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). The import plan
+    /// classifies these as [`crate::wir::ImportKind::Component`] so codegen
+    /// satisfies them by embedding the dependency component, not by a host
+    /// import.
+    component_interfaces: IndexSet<String>,
 }
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
@@ -1307,6 +1314,28 @@ impl CmInterfaceRegistry {
                 }
             }
         }
+    }
+
+    /// Register a linked CM component's binding module: its `#[cm(...)]`
+    /// interfaces, functions, and named types go through the same
+    /// [`Self::register_module_decls`] path as the stdlib, and each exported
+    /// interface FQ is recorded as a component import so the plan classifies it
+    /// as [`crate::wir::ImportKind::Component`].
+    pub fn register_component_decls(
+        &mut self,
+        module: &crate::ast::Module,
+        interface_fqs: &[String],
+    ) {
+        self.register_module_decls(module);
+        for fq in interface_fqs {
+            self.component_interfaces.insert(fq.clone());
+        }
+    }
+
+    /// Whether `fq` names an interface imported from a linked CM component.
+    #[must_use]
+    pub fn is_component_interface(&self, fq: &str) -> bool {
+        self.component_interfaces.contains(fq)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
