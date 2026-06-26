@@ -1,7 +1,8 @@
 // Import an interface from an external `.wasm` component and round-trip values
 // across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
-// test runs `lift(lower(x)) == x` against the real component.
-use { CmCatalog, Color, Point, Perms } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+// test runs `lift(lower(x)) == x` against the real component across the full
+// value-type surface.
+use { CmCatalog, Color, Point, Shape, Perms, Mixed } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -27,6 +28,10 @@ test "enum round-trip" {
     assert CmCatalog::id_enum(Color::Green) == Color::Green;
 }
 
+test "newtype round-trip" {
+    assert CmCatalog::id_newtype(2.5) == 2.5;
+}
+
 test "list round-trip" {
     let r = CmCatalog::id_list_u8([1, 2, 3]);
     assert r.len() == 3;
@@ -40,6 +45,7 @@ test "list round-trip" {
 test "option round-trip" {
     assert CmCatalog::id_option_u32(Option::Some(5)) matches { Some(5) };
     assert CmCatalog::id_option_u32(null) matches { None };
+    assert CmCatalog::id_option_string(Option::Some("x")) matches { Some(_) };
 }
 
 test "result round-trip" {
@@ -47,6 +53,8 @@ test "result round-trip" {
     assert CmCatalog::id_result_both(ok) matches { Ok(9) };
     let err: Result<u32, String> = Result::Err("nope");
     assert CmCatalog::id_result_both(err) matches { Err(_) };
+    // Ok/Err of different core classes (f32 vs u32) share one joined slot.
+    assert CmCatalog::id_result_fu(Result::Ok(1.5)) matches { Ok(f) && f == 1.5 };
 }
 
 test "record round-trip" {
@@ -55,9 +63,41 @@ test "record round-trip" {
     assert r.y == 2.5;
 }
 
+test "variant round-trip" {
+    assert CmCatalog::id_variant(Shape::Circle(2.0)) matches { Circle(x) && x == 2.0 };
+    assert CmCatalog::id_variant(Shape::Rect([3.0, 4.0])) matches { Rect(_) };
+    assert CmCatalog::id_variant(Shape::Nothing) matches { Nothing };
+    assert CmCatalog::id_mixed(Mixed::AsInt(7)) matches { AsInt(7) };
+    assert CmCatalog::id_mixed(Mixed::AsFloat(1.5)) matches { AsFloat(f) && f == 1.5 };
+}
+
 test "flags round-trip" {
     let r = CmCatalog::id_flags(Perms::Read | Perms::Write);
     assert r == (Perms::Read | Perms::Write);
+}
+
+test "tuple round-trip" {
+    let [a, b] = CmCatalog::id_tuple_pair([7, "x"]);
+    assert a == 7;
+    assert b == "x";
+    let [c, d, e] = CmCatalog::id_tuple_triple([5, true, 'Z']);
+    assert c == 5;
+    assert d;
+    assert e == 'Z';
+}
+
+test "nested containers round-trip" {
+    assert CmCatalog::id_list_record([Point { x: 1.0, y: 2.0 }]).len() == 1;
+    assert CmCatalog::id_option_record(Option::Some(Point { x: 1.0, y: 2.0 })) matches { Some(_) };
+    assert CmCatalog::id_tuple_record([Point { x: 1.0, y: 2.0 }, 9]).1 == 9;
+    assert CmCatalog::id_option_list(Option::Some([1, 2])) matches { Some(_) };
+    let rl: Result<List<Point>, String> = Result::Ok([Point { x: 1.0, y: 2.0 }]);
+    assert CmCatalog::id_result_list(rl) matches { Ok(_) };
+    assert CmCatalog::id_list_tuple([[1, "a"]]).len() == 1;
+    assert CmCatalog::id_assoc_array([["k", 1]]).len() == 1;
+    assert CmCatalog::id_list_option([Option::Some(1)]).len() == 1;
+    assert CmCatalog::id_tuple_option([Option::Some(3), 4]).1 == 4;
+    assert CmCatalog::id_list_tuple_record([[Point { x: 1.0, y: 2.0 }, 9]]).len() == 1;
 }
 
 __DATA__

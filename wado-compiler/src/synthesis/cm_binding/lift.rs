@@ -23,8 +23,7 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, canonical_wasi_package, cm_flags_byte_size, cm_type_to_type_id,
-    is_unit_type, kebab_to_pascal,
+    LiftContext, binary_add, cm_flags_byte_size, cm_type_to_type_id, is_unit_type, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -256,19 +255,20 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> Option<TirExpr> {
-    let tt = ctx.type_table.borrow();
+    // Resolve the variant/enum type through the source's `ModuleSource` (the
+    // same registry-provenance path the struct lift uses), so component-imported
+    // and `--lib` types — whose `ModuleSource::Wasm`/entry source the cm-package
+    // prefix scan cannot match — reach the type the elaborator registered.
     if let Some(cases) = ctx
         .cm_interface_registry
         .get_variant_cases_by_source(source, &named.name)
     {
         let cases = cases.to_vec();
-        let variant_type = tt
-            .find_named_type_by_cm_package(&named.name, ctx.cm_package)
-            .or_else(|| {
-                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
-                    .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
-            })?;
-        drop(tt);
+        let module_source = ctx.module_source_for(source);
+        let variant_type = ctx
+            .type_table
+            .borrow_mut()
+            .make_variant(named.name.clone(), module_source);
         return Some(synthesize_lift_wasi_variant(
             &named.name,
             variant_type,
@@ -285,13 +285,11 @@ pub(super) fn try_lift_wasi_variant_or_enum(
         .get_enum_variants_by_source(source, &named.name)
     {
         let case_names = case_names.to_vec();
-        let enum_type = tt
-            .find_named_type_by_cm_package(&named.name, ctx.cm_package)
-            .or_else(|| {
-                canonical_wasi_package(ctx.cm_interface_registry, &named.name)
-                    .and_then(|pkg| tt.find_named_type_by_cm_package(&named.name, pkg))
-            })?;
-        drop(tt);
+        let module_source = ctx.module_source_for(source);
+        let enum_type = ctx
+            .type_table
+            .borrow_mut()
+            .make_enum(named.name.clone(), module_source);
         return Some(synthesize_lift_wasi_enum(
             &named.name,
             enum_type,

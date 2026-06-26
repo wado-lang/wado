@@ -1411,6 +1411,23 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
+    /// Find any decl-backed named type (struct, variant, enum, flags, or
+    /// resource) by its exact `(name, module_source)` key. Used to resolve a CM
+    /// type whose owning interface FQ maps to a concrete `ModuleSource` via the
+    /// registry's provenance (component imports and `--lib` locals), where the
+    /// cm-package prefix scan does not apply.
+    pub fn find_named_type_by_source(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        self.find_struct_type(name, module_source)
+            .or_else(|| self.find_variant_type(name, module_source))
+            .or_else(|| self.find_enum_type(name, module_source))
+            .or_else(|| self.find_flags_type(name, module_source))
+            .or_else(|| self.find_resource_type(name, module_source))
+    }
+
     /// Find any decl-backed named type (resource, enum, variant, struct,
     /// flags, or newtype) scoped to a CM package.
     ///

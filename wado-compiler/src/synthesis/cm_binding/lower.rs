@@ -1183,6 +1183,48 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
+        // List<T> → (ptr, len). Lower the list into an element buffer via the
+        // shared list lowerer (writing the pair to a scratch slot), then push
+        // the two loaded i32s. Reached for a `List` payload of an Option /
+        // Result / tuple (e.g. `option<list<u8>>`).
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+            let pair_local = alloc_local(next_local, locals, TypeTable::I32);
+            let pair_name = format!("{prefix}_listpair");
+            stmts.push(let_stmt(
+                &pair_name,
+                pair_local,
+                TypeTable::I32,
+                builtin_call(
+                    "realloc",
+                    vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
+                    TypeTable::I32,
+                ),
+            ));
+            let lower = synthesize_lower_list_to_memory(
+                &g.args[0],
+                value,
+                local_ref(pair_local, &pair_name, TypeTable::I32),
+                next_local,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts.extend(lower);
+            flat_args.push(builtin_call(
+                "i32_load",
+                vec![local_ref(pair_local, &pair_name, TypeTable::I32)],
+                TypeTable::I32,
+            ));
+            flat_args.push(builtin_call(
+                "i32_load",
+                vec![binary_add(
+                    local_ref(pair_local, &pair_name, TypeTable::I32),
+                    i32_const(4),
+                )],
+                TypeTable::I32,
+            ));
+        }
         // Tuple → each element's flat args, in order. Mirrors `cm_flatten`'s
         // tuple expansion so the lowered values match the flat signature. A
         // tuple appears either as `Type::Tuple` or as `Generic("Tuple", …)`.
@@ -1358,15 +1400,17 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         return;
     }
 
-    // Allocate mutable locals for inner flats, initialized to 0
+    // Allocate mutable locals for inner flats, zero-initialized by slot type
+    // (an `f32`/`f64` slot needs a float zero, not an i32 zero).
     let mut inner_locals: Vec<(u32, TypeId)> = Vec::new();
     for (i, &ft) in inner_flat_types.iter().enumerate() {
         let local = alloc_local(next_local, locals, ft);
-        let zero = match ft {
-            TypeTable::I64 => i64_const(0),
-            _ => i32_const(0),
-        };
-        stmts.push(let_mut_stmt(&format!("{prefix}_inner{i}"), local, ft, zero));
+        stmts.push(let_mut_stmt(
+            &format!("{prefix}_inner{i}"),
+            local,
+            ft,
+            flat_slot_zero(ft),
+        ));
         inner_locals.push((local, ft));
     }
 
@@ -1613,12 +1657,16 @@ fn flatten_result_case_arm(
     for (i, flat_val) in case_flat.into_iter().enumerate() {
         if i < payload_locals.len() {
             let (pl, pt) = payload_locals[i];
-            // Cast a narrower case flat into the (possibly wider) joined slot.
-            let v = if flat_val.type_id == pt {
-                flat_val
-            } else {
-                cast(flat_val, pt)
-            };
+            // Merge this case's flat into the shared joined slot, bit-
+            // reinterpreting when the join widened the slot to a different core
+            // class (e.g. an `f32` ok sharing an `i32`-joined slot with a `u32`
+            // err) — a numeric cast would corrupt the value (1.5 -> 1).
+            let flat_val_ty = flat_val.type_id;
+            let v = coerce_flat_lower(
+                flat_val,
+                cm_val_type_from_type_id(flat_val_ty),
+                cm_val_type_from_type_id(pt),
+            );
             case_stmts.push(expr_stmt(assign(
                 local_ref(pl, &format!("{prefix}_p{i}"), pt),
                 v,

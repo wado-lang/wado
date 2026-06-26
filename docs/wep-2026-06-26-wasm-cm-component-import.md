@@ -84,15 +84,17 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
 
 Working end-to-end: `use { Iface } from "./c.wasm" with { type: "wasm" }` →
 `Iface::method(x)` resolves, composes, and round-trips at runtime. E2E fixture
-`tests/fixtures/cm_component_import_catalog.wado` round-trips the full primitive
-surface, `string`, and `enum` against the composed `cm-catalog.wasm` at O0/O2.
+`tests/fixtures/cm_component_import_catalog.wado` round-trips the full
+value-type surface (primitives, `string`, `enum`, `flags`, newtype, `List`,
+`Option`, `Result`, records, variants, tuples, and nested combinations) against
+the composed `cm-catalog.wasm` at O0/O2.
 
 - [x] Phase 1 — fixture committed.
 - [x] Phase 2 — shared type-mapping core (`CmShape`) + WIT→ast::Type (`wit_consume`).
 - [x] Phase 3 — loader detect/decode/build-AST; the import resolves.
 - [x] Phase 4 — registry provenance + `ImportKind::Component`; binding synthesis reused.
 - [x] Phase 6 — codegen composes via `wasm-compose` (see below).
-- [x] Phase 7 — e2e round-trip (primitives/string/enum).
+- [x] Phase 7 — e2e round-trip (full value-type surface).
 
 ### Codegen: fused composition via `wasm-compose`
 
@@ -115,36 +117,51 @@ panic-path imports become the composed component's imports).
 
 ### Value-type surface (params + lower/lift)
 
-The instance-type emitter and the binding synthesis now cover most of the
-value-type surface for component-import params and returns. Two fixes made this
-work, both correcting drift between parallel code paths rather than adding new
-ones:
+The instance-type emitter and the binding synthesis cover the full value-type
+surface for component-import params and returns. The work was almost entirely
+removing drift between parallel code paths — for an imported component, a
+type's `source_interface` namespace is arbitrary (`wado:cm-catalog/...`), which
+broke every WASI-only shortcut:
 
+- **Component module-source provenance.** `register_component_decls` records each
+  interface FQ → its `ModuleSource::Wasm` (mirroring `register_lib_local_decls`);
+  the `lib_interface_sources` map is renamed `cm_interface_module_sources`.
+  Without it, deriving a guest `ModuleSource` from a component FQ fell to the
+  empty `Core("")` default, so component records/variants never got a concrete
+  guest GC type and failed WIR build (`StructLiteral expected Ref WirType`).
 - **Unified CM flattening.** Three near-identical flatteners
   (`cm_abi::cm_flat_types`, `component_model::flatten_cm_param_type`,
   `synthesis::flatten_param_type`) had drifted — conflicting tuple handling, a
   wrong `{i32,f32}` join, and a `wasi:`/`core:kiln/`-prefix gate that excluded a
-  component's own package namespace, so records/variants/tuples collapsed to a
-  single `i32`. They now delegate to one registry-aware
-  `CmInterfaceRegistry::cm_flatten`. The outptr decision is likewise unified into
-  `cm_return_needs_outptr`, so the binding and the core functype builder agree.
-- **Component module-source provenance.** `register_component_decls` now records
-  each interface FQ → its `ModuleSource::Wasm` (mirroring `register_lib_local_decls`).
-  Without it, deriving a guest `ModuleSource` from a component FQ fell back to the
-  empty `Core("")` default, so component records/variants never got a concrete
-  guest GC type and failed WIR build. The `lib_interface_sources` map was renamed
-  `cm_interface_module_sources` to reflect that it now serves `--lib` *and*
-  component imports.
+  component's namespace, so records/variants/tuples collapsed to a single `i32`.
+  They now delegate to one registry-aware `CmInterfaceRegistry::cm_flatten`. The
+  outptr decision is unified into `cm_return_needs_outptr` so the binding and the
+  core functype builder agree.
+- **Registry-aware resolution everywhere.** `cm_type_to_type_id`, the lift's
+  variant/enum reconstruction, and `cm_variant_size_align` all resolved CM named
+  types via `find_named_type_by_cm_package` / `resolve_wasi_source_for` — a
+  prefix/WASI-only scan that misses `Wasm`-sourced types. They now fall back to
+  the FQ → `ModuleSource` provenance (`find_named_type_by_source`) /
+  `resolve_cm_source_for`, so component records, variants, enums, and their CM
+  layout sizes resolve to the concrete elaborator-registered type.
+- **Missing lower paths filled.** `is_param_type_supported_with_types` accepts
+  tuples; `synthesize_flatten_value_to_flat_args` flattens tuples and nested
+  `List`; the `List<T>` element lower routes through the registry-aware
+  `synthesize_lower_wasi_type_to_memory` (records-in-lists); option payload slots
+  zero-init by slot type; and the result-case join uses `coerce_flat_lower`
+  (bit-reinterpret) so an `f32`/`i32`-joined slot is not numerically truncated.
 
-Working end-to-end (O0/O2): primitives, `string`, `enum`, `flags`, `List`,
-`Option`, `Result<ok, err>` (arbitrary `err`), and records.
+Working end-to-end (O0/O2), verified by `cm_component_import_catalog`:
+primitives, `string`, `char`, `enum`, `flags`, newtype, `List`, `Option`,
+`Result<ok, err>` (arbitrary `err`, including mismatched core classes), records,
+variants (incl. payload-bearing and tuple payloads), tuples, and nested
+combinations (`list<record>`, `option<record>`, `tuple<record, _>`,
+`option<list>`, `result<list<record>, _>`, `list<tuple<record, _>>`, …).
+
+- [x] Phase 5/6/7 — full value-type surface for params and returns.
 
 ### Known gaps (follow-ups)
 
-- **Variant and tuple import params.** Variant params still emit a broken
-  discriminant/payload Match, and tuple params/returns still cast the GC tuple to
-  `i32` — the value-flattening lower path needs the same registry-aware treatment
-  the signature side now has.
 - **World-level function exports** (case A, no named types) are rejected by
   `wit_consume` — only interface exports are handled. World-level free-function
   imports also need an import-plan path that isn't interface-keyed.

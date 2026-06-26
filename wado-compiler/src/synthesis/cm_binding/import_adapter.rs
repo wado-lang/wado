@@ -35,7 +35,7 @@ use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_
 use super::lower::{
     flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
     synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
-    synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
+    synthesize_lower_option_to_memory, synthesize_lower_wasi_type_to_memory,
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
@@ -589,6 +589,28 @@ pub(super) fn synthesize_adapter(
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
+            // Tuple param: single GC tuple, binding body lowers to flat args.
+            _ if tuple_elems(param_type).is_some_and(|e| !e.is_empty()) => {
+                let tuple_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: tuple_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                locals.push(TirLocal::synth(next_local, tuple_type_id, false));
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
             // All other types: create flat params matching CM ABI
             _ => {
                 for (j, flat_ty) in flat_tys.iter().enumerate() {
@@ -857,31 +879,23 @@ pub(super) fn synthesize_adapter(
                         synth_span(),
                     ),
                 ));
-                // Lower element to linear memory at __addr
+                // Lower element to linear memory at __addr through the full
+                // registry-aware memory lowerer, so aggregate elements
+                // (records, variants, options, tuples, nested lists) lay out
+                // their payload correctly instead of being stored as an i32.
                 let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
                 let addr_ref =
                     local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
-                let lower_stmts = if let Type::Tuple(sub_elems) = elem_type {
-                    synthesize_lower_tuple(
-                        sub_elems,
-                        elem_ref,
-                        addr_ref,
-                        &mut next_local,
-                        &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    )
-                } else {
-                    synthesize_lower(
-                        elem_type,
-                        elem_ref,
-                        addr_ref,
-                        &mut next_local,
-                        &mut locals,
-                        &names,
-                    )
-                };
+                let lower_stmts = synthesize_lower_wasi_type_to_memory(
+                    elem_type,
+                    elem_ref,
+                    addr_ref,
+                    &mut next_local,
+                    &mut locals,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
                 loop_body.extend(lower_stmts);
                 // __i += 1
                 loop_body.push(expr_stmt(assign(

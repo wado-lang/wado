@@ -3350,12 +3350,15 @@ fn is_param_type_supported_with_types(
                 || resources.contains(name)
                 || structs.contains(name)
         }
-        Type::Generic(generic) => {
-            matches!(
-                generic.name.as_str(),
-                "Stream" | "Result" | "Future" | "Option" | "List"
-            )
-        }
+        Type::Generic(generic) => match generic.name.as_str() {
+            "Stream" | "Result" | "Future" | "Option" | "List" => true,
+            // All tuple elements must themselves be supported param types.
+            "Tuple" => generic
+                .args
+                .iter()
+                .all(|arg| is_param_type_supported_with_types(arg, enums, resources, structs)),
+            _ => false,
+        },
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - passed as i32 handle at CM boundary
             if let Type::Named(named) = inner.as_ref() {
@@ -3364,6 +3367,10 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
+        // A tuple may also be spelled `Type::Tuple`; each element must be supported.
+        Type::Tuple(elems) => elems
+            .iter()
+            .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
         _ => false,
     }
 }
@@ -3651,17 +3658,15 @@ pub fn cm_variant_size_align(
 
 /// Package-scoped variant of `cm_variant_size_align`.
 ///
-/// When the reference's `source_interface` is populated (stdlib bootstrap),
-/// that exact source is used. Otherwise the unique `wasi:*` registrant for
-/// the name is used. `wasi_package` is kept as a parameter so that existing
-/// callers can still supply it; it is currently unused here because source
-/// resolution is already unambiguous.
+/// When the reference's `source_interface` is populated (stdlib bootstrap or a
+/// component import) that exact source is used; otherwise the name is resolved
+/// through the registry, biased by `wasi_package`.
 pub fn cm_variant_size_align_scoped(
     named: &crate::ast::NamedType,
     registry: &CmInterfaceRegistry,
-    _wasi_package: Option<&str>,
+    wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
-    let source = registry.resolve_wasi_source_for(named, None)?;
+    let source = registry.resolve_cm_source_for(named, wasi_package)?;
     let cases = registry.get_variant_cases_by_source(source, &named.name)?;
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr

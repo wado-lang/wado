@@ -287,6 +287,17 @@ pub fn cm_type_to_type_id(
                         type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
                     })
                 })
+                // Component-imported (and `--lib`) types live under a
+                // `ModuleSource::Wasm`/entry source that the cm-package prefix
+                // lookup above cannot match; resolve them through the FQ ->
+                // ModuleSource provenance recorded at registration.
+                .or_else(|| {
+                    named
+                        .source_interface
+                        .as_deref()
+                        .and_then(|fq| registry.cm_interface_module_source_of(fq))
+                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                })
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => {
@@ -324,6 +335,16 @@ pub fn cm_type_to_type_id(
                 "AsyncCall" if g.args.len() == 1 => {
                     let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_async_call(inner)
+                }
+                // A tuple resolves to `Generic("Tuple", elems)`; build the GC
+                // tuple type from its element types (mirrors the `Type::Tuple` arm).
+                "Tuple" if !g.args.is_empty() => {
+                    let elems: Vec<TypeId> = g
+                        .args
+                        .iter()
+                        .map(|t| cm_type_to_type_id(t, type_table, registry, wasi_package))
+                        .collect();
+                    type_table.make_tuple(elems)
                 }
                 // Own/Borrow are handle types represented as i32
                 "Own" | "Borrow" => TypeTable::I32,
