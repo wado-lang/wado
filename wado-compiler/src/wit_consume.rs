@@ -500,3 +500,71 @@ fn unit() -> Type {
 fn syn() -> Span {
     Span::new(0, 0, 1, 1)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Item;
+
+    fn decode_fixture() -> (Resolve, WorldId) {
+        let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
+        match wit_component::decode(&bytes).unwrap() {
+            wit_component::DecodedWasm::Component(r, w) => (r, w),
+            wit_component::DecodedWasm::WitPackage(..) => panic!("expected component"),
+        }
+    }
+
+    #[test]
+    fn builds_catalog_bindings() {
+        let (resolve, world) = decode_fixture();
+        let b = build_bindings(&resolve, world).expect("build bindings");
+        assert_eq!(b.interface_fqs, vec!["wado:cm-catalog/cm-catalog@0.1.0"]);
+
+        let mut iface = None;
+        let mut type_names = Vec::new();
+        for item in &b.module.items {
+            match item {
+                Item::Interface(d) => iface = Some(d),
+                Item::Struct(d) => type_names.push(d.name.clone()),
+                Item::Enum(d) => type_names.push(d.name.clone()),
+                Item::Variant(d) => type_names.push(d.name.clone()),
+                Item::Flags(d) => type_names.push(d.name.clone()),
+                Item::Newtype(d) => type_names.push(d.name.clone()),
+                _ => {}
+            }
+        }
+        let iface = iface.expect("interface present");
+        assert_eq!(iface.name, "CmCatalog");
+
+        // A primitive identity and a named-type identity, with cm metadata.
+        let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
+        let cm = id_u32.attrs[0].as_cm_import().unwrap();
+        assert_eq!(cm.interface_path(), "wado:cm-catalog/cm-catalog@0.1.0");
+        assert_eq!(cm.function.as_deref(), Some("id-u32"));
+
+        let id_record = iface.methods.iter().find(|m| m.name == "id_record").unwrap();
+        match &id_record.params[0].ty {
+            Type::Named(n) => {
+                assert_eq!(n.name, "Point");
+                assert_eq!(
+                    n.source_interface.as_deref(),
+                    Some("wado:cm-catalog/cm-catalog@0.1.0")
+                );
+            }
+            other => panic!("expected Named Point, got {other:?}"),
+        }
+
+        // Records/enums/variants/flags are preserved as named types; the
+        // `meters = f64` newtype is transparent at the CM boundary, so the
+        // compiled component inlines it (id_newtype is f64 -> f64).
+        for t in ["Point", "Color", "Shape", "Perms", "Mixed"] {
+            assert!(type_names.contains(&t.to_string()), "missing type {t}");
+        }
+        let id_newtype = iface
+            .methods
+            .iter()
+            .find(|m| m.name == "id_newtype")
+            .unwrap();
+        assert!(matches!(&id_newtype.params[0].ty, Type::Named(n) if n.name == "f64"));
+    }
+}
