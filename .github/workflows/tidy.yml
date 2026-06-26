@@ -13,193 +13,101 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # Detects when the latest commit on the PR was produced by this workflow
-  # itself ("chore: tidy" by a GitHub App bot). In that case the heavy tidy
-  # jobs are skipped and the aggregator `tidy` job short-circuits to success.
-  # This avoids re-running tidy on its own output (which is idempotent by
-  # construction) and prevents a buggy step from producing an infinite
-  # push loop.
-  precheck:
-    name: Precheck
+  # One job replaces the old precheck/tidy-rust/tidy-wado/aggregator fan-out.
+  # Required-check name stays "Tidy". Setup runs once; no patch artifacts.
+  #
+  # The two whole-workspace compiles (`cargo build`, `clippy-fix`) serialize on
+  # cargo's target lock, so they can't run in parallel here — build goes first
+  # so clippy reuses its dependency artifacts. The post-build regenerators write
+  # disjoint trees, so they run as `background` steps joined at `wait-all`.
+  tidy:
+    name: Tidy
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
-          fetch-depth: 1
+          # The final push uses a GitHub App token; don't keep the default creds.
+          persist-credentials: false
 
-      - id: check
+      # Skip the heavy steps when the latest commit is tidy's own output, so we
+      # don't re-tidy idempotent output or spin up a push loop.
+      - name: Precheck — short-circuit on a tidy bot commit
+        id: precheck
         run: |
           msg=$(git log -1 --pretty=%s)
           email=$(git log -1 --pretty=%ae)
           if [ "$msg" = "chore: tidy" ] && [[ "$email" == *"[bot]"* ]]; then
-            echo "Latest commit is a tidy bot commit; short-circuiting."
             echo "should-run=false" >> "$GITHUB_OUTPUT"
           else
             echo "should-run=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # Rust-only lint/format. Needs no built `wado` / `wado-dev-tools` binary, so
-  # it compiles the workspace exactly once (via clippy) and never pays a second
-  # `cargo build`. Runs in parallel with `tidy-wado`; uploads its diff as an
-  # artifact for the aggregator to apply.
-  #
-  # Every binary-dependent step — including `format-md` — lives in `tidy-wado`,
-  # not here. Invoking `format-md` from this job would mean
-  # `cargo run -p wado-dev-tools`, which forces a second, non-clippy compile of
-  # the whole workspace on top of clippy's (clippy and `cargo build` produce
-  # separate artifacts). Keeping every binary step on the job that already runs
-  # `cargo build` avoids that redundant compile and frees this runner sooner.
-  tidy-rust:
-    name: Tidy (Rust)
-    needs: precheck
-    if: needs.precheck.outputs.should-run == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-
       - name: Check out the vendored wasmtime fork (path dependency)
+        if: steps.precheck.outputs.should-run == 'true'
         run: git submodule update --init --depth 1 vendor/wasmtime
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.precheck.outputs.should-run == 'true'
         with:
           shared-key: ci
 
       - uses: jdx/mise-action@v4
+        if: steps.precheck.outputs.should-run == 'true'
         with:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
         env:
           MISE_VERBOSE: ${{ runner.debug }}
 
-      - run: mise run clippy-fix
-      - run: cargo fmt --all
+      # One compile serves every binary-dependent step below.
+      - name: Build wado binaries
+        if: steps.precheck.outputs.should-run == 'true'
+        run: cargo build --bin wado --bin wado-dev-tools
 
-      - name: Capture diff
+      # Disjoint output trees → run concurrently via the `parallel` group, which
+      # waits for all of its steps before the next step. Each calls the prebuilt
+      # binary directly so only `doc-stdlib` touches the cargo lock (itself).
+      - parallel:
+          - name: Regenerate WIR golden fixtures
+            if: steps.precheck.outputs.should-run == 'true'
+            run: |
+              mkdir -p wado-compiler/tests/generated/fixtures
+              ./target/debug/wado-dev-tools golden-dump \
+                --in 'wado-compiler/tests/fixtures/{name}.wado' \
+                --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
+                -O2
+          - name: Regenerate format golden fixtures
+            if: steps.precheck.outputs.should-run == 'true'
+            run: bash scripts/update-golden-format-fixtures.sh
+          - name: Refresh Gale kiln caches
+            if: steps.precheck.outputs.should-run == 'true'
+            run: ./target/debug/wado test --no-run package-gale
+          - name: Regenerate stdlib docs
+            if: steps.precheck.outputs.should-run == 'true'
+            run: mise run doc-stdlib
+
+      # Whole-tree formatters, after the parallel join so they don't race a regenerator.
+      - name: Format Markdown
+        if: steps.precheck.outputs.should-run == 'true'
+        run: ./target/debug/wado-dev-tools format-md
+
+      - name: Format Wado sources
+        if: steps.precheck.outputs.should-run == 'true'
+        run: ./target/debug/wado format -w .
+
+      # Second compile; runs last to keep the cargo lock uncontended.
+      - name: Clippy autofix and rustfmt
+        if: steps.precheck.outputs.should-run == 'true'
         run: |
-          git add -A
-          git diff --cached --binary > tidy-rust.patch
-          touch tidy-rust.patch
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tidy-rust-patch
-          path: tidy-rust.patch
-          retention-days: 1
-          include-hidden-files: false
-
-  # Everything that needs a built `wado` / `wado-dev-tools` binary. A single
-  # `cargo build` serves all of these steps, so they share one compile. This is
-  # the workflow's critical path (build + golden regeneration + gale test
-  # compile); `format-md` and `doc-stdlib` are nearly free on top.
-  #
-  # `format-md` runs here (after `doc-stdlib`) so the regenerated
-  # `docs/stdlib-*.md` are formatted within the same job rather than relying on
-  # a follow-up pass from a parallel job. `wado doc -f markdown` is already
-  # dprint-stable (see wado-cli/src/doc.rs), so this is belt-and-braces. It is
-  # invoked as `./target/debug/wado-dev-tools format-md` to reuse the `cargo
-  # build` artifacts instead of triggering a fresh `cargo run` rebuild.
-  #
-  # Where the two parallel jobs do touch the same file (e.g. `Cargo.lock`), the
-  # aggregator's `--3way` apply merges the overlapping patches — see the
-  # "Apply patches" step.
-  tidy-wado:
-    name: Tidy (Wado)
-    needs: precheck
-    if: needs.precheck.outputs.should-run == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref }}
-
-      - name: Check out the vendored wasmtime fork (path dependency)
-        run: git submodule update --init --depth 1 vendor/wasmtime
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-
-      - uses: jdx/mise-action@v4
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
-
-      - run: cargo build --bin wado --bin wado-dev-tools
-      - run: mise run format-wado
-      - run: mise run update-golden-fixtures
-      - run: mise run update-golden-format-fixtures
-      - run: mise run doc-stdlib
-      - run: ./target/debug/wado-dev-tools format-md
-      # See tidy.yml history for the rationale of refreshing Gale kiln caches
-      # (package-gale/tests/generated/**/*.kiln.json) on every tidy run.
-      - run: ./target/debug/wado test --no-run package-gale
-
-      - name: Capture diff
-        run: |
-          git add -A
-          git diff --cached --binary > tidy-wado.patch
-          touch tidy-wado.patch
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tidy-wado-patch
-          path: tidy-wado.patch
-          retention-days: 1
-          include-hidden-files: false
-
-  # Aggregator. Required-check name stays "Tidy" for branch protection
-  # compatibility. Behavior:
-  # - If `precheck.should-run=false` (latest commit is a tidy bot commit),
-  #   short-circuit to success immediately.
-  # - Otherwise apply both upstream patches. If the result differs from
-  #   HEAD:
-  #     * On an internal PR (head repo == this repo), push a `chore: tidy`
-  #       commit and exit green. The push retriggers this workflow; the next
-  #       run hits the short-circuit and stays green. We deliberately do NOT
-  #       fail here: the push itself starts a fresh CI round, so the PR is
-  #       never momentarily all-green and auto-merge cannot fire prematurely.
-  #       A red check on the (now superseded) run only confuses tooling and
-  #       coding agents into thinking tidy is broken.
-  #     * On a fork PR (no write access, secrets unavailable), skip the push,
-  #       emit guidance for the fork author, and exit non-zero so the check
-  #       stays red until tidy is satisfied.
-  tidy:
-    name: Tidy
-    needs: [precheck, tidy-rust, tidy-wado]
-    if: always() && needs.precheck.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Short-circuit when latest commit is a tidy bot commit
-        if: needs.precheck.outputs.should-run == 'false'
-        run: echo "Latest commit was produced by tidy; nothing to do."
-
-      - name: Fail if upstream tidy jobs did not succeed
-        if: >-
-          needs.precheck.outputs.should-run == 'true' &&
-          (needs.tidy-rust.result != 'success' || needs.tidy-wado.result != 'success')
-        run: |
-          echo "tidy-rust: ${{ needs.tidy-rust.result }}"
-          echo "tidy-wado: ${{ needs.tidy-wado.result }}"
-          exit 1
+          mise run clippy-fix
+          cargo fmt --all
 
       - name: Determine push capability
         id: cap
-        if: needs.precheck.outputs.should-run == 'true'
+        if: steps.precheck.outputs.should-run == 'true'
         run: |
           if [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
             echo "can-push=true" >> "$GITHUB_OUTPUT"
@@ -207,63 +115,11 @@ jobs:
             echo "can-push=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate GitHub App token
-        id: app-token
-        if: needs.precheck.outputs.should-run == 'true' && steps.cap.outputs.can-push == 'true'
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: "${{ secrets.GH_APP_ID }}"
-          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
-          permission-contents: write
-
-      - uses: actions/checkout@v6
-        if: needs.precheck.outputs.should-run == 'true'
-        with:
-          token: "${{ steps.app-token.outputs.token || github.token }}"
-          ref: "${{ github.head_ref }}"
-
-      - uses: actions/download-artifact@v4
-        if: needs.precheck.outputs.should-run == 'true'
-        with:
-          name: tidy-rust-patch
-
-      - uses: actions/download-artifact@v4
-        if: needs.precheck.outputs.should-run == 'true'
-        with:
-          name: tidy-wado-patch
-
-      - name: Apply patches
-        if: needs.precheck.outputs.should-run == 'true'
-        run: |
-          set -e
-          # Both patches are full diffs taken from the same HEAD by two
-          # parallel jobs, so any file touched by both makes a plain
-          # `git apply` of the second patch reject ("patch does not apply").
-          # This happens whenever the jobs converge on the same file — most
-          # commonly `Cargo.lock`, which both `clippy-fix`/`cargo fmt`
-          # (tidy-rust) and `cargo build` (tidy-wado) regenerate identically
-          # once it is stale, but also any doc both jobs rewrite.
-          #
-          # `--3way` falls back to a 3-way merge against the blob ids recorded
-          # in the patch (the HEAD blobs, present because the aggregator checked
-          # out the same ref): identical or non-overlapping edits merge cleanly,
-          # and only a genuine content conflict between the two tidy jobs fails
-          # — which is a real bug worth surfacing red. `--3way` implies `--index`.
-          apply_patch() {
-            local patch="$1"
-            [ -s "$patch" ] || return 0
-            if ! git apply --3way --whitespace=nowarn "$patch"; then
-              echo "::error::Failed to apply ${patch}: the two parallel tidy jobs produced conflicting edits to the same file."
-              exit 1
-            fi
-          }
-          apply_patch tidy-rust.patch
-          apply_patch tidy-wado.patch
-
       - name: Detect changes
         id: changes
-        if: needs.precheck.outputs.should-run == 'true'
+        if: steps.precheck.outputs.should-run == 'true'
         run: |
+          git add -A
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -272,9 +128,25 @@ jobs:
             git diff --cached --stat
           fi
 
+      - name: Generate GitHub App token
+        id: app-token
+        if: >-
+          steps.precheck.outputs.should-run == 'true' &&
+          steps.changes.outputs.changed == 'true' &&
+          steps.cap.outputs.can-push == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: "${{ secrets.GH_APP_ID }}"
+          private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
+          permission-contents: write
+
+      # Internal PR: push `chore: tidy` and exit green. The push retriggers this
+      # workflow, which then short-circuits — so the PR is never momentarily
+      # all-green and auto-merge can't fire early. Failing here would only mislead
+      # tooling on a superseded run.
       - name: Commit and push (internal PR only)
         if: >-
-          needs.precheck.outputs.should-run == 'true' &&
+          steps.precheck.outputs.should-run == 'true' &&
           steps.changes.outputs.changed == 'true' &&
           steps.cap.outputs.can-push == 'true'
         env:
@@ -285,19 +157,16 @@ jobs:
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
           git commit -m "chore: tidy"
-          git push
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin "HEAD:${{ github.head_ref }}"
 
+      # Fork PR: can't push, so emit guidance and stay red until tidy is satisfied.
       - name: Report tidy result
         if: >-
-          needs.precheck.outputs.should-run == 'true' &&
+          steps.precheck.outputs.should-run == 'true' &&
           steps.changes.outputs.changed == 'true'
         run: |
           if [ "${{ steps.cap.outputs.can-push }}" = "true" ]; then
-            # Exit green: the `chore: tidy` push above already retriggered this
-            # workflow, so a fresh CI round is in flight and the PR is never
-            # momentarily all-green — auto-merge cannot fire prematurely. A red
-            # check on this superseded run only misleads tooling and coding
-            # agents.
             echo "::notice::Tidy produced changes and pushed a 'chore: tidy' commit. Pull the latest before continuing."
           else
             echo "::error::Tidy produced changes. Fork PRs cannot be auto-pushed; run 'mise run clippy-fix && cargo fmt --all && mise run format-wado && mise run update-golden-fixtures && mise run update-golden-format-fixtures && mise run doc-stdlib && cargo run -p wado-dev-tools -- format-md' locally and push the result."
