@@ -506,7 +506,6 @@ fn lower_to_flat_inner(
                 cm_type: cm_abi::CmValType::I32,
             });
 
-            // Joined payload slots (zero-initialized mutable locals).
             let payload_flats: Vec<cm_abi::CmValType> = {
                 let tt = ctx.type_table.borrow();
                 flat_types_from_type_id(type_id, tir_modules, &tt)
@@ -527,7 +526,6 @@ fn lower_to_flat_inner(
                     })
                     .collect();
 
-                // Lower one arm's payload into the shared slots.
                 let lower_arm = |case_index: u32,
                                      payload_tid: TypeId,
                                      next_local: &mut u32,

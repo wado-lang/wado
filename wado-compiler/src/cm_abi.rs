@@ -518,18 +518,15 @@ mod tests {
     #[test]
     fn test_canonical_join() {
         use CmValType::*;
-        // Equal types stay.
         assert_eq!(CmValType::join(Some(I32), Some(I32)), I32);
         assert_eq!(CmValType::join(Some(F64), Some(F64)), F64);
         // {i32, f32} widens to i32 — order-independent (the bug was f32-first).
         assert_eq!(CmValType::join(Some(I32), Some(F32)), I32);
         assert_eq!(CmValType::join(Some(F32), Some(I32)), I32);
-        // Any other mismatch widens to i64.
         assert_eq!(CmValType::join(Some(I64), Some(F64)), I64);
         assert_eq!(CmValType::join(Some(F64), Some(I64)), I64);
         assert_eq!(CmValType::join(Some(I32), Some(I64)), I64);
         assert_eq!(CmValType::join(Some(F64), Some(I32)), I64);
-        // Absent side passes the other through.
         assert_eq!(CmValType::join(Some(F32), None), F32);
         assert_eq!(CmValType::join(None, Some(I64)), I64);
         assert_eq!(CmValType::join(None, None), I32);
