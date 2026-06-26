@@ -132,13 +132,6 @@ import union/forwarding automatically (the dependency's own `wasi:cli/types` /
   `wit_consume` — only interface exports are handled. World-level free-function
   imports also need an import-plan path that isn't interface-keyed.
 
-### Unrelated pre-existing failures (not introduced here)
-
-`tests/wit.rs::full_scope_{inlines_referenced_interfaces,reconstructs_resource_methods}_and_reparses`
-fail on the branch base (verified by reverting this WEP's `wit_emit` refactor):
-the emitted full-scope WIT re-parses with a duplicate `run` / `handle` world
-export. This is a WIT-producer issue orthogonal to CM linking.
-
 ## Notes
 
 - Producer-side `--lib` WIT embedding currently warns "duplicate item named
