@@ -67,39 +67,29 @@ jobs:
         if: steps.precheck.outputs.should-run == 'true'
         run: cargo build --bin wado --bin wado-dev-tools
 
-      # Disjoint output trees → run concurrently. Each calls the prebuilt binary
-      # directly so only `doc-stdlib` touches the cargo lock (blocking itself).
-      - name: Regenerate WIR golden fixtures
-        if: steps.precheck.outputs.should-run == 'true'
-        background: true
-        run: |
-          mkdir -p wado-compiler/tests/generated/fixtures
-          ./target/debug/wado-dev-tools golden-dump \
-            --in 'wado-compiler/tests/fixtures/{name}.wado' \
-            --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
-            -O2
+      # Disjoint output trees → run concurrently via the `parallel` group, which
+      # waits for all of its steps before the next step. Each calls the prebuilt
+      # binary directly so only `doc-stdlib` touches the cargo lock (itself).
+      - parallel:
+          - name: Regenerate WIR golden fixtures
+            if: steps.precheck.outputs.should-run == 'true'
+            run: |
+              mkdir -p wado-compiler/tests/generated/fixtures
+              ./target/debug/wado-dev-tools golden-dump \
+                --in 'wado-compiler/tests/fixtures/{name}.wado' \
+                --emit wir:'wado-compiler/tests/generated/fixtures/{name}.wir.wado' \
+                -O2
+          - name: Regenerate format golden fixtures
+            if: steps.precheck.outputs.should-run == 'true'
+            run: bash scripts/update-golden-format-fixtures.sh
+          - name: Refresh Gale kiln caches
+            if: steps.precheck.outputs.should-run == 'true'
+            run: ./target/debug/wado test --no-run package-gale
+          - name: Regenerate stdlib docs
+            if: steps.precheck.outputs.should-run == 'true'
+            run: mise run doc-stdlib
 
-      - name: Regenerate format golden fixtures
-        if: steps.precheck.outputs.should-run == 'true'
-        background: true
-        run: bash scripts/update-golden-format-fixtures.sh
-
-      - name: Refresh Gale kiln caches
-        if: steps.precheck.outputs.should-run == 'true'
-        background: true
-        run: ./target/debug/wado test --no-run package-gale
-
-      - name: Regenerate stdlib docs
-        if: steps.precheck.outputs.should-run == 'true'
-        background: true
-        run: mise run doc-stdlib
-
-      - name: Join regenerators
-        if: steps.precheck.outputs.should-run == 'true'
-        wait-all: true
-        run: echo "All regenerators completed."
-
-      # Whole-tree formatters, after the barrier so they don't race a regenerator.
+      # Whole-tree formatters, after the parallel join so they don't race a regenerator.
       - name: Format Markdown
         if: steps.precheck.outputs.should-run == 'true'
         run: ./target/debug/wado-dev-tools format-md
