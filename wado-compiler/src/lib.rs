@@ -715,8 +715,11 @@ fn compile_after_load<H: CompilerHost>(
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
     if let (Some(fq), Some(entry)) = (options.lib_world.as_ref(), lib_entry_module.as_ref()) {
-        std::sync::Arc::make_mut(&mut tysys.cm_interface_registry)
-            .register_lib_local_decls(entry, fq);
+        std::sync::Arc::make_mut(&mut tysys.cm_interface_registry).register_lib_local_decls(
+            entry,
+            fq,
+            entry_module_source.clone(),
+        );
     }
 
     debug_assert_eq!(

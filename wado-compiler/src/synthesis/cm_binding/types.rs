@@ -136,27 +136,17 @@ pub struct LiftContext<'a> {
     /// into `synthesize_lift` or its helpers. The lift path itself only
     /// borrows transiently inside `module_source_for_cm_interface`.
     pub interner: &'a RefCell<ModuleSourceInterner>,
-    /// Entry module source for a `--lib` compile. Lib-local named types
-    /// (`struct`/`variant`/`enum`/`flags`) are registered in the type table
-    /// under the entry module's `ModuleSource`, but their CM interface FQ
-    /// (`wado:pkg/iface@ver`) is neither `wasi:` nor `core:`, so
-    /// `module_source_for_cm_interface` cannot derive it. Synthesized lifts of
-    /// such types use this source so the struct/variant `TypeId` matches the
-    /// elaborator-registered one (and resolves to a concrete WIR ref).
-    /// `None` for WASI/kiln bindings.
-    pub lib_module_source: Option<&'a ModuleSource>,
 }
 
 impl LiftContext<'_> {
-    /// Resolve the `ModuleSource` for a CM named type declared by `source` (its
-    /// interface FQ). WASI/kiln types derive it from the FQ; lib-local types
-    /// (FQ neither `wasi:` nor `core:`) use the `--lib` entry source so the
-    /// resulting `TypeId` matches the elaborator-registered struct/variant.
+    /// Resolve the `ModuleSource` for a CM named type declared by interface FQ
+    /// `source`. A lib-local interface returns its recorded entry source; a
+    /// WASI/core interface derives its source from the FQ by the canonical
+    /// naming convention. Provenance comes from the registry, not an FQ prefix
+    /// check, so the resulting struct/variant `TypeId` matches the
+    /// elaborator-registered one in every world.
     pub(super) fn module_source_for(&self, source: &str) -> ModuleSource {
-        if !source.starts_with("wasi:")
-            && !source.starts_with("core:")
-            && let Some(entry) = self.lib_module_source
-        {
+        if let Some(entry) = self.cm_interface_registry.lib_module_source_of(source) {
             return entry.clone();
         }
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
@@ -164,18 +154,19 @@ impl LiftContext<'_> {
 
     /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware.
     ///
-    /// Unlike [`cm_type_to_type_id`], a lib-local named struct/variant (source
-    /// FQ neither `wasi:` nor `core:`) is resolved through the `--lib` entry
-    /// `ModuleSource`, so it yields the concrete GC `TypeId` the rest of the
-    /// pipeline expects rather than falling back to `i32`. Container types
-    /// (tuple/list/option/result) recurse through this method so nested
-    /// lib-local elements resolve too.
+    /// Unlike [`cm_type_to_type_id`], a *lib-local* named struct/variant is
+    /// resolved through its recorded entry `ModuleSource`, so it yields the
+    /// concrete GC `TypeId` the rest of the pipeline expects rather than falling
+    /// back to `i32`. WASI/core named types keep going through
+    /// `cm_type_to_type_id` (which resolves them by package). Lib-local
+    /// provenance is detected via the registry, not an FQ prefix check. Container
+    /// types (tuple/list/option/result) recurse so nested lib-local elements
+    /// resolve too.
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
         match ty {
             Type::Named(n) => {
                 if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
-                    && !src.starts_with("wasi:")
-                    && !src.starts_with("core:")
+                    && self.cm_interface_registry.lib_module_source_of(src).is_some()
                 {
                     if self
                         .cm_interface_registry

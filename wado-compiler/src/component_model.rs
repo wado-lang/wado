@@ -424,6 +424,15 @@ pub struct CmInterfaceRegistry {
     /// Fields: Vec<(`cm_field_name`, `field_type`)>
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
+
+    /// `--lib` interface FQ -> the entry `ModuleSource` whose decls were
+    /// registered under it. Records the provenance of library-local types so
+    /// consumers resolve a CM interface to its Wado `ModuleSource` (and
+    /// recognise it as lib-local) via [`Self::lib_module_source_of`] — without
+    /// sniffing `wasi:`/`core:` prefixes off the FQ. WASI/core interfaces are
+    /// absent here; their `ModuleSource` is derived from the FQ by the canonical
+    /// naming convention (`module_source_for_cm_interface`).
+    lib_interface_sources: IndexMap<String, ModuleSource>,
 }
 
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
@@ -1344,8 +1353,19 @@ impl CmInterfaceRegistry {
     /// this runs, both the export type plan (`resolve_cm_export_type`) and the
     /// CM type emitter (`ast_type_to_cm`) resolve these types through the
     /// registry exactly like WASI types, with no library-specific path.
-    pub fn register_lib_local_decls(&mut self, module: &crate::ast::Module, iface_fq: &str) {
+    pub fn register_lib_local_decls(
+        &mut self,
+        module: &crate::ast::Module,
+        iface_fq: &str,
+        entry_source: ModuleSource,
+    ) {
         use crate::ast::Item;
+
+        // Record the FQ -> entry ModuleSource so consumers resolve lib-local
+        // types' module source (and detect lib-local provenance) without
+        // prefix-sniffing the FQ.
+        self.lib_interface_sources
+            .insert(iface_fq.to_string(), entry_source);
 
         for item in &module.items {
             match item {
@@ -1675,6 +1695,14 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_wasi_variant_source(&named.name))
             .or_else(|| self.find_wasi_enum_source(&named.name))
             .or_else(|| self.find_wasi_flags_source(&named.name))
+    }
+
+    /// The entry `ModuleSource` a `--lib` interface FQ was registered under, or
+    /// `None` for a WASI/core interface (or an unknown FQ). A `Some` result also
+    /// identifies the FQ as lib-local, replacing `!fq.starts_with("wasi:"/"core:")`
+    /// prefix checks at consumer sites.
+    pub fn lib_module_source_of(&self, iface_fq: &str) -> Option<&ModuleSource> {
+        self.lib_interface_sources.get(iface_fq)
     }
 
     /// Resolve a named type to its source interface across all CM namespaces

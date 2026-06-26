@@ -346,7 +346,6 @@ fn synthesize_future_read_func(
         type_table,
         cm_package: &cm_package,
         interner,
-        lib_module_source: None,
     };
     let lifted = synthesize_lift(
         &payload_ast,
@@ -710,7 +709,6 @@ fn synthesize_stream_read_func(
         type_table,
         cm_package: "filesystem",
         interner,
-        lib_module_source: None,
     };
     let ast_type = Type::Named(NamedType {
         id: AstId::fresh(),

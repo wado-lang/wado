@@ -167,7 +167,6 @@ fn generate_inline_task_return(
         type_table,
         cm_package,
         interner,
-        lib_module_source: None,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
