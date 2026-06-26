@@ -18,7 +18,7 @@ use wit_encoder::{
     TypeDef, VariantCase, World, WorldItem,
 };
 
-use crate::component_model::to_kebab;
+use crate::name::to_kebab;
 use crate::semantics::Semantics;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 

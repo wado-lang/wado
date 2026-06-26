@@ -12,6 +12,7 @@ use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::module_source::ModuleSource;
+use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CmFuturePayload, CmScalarType};
 
@@ -435,40 +436,6 @@ pub struct CmInterfaceRegistry {
     lib_interface_sources: IndexMap<String, ModuleSource>,
 }
 
-/// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
-/// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
-pub(crate) fn to_kebab(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut out = String::with_capacity(name.len() + 4);
-    let mut prev_lower_or_digit = false;
-    for (i, &ch) in chars.iter().enumerate() {
-        if ch == '_' {
-            if !out.ends_with('-') && !out.is_empty() {
-                out.push('-');
-            }
-            prev_lower_or_digit = false;
-            continue;
-        }
-        if ch.is_ascii_uppercase() {
-            // Break before an uppercase letter that starts a new word: either
-            // after a lowercase/digit (`myApi` -> `my-api`), or at the end of
-            // an acronym run when the next char is lowercase
-            // (`HTTPServer` -> `http-server`).
-            let acronym_boundary = chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
-                && i > 0
-                && chars[i - 1].is_ascii_uppercase();
-            if (prev_lower_or_digit || acronym_boundary) && !out.is_empty() {
-                out.push('-');
-            }
-            out.push(ch.to_ascii_lowercase());
-            prev_lower_or_digit = false;
-        } else {
-            out.push(ch);
-            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
-        }
-    }
-    out
-}
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
 /// registration. Two registrations of the same `(interface, name)` pair
