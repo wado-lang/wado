@@ -88,11 +88,50 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
 ## Status
 
 - [x] Phase 1 — fixture committed.
-- [ ] Phase 2 — shared type-mapping core + WIT→ast::Type.
-- [ ] Phase 3 — loader detect/decode/build-AST.
-- [ ] Phase 4 — registry provenance + `ImportKind::Component`.
-- [ ] Phase 6 — codegen composition.
-- [ ] Phase 7 — e2e round-trip.
+- [x] Phase 2 — shared type-mapping core (`CmShape` + `CmTypeAssembler`) + WIT→ast::Type (`wit_consume`).
+- [x] Phase 3 — loader detect/decode/build-AST; `use { Iface } from "./c.wasm"` resolves.
+- [x] Phase 4 — registry provenance + `ImportKind::Component`; binding synthesis reused.
+- [x] Phase 6a — codegen embeds + instantiates + lowers the dependency, forwarding its
+      own interface imports. **The composed multi-component `.wasm` validates.**
+- [ ] Phase 6b — **blocked:** runtime traps `CannotEnterComponent` (see below).
+- [ ] Phase 7 — e2e round-trip (blocked on 6b).
+
+### Blocker: host-mediated cross-component call trips CM reentrancy
+
+The composed component validates but traps at runtime with
+`CannotEnterComponent`. Root cause (verified in
+`vendor/wasmtime/.../component/concurrent.rs::may_enter`): with concurrency
+support enabled — always on for WASI P3 — the canonical ABI forbids the host
+from re-entering a **top-level** component instance already on the stack, even a
+different leaf instance. The dependency component is nested inside the outer
+(same top-level), so calling it traps.
+
+The current codegen satisfies the import the WASI way: `canon lower` the
+dependency's lifted export into a core func the main module imports. That call
+is **host-mediated** (`lower → host trampoline → lift`), so it runs the
+`may_enter` check. wasmtime *elides* that check only for **fused guest-to-guest
+adapters** — the structure `wac` / `wasm-compose` produce, where the program is
+a sub-component that *imports* the interface and is instantiated *with* the
+dependency's instance.
+
+Fix direction (next): emit the link as a proper sub-component composition —
+wrap the program's core logic as a sub-component that imports the linked
+interface, instantiate the dependency, and instantiate the program with it — so
+the cross-component call fuses guest-to-guest and the reentrancy check is
+elided. This is a codegen restructure (the outer component currently hosts the
+main core module directly).
+
+### Known smaller gaps (independent of the blocker)
+
+- A linked component that exports a **record** param/return hits a GC-ref vs i32
+  ABI mismatch in the caller (`expected (ref $type), found i32`).
+- A linked component that exports **world-level functions** (case A, no named
+  types) is rejected by `wit_consume` (only interface exports handled).
+- The outer must import the **union** of its own + the dependency's imports; the
+  current forwarding only wires imports the outer already has (the panic path's
+  `wasi:cli/stderr`/`types` happen to be present when the program uses `assert`,
+  but a program that triggers neither leaves the dependency's imports
+  unsatisfied — validation error naming the missing import).
 
 ## Notes
 
