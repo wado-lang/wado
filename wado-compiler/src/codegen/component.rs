@@ -3747,26 +3747,40 @@ fn embed_linked_components(
 
         let label = sanitise_wasm_namespace_for_label(namespace);
         let comp_idx = builder.component_raw(Some(&format!("linked-{label}")), &asset.bytes);
-        // A linked library component is self-contained (it carries its own
-        // memory/allocator), so it instantiates with no imports.
-        let inst_idx = builder.instantiate(
-            Some(&format!("linked-{label}-inst")),
-            comp_idx,
-            Vec::<(&str, ComponentExportKind, u32)>::new(),
-        );
+        // Forward the dependency's own interface imports (e.g. the ambient
+        // `wasi:cli/types` / `wasi:cli/stderr` panic path) from the outer
+        // component's matching imported instances, so the composed component is
+        // standalone. An import the outer does not provide is left unsatisfied
+        // and surfaces as a validation error naming it.
+        let args: Vec<(String, ComponentExportKind, u32)> = component_instance_imports(&asset.bytes)
+            .into_iter()
+            .filter_map(|import_name| {
+                let key = crate::name::cm_instance_key_from_fq(&import_name)?;
+                ctx.has_instance(&key)
+                    .then(|| (import_name, ComponentExportKind::Instance, ctx.instance_idx(&key)))
+            })
+            .collect();
+        let inst_idx = builder.instantiate(Some(&format!("linked-{label}-inst")), comp_idx, args);
         ctx.register_instance(&format!("linked-{label}-inst"));
 
         for fq in imported_fqs {
             let iface_inst = builder.alias_export(inst_idx, fq, ComponentExportKind::Instance);
             ctx.register_instance(&format!("linked-iface-{fq}"));
-            // (local core name, CM export name) per exported function.
+            // (local core name, CM export name) per *used* exported function.
+            // Only functions actually called are aliased and lowered; the rest
+            // of the interface stays untouched (mirrors WASI tree-shaking).
             let mut funcs: Vec<(String, String)> = Vec::new();
             for iface in project.cm_interface_registry.interfaces() {
                 if &iface.path != fq {
                     continue;
                 }
                 for f in &iface.functions {
-                    funcs.push((f.local_alias_name(), f.wasi_func_name.clone()));
+                    let used = project
+                        .used_wasi_functions
+                        .contains(&format!("{}::{}", f.interface_name, f.method_name));
+                    if used && project.cm_interface_registry.is_function_supported(f) {
+                        funcs.push((f.local_alias_name(), f.wasi_func_name.clone()));
+                    }
                 }
             }
             for (local_name, cm_export_name) in funcs {
@@ -3778,6 +3792,20 @@ fn embed_linked_components(
             }
         }
     }
+}
+
+/// The top-level CM instance-import names of a component binary, in order.
+fn component_instance_imports(bytes: &[u8]) -> Vec<String> {
+    use wasmparser::{Parser, Payload};
+    let mut names = Vec::new();
+    for payload in Parser::new(0).parse_all(bytes) {
+        if let Ok(Payload::ComponentImportSection(reader)) = payload {
+            for import in reader.into_iter().flatten() {
+                names.push(import.name.name.to_string());
+            }
+        }
+    }
+    names
 }
 
 fn lower_wasi_functions(
