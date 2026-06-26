@@ -242,11 +242,6 @@ pub fn build_component(
         component_plan,
     );
 
-    // Embed and instantiate linked CM components, aliasing each used export as
-    // a component func so the WASI-lowering pass below canon-lowers it into the
-    // core func the main module imports — same machinery, sub-component source.
-    embed_linked_components(&mut builder, &mut ctx, project, &wir_package.import_plan);
-
     // Lower WASI functions
     lower_wasi_functions(project, &mut builder, &mut ctx);
 
@@ -375,7 +370,10 @@ pub fn build_component(
     // freestanding world functions stay bare. See the function doc.
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
-    component_bytes
+    // Statically link any imported CM components: compose this component (which
+    // imports the linked interfaces) with the dependency components, so the
+    // cross-component calls fuse guest-to-guest and the result is standalone.
+    compose_linked_components(component_bytes, project, &wir_package.import_plan)
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -1973,10 +1971,17 @@ fn generate_cm_imports(
         // Membership: the plan lists this FQ as a function-bearing interface.
         // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
         // so it is correctly excluded from this loop and handled by Phase 0.)
-        if !import_plan
-            .iter()
-            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
-        {
+        // A linked CM component's interface is imported here exactly like a
+        // host function-interface; the dependency is wired in afterwards by
+        // `compose_linked_components`, so the cross-component call fuses
+        // guest-to-guest instead of going through a host trampoline.
+        if !import_plan.iter().any(|e| {
+            e.fq == interface_info.path
+                && matches!(
+                    e.kind,
+                    ImportKind::FunctionInterface | ImportKind::Component
+                )
+        }) {
             continue;
         }
 
@@ -3713,99 +3718,85 @@ fn import_resource_using_interfaces(
     }
 }
 
-/// Embed each linked CM component as a sub-component, instantiate it, and alias
-/// its exported interface functions as component funcs registered under the same
-/// local names the WASI-import path uses. [`lower_wasi_functions`] then
-/// canon-lowers them into core funcs, and they flow into the `wasi` instance and
-/// the main module exactly like host imports — the only difference is the source
-/// of the lifted func (a nested instance export vs a host import).
-fn embed_linked_components(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
+/// Statically link the program component (`program_bytes`, which imports the
+/// linked interfaces) with the dependency components, producing one standalone
+/// component. Uses `wasm-compose`'s in-memory graph: each dependency is
+/// instantiated and its exported interface connected to the program's matching
+/// import; the program's remaining imports (host WASI) and the dependencies'
+/// own imports are surfaced (and merged by name) as the result's imports, and
+/// the program's exports are re-exported. Because the call crosses two
+/// sub-components of one composed component, wasmtime fuses it guest-to-guest
+/// and the Component Model reentrancy guard is elided (no `CannotEnterComponent`
+/// trap).
+fn compose_linked_components(
+    program_bytes: Vec<u8>,
     project: &NirPackage,
     import_plan: &[crate::wir::ImportEntry],
-) {
+) -> Vec<u8> {
     use crate::wir::ImportKind;
-    let component_fqs: IndexSet<&str> = import_plan
+    use wasm_compose::graph::{Component, CompositionGraph, EncodeOptions};
+    use wasmparser::Validator;
+
+    let linked_fqs: IndexSet<&str> = import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    if component_fqs.is_empty() {
-        return;
+    if linked_fqs.is_empty() {
+        return program_bytes;
     }
 
-    for (namespace, asset) in &project.wasm_assets {
-        let imported_fqs: Vec<&String> = asset
-            .component_interface_fqs
-            .iter()
-            .filter(|fq| component_fqs.contains(fq.as_str()))
-            .collect();
-        if imported_fqs.is_empty() {
-            continue;
-        }
+    let compose = || -> anyhow::Result<Vec<u8>> {
+        let mut validator = Validator::new_with_features(wasmparser::WasmFeatures::all());
+        let mut graph = CompositionGraph::new();
 
-        let label = sanitise_wasm_namespace_for_label(namespace);
-        let comp_idx = builder.component_raw(Some(&format!("linked-{label}")), &asset.bytes);
-        // Forward the dependency's own interface imports (e.g. the ambient
-        // `wasi:cli/types` / `wasi:cli/stderr` panic path) from the outer
-        // component's matching imported instances, so the composed component is
-        // standalone. An import the outer does not provide is left unsatisfied
-        // and surfaces as a validation error naming it.
-        let args: Vec<(String, ComponentExportKind, u32)> = component_instance_imports(&asset.bytes)
-            .into_iter()
-            .filter_map(|import_name| {
-                let key = crate::name::cm_instance_key_from_fq(&import_name)?;
-                ctx.has_instance(&key)
-                    .then(|| (import_name, ComponentExportKind::Instance, ctx.instance_idx(&key)))
-            })
-            .collect();
-        let inst_idx = builder.instantiate(Some(&format!("linked-{label}-inst")), comp_idx, args);
-        ctx.register_instance(&format!("linked-{label}-inst"));
+        let program = Component::from_bytes(&mut validator, "program", program_bytes.clone())?;
+        let program_id = graph.add_component(program)?;
+        let program_inst = graph.instantiate(program_id)?;
 
-        for fq in imported_fqs {
-            let iface_inst = builder.alias_export(inst_idx, fq, ComponentExportKind::Instance);
-            ctx.register_instance(&format!("linked-iface-{fq}"));
-            // (local core name, CM export name) per *used* exported function.
-            // Only functions actually called are aliased and lowered; the rest
-            // of the interface stays untouched (mirrors WASI tree-shaking).
-            let mut funcs: Vec<(String, String)> = Vec::new();
-            for iface in project.cm_interface_registry.interfaces() {
-                if &iface.path != fq {
-                    continue;
-                }
-                for f in &iface.functions {
-                    let used = project
-                        .used_wasi_functions
-                        .contains(&format!("{}::{}", f.interface_name, f.method_name));
-                    if used && project.cm_interface_registry.is_function_supported(f) {
-                        funcs.push((f.local_alias_name(), f.wasi_func_name.clone()));
-                    }
-                }
+        // Each dependency component, instantiated once; its exported interfaces
+        // connected to the program's matching imports.
+        for asset in project.wasm_assets.values() {
+            let provides: Vec<&String> = asset
+                .component_interface_fqs
+                .iter()
+                .filter(|fq| linked_fqs.contains(fq.as_str()))
+                .collect();
+            if provides.is_empty() {
+                continue;
             }
-            for (local_name, cm_export_name) in funcs {
-                if ctx.has_comp_func(&local_name) {
-                    continue;
-                }
-                builder.alias_export(iface_inst, &cm_export_name, ComponentExportKind::Func);
-                ctx.register_comp_func(&local_name);
+            let dep = Component::from_bytes(&mut validator, "dependency", asset.bytes.clone())?;
+            let dep_id = graph.add_component(dep)?;
+            let dep_inst = graph.instantiate(dep_id)?;
+
+            for fq in provides {
+                let dep_export = graph
+                    .get_component(dep_id)
+                    .and_then(|c| c.export_by_name(fq))
+                    .map(|(idx, _, _)| idx)
+                    .ok_or_else(|| anyhow::anyhow!("dependency missing export `{fq}`"))?;
+                let program_import = graph
+                    .get_component(program_id)
+                    .and_then(|c| c.import_by_name(fq))
+                    .map(|(idx, _)| idx)
+                    .ok_or_else(|| anyhow::anyhow!("program missing import `{fq}`"))?;
+                graph.connect(dep_inst, Some(dep_export), program_inst, program_import)?;
             }
         }
+
+        graph.encode(EncodeOptions {
+            define_components: true,
+            export: Some(program_inst),
+            validate: false,
+        })
+    };
+
+    match compose() {
+        Ok(bytes) => bytes,
+        // Composition is a pure transform over already-valid components; a
+        // failure is a compiler bug, not user error.
+        Err(e) => panic!("failed to link CM component dependencies: {e:?}"),
     }
-}
-
-/// The top-level CM instance-import names of a component binary, in order.
-fn component_instance_imports(bytes: &[u8]) -> Vec<String> {
-    use wasmparser::{Parser, Payload};
-    let mut names = Vec::new();
-    for payload in Parser::new(0).parse_all(bytes) {
-        if let Ok(Payload::ComponentImportSection(reader)) = payload {
-            for import in reader.into_iter().flatten() {
-                names.push(import.name.name.to_string());
-            }
-        }
-    }
-    names
 }
 
 fn lower_wasi_functions(
