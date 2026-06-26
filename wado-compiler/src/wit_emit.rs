@@ -602,7 +602,9 @@ impl<'a> Emitter<'a> {
     ) -> Result<Type, WitEmitError> {
         match classify_ast(ty) {
             CmShape::Leaf => self.map_ast_leaf(ty, current_fq, uses),
-            shape => assemble(shape, |child| self.map_ast_type(&child, current_fq, uses)),
+            shape => assemble::<_, WitAssembler, _>(shape, |child| {
+                self.map_ast_type(&child, current_fq, uses)
+            }),
         }
     }
 
@@ -726,7 +728,7 @@ impl<'a> Emitter<'a> {
     fn map_type(&mut self, type_id: TypeId) -> Result<Type, WitEmitError> {
         match self.classify_resolved(type_id) {
             CmShape::Leaf => self.map_resolved_leaf(type_id),
-            shape => assemble(shape, |child| self.map_type(child)),
+            shape => assemble::<_, WitAssembler, _>(shape, |child| self.map_type(child)),
         }
     }
 
@@ -821,7 +823,7 @@ impl<'a> Emitter<'a> {
 /// for resolved types, `ast::Type` for CM-registry signatures) so the shared
 /// [`assemble`] rule can recurse back through the same mapper. `Leaf` covers
 /// primitives, named types, and handles — rendered by the front-end.
-enum CmShape<T> {
+pub(crate) enum CmShape<T> {
     Option(T),
     List(T),
     Tuple(Vec<T>),
@@ -831,38 +833,77 @@ enum CmShape<T> {
     Leaf,
 }
 
-/// The one place the WIT structural constructors (`option` / `list` / `tuple`
-/// / `result` / `future` / `stream`) are built, so the resolved-type and
-/// CM-AST front-ends cannot drift in how a shape becomes WIT. `render` maps a
-/// child in the front-end's native representation.
-fn assemble<T>(
+/// Builds the structural CM constructors (`option` / `list` / `tuple` /
+/// `result` / `future` / `stream`) for one output representation. Both the
+/// WIT producer (`Output = wit_encoder::Type`) and the component consumer
+/// (`Output = ast::Type`, in `wit_consume`) implement this, so the structural
+/// shape ↔ type correspondence lives in exactly one place for both directions.
+pub(crate) trait CmTypeAssembler {
+    type Output;
+    fn option(inner: Self::Output) -> Self::Output;
+    fn list(inner: Self::Output) -> Self::Output;
+    fn tuple(elems: Vec<Self::Output>) -> Self::Output;
+    fn result(ok: Option<Self::Output>, err: Option<Self::Output>) -> Self::Output;
+    fn future(inner: Option<Self::Output>) -> Self::Output;
+    fn stream(inner: Option<Self::Output>) -> Self::Output;
+}
+
+/// The one place a [`CmShape`] becomes a concrete type, so the producer and
+/// consumer front-ends cannot drift in how a shape is assembled. `render` maps
+/// a child in the front-end's native representation into the assembler's output.
+pub(crate) fn assemble<T, A: CmTypeAssembler, E>(
     shape: CmShape<T>,
-    mut render: impl FnMut(T) -> Result<Type, WitEmitError>,
-) -> Result<Type, WitEmitError> {
+    mut render: impl FnMut(T) -> Result<A::Output, E>,
+) -> Result<A::Output, E> {
     Ok(match shape {
         CmShape::Leaf => unreachable!("leaves are rendered by the front-end, not assembled"),
-        CmShape::Option(t) => Type::option(render(t)?),
-        CmShape::List(t) => Type::list(render(t)?),
+        CmShape::Option(t) => A::option(render(t)?),
+        CmShape::List(t) => A::list(render(t)?),
         CmShape::Tuple(ts) => {
             let mut elems = Vec::with_capacity(ts.len());
             for t in ts {
                 elems.push(render(t)?);
             }
-            Type::tuple(elems)
+            A::tuple(elems)
         }
         CmShape::Result { ok, err } => {
             let ok = ok.map(&mut render).transpose()?;
             let err = err.map(&mut render).transpose()?;
-            match (ok, err) {
-                (None, None) => Type::result_empty(),
-                (Some(o), None) => Type::result_ok(o),
-                (None, Some(e)) => Type::result_err(e),
-                (Some(o), Some(e)) => Type::result_both(o, e),
-            }
+            A::result(ok, err)
         }
-        CmShape::Future(t) => Type::future(t.map(&mut render).transpose()?),
-        CmShape::Stream(t) => Type::stream(t.map(&mut render).transpose()?),
+        CmShape::Future(t) => A::future(t.map(&mut render).transpose()?),
+        CmShape::Stream(t) => A::stream(t.map(&mut render).transpose()?),
     })
+}
+
+/// The WIT-producer assembler: `CmShape` → `wit_encoder::Type`.
+pub(crate) struct WitAssembler;
+
+impl CmTypeAssembler for WitAssembler {
+    type Output = Type;
+    fn option(inner: Type) -> Type {
+        Type::option(inner)
+    }
+    fn list(inner: Type) -> Type {
+        Type::list(inner)
+    }
+    fn tuple(elems: Vec<Type>) -> Type {
+        Type::tuple(elems)
+    }
+    fn result(ok: Option<Type>, err: Option<Type>) -> Type {
+        match (ok, err) {
+            (None, None) => Type::result_empty(),
+            (Some(o), None) => Type::result_ok(o),
+            (None, Some(e)) => Type::result_err(e),
+            (Some(o), Some(e)) => Type::result_both(o, e),
+        }
+    }
+    fn future(inner: Option<Type>) -> Type {
+        Type::future(inner)
+    }
+    fn stream(inner: Option<Type>) -> Type {
+        Type::stream(inner)
+    }
 }
 
 /// Classify a CM-signature AST type into its structural shape. `AsyncCall<T>`

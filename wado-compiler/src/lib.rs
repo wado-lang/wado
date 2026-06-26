@@ -59,6 +59,7 @@ pub mod wir_optimize;
 pub mod wir_unparse;
 pub mod wir_visitor;
 pub mod wit_bundle;
+pub mod wit_consume;
 pub mod wit_emit;
 pub mod world_registry;
 
