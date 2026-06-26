@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
+use crate::tir::{ResolvedType, TirFunction, TirModule, TypeId, TypeTable};
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
@@ -299,6 +299,33 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 user_func.params.len(),
                                 export.params.len()
                             ));
+                        }
+                    }
+
+                    // Reject any param/return type with no Component Model value
+                    // representation in any world (empty records, 128-bit/v128
+                    // scalars) with a proper compile error rather than emitting
+                    // an invalid component or panicking in codegen. Handle/async
+                    // types pass — they lower to i32 handles in every world — so
+                    // this needs no `--lib`-vs-WASI branch.
+                    {
+                        let user_func = user_func_rc.borrow();
+                        let tt = entry_type_table.borrow();
+                        let mut to_check: Vec<TypeId> =
+                            user_func.params.iter().map(|p| p.type_id).collect();
+                        to_check.push(user_func.return_type);
+                        for tid in to_check {
+                            if let Err(reason) = types::check_cm_boundary_representable(
+                                tid,
+                                &tt,
+                                &project.tir_modules,
+                                &mut Vec::new(),
+                            ) {
+                                return Err(format!(
+                                    "export function `{}`: {reason}",
+                                    export.name
+                                ));
+                            }
                         }
                     }
 

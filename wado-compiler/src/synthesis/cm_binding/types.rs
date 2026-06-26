@@ -485,6 +485,158 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     )
 }
 
+/// Validate that `type_id` has a Component Model value representation, returning
+/// `Err(reason)` for a type that has *none in any world* — an empty record (the
+/// CM binary format forbids zero-field records) or a 128-bit/`v128` scalar (no
+/// CM scalar type). The driver surfaces this as a proper compile error instead
+/// of emitting an invalid component or panicking in codegen.
+///
+/// The check is world-independent: it does not branch on `--lib` vs WASI. Handle
+/// and async types (`resource`, `own`/`borrow`, `stream`/`future`) *are*
+/// representable — they lower to `i32` handles identically in every world — so
+/// they pass. Recurses through containers and named aggregates to catch a
+/// non-representable type nested inside one; `visited` guards against cycles.
+pub(super) fn check_cm_boundary_representable(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), String> {
+    use crate::tir::{PrimitiveType, ResolvedType as R};
+
+    if visited.contains(&type_id) {
+        return Ok(());
+    }
+    visited.push(type_id);
+
+    // Container shapes resolve through the type-table accessors regardless of
+    // their declaring module, keeping this free of source-prefix branching.
+    let recurse = |tid, visited: &mut Vec<TypeId>| {
+        check_cm_boundary_representable(tid, type_table, tir_modules, visited)
+    };
+    let result = (|visited: &mut Vec<TypeId>| {
+        if let Some(inner) = type_table.as_option(type_id) {
+            return recurse(inner, visited);
+        }
+        if let Some(elem) = type_table.as_list(type_id) {
+            return recurse(elem, visited);
+        }
+        if let Some(elems) = type_table.as_tuple(type_id) {
+            for e in elems {
+                recurse(e, visited)?;
+            }
+            return Ok(());
+        }
+        // Exhaustive over `ResolvedType` on purpose — no wildcard. A wildcard
+        // would silently classify an unhandled (or future) variant as
+        // representable and let it fall through to the i32 lowering, which is
+        // exactly the bug this check exists to prevent. New variants must be
+        // classified explicitly.
+        match type_table.get(type_id) {
+            // No CM value representation in any world.
+            R::Primitive(
+                PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128,
+            ) => Err(format!(
+                "`{}` has no Component Model value representation",
+                type_table.type_name(type_id)
+            )),
+            // Scalars, plain discriminants, bitflags, and resource/handle types
+            // (`resource`, `own`/`borrow`, `stream`/`future`) — the last group
+            // lowers to an i32 handle identically in every world.
+            R::Primitive(_)
+            | R::Unit
+            | R::Enum { .. }
+            | R::Flags { .. }
+            | R::Resource { .. }
+            | R::GenericResource { .. } => Ok(()),
+            R::Struct { name, .. } => {
+                let names = CmStdlibNames::from_compiler_items(type_table.compiler_items());
+                if name == &names.string {
+                    return Ok(());
+                }
+                let name = name.clone();
+                match find_struct_decl(&name, tir_modules) {
+                    Some(decl) if decl.fields.is_empty() => Err(format!(
+                        "record `{name}` has no fields; an empty record has no \
+                         Component Model representation — add at least one field"
+                    )),
+                    Some(decl) => {
+                        let field_tys: Vec<TypeId> =
+                            decl.fields.iter().map(|f| f.type_id).collect();
+                        for ft in field_tys {
+                            recurse(ft, visited)?;
+                        }
+                        Ok(())
+                    }
+                    None => Ok(()),
+                }
+            }
+            R::Variant { name, .. } => {
+                let name = name.clone();
+                match find_variant_decl(&name, tir_modules) {
+                    Some(decl) => {
+                        let payloads: Vec<TypeId> =
+                            decl.cases.iter().map(|c| c.payload).collect();
+                        for p in payloads {
+                            recurse(p, visited)?;
+                        }
+                        Ok(())
+                    }
+                    None => Ok(()),
+                }
+            }
+            R::GenericInstance { name, type_args, .. } => {
+                // Option/List/Tuple were handled above by the `as_*` accessors;
+                // `Result<T, E>` recurses into its arms. Any other generic
+                // instance has no concrete CM lowering at this boundary (it
+                // should have monomorphized to a named type), so reject it
+                // rather than lowering it as an opaque i32.
+                let result_name = type_table
+                    .compiler_items()
+                    .variant_name(crate::compiler_item::CompilerItem::Result);
+                if name == result_name {
+                    let args = type_args.clone();
+                    for a in args {
+                        recurse(a, visited)?;
+                    }
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "generic type `{}` has no Component Model value \
+                         representation at an export boundary",
+                        type_table.type_name(type_id)
+                    ))
+                }
+            }
+            R::Newtype { base_type, .. } => {
+                let base = *base_type;
+                recurse(base, visited)
+            }
+            // These never carry a CM value at a concrete export boundary
+            // (diverging/never, closures, reactive cells, raw GC arrays,
+            // unmonomorphized type parameters, or unresolved/error types).
+            // Reject explicitly instead of silently lowering to i32.
+            R::Never
+            | R::Ref(_)
+            | R::MutRef(_)
+            | R::Function { .. }
+            | R::Reactive(_)
+            | R::TypeParam { .. }
+            | R::TypePack { .. }
+            | R::AssocTypeProjection { .. }
+            | R::BuiltinArray(_)
+            | R::Unknown
+            | R::Error => Err(format!(
+                "type `{}` has no Component Model value representation",
+                type_table.type_name(type_id)
+            )),
+        }
+    })(visited);
+
+    visited.pop();
+    result
+}
+
 /// Map a core-value `TypeId` (`i32`/`i64`/`f32`/`f64`) to its `CmValType`.
 /// Non-core TypeIds (which never appear as a flat slot) map to `I32`.
 pub(super) fn cm_val_type_from_type_id(tid: TypeId) -> cm_abi::CmValType {

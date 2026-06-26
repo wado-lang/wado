@@ -253,6 +253,33 @@ fn run_round_trips(opt_level: OptLevel) {
     });
 }
 
+/// Compile an inline library source at O0, returning the compiler's result.
+fn try_compile_lib(source: &str) -> Result<(), String> {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O0,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// A library export whose signature carries a type with no Component Model value
+/// representation must be rejected with a readable compile error, not an ICE or
+/// silently-wrong code. An empty record is the canonical case.
+#[test]
+fn cm_lib_rejects_empty_record_boundary_type() {
+    let err = try_compile_lib(
+        "pub struct Empty {}\nexport fn id_empty(v: Empty) -> Empty {\n    return v;\n}\n",
+    )
+    .expect_err("empty-record export should fail to compile");
+    assert!(
+        err.contains("id_empty") && err.contains("empty record"),
+        "expected an empty-record boundary diagnostic, got: {err}"
+    );
+}
+
 #[test]
 fn cm_catalog_round_trip_o0() {
     run_round_trips(OptLevel::O0);
