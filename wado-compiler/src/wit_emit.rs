@@ -821,7 +821,7 @@ impl<'a> Emitter<'a> {
 /// for resolved types, `ast::Type` for CM-registry signatures) so the shared
 /// [`assemble`] rule can recurse back through the same mapper. `Leaf` covers
 /// primitives, named types, and handles — rendered by the front-end.
-enum CmShape<T> {
+pub(crate) enum CmShape<T> {
     Option(T),
     List(T),
     Tuple(Vec<T>),
@@ -834,7 +834,9 @@ enum CmShape<T> {
 /// The one place the WIT structural constructors (`option` / `list` / `tuple`
 /// / `result` / `future` / `stream`) are built, so the resolved-type and
 /// CM-AST front-ends cannot drift in how a shape becomes WIT. `render` maps a
-/// child in the front-end's native representation.
+/// child in the front-end's native representation. The `wit_consume` consumer
+/// shares the [`CmShape`] classification but renders to `ast::Type` separately
+/// (its nodes carry `AstId`s this id-less producer rule cannot supply).
 fn assemble<T>(
     shape: CmShape<T>,
     mut render: impl FnMut(T) -> Result<Type, WitEmitError>,

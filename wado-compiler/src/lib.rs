@@ -59,6 +59,7 @@ pub mod wir_optimize;
 pub mod wir_unparse;
 pub mod wir_visitor;
 pub mod wit_bundle;
+pub mod wit_consume;
 pub mod wit_emit;
 pub mod world_registry;
 
@@ -1215,8 +1216,16 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (cm_interface_registry, world_registry) =
+            let (mut cm_interface_registry, world_registry) =
                 component_model::CmInterfaceRegistry::build_from_stdlib();
+            // Mirror elaboration's fold so CM imports resolve during WIR build
+            // (the dump path rebuilds the registry from the stdlib snapshot).
+            // Stdlib modules are never `Wasm`, so an empty stdlib set suffices.
+            crate::elaborator::orchestration::fold_component_interfaces(
+                &mut cm_interface_registry,
+                &load_result.modules,
+                &crate::hashmap::IndexSet::default(),
+            );
 
             let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
             let mut builtin_registry =

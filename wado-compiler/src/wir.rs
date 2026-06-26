@@ -54,6 +54,9 @@ pub enum ImportKind {
     /// combined shape — resources plus a getter — is encoded as one instance by
     /// codegen's dedicated resource-defining pass.
     ResourceDefiningInterface,
+    /// An interface imported from a CM component dependency. Codegen imports it
+    /// like a host interface, then composes the dependency in with `wasm-compose`.
+    Component,
 }
 
 /// One entry of the WIR-level import plan: a CM interface FQ and its category.

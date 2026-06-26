@@ -370,7 +370,8 @@ pub fn build_component(
     // freestanding world functions stay bare. See the function doc.
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
-    component_bytes
+    // Compose in imported CM component dependencies so the result is standalone.
+    compose_dependency_components(component_bytes, project, &wir_package.import_plan)
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -754,6 +755,8 @@ fn wado_type_to_cm_val_type(
                 return ComponentValType::Type(flags_idx);
             }
             match named.name.as_str() {
+                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
+                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
                 "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
                 "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
                 "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
@@ -1968,10 +1971,15 @@ fn generate_cm_imports(
         // Membership: the plan lists this FQ as a function-bearing interface.
         // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
         // so it is correctly excluded from this loop and handled by Phase 0.)
-        if !import_plan
-            .iter()
-            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::FunctionInterface)
-        {
+        // A `Component` import is emitted like a host function-interface here;
+        // `compose_dependency_components` wires in the dependency afterwards.
+        if !import_plan.iter().any(|e| {
+            e.fq == interface_info.path
+                && matches!(
+                    e.kind,
+                    ImportKind::FunctionInterface | ImportKind::Component
+                )
+        }) {
             continue;
         }
 
@@ -3705,6 +3713,80 @@ fn import_resource_using_interfaces(
                 ComponentExportKind::Func,
             );
         }
+    }
+}
+
+/// Compose `program_bytes` with its `ImportKind::Component` dependencies into
+/// one standalone component via `wasm-compose`. Each dependency's exported
+/// interface is connected to the program's matching import; leftover host
+/// imports are merged by name. The fused guest-to-guest call elides the CM
+/// reentrancy guard (no `CannotEnterComponent` trap a host trampoline would hit).
+fn compose_dependency_components(
+    program_bytes: Vec<u8>,
+    project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
+) -> Vec<u8> {
+    use crate::wir::ImportKind;
+    use wasm_compose::graph::{Component, CompositionGraph, EncodeOptions};
+    use wasmparser::Validator;
+
+    let dependency_fqs: IndexSet<&str> = import_plan
+        .iter()
+        .filter(|e| e.kind == ImportKind::Component)
+        .map(|e| e.fq.as_str())
+        .collect();
+    if dependency_fqs.is_empty() {
+        return program_bytes;
+    }
+
+    let compose = || -> anyhow::Result<Vec<u8>> {
+        let mut validator = Validator::new_with_features(wasmparser::WasmFeatures::all());
+        let mut graph = CompositionGraph::new();
+
+        let program = Component::from_bytes(&mut validator, "program", program_bytes.clone())?;
+        let program_id = graph.add_component(program)?;
+        let program_inst = graph.instantiate(program_id)?;
+
+        // Instantiate each dependency, connecting its exports to program imports.
+        for asset in project.wasm_assets.values() {
+            let provides: Vec<&String> = asset
+                .component_interface_fqs
+                .iter()
+                .filter(|fq| dependency_fqs.contains(fq.as_str()))
+                .collect();
+            if provides.is_empty() {
+                continue;
+            }
+            let dep = Component::from_bytes(&mut validator, "dependency", asset.bytes.clone())?;
+            let dep_id = graph.add_component(dep)?;
+            let dep_inst = graph.instantiate(dep_id)?;
+
+            for fq in provides {
+                let dep_export = graph
+                    .get_component(dep_id)
+                    .and_then(|c| c.export_by_name(fq))
+                    .map(|(idx, _, _)| idx)
+                    .ok_or_else(|| anyhow::anyhow!("dependency missing export `{fq}`"))?;
+                let program_import = graph
+                    .get_component(program_id)
+                    .and_then(|c| c.import_by_name(fq))
+                    .map(|(idx, _)| idx)
+                    .ok_or_else(|| anyhow::anyhow!("program missing import `{fq}`"))?;
+                graph.connect(dep_inst, Some(dep_export), program_inst, program_import)?;
+            }
+        }
+
+        graph.encode(EncodeOptions {
+            define_components: true,
+            export: Some(program_inst),
+            validate: false,
+        })
+    };
+
+    match compose() {
+        Ok(bytes) => bytes,
+        // Pure transform over valid components: a failure is a compiler bug.
+        Err(e) => panic!("failed to compose CM component dependencies: {e:?}"),
     }
 }
 

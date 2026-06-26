@@ -770,7 +770,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let (cm_interface_registry, world_registry) = {
             let _span = logger.span("elaborate/cm_interface_registry");
-            CmInterfaceRegistry::build_from_stdlib()
+            let (mut cm_interface_registry, world_registry) =
+                CmInterfaceRegistry::build_from_stdlib();
+            // Resolve `Interface::method` calls into CM components during
+            // annotate — the same role build_from_stdlib plays for WASI.
+            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
+            (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
             let _span = logger.span("elaborate/builtin_registry");
@@ -3183,4 +3188,40 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
     }
+}
+
+/// Fold component-dependency interfaces into `registry` (copy-on-write) so
+/// `Interface::method` calls resolve their CM signatures. Component binding
+/// modules are loader-synthesized `ModuleSource::Wasm` modules; the `Wasm`-source
+/// guard excludes stdlib WASI. Shared by elaboration and the dump pipeline.
+pub(crate) fn fold_component_interfaces(
+    registry: &mut Arc<CmInterfaceRegistry>,
+    modules: &IndexMap<ModuleSource, Module>,
+    stdlib_set: &IndexSet<ModuleSource>,
+) {
+    for (ms, module) in modules {
+        if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
+            continue;
+        }
+        let interface_fqs = component_interface_fqs(module);
+        if !interface_fqs.is_empty() {
+            Arc::make_mut(registry).register_component_decls(module, &interface_fqs);
+        }
+    }
+}
+
+/// Exported interface FQs of a component-binding module. Empty for a core-wasm
+/// asset (whose decls carry `#[canonical(...)]`, not `#[cm(...)]` interfaces).
+fn component_interface_fqs(module: &Module) -> Vec<String> {
+    module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Interface(decl) => decl
+                .attrs
+                .iter()
+                .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path)),
+            _ => None,
+        })
+        .collect()
 }

@@ -1013,11 +1013,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             match item {
                 Item::Use(use_decl) => {
                     // `entry` must be threaded so identities match the loader
-                    // (see `name::resolve_local_identity`).
-                    let source = name::resolve_import_with_invocations(
+                    // (see `name::resolve_local_identity`). Wasm-asset imports
+                    // resolve to `ModuleSource::Wasm`, matching the loader.
+                    let source = crate::loader::resolve_use_decl_source(
                         interner,
                         module_source,
-                        &use_decl.source,
+                        use_decl,
                         entry,
                         invocations,
                     );

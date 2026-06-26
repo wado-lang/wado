@@ -1,0 +1,31 @@
+// Import an interface from an external `.wasm` component and round-trip values
+// across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
+// test runs `lift(lower(x)) == x` against the real component.
+use { CmCatalog, Color } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+test "primitives round-trip" {
+    assert CmCatalog::id_bool(true) == true;
+    assert CmCatalog::id_u8(200) == 200;
+    assert CmCatalog::id_u16(40000) == 40000;
+    assert CmCatalog::id_u32(42) == 42;
+    assert CmCatalog::id_u64(9000000000) == 9000000000;
+    assert CmCatalog::id_s8(-5) == -5;
+    assert CmCatalog::id_s16(-300) == -300;
+    assert CmCatalog::id_s32(-7) == -7;
+    assert CmCatalog::id_s64(-9000000000) == -9000000000;
+    assert CmCatalog::id_f32(1.5) == 1.5;
+    assert CmCatalog::id_f64(3.5) == 3.5;
+    assert CmCatalog::id_char('Z') == 'Z';
+}
+
+test "string round-trip" {
+    let s: String = "hello";
+    assert CmCatalog::id_string(s) == "hello";
+}
+
+test "enum round-trip" {
+    assert CmCatalog::id_enum(Color::Green) == Color::Green;
+}
+
+__DATA__
+{"test": {}}

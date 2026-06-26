@@ -55,10 +55,10 @@ pub(super) fn module_import_scope(
     let mut pending_cases: Vec<(String, ModuleSource)> = Vec::new();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
-            let source = name::resolve_import_with_invocations(
+            let source = crate::loader::resolve_use_decl_source(
                 interner,
                 from_module,
-                &use_decl.source,
+                use_decl,
                 entry_module,
                 invocations,
             );

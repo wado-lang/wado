@@ -434,6 +434,10 @@ pub struct CmInterfaceRegistry {
     /// absent here; their `ModuleSource` is derived from the FQ by the canonical
     /// naming convention (`module_source_for_cm_interface`).
     lib_interface_sources: IndexMap<String, ModuleSource>,
+
+    /// FQs of interfaces imported from a CM component dependency. The plan
+    /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
+    component_interfaces: IndexSet<String>,
 }
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
@@ -1307,6 +1311,26 @@ impl CmInterfaceRegistry {
                 }
             }
         }
+    }
+
+    /// Register a component dependency's binding module via the stdlib's
+    /// [`Self::register_module_decls`] path, recording each interface FQ as a
+    /// component import for [`crate::wir::ImportKind::Component`] classification.
+    pub fn register_component_decls(
+        &mut self,
+        module: &crate::ast::Module,
+        interface_fqs: &[String],
+    ) {
+        self.register_module_decls(module);
+        for fq in interface_fqs {
+            self.component_interfaces.insert(fq.clone());
+        }
+    }
+
+    /// Whether `fq` names an interface imported from a CM component dependency.
+    #[must_use]
+    pub fn is_component_interface(&self, fq: &str) -> bool {
+        self.component_interfaces.contains(fq)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
@@ -3294,7 +3318,8 @@ fn is_param_type_supported_with_types(
             // Struct types (records) like Instant are also supported as params
             matches!(
                 name,
-                "i32"
+                "i8" | "i16"
+                    | "i32"
                     | "i64"
                     | "u8"
                     | "u16"
@@ -3346,7 +3371,8 @@ fn is_return_type_supported_with_types(
             // Unit type () is parsed as Named("()"), not Tuple([])
             matches!(
                 name,
-                "i32"
+                "i8" | "i16"
+                    | "i32"
                     | "i64"
                     | "u8"
                     | "u16"

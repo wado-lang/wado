@@ -268,10 +268,51 @@ pub struct WasmExportSig {
 /// extracted export signatures used by TIR synthesis.
 #[derive(Debug, Clone)]
 pub struct WasmAsset {
-    /// Core wasm bytes (always binary; `.wat` is parsed at load time).
+    /// Binary bytes (`.wat` is parsed at load time). For a component asset, the
+    /// whole component binary, composed into the output at codegen.
     pub bytes: Vec<u8>,
-    /// Function exports (kind = func) ordered by their wasm order.
+    /// Function exports in wasm order. Empty for a component asset.
     pub function_exports: Vec<WasmExportSig>,
+    /// Exported interface FQs; non-empty marks this as a CM component to compose in.
+    pub component_interface_fqs: Vec<String>,
+}
+
+/// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
+/// the `with { type: "wat" | "wasm" }` form to `ModuleSource::Wasm`. Mirrors
+/// `analyze::resolve_use_decl_module_source`.
+pub fn resolve_use_decl_source(
+    interner: &mut ModuleSourceInterner,
+    from: &ModuleSource,
+    use_decl: &crate::ast::UseDecl,
+    entry: Option<&ModuleSource>,
+    invocations: &crate::kiln::InvocationIndex,
+) -> ModuleSource {
+    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref())
+        && let Ok(path) =
+            resolve_wasm_asset_path(from, &use_decl.source, &crate::name::entry_dir_of(entry))
+    {
+        return interner.wasm(&path, kind);
+    }
+    crate::name::resolve_import_with_invocations(
+        interner,
+        from,
+        &use_decl.source,
+        entry,
+        invocations,
+    )
+}
+
+/// Whether `bytes` is a CM component (vs a core module), per the preamble encoding.
+fn is_wasm_component(bytes: &[u8]) -> bool {
+    use wasmparser::{Encoding, Parser, Payload};
+    Parser::new(0)
+        .parse_all(bytes)
+        .filter_map(Result::ok)
+        .find_map(|payload| match payload {
+            Payload::Version { encoding, .. } => Some(encoding == Encoding::Component),
+            _ => None,
+        })
+        .unwrap_or(false)
 }
 
 /// Result of loading all modules
@@ -1288,9 +1329,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::Wasm { path, .. } => path.clone(),
             _ => unreachable!(),
         };
-        let (core_wasm_bytes, function_exports) = {
+        let raw_bytes = {
             let _span = self.logger.span(&format!("load_wasm_asset {namespace}"));
-            let raw_bytes = self.fetch_wasm_asset_bytes(&source, &path).await?;
+            self.fetch_wasm_asset_bytes(&source, &path).await?
+        };
+
+        // A CM component takes the component path; a core module falls through.
+        if kind == WasmAssetKind::Wasm && is_wasm_component(&raw_bytes) {
+            return self.handle_component_import(&source, &namespace, raw_bytes);
+        }
+
+        let (core_wasm_bytes, function_exports) = {
             let core_wasm_bytes = match kind {
                 WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
                     .map_err(|e| LoadError::WasmImport {
@@ -1331,9 +1380,59 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             WasmAsset {
                 bytes: core_wasm_bytes,
                 function_exports,
+                component_interface_fqs: Vec::new(),
             },
         );
         Ok(())
+    }
+
+    /// Decode the component's WIT into a `#[cm(...)]` binding module and record
+    /// its bytes for composition at codegen. The synthesized module flows
+    /// through the normal frontend, so the import resolves like any other module.
+    fn handle_component_import(
+        &mut self,
+        source: &ModuleSource,
+        namespace: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), LoadError> {
+        let span = format!("decode component {namespace}");
+        self.logger.span_start(&span);
+        let built = self.build_component_bindings(source, &bytes);
+        self.logger.span_end(&span);
+        let bindings = built?;
+
+        self.bind_module(&bindings.module, source)?;
+        self.loaded.insert(source.clone(), bindings.module);
+        self.loaded_wasm_namespaces.insert(namespace.to_string());
+        self.wasm_assets.insert(
+            namespace.to_string(),
+            WasmAsset {
+                bytes,
+                function_exports: Vec::new(),
+                component_interface_fqs: bindings.interface_fqs,
+            },
+        );
+        Ok(())
+    }
+
+    fn build_component_bindings(
+        &self,
+        source: &ModuleSource,
+        bytes: &[u8],
+    ) -> Result<crate::wit_consume::ComponentBindings, LoadError> {
+        let err = |message: String| LoadError::WasmImport {
+            module_source: source.clone(),
+            message,
+        };
+        let decoded = wit_component::decode(bytes)
+            .map_err(|e| err(format!("failed to decode component WIT: {e}")))?;
+        let (resolve, world) = match decoded {
+            wit_component::DecodedWasm::Component(resolve, world) => (resolve, world),
+            wit_component::DecodedWasm::WitPackage(..) => {
+                return Err(err("expected a component, found a WIT package".to_string()));
+            }
+        };
+        crate::wit_consume::build_bindings(&resolve, world).map_err(err)
     }
 
     /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths

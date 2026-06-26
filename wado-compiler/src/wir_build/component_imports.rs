@@ -140,7 +140,11 @@ pub fn resolve_import_plan(
                 .get_resource_source_interface(resource)
                 .is_some_and(|src| src != interface_info.path)
         });
-        let kind = if uses_external_resources {
+        let kind = if registry.is_component_interface(&interface_info.path) {
+            // Imported like a host interface, but the dependency is composed in
+            // at codegen (wasm-compose) rather than provided by the host.
+            ImportKind::Component
+        } else if uses_external_resources {
             ImportKind::ResourceUsingInterface
         } else {
             ImportKind::FunctionInterface
@@ -236,9 +240,16 @@ fn collect_export_interface_fqs(
 }
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.
+///
+/// `ImportKind::Component` is excluded: the dependency is composed in, so the
+/// final artifact does not import its interface.
 #[must_use]
 pub fn import_plan_fqs(plan: &[ImportEntry]) -> Vec<String> {
-    let mut out: Vec<String> = plan.iter().map(|e| e.fq.clone()).collect();
+    let mut out: Vec<String> = plan
+        .iter()
+        .filter(|e| e.kind != ImportKind::Component)
+        .map(|e| e.fq.clone())
+        .collect();
     out.sort();
     out
 }
