@@ -1983,6 +1983,15 @@ fn generate_cm_imports(
             continue;
         }
 
+        // A `Component` import declares an arbitrary value-type surface (any
+        // `result<ok, err>`, list/option/tuple, record, variant). Its
+        // signatures are emitted faithfully via the recursive `ast_type_to_cm`
+        // engine, whereas WASI host interfaces keep the legacy emitter whose
+        // `result` always resolves to the shared `error-code`.
+        let is_component_import = import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::Component);
+
         // Which functions of this interface to expose in its instance type.
         let supported_functions: Vec<_> = interface_info
             .functions
@@ -2325,13 +2334,14 @@ fn generate_cm_imports(
                     .iter()
                     .map(|(_, cm_name, ty)| {
                         let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                        let val_type = if let Type::Named(named) = &resolved_ty
-                            && named.source_interface.as_deref().is_some_and(|s| {
+                        let is_struct = matches!(&resolved_ty, Type::Named(named)
+                            if named.source_interface.as_deref().is_some_and(|s| {
                                 project
                                     .cm_interface_registry
                                     .get_struct_fields_by_source(s, &named.name)
                                     .is_some()
-                            }) {
+                            }));
+                        let val_type = if is_component_import || is_struct {
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
                                 .map(|(k, &v)| (k.as_str(), v))
@@ -2366,18 +2376,21 @@ fn generate_cm_imports(
                     .map(|(name, val_type)| (name.as_str(), *val_type))
                     .collect();
 
-                // Return type: use emit_cm_val_type for unified recursive type definition,
-                // with shared_type_gen for struct (record) return types.
+                // Return type: a component import emits its full value-type
+                // surface faithfully via `ast_type_to_cm` (notably `result<ok,
+                // err>` with an arbitrary `err`); WASI host interfaces use
+                // `emit_cm_val_type`, whose `result` resolves to `error-code`.
+                // Record returns always route through `ast_type_to_cm`.
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                    if let Type::Named(named) = &resolved_ty
-                        && named.source_interface.as_deref().is_some_and(|s| {
+                    let is_struct = matches!(&resolved_ty, Type::Named(named)
+                        if named.source_interface.as_deref().is_some_and(|s| {
                             project
                                 .cm_interface_registry
                                 .get_struct_fields_by_source(s, &named.name)
                                 .is_some()
-                        })
-                    {
+                        }));
+                    if is_component_import || is_struct {
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
                             .map(|(k, &v)| (k.as_str(), v))
