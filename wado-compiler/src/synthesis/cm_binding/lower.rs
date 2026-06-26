@@ -627,9 +627,9 @@ pub(super) fn synthesize_lower_result_to_memory(
     type_table: &RefCell<TypeTable>,
 ) {
     let value_type_id = value.type_id;
-    let (ok_name, ok_index, err_name, err_index, ok_tid, err_tid) = {
+    let (ok_name, err_name, err_index, ok_tid, err_tid) = {
         let tt = type_table.borrow();
-        let (_, _, ok_name, ok_index) = tt
+        let (_, _, ok_name, _) = tt
             .compiler_items()
             .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = tt
@@ -643,7 +643,6 @@ pub(super) fn synthesize_lower_result_to_memory(
         };
         (
             ok_name.to_string(),
-            ok_index,
             err_name.to_string(),
             err_index,
             ok_tid,
@@ -728,7 +727,6 @@ pub(super) fn synthesize_lower_result_to_memory(
 
     let ok_arm = arm(true, &ok_name, ok_type, ok_tid, next_local, locals);
     let err_arm = arm(false, &err_name, err_type, err_tid, next_local, locals);
-    let _ = (ok_index,);
     stmts.push(TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::Match {

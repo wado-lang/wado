@@ -480,14 +480,14 @@ fn lower_to_flat_inner(
             let res_local = alloc_local(next_local, locals, type_id);
             stmts.push(let_stmt("__res_val", res_local, type_id, value));
 
-            let (ok_name, ok_index, err_name, err_index) = {
+            let (ok_index, err_name, err_index) = {
                 let tt = ctx.type_table.borrow();
                 let items = tt.compiler_items();
-                let (_, _, ok_n, ok_i) =
+                let (_, _, _, ok_i) =
                     items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
                 let (_, _, err_n, err_i) =
                     items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-                (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
+                (ok_i, err_n.to_string(), err_i)
             };
 
             // disc: variant_test(Err) → 1 when Err, 0 when Ok.
@@ -583,7 +583,6 @@ fn lower_to_flat_inner(
                     Some(block(err_stmts)),
                 ));
 
-                let _ = ok_name;
                 for (l, vt, _) in slot_locals {
                     result.push(FlatLocal {
                         index: l,
@@ -995,8 +994,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     null_expr(target_type_id),
                 ));
 
-                let build_arm = |is_ok: bool,
-                                 case_name: &str,
+                let build_arm = |case_name: &str,
                                  case_index: u32,
                                  payload_ty: &Type,
                                  payload_tid: TypeId,
@@ -1031,7 +1029,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                         );
                         Some(Box::new(lifted))
                     };
-                    let _ = is_ok;
                     arm_stmts.push(expr_stmt(assign(
                         local_ref(result_local, "__res_lift", target_type_id),
                         TirExpr::new(
@@ -1048,10 +1045,9 @@ pub(super) fn synthesize_lift_from_flat_params(
                     arm_stmts
                 };
 
-                let ok_stmts =
-                    build_arm(true, &ok_name, ok_index, ok_ty, ok_tid, next_local, locals);
+                let ok_stmts = build_arm(&ok_name, ok_index, ok_ty, ok_tid, next_local, locals);
                 let err_stmts =
-                    build_arm(false, &err_name, err_index, err_ty, err_tid, next_local, locals);
+                    build_arm(&err_name, err_index, err_ty, err_tid, next_local, locals);
 
                 let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
                 stmts.push(if_stmt(
