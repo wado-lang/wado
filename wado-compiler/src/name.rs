@@ -980,19 +980,6 @@ pub fn resolve_import(
     resolve_import_with_entry(interner, from_module, import_source, None)
 }
 
-/// The codegen instance key (`{package}-{interface}`) for a CM interface FQ,
-/// e.g. `wasi:cli/types@0.3.0-rc-…` → `cli-types`. Matches the format
-/// `CmInterfaceInfo::instance_key` registers outer import instances under, so
-/// codegen can map a dependency component's import name back to the outer
-/// instance that satisfies it. Returns `None` if `fq` is not an interface path.
-#[must_use]
-pub fn cm_instance_key_from_fq(fq: &str) -> Option<String> {
-    let path = fq.split('@').next().unwrap_or(fq);
-    let (ns_pkg, interface) = path.split_once('/')?;
-    let (_namespace, package) = ns_pkg.split_once(':')?;
-    Some(format!("{package}-{interface}"))
-}
-
 /// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
 /// first.
 ///

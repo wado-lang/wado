@@ -55,10 +55,9 @@ pub enum ImportKind {
     /// codegen's dedicated resource-defining pass.
     ResourceDefiningInterface,
     /// A function-bearing interface imported from a linked CM component (via
-    /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). Codegen satisfies
-    /// it by embedding the dependency component, instantiating it, and lowering
-    /// its exported functions into the core funcs the main module imports —
-    /// rather than emitting a host-facing component import.
+    /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). Codegen imports
+    /// it like a host interface, then statically links the dependency component
+    /// with `wasm-compose` so the cross-component call fuses guest-to-guest.
     Component,
 }
 

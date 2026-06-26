@@ -438,8 +438,7 @@ pub struct CmInterfaceRegistry {
     /// FQ names of interfaces imported from a linked CM component (via
     /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). The import plan
     /// classifies these as [`crate::wir::ImportKind::Component`] so codegen
-    /// satisfies them by embedding the dependency component, not by a host
-    /// import.
+    /// links the dependency component in rather than leaving a host import.
     component_interfaces: IndexSet<String>,
 }
 

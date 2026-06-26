@@ -141,7 +141,8 @@ pub fn resolve_import_plan(
                 .is_some_and(|src| src != interface_info.path)
         });
         let kind = if registry.is_component_interface(&interface_info.path) {
-            // A linked CM component is satisfied by embedding, not a host import.
+            // Imported like a host interface, but the dependency is linked in at
+            // codegen (wasm-compose) rather than provided by the host.
             ImportKind::Component
         } else if uses_external_resources {
             ImportKind::ResourceUsingInterface

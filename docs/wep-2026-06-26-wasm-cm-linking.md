@@ -32,7 +32,7 @@ parsed WIT".
   `CmInterfaceRegistry::interfaces()` and `used_wasi_functions`
   (`Interface::method`, populated from effect usage), so a function-bearing WIT
   interface maps onto a Wado `interface` exactly like WASI. This reuses the
-  whole pipeline; only codegen's *satisfaction* of the import differs.
+  whole pipeline; only codegen's _satisfaction_ of the import differs.
 
 ## Design
 
@@ -55,7 +55,7 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
    assembly and primitive correspondence.
 
 3. **Loader: detect + decode + build AST.** In `handle_wasm_import`, detect a
-   component (wasmparser component header). `WasmAssetKind::Component`. Decode
+   component by its binary header (`is_wasm_component`) and branch. Decode
    via `wit_component::decode`; for each exported interface build a
    `ast::Item::Interface` (with `#[cm(fq)]` + per-method `#[cm(fq#name)]` +
    `#[cm_params(...)]`) and its named types as top-level items with `#[cm(...)]`.
@@ -73,14 +73,9 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
 5. **Binding synthesis.** Reused unchanged: the type-driven lower(args)/lift(result)
    adapters are the same as for WASI imports.
 
-6. **Codegen composition.** For each `ImportKind::Component`: `component_raw`
-   embeds the dependency, `instantiate` runs it, `alias_export` pulls the
-   exported interface instance and each used func, `lower_func` canon-lowers each
-   into a core func (the host component's memory/realloc), and a core instance of
-   those lowered funcs is supplied to the main core module's instantiation under
-   the import namespace — the same slot WASI lowered funcs occupy. Reuses
-   `lower_wasi_functions`; only the *source* of the component func differs
-   (nested-instance export vs host import).
+6. **Codegen composition.** The program imports each `ImportKind::Component`
+   interface like a host interface, then `compose_linked_components` links the
+   dependency in with `wasm-compose` (see "Codegen" below).
 
 7. **E2E.** `tests/fixtures` round-trips `Catalog::id_*` against the fixture,
    asserting `lift(lower(x)) == x` across the value-type surface at O0/O2.

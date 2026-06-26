@@ -770,7 +770,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let (cm_interface_registry, world_registry) = {
             let _span = logger.span("elaborate/cm_interface_registry");
-            let (mut cm_interface_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
+            let (mut cm_interface_registry, world_registry) =
+                CmInterfaceRegistry::build_from_stdlib();
             // Fold linked CM components' interfaces and named types into the
             // registry (copy-on-write off the stdlib snapshot) so that
             // `Interface::method` calls resolve their CM signatures during

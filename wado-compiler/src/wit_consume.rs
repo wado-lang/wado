@@ -13,18 +13,16 @@
 //! (`CmShape`) so the producer (Wado → WIT) and this consumer (WIT → Wado)
 //! cannot drift in how `option`/`list`/`tuple`/`result` are structured.
 
+use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
     AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
     GenericType, InterfaceDecl, InterfaceMethod, Item, Module, NamedType, Newtype, Param, SelfKind,
     StructDecl, StructField, Type, VariantCase, VariantDecl,
 };
-use crate::ast::{AstId, AstIdSpace};
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
-use wit_parser::{
-    Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
-};
+use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
 
 /// The bindings synthesized for one linked component.
 pub struct LinkedComponentBindings {
@@ -542,7 +540,11 @@ mod tests {
         assert_eq!(cm.interface_path(), "wado:cm-catalog/cm-catalog@0.1.0");
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
-        let id_record = iface.methods.iter().find(|m| m.name == "id_record").unwrap();
+        let id_record = iface
+            .methods
+            .iter()
+            .find(|m| m.name == "id_record")
+            .unwrap();
         match &id_record.params[0].ty {
             Type::Named(n) => {
                 assert_eq!(n.name, "Point");

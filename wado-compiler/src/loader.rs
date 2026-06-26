@@ -270,8 +270,7 @@ pub struct WasmExportSig {
 pub struct WasmAsset {
     /// Core wasm bytes (always binary; `.wat` is parsed at load time). For a
     /// component asset (`component_interface_fqs` non-empty) this is the whole
-    /// component binary, embedded and instantiated as a sub-component at link
-    /// time.
+    /// component binary, linked into the output at codegen.
     pub bytes: Vec<u8>,
     /// Function exports (kind = func) ordered by their wasm order. Empty for a
     /// component asset (its surface is described by the WIT it carries).
@@ -282,8 +281,8 @@ pub struct WasmAsset {
 }
 
 impl WasmAsset {
-    /// Whether this asset is a CM component (linked by embedding) rather than a
-    /// core-wasm module (linked by core instantiation).
+    /// Whether this asset is a CM component (linked via component composition)
+    /// rather than a core-wasm module (linked by core instantiation).
     #[must_use]
     pub fn is_component(&self) -> bool {
         !self.component_interface_fqs.is_empty()
@@ -308,7 +307,13 @@ pub fn resolve_use_decl_source(
     {
         return interner.wasm(&path, kind);
     }
-    crate::name::resolve_import_with_invocations(interner, from, &use_decl.source, entry, invocations)
+    crate::name::resolve_import_with_invocations(
+        interner,
+        from,
+        &use_decl.source,
+        entry,
+        invocations,
+    )
 }
 
 /// Whether `bytes` is a Component Model binary (vs a core wasm module). The
@@ -1338,7 +1343,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         };
 
         // A `with { type: "wasm" }` asset that is a CM component (not a core
-        // module) is linked by embedding: decode its WIT and synthesize Wado
+        // module) takes the component path: decode its WIT and synthesize Wado
         // bindings directly from the decoded type.
         if kind == WasmAssetKind::Wasm && is_wasm_component(&raw_bytes) {
             return self.handle_component_import(&source, &namespace, raw_bytes);
@@ -1391,9 +1396,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Link a CM component import: decode the component's WIT, synthesize a
+    /// Handle a CM component import: decode the component's WIT, synthesize a
     /// Wado binding module (interfaces + named types with `#[cm(...)]`) directly
-    /// from the decoded type, and record the component bytes for embedding at
+    /// from the decoded type, and record the component bytes for linking at
     /// codegen. The synthesized module flows through the normal frontend, so
     /// `use { Iface } from "./c.wasm"` resolves like any other module.
     fn handle_component_import(
