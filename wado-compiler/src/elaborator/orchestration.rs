@@ -772,27 +772,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/cm_interface_registry");
             let (mut cm_interface_registry, world_registry) =
                 CmInterfaceRegistry::build_from_stdlib();
-            // Fold imported CM components' interfaces and named types into the
-            // registry (copy-on-write off the stdlib snapshot) so that
-            // `Interface::method` calls resolve their CM signatures during
-            // annotate — the same role build_from_stdlib plays for WASI. A
-            // component binding module is a `ModuleSource::Wasm` module the
-            // loader synthesized from a decoded component; it carries `#[cm]`
-            // interface imports, whereas a core-wasm asset module carries only
-            // `#[canonical]` functions (no interfaces). Stdlib WASI modules
-            // (Wasi/Core sources) also carry `#[cm]` interfaces but must NOT be
-            // treated as component dependencies — the `Wasm`-source guard
-            // excludes them.
-            for (ms, module) in modules {
-                if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
-                    continue;
-                }
-                let interface_fqs = component_interface_fqs(module);
-                if !interface_fqs.is_empty() {
-                    std::sync::Arc::make_mut(&mut cm_interface_registry)
-                        .register_component_decls(module, &interface_fqs);
-                }
-            }
+            // Resolve `Interface::method` calls into CM components during
+            // annotate — the same role build_from_stdlib plays for WASI.
+            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
@@ -3204,6 +3186,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
             }
+        }
+    }
+}
+
+/// Fold imported CM components' interfaces and named types into `registry`
+/// (copy-on-write off the stdlib snapshot) so `Interface::method` calls resolve
+/// their CM signatures. A component binding module is a `ModuleSource::Wasm`
+/// module the loader synthesized from a decoded component; it carries `#[cm]`
+/// interface imports, whereas a core-wasm asset module carries only
+/// `#[canonical]` functions. Stdlib WASI modules (Wasi/Core sources) also carry
+/// `#[cm]` interfaces but must NOT be treated as component dependencies — the
+/// `Wasm`-source guard excludes them. Shared by elaboration and the dump
+/// pipeline, which both rebuild the registry from the stdlib snapshot.
+pub(crate) fn fold_component_interfaces(
+    registry: &mut Arc<CmInterfaceRegistry>,
+    modules: &IndexMap<ModuleSource, Module>,
+    stdlib_set: &IndexSet<ModuleSource>,
+) {
+    for (ms, module) in modules {
+        if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
+            continue;
+        }
+        let interface_fqs = component_interface_fqs(module);
+        if !interface_fqs.is_empty() {
+            Arc::make_mut(registry).register_component_decls(module, &interface_fqs);
         }
     }
 }

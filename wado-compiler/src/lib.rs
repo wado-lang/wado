@@ -1216,8 +1216,19 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         if let Some(resolved_modules) = tir_modules_by_source.clone() {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (cm_interface_registry, world_registry) =
+            let (mut cm_interface_registry, world_registry) =
                 component_model::CmInterfaceRegistry::build_from_stdlib();
+            // Mirror elaboration: fold imported CM components' interfaces into
+            // the registry so `Interface::method` calls resolve during WIR
+            // build. The dump path rebuilds the registry from the stdlib
+            // snapshot, so without this re-fold the dependency's methods stay
+            // unresolved. Stdlib modules are never `ModuleSource::Wasm`, so an
+            // empty stdlib set is sufficient here.
+            crate::elaborator::orchestration::fold_component_interfaces(
+                &mut cm_interface_registry,
+                &load_result.modules,
+                &crate::hashmap::IndexSet::default(),
+            );
 
             let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
             let mut builtin_registry =
