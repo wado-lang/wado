@@ -240,9 +240,18 @@ fn collect_export_interface_fqs(
 }
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.
+///
+/// Linked CM components (`ImportKind::Component`) are excluded: the dependency
+/// is composed into the output (`compose_linked_components`), so the final
+/// artifact does not import its interface — emitting it as a world import would
+/// misdescribe the composed component.
 #[must_use]
 pub fn import_plan_fqs(plan: &[ImportEntry]) -> Vec<String> {
-    let mut out: Vec<String> = plan.iter().map(|e| e.fq.clone()).collect();
+    let mut out: Vec<String> = plan
+        .iter()
+        .filter(|e| e.kind != ImportKind::Component)
+        .map(|e| e.fq.clone())
+        .collect();
     out.sort();
     out
 }

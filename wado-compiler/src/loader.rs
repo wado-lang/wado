@@ -280,15 +280,6 @@ pub struct WasmAsset {
     pub component_interface_fqs: Vec<String>,
 }
 
-impl WasmAsset {
-    /// Whether this asset is a CM component (linked via component composition)
-    /// rather than a core-wasm module (linked by core instantiation).
-    #[must_use]
-    pub fn is_component(&self) -> bool {
-        !self.component_interface_fqs.is_empty()
-    }
-}
-
 /// Resolve a `use` declaration's import source to its `ModuleSource`, honoring
 /// the wasm-asset `with { type: "wat" | "wasm" }` form — which resolves to
 /// `ModuleSource::Wasm` — so symbol, effect, and type resolution in the
@@ -316,11 +307,18 @@ pub fn resolve_use_decl_source(
     )
 }
 
-/// Whether `bytes` is a Component Model binary (vs a core wasm module). The
-/// component preamble is `\0asm` magic, version `0x000d`, layer `0x0001`; a
-/// core module's layer byte is `0x00`.
+/// Whether `bytes` is a Component Model binary (vs a core wasm module), read
+/// from the preamble's encoding rather than a hard-coded byte offset.
 fn is_wasm_component(bytes: &[u8]) -> bool {
-    bytes.len() >= 8 && bytes[0..4] == [0x00, 0x61, 0x73, 0x6d] && bytes[6] == 0x01
+    use wasmparser::{Encoding, Parser, Payload};
+    Parser::new(0)
+        .parse_all(bytes)
+        .filter_map(Result::ok)
+        .find_map(|payload| match payload {
+            Payload::Version { encoding, .. } => Some(encoding == Encoding::Component),
+            _ => None,
+        })
+        .unwrap_or(false)
 }
 
 /// Result of loading all modules
