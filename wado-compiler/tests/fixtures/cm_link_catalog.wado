@@ -1,0 +1,33 @@
+// CM component linking: import an interface from an external `.wasm` component
+// (`sub/cm-catalog.wasm`, the value-type catalog compiled with `--lib`) and call
+// its identity functions. The compiler statically links the dependency via
+// wasm-compose, so the test world runs the round-trip against the real
+// component — `lift(lower(x)) == x` across the linked boundary.
+use { CmCatalog, Color } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+test "linked primitives round-trip" {
+    assert CmCatalog::id_bool(true) == true;
+    assert CmCatalog::id_u8(200) == 200;
+    assert CmCatalog::id_u16(40000) == 40000;
+    assert CmCatalog::id_u32(42) == 42;
+    assert CmCatalog::id_u64(9000000000) == 9000000000;
+    assert CmCatalog::id_s8(-5) == -5;
+    assert CmCatalog::id_s16(-300) == -300;
+    assert CmCatalog::id_s32(-7) == -7;
+    assert CmCatalog::id_s64(-9000000000) == -9000000000;
+    assert CmCatalog::id_f32(1.5) == 1.5;
+    assert CmCatalog::id_f64(3.5) == 3.5;
+    assert CmCatalog::id_char('Z') == 'Z';
+}
+
+test "linked string round-trip" {
+    let s: String = "hello";
+    assert CmCatalog::id_string(s) == "hello";
+}
+
+test "linked enum round-trip" {
+    assert CmCatalog::id_enum(Color::Green) == Color::Green;
+}
+
+__DATA__
+{"test": {}}

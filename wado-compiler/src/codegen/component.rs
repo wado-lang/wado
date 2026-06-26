@@ -757,6 +757,8 @@ fn wado_type_to_cm_val_type(
                 return ComponentValType::Type(flags_idx);
             }
             match named.name.as_str() {
+                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
+                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
                 "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
                 "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
                 "u8" => ComponentValType::Primitive(PrimitiveValType::U8),

@@ -3323,7 +3323,8 @@ fn is_param_type_supported_with_types(
             // Struct types (records) like Instant are also supported as params
             matches!(
                 name,
-                "i32"
+                "i8" | "i16"
+                    | "i32"
                     | "i64"
                     | "u8"
                     | "u16"
@@ -3375,7 +3376,8 @@ fn is_return_type_supported_with_types(
             // Unit type () is parsed as Named("()"), not Tuple([])
             matches!(
                 name,
-                "i32"
+                "i8" | "i16"
+                    | "i32"
                     | "i64"
                     | "u8"
                     | "u16"
