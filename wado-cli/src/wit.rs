@@ -165,7 +165,7 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
 /// re-emitted) and read the faithful import set from the WIR-level plan
 /// (`NirPackage::imported_cm_interfaces`). Returns empty on any failure; the
 /// caller has already validated the program with `semantics`.
-async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<String> {
+pub(crate) async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<String> {
     let base_path = Path::new(input)
         .parent()
         .map(Path::to_path_buf)
@@ -195,7 +195,7 @@ async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<St
 
 /// The default interface name: the manifest `[package].name` when the input
 /// resolves through a project, otherwise the entry file stem.
-fn default_interface_name(input: &str) -> String {
+pub(crate) fn default_interface_name(input: &str) -> String {
     if let Some((manifest, _root)) = crate::compile::load_nearest_manifest(Path::new(input))
         && let Some(package) = manifest.package
     {

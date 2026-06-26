@@ -63,6 +63,14 @@ pub enum WitEmitError {
         /// Human-readable description of the offending type.
         description: String,
     },
+    /// The emitted WIT text could not be re-parsed, the target world could not
+    /// be selected, or the `component-type` metadata could not be encoded while
+    /// embedding (see [`crate::wit_bundle`]). A bug in the emitter or an
+    /// unexpected world FQ, not user-actionable beyond reporting.
+    Embed {
+        /// Human-readable description of the failure.
+        description: String,
+    },
 }
 
 impl std::fmt::Display for WitEmitError {
@@ -73,6 +81,9 @@ impl std::fmt::Display for WitEmitError {
             }
             Self::UnrepresentableType { description } => {
                 write!(f, "type is not representable in WIT: {description}")
+            }
+            Self::Embed { description } => {
+                write!(f, "cannot embed component-type metadata: {description}")
             }
         }
     }
@@ -1062,6 +1073,14 @@ fn collect_named_type_sources(ty: &crate::ast::Type, out: &mut Vec<String>) {
         }
         Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
+}
+
+/// The WIT world name the emitter renders for `opts`, in kebab-case. This is
+/// the name to pass to `Resolve::select_world` when re-parsing the emitted text
+/// (see [`crate::wit_bundle`]).
+#[must_use]
+pub fn world_name(opts: &WitEmitOptions) -> String {
+    to_kebab(&world_local_name(&opts.world_fq))
 }
 
 /// Extract the local name of a world FQ: `wasi:cli/command` -> `command`.

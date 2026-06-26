@@ -8,6 +8,8 @@ use wado_manifest::DependencySource;
 use lexopt::Arg::Value;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::wit_bundle;
+use wado_compiler::wit_emit::{WitEmitOptions, WitScope};
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
@@ -91,6 +93,43 @@ pub struct CompileOptions {
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels.
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
+    /// `--no-wit`: opt out of embedding the `component-type` WIT section.
+    pub no_wit: bool,
+    /// `--embed-wit=<scope>`: force embedding at this scope, overriding the
+    /// default-on resolution (and the `-Os` default-off). Mutually exclusive
+    /// with `--no-wit`.
+    pub embed_wit: Option<WitScope>,
+}
+
+impl CompileOptions {
+    /// Resolve whether to embed the `component-type` WIT section, and at what
+    /// scope. Returns `(scope, explicit)`; `explicit` is true when the user
+    /// passed `--embed-wit`, so an embedding failure is fatal rather than a
+    /// warning. Embedding is default-on except under `-Os` (frontend delivery,
+    /// where the WIT metadata never reaches a CM host). See WEP
+    /// `wep-2026-05-02-wit-interoperability.md` §"Embedding policy".
+    fn embed_decision(&self) -> Option<(WitScope, bool)> {
+        resolve_embed_decision(self.no_wit, self.embed_wit, self.opt_level)
+    }
+}
+
+/// Pure embedding-policy resolution, factored out of [`CompileOptions`] for
+/// testing. See [`CompileOptions::embed_decision`].
+fn resolve_embed_decision(
+    no_wit: bool,
+    embed_wit: Option<WitScope>,
+    opt_level: OptLevel,
+) -> Option<(WitScope, bool)> {
+    if no_wit {
+        return None;
+    }
+    if let Some(scope) = embed_wit {
+        return Some((scope, true));
+    }
+    if opt_level == OptLevel::Os {
+        return None;
+    }
+    Some((WitScope::Full, false))
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -165,6 +204,8 @@ enum Opt {
     NoCache,
     Allocator,
     Feature,
+    NoWit,
+    EmbedWit,
     Help,
 }
 
@@ -183,6 +224,8 @@ impl Opt {
         Self::NoCache,
         Self::Allocator,
         Self::Feature,
+        Self::NoWit,
+        Self::EmbedWit,
         Self::Help,
     ];
 
@@ -221,6 +264,18 @@ impl Opt {
             Self::NoCache => args::NO_CACHE_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Feature => args::FEATURE_SPEC,
+            Self::NoWit => args::OptSpec {
+                long: Some("no-wit"),
+                short: None,
+                value: None,
+                desc: "Do not embed the WIT `component-type` section in the output",
+            },
+            Self::EmbedWit => args::OptSpec {
+                long: Some("embed-wit"),
+                short: None,
+                value: Some("<full|local>"),
+                desc: "Embed WIT at this scope, forcing it on (default: full, off under -Os)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -263,6 +318,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
     let mut lib = false;
+    let mut no_wit = false;
+    let mut embed_wit: Option<WitScope> = None;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -299,6 +356,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                     allocator = Some(args::require_string(&mut parser)?);
                 }
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
+                Opt::NoWit => no_wit = true,
+                Opt::EmbedWit => {
+                    let value = args::require_string(&mut parser)?;
+                    embed_wit = Some(match value.as_str() {
+                        "full" => WitScope::Full,
+                        "local" => WitScope::Local,
+                        other => {
+                            return Err(CliExit::error(format!(
+                                "unknown --embed-wit value '{other}' (expected 'full' or 'local')"
+                            )));
+                        }
+                    });
+                }
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -312,6 +382,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     if lib && target_world.is_some() {
         return Err(CliExit::error(
             "`--lib` and `--world` are mutually exclusive",
+        ));
+    }
+
+    if no_wit && embed_wit.is_some() {
+        return Err(CliExit::error(
+            "`--no-wit` and `--embed-wit` are mutually exclusive",
         ));
     }
 
@@ -345,6 +421,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         lib_world,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
+        no_wit,
+        embed_wit,
     })
 }
 
@@ -875,6 +953,57 @@ fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     Ok(wat)
 }
 
+/// Embed the WIT `component-type` section into `wasm` per `opts.embed_decision`,
+/// or return `wasm` unchanged when embedding is off. The component is already a
+/// valid, self-describing artifact, so a non-explicit embedding failure warns
+/// and yields the un-embedded bytes; an explicit `--embed-wit` makes it fatal.
+async fn maybe_embed_wit(opts: &CompileOptions, wasm: Vec<u8>) -> Result<Vec<u8>, CliExit> {
+    let Some((scope, explicit)) = opts.embed_decision() else {
+        return Ok(wasm);
+    };
+
+    let input = &opts.input;
+    let Ok(source) = fs::read_to_string(input) else {
+        // The file compiled moments ago; an unreadable source now is unexpected.
+        return Ok(wasm);
+    };
+
+    // The embedded world FQ mirrors what was compiled: the `--lib` world, then
+    // `--world`, then the CLI default — matching `wado wit`.
+    let world = opts
+        .lib_world
+        .clone()
+        .or_else(|| opts.target_world.clone())
+        .unwrap_or_else(|| "wasi:cli/command".to_string());
+
+    let base_path = Path::new(input)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    // Quiet host: diagnostics were already surfaced by the main compile.
+    let host = FilesystemCompilerHost::silent(base_path);
+    let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
+    if !sem.is_complete() {
+        return Ok(wasm);
+    }
+
+    let emit_opts = WitEmitOptions {
+        scope,
+        world_fq: world.clone(),
+        default_interface_name: crate::wit::default_interface_name(input),
+        world_imports: crate::wit::resolve_world_imports(&source, input, &world).await,
+    };
+
+    match wit_bundle::embed_component_type(&wasm, &sem, &emit_opts) {
+        Ok(embedded) => Ok(embedded),
+        Err(e) if explicit => Err(CliExit::error(format!("--embed-wit: {e}"))),
+        Err(e) => {
+            eprintln!("warning: skipped embedding WIT component-type section: {e}");
+            Ok(wasm)
+        }
+    }
+}
+
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     let flags = opts.flags();
     let wasm = compile(&opts.input, &flags).await?;
@@ -906,13 +1035,51 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     };
 
     let bytes = match format {
-        OutputFormat::Wasm => wasm,
+        // Embed the WIT `component-type` section into the distributable wasm
+        // artifact (default on). WAT output is an inspection/debug format, so it
+        // is left un-embedded to keep the text readable.
+        OutputFormat::Wasm => maybe_embed_wit(&opts, wasm).await?,
         OutputFormat::Wat => wasm_to_wat(&wasm)?.into_bytes(),
     };
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
     eprintln!("Generated: {}", output_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod embed_policy_tests {
+    use super::{OptLevel, WitScope, resolve_embed_decision};
+
+    #[test]
+    fn default_on_full_except_os() {
+        // Default (no flags): embed at full, non-explicit.
+        assert_eq!(
+            resolve_embed_decision(false, None, OptLevel::O2),
+            Some((WitScope::Full, false))
+        );
+        // `-Os`: default off (frontend delivery; WIT is dead weight).
+        assert_eq!(resolve_embed_decision(false, None, OptLevel::Os), None);
+    }
+
+    #[test]
+    fn no_wit_opts_out_everywhere() {
+        assert_eq!(resolve_embed_decision(true, None, OptLevel::O2), None);
+        assert_eq!(resolve_embed_decision(true, None, OptLevel::Os), None);
+    }
+
+    #[test]
+    fn explicit_embed_wit_forces_on_even_under_os() {
+        // Explicit scope is marked explicit=true so failures become fatal.
+        assert_eq!(
+            resolve_embed_decision(false, Some(WitScope::Local), OptLevel::O2),
+            Some((WitScope::Local, true))
+        );
+        assert_eq!(
+            resolve_embed_decision(false, Some(WitScope::Full), OptLevel::Os),
+            Some((WitScope::Full, true))
+        );
+    }
 }
 
 #[cfg(test)]
