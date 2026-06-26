@@ -87,51 +87,57 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
 
 ## Status
 
+Working end-to-end: `use { Iface } from "./c.wasm" with { type: "wasm" }` →
+`Iface::method(x)` resolves, links, and round-trips at runtime. E2E fixture
+`tests/fixtures/cm_link_catalog.wado` round-trips the full primitive surface,
+`string`, and `enum` against the linked `cm-catalog.wasm` at O0/O2.
+
 - [x] Phase 1 — fixture committed.
 - [x] Phase 2 — shared type-mapping core (`CmShape` + `CmTypeAssembler`) + WIT→ast::Type (`wit_consume`).
-- [x] Phase 3 — loader detect/decode/build-AST; `use { Iface } from "./c.wasm"` resolves.
+- [x] Phase 3 — loader detect/decode/build-AST; the import resolves.
 - [x] Phase 4 — registry provenance + `ImportKind::Component`; binding synthesis reused.
-- [x] Phase 6a — codegen embeds + instantiates + lowers the dependency, forwarding its
-      own interface imports. **The composed multi-component `.wasm` validates.**
-- [ ] Phase 6b — **blocked:** runtime traps `CannotEnterComponent` (see below).
-- [ ] Phase 7 — e2e round-trip (blocked on 6b).
+- [x] Phase 6 — codegen links via `wasm-compose` (see below).
+- [x] Phase 7 — e2e round-trip (primitives/string/enum).
 
-### Blocker: host-mediated cross-component call trips CM reentrancy
+### Codegen: fused composition via `wasm-compose`
 
-The composed component validates but traps at runtime with
-`CannotEnterComponent`. Root cause (verified in
-`vendor/wasmtime/.../component/concurrent.rs::may_enter`): with concurrency
-support enabled — always on for WASI P3 — the canonical ABI forbids the host
-from re-entering a **top-level** component instance already on the stack, even a
-different leaf instance. The dependency component is nested inside the outer
-(same top-level), so calling it traps.
+The program component imports the linked interface like a host
+function-interface (`generate_cm_imports` treats `ImportKind::Component` exactly
+like `FunctionInterface`). `compose_linked_components` then statically links it:
+using `wasm-compose`'s in-memory `CompositionGraph`, each dependency component is
+instantiated and its exported interface connected to the program's matching
+import; both components' remaining imports (host WASI) are surfaced and merged by
+name, and the program's exports are re-exported.
 
-The current codegen satisfies the import the WASI way: `canon lower` the
-dependency's lifted export into a core func the main module imports. That call
-is **host-mediated** (`lower → host trampoline → lift`), so it runs the
-`may_enter` check. wasmtime *elides* that check only for **fused guest-to-guest
-adapters** — the structure `wac` / `wasm-compose` produce, where the program is
-a sub-component that *imports* the interface and is instantiated *with* the
-dependency's instance.
+This replaced an earlier host-mediated approach (`canon lower` the dependency's
+export into the program's imports) that validated but trapped `CannotEnterComponent`
+at runtime: with concurrency support on (always, under WASI P3), the canonical
+ABI forbids the host re-entering a top-level instance already on the stack, and
+wasmtime elides that check only for **fused guest-to-guest adapters** — exactly
+what the `wasm-compose` composition produces. `wasm-compose` also handles the
+import union/forwarding automatically (the dependency's own `wasi:cli/types` /
+`stderr` panic-path imports become the composed component's imports).
 
-Fix direction (next): emit the link as a proper sub-component composition —
-wrap the program's core logic as a sub-component that imports the linked
-interface, instantiate the dependency, and instantiate the program with it — so
-the cross-component call fuses guest-to-guest and the reentrancy check is
-elided. This is a codegen restructure (the outer component currently hosts the
-main core module directly).
+### Known gaps (follow-ups)
 
-### Known smaller gaps (independent of the blocker)
+- **Container / record / option / tuple import params.** The import-side param
+  type emitter `codegen::component::wado_type_to_cm_val_type` only handles
+  primitives, `string`, `enum`, `flags`, `Result`, and `Stream`; `Option` /
+  `List` / `Tuple` / records panic ("unsupported generic param type for CM").
+  This is the limited legacy import-type path (shared with WASI imports), not the
+  recursive engine; routing it through the full CM type emitter is the next step
+  to cover the rest of the value-type surface. (Primitives `i8`/`i16` were filled
+  in along the way.)
+- **World-level function exports** (case A, no named types) are rejected by
+  `wit_consume` — only interface exports are handled. World-level free-function
+  imports also need an import-plan path that isn't interface-keyed.
 
-- A linked component that exports a **record** param/return hits a GC-ref vs i32
-  ABI mismatch in the caller (`expected (ref $type), found i32`).
-- A linked component that exports **world-level functions** (case A, no named
-  types) is rejected by `wit_consume` (only interface exports handled).
-- The outer must import the **union** of its own + the dependency's imports; the
-  current forwarding only wires imports the outer already has (the panic path's
-  `wasi:cli/stderr`/`types` happen to be present when the program uses `assert`,
-  but a program that triggers neither leaves the dependency's imports
-  unsatisfied — validation error naming the missing import).
+### Unrelated pre-existing failures (not introduced here)
+
+`tests/wit.rs::full_scope_{inlines_referenced_interfaces,reconstructs_resource_methods}_and_reparses`
+fail on the branch base (verified by reverting this WEP's `wit_emit` refactor):
+the emitted full-scope WIT re-parses with a duplicate `run` / `handle` world
+export. This is a WIT-producer issue orthogonal to CM linking.
 
 ## Notes
 
