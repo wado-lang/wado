@@ -102,17 +102,17 @@ This is the same format produced by `wit-component::metadata::encode()` in `wasm
 | Service (`wasi:http/service`)          | Yes (default) | Same as command                                                                   |
 | `-Os` (strip symbols)                  | No (default)  | Frontend-delivery build (`jco` → core wasm + JS); the WIT never reaches a CM host |
 
-The `-Os` row was revised during Phase 2: `-Os` is the production build for browser/frontend delivery, where the embedded WIT is dead weight that a CM host never reads. It therefore defaults to no embedding (as if `--no-wit`); an explicit `--embed-wit=<scope>` still forces it on. See [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Embedding policy".
+The `-Os` row was revised during Phase 2: `-Os` is the production build for browser/frontend delivery, where the embedded WIT is dead weight that a CM host never reads. It therefore defaults to no embedding (as if `--no-embed-wit`); an explicit `--embed-wit` still forces it on. See [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md) §"Embedding policy".
 
 ### CLI Control
 
 ```sh
-wado compile file.wado                    # WIT embedded (default, scope full)
-wado compile --no-wit file.wado           # WIT omitted (smaller binary)
-wado compile --embed-wit=full file.wado   # force embedding (e.g. under -Os)
+wado compile file.wado                    # WIT embedded (default)
+wado compile --no-embed-wit file.wado     # WIT omitted (smaller binary)
+wado compile --embed-wit file.wado        # force embedding (e.g. under -Os)
 ```
 
-`--no-wit` and `--embed-wit` are mutually exclusive. The `--no-wit` flag is an escape hatch for size-sensitive deployments where the consumer already has the WIT definition through other means.
+`--embed-wit` and `--no-embed-wit` are mutually exclusive and take no value: the embedded section is always the self-contained full closure (a `local`, registry-referencing section is not encodable — §"Phase 2 finding" in the interop WEP). `--no-embed-wit` is an escape hatch for size-sensitive deployments where the consumer already has the WIT definition through other means.
 
 ### Extraction and Verification
 
