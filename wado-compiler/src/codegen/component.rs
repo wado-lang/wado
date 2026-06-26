@@ -2335,12 +2335,12 @@ fn generate_cm_imports(
                     .map(|(_, cm_name, ty)| {
                         let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                         let is_struct = matches!(&resolved_ty, Type::Named(named)
-                            if named.source_interface.as_deref().is_some_and(|s| {
-                                project
-                                    .cm_interface_registry
-                                    .get_struct_fields_by_source(s, &named.name)
-                                    .is_some()
-                            }));
+                        if named.source_interface.as_deref().is_some_and(|s| {
+                            project
+                                .cm_interface_registry
+                                .get_struct_fields_by_source(s, &named.name)
+                                .is_some()
+                        }));
                         let val_type = if is_component_import || is_struct {
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
@@ -2384,12 +2384,12 @@ fn generate_cm_imports(
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     let is_struct = matches!(&resolved_ty, Type::Named(named)
-                        if named.source_interface.as_deref().is_some_and(|s| {
-                            project
-                                .cm_interface_registry
-                                .get_struct_fields_by_source(s, &named.name)
-                                .is_some()
-                        }));
+                    if named.source_interface.as_deref().is_some_and(|s| {
+                        project
+                            .cm_interface_registry
+                            .get_struct_fields_by_source(s, &named.name)
+                            .is_some()
+                    }));
                     if is_component_import || is_struct {
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
@@ -3832,11 +3832,10 @@ fn lower_wasi_functions(
             // `MAX_FLAT_RESULTS` core values, e.g. a tuple or composite return).
             let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
                 let resolved = project.cm_interface_registry.resolve_type(ty);
-                crate::component_model::return_type_requires_outptr(&resolved)
-                    || crate::component_model::cm_named_type_return_needs_outptr(
-                        &resolved,
-                        &project.cm_interface_registry,
-                    )
+                crate::component_model::cm_return_needs_outptr(
+                    &resolved,
+                    &project.cm_interface_registry,
+                )
             });
             let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
                 || returns_via_outptr;

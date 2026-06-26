@@ -3205,7 +3205,7 @@ pub(crate) fn fold_component_interfaces(
         }
         let interface_fqs = component_interface_fqs(module);
         if !interface_fqs.is_empty() {
-            Arc::make_mut(registry).register_component_decls(module, &interface_fqs);
+            Arc::make_mut(registry).register_component_decls(module, &interface_fqs, ms);
         }
     }
 }

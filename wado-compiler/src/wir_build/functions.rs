@@ -102,7 +102,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 ///
 /// WASI functions are already lowered at the component level;
 /// the core module imports them from the "wasi" namespace.
-/// Uses `flatten_cm_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
+/// Uses `flatten_cm_param_type` / `cm_return_needs_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     let cm_interface_registry = &ctx.package.cm_interface_registry;
 
@@ -166,12 +166,10 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // Sync functions with complex return types also need an outptr
             else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::cm_named_type_return_needs_outptr(
-                        &resolved_ret_ty,
-                        cm_interface_registry,
-                    )
-                {
+                if crate::component_model::cm_return_needs_outptr(
+                    &resolved_ret_ty,
+                    cm_interface_registry,
+                ) {
                     param_vts.push(wasm_encoder::ValType::I32);
                 }
             }
@@ -184,12 +182,10 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 vec![WirType::I32]
             } else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
-                    || crate::component_model::cm_named_type_return_needs_outptr(
-                        &resolved_ret_ty,
-                        cm_interface_registry,
-                    )
-                {
+                if crate::component_model::cm_return_needs_outptr(
+                    &resolved_ret_ty,
+                    cm_interface_registry,
+                ) {
                     // Complex return via outptr — function returns nothing
                     Vec::new()
                 } else {

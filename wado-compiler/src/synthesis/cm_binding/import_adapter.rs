@@ -16,7 +16,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::cm_abi;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -41,7 +40,7 @@ use super::lower::{
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting, tuple_elems,
 };
 
 /// Build the binding function name for a WASI import.
@@ -62,9 +61,6 @@ pub(super) struct AdapterArtifacts {
     pub adapter: Rc<RefCell<TirFunction>>,
     pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
 }
-
-/// Canonical ABI: maximum number of flat return values before outptr is used.
-const MAX_FLAT_RESULTS: usize = 1;
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
 ///
@@ -144,11 +140,11 @@ fn synthesize_lift_flat_result(
             )
         } else {
             // Err with a flat payload — the remaining flat values encode the error.
-            // Only lift when the error type is a named WASI variant/enum carrying
-            // a resolved source_interface; otherwise fall back to a bare Err.
+            // Lift when the error type is a named CM variant/enum; the registry
+            // lookup inside `try_lift_wasi_variant_or_enum` is the gate (it
+            // returns None for anything else), so we fall back to a bare Err.
             let lifted_variant = if let Type::Named(n) = err_ty
                 && let Some(source) = n.source_interface.as_deref()
-                && crate::component_model::source_uses_cm_abi(source)
             {
                 try_lift_wasi_variant_or_enum(
                     n,
@@ -266,11 +262,7 @@ fn wasi_return_type_id(
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
-            cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-                || crate::component_model::cm_named_type_return_needs_outptr(
-                    rt,
-                    cm_interface_registry,
-                )
+            crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
         });
         if needs_outptr {
             // Outptr: raw call returns void; result is read from outptr
@@ -382,9 +374,9 @@ pub(super) fn synthesize_adapter(
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
-    // Derive outptr needs from return type using Canonical ABI layout.
-    // Also check WASI variants with payload cases (e.g., Method with Other(String)):
-    // cm_flat_types treats unknown named types as i32, missing their true flat count.
+    // Derive outptr needs from the return type via the shared Canonical-ABI
+    // decision (`cm_return_needs_outptr`), so the binding and the core functype
+    // builder agree on the import's signature.
     //
     // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
     // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
@@ -393,8 +385,7 @@ pub(super) fn synthesize_adapter(
     // return type.
     let cm_return_type: Option<Type> = func_info.return_type.clone();
     let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
-        cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-            || crate::component_model::cm_named_type_return_needs_outptr(rt, cm_interface_registry)
+        crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
     });
     let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
@@ -1011,6 +1002,28 @@ pub(super) fn synthesize_adapter(
                 synthesize_flatten_result_to_flat_args(
                     &g.args[0],
                     &g.args[1],
+                    local_ref(param_local, param_name, params[start_idx].type_id),
+                    &format!("__{param_name}"),
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut locals,
+                    &mut flat_args,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
+            }
+            // Tuple param: flatten each element to its flat args, in order. A
+            // tuple is spelled `Type::Tuple` or `Generic("Tuple", …)`.
+            _ if tuple_elems(param_type).is_some_and(|e| !e.is_empty()) => {
+                assert!(
+                    !func_info.is_async,
+                    "CM import '{}#{}' takes a tuple parameter on an async \
+                     function; async tuple-param lowering is not yet implemented",
+                    func_info.interface_name, func_info.method_name
+                );
+                synthesize_flatten_value_to_flat_args(
+                    param_type,
                     local_ref(param_local, param_name, params[start_idx].type_id),
                     &format!("__{param_name}"),
                     &mut next_local,

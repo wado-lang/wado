@@ -113,16 +113,38 @@ what `wasm-compose` produces. `wasm-compose` also handles the import
 union/forwarding automatically (the dependency's own `wasi:cli/types` / `stderr`
 panic-path imports become the composed component's imports).
 
+### Value-type surface (params + lower/lift)
+
+The instance-type emitter and the binding synthesis now cover most of the
+value-type surface for component-import params and returns. Two fixes made this
+work, both correcting drift between parallel code paths rather than adding new
+ones:
+
+- **Unified CM flattening.** Three near-identical flatteners
+  (`cm_abi::cm_flat_types`, `component_model::flatten_cm_param_type`,
+  `synthesis::flatten_param_type`) had drifted — conflicting tuple handling, a
+  wrong `{i32,f32}` join, and a `wasi:`/`core:kiln/`-prefix gate that excluded a
+  component's own package namespace, so records/variants/tuples collapsed to a
+  single `i32`. They now delegate to one registry-aware
+  `CmInterfaceRegistry::cm_flatten`. The outptr decision is likewise unified into
+  `cm_return_needs_outptr`, so the binding and the core functype builder agree.
+- **Component module-source provenance.** `register_component_decls` now records
+  each interface FQ → its `ModuleSource::Wasm` (mirroring `register_lib_local_decls`).
+  Without it, deriving a guest `ModuleSource` from a component FQ fell back to the
+  empty `Core("")` default, so component records/variants never got a concrete
+  guest GC type and failed WIR build. The `lib_interface_sources` map was renamed
+  `cm_interface_module_sources` to reflect that it now serves `--lib` *and*
+  component imports.
+
+Working end-to-end (O0/O2): primitives, `string`, `enum`, `flags`, `List`,
+`Option`, `Result<ok, err>` (arbitrary `err`), and records.
+
 ### Known gaps (follow-ups)
 
-- **Container / record / option / tuple import params.** The import-side param
-  type emitter `codegen::component::wado_type_to_cm_val_type` only handles
-  primitives, `string`, `enum`, `flags`, `Result`, and `Stream`; `Option` /
-  `List` / `Tuple` / records panic ("unsupported generic param type for CM").
-  This is the limited legacy import-type path (shared with WASI imports), not the
-  recursive engine; routing it through the full CM type emitter is the next step
-  to cover the rest of the value-type surface. (Primitives `i8`/`i16` were filled
-  in along the way.)
+- **Variant and tuple import params.** Variant params still emit a broken
+  discriminant/payload Match, and tuple params/returns still cast the GC tuple to
+  `i32` — the value-flattening lower path needs the same registry-aware treatment
+  the signature side now has.
 - **World-level function exports** (case A, no named types) are rejected by
   `wit_consume` — only interface exports are handled. World-level free-function
   imports also need an import-plan path that isn't interface-keyed.

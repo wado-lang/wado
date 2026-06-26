@@ -32,7 +32,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, field_access,
-    flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
+    flatten_param_type, is_unit_type, kebab_to_pascal, tuple_elems, variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types via the single Canonical ABI join
@@ -1182,6 +1182,44 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 wasi_package,
                 type_table,
             );
+        }
+        // Tuple → each element's flat args, in order. Mirrors `cm_flatten`'s
+        // tuple expansion so the lowered values match the flat signature. A
+        // tuple appears either as `Type::Tuple` or as `Generic("Tuple", …)`.
+        _ if tuple_elems(&resolved).is_some_and(|e| !e.is_empty()) => {
+            let elems = tuple_elems(&resolved).expect("matched above");
+            let tuple_type_id = value.type_id;
+            let val_local = alloc_local(next_local, locals, tuple_type_id);
+            let val_name = format!("{prefix}_tup");
+            stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
+            let elem_type_ids: Vec<TypeId> = type_table
+                .borrow()
+                .as_tuple(tuple_type_id)
+                .unwrap_or_default();
+            for (i, elem_ty) in elems.iter().enumerate() {
+                let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+                });
+                let elem_expr = field_access(
+                    local_ref(val_local, &val_name, tuple_type_id),
+                    &i.to_string(),
+                    i as u32,
+                    elem_type_id,
+                );
+                synthesize_flatten_value_to_flat_args(
+                    elem_ty,
+                    elem_expr,
+                    &format!("{prefix}_e{i}"),
+                    next_local,
+                    stmts,
+                    locals,
+                    flat_args,
+                    cm_interface_registry,
+                    wasi_package,
+                    type_table,
+                );
+            }
         }
         // CM record → its fields' flat args via `flatten_cm_record_fields`,
         // in declared order; anything else — primitive, handle, or a plain

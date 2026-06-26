@@ -1,7 +1,7 @@
 // Import an interface from an external `.wasm` component and round-trip values
 // across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
 // test runs `lift(lower(x)) == x` against the real component.
-use { CmCatalog, Color } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog, Color, Point, Perms } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -25,6 +25,39 @@ test "string round-trip" {
 
 test "enum round-trip" {
     assert CmCatalog::id_enum(Color::Green) == Color::Green;
+}
+
+test "list round-trip" {
+    let r = CmCatalog::id_list_u8([1, 2, 3]);
+    assert r.len() == 3;
+    assert r[0] == 1;
+    assert r[2] == 3;
+    let s = CmCatalog::id_list_string(["a", "bb"]);
+    assert s.len() == 2;
+    assert s[1] == "bb";
+}
+
+test "option round-trip" {
+    assert CmCatalog::id_option_u32(Option::Some(5)) matches { Some(5) };
+    assert CmCatalog::id_option_u32(null) matches { None };
+}
+
+test "result round-trip" {
+    let ok: Result<u32, String> = Result::Ok(9);
+    assert CmCatalog::id_result_both(ok) matches { Ok(9) };
+    let err: Result<u32, String> = Result::Err("nope");
+    assert CmCatalog::id_result_both(err) matches { Err(_) };
+}
+
+test "record round-trip" {
+    let r = CmCatalog::id_record(Point { x: 1.5, y: 2.5 });
+    assert r.x == 1.5;
+    assert r.y == 2.5;
+}
+
+test "flags round-trip" {
+    let r = CmCatalog::id_flags(Perms::Read | Perms::Write);
+    assert r == (Perms::Read | Perms::Write);
 }
 
 __DATA__
