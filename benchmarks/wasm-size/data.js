@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782431358737,
+  "lastUpdate": 1782433930173,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35521,6 +35521,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf1bd4690db87d8c86aac397a0612f0c29aaaeb4"
         },
         "date": 1782431358179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02157750edaf5c43b449db7981c4ef5baef01f0c",
+          "message": "Merge pull request #1446 from wado-lang/claude/wado-library-boundary-q0wo9j\n\nfeat: separate the Wado library boundary from the CM boundary",
+          "timestamp": "2026-06-26T09:22:33+09:00",
+          "tree_id": "5b44a4b234037d09452fd21754d45bf22a4d504c",
+          "url": "https://github.com/wado-lang/wado/commit/02157750edaf5c43b449db7981c4ef5baef01f0c"
+        },
+        "date": 1782433929547,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
