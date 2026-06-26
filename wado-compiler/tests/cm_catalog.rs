@@ -229,7 +229,7 @@ fn run_round_trips(opt_level: OptLevel) {
             };
             let result_arity = func.ty(&store).results().len();
             let mut results = vec![Val::Bool(false); result_arity];
-            match func.call_async(&mut store, &[value.clone()], &mut results).await {
+            match func.call_async(&mut store, std::slice::from_ref(&value), &mut results).await {
                 Ok(()) => {
                     if results.len() != 1 {
                         failures.push(format!(

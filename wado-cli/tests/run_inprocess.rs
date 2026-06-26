@@ -105,6 +105,8 @@ fn hello_compile_opts(output_path: &Path, format: Option<OutputFormat>) -> Compi
         lib_world: None,
         param_overrides: wado_compiler::hashmap::IndexMap::default(),
         param_policy: wado_compiler::param_resolution::ParamPolicy::default(),
+        no_embed_wit: false,
+        embed_wit: false,
     }
 }
 

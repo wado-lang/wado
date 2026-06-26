@@ -8,6 +8,8 @@ use wado_manifest::DependencySource;
 use lexopt::Arg::Value;
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::wit_bundle;
+use wado_compiler::wit_emit::{WitEmitOptions, WitScope};
 
 use crate::args::{self, CliExit};
 use crate::compiler_host::{FilesystemCompilerHost, KilnComponentCache};
@@ -91,6 +93,44 @@ pub struct CompileOptions {
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels.
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
+    /// `--no-embed-wit`: opt out of embedding the `component-type` WIT section.
+    pub no_embed_wit: bool,
+    /// `--embed-wit`: force embedding on, overriding the `-Os` default-off.
+    /// Takes no value — the embedded section is always the self-contained full
+    /// closure (a `local`, registry-referencing section is not encodable; see
+    /// WEP §"Phase 2 finding"). Mutually exclusive with `--no-embed-wit`.
+    pub embed_wit: bool,
+}
+
+impl CompileOptions {
+    /// Resolve whether to embed the `component-type` WIT section. Returns
+    /// `Some(explicit)`, where `explicit` is true when the user passed
+    /// `--embed-wit` (so an embedding failure is fatal rather than a warning),
+    /// or `None` to skip. Embedding is default-on except under `-Os` (frontend
+    /// delivery, where the WIT metadata never reaches a CM host). See WEP
+    /// `wep-2026-05-02-wit-interoperability.md` §"Embedding policy".
+    fn embed_decision(&self) -> Option<bool> {
+        resolve_embed_decision(self.no_embed_wit, self.embed_wit, self.opt_level)
+    }
+}
+
+/// Pure embedding-policy resolution, factored out of [`CompileOptions`] for
+/// testing. See [`CompileOptions::embed_decision`].
+fn resolve_embed_decision(
+    no_embed_wit: bool,
+    embed_wit: bool,
+    opt_level: OptLevel,
+) -> Option<bool> {
+    if no_embed_wit {
+        return None;
+    }
+    if embed_wit {
+        return Some(true);
+    }
+    if opt_level == OptLevel::Os {
+        return None;
+    }
+    Some(false)
 }
 
 /// Compile-time options shared by `compile`/`run`/`serve`/`test`.
@@ -127,6 +167,10 @@ pub struct CompileFlags {
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels. Forwarded to `CompilerOptions::param_policy`.
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
+    /// Retain the WIR module in the result. `wado compile` sets it when
+    /// embedding WIT, to read the faithful import plan
+    /// (`imported_cm_interfaces`) without a second compile.
+    pub retain_wir: bool,
 }
 
 impl CompileOptions {
@@ -146,6 +190,7 @@ impl CompileOptions {
             lib_world: self.lib_world.clone(),
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
+            retain_wir: false,
         }
     }
 }
@@ -165,6 +210,8 @@ enum Opt {
     NoCache,
     Allocator,
     Feature,
+    NoEmbedWit,
+    EmbedWit,
     Help,
 }
 
@@ -183,6 +230,8 @@ impl Opt {
         Self::NoCache,
         Self::Allocator,
         Self::Feature,
+        Self::NoEmbedWit,
+        Self::EmbedWit,
         Self::Help,
     ];
 
@@ -221,6 +270,18 @@ impl Opt {
             Self::NoCache => args::NO_CACHE_SPEC,
             Self::Allocator => args::ALLOCATOR_SPEC,
             Self::Feature => args::FEATURE_SPEC,
+            Self::NoEmbedWit => args::OptSpec {
+                long: Some("no-embed-wit"),
+                short: None,
+                value: None,
+                desc: "Do not embed the WIT `component-type` section in the output",
+            },
+            Self::EmbedWit => args::OptSpec {
+                long: Some("embed-wit"),
+                short: None,
+                value: None,
+                desc: "Force embedding the WIT section on (e.g. under -Os, where it is off by default)",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -263,6 +324,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut codegen_flags: Vec<String> = Vec::new();
     let mut no_cache = false;
     let mut lib = false;
+    let mut no_embed_wit = false;
+    let mut embed_wit = false;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -299,6 +362,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                     allocator = Some(args::require_string(&mut parser)?);
                 }
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
+                Opt::NoEmbedWit => no_embed_wit = true,
+                Opt::EmbedWit => embed_wit = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -312,6 +377,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     if lib && target_world.is_some() {
         return Err(CliExit::error(
             "`--lib` and `--world` are mutually exclusive",
+        ));
+    }
+
+    if no_embed_wit && embed_wit {
+        return Err(CliExit::error(
+            "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
         ));
     }
 
@@ -345,6 +416,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         lib_world,
         param_overrides: param_args.overrides,
         param_policy: param_args.policy,
+        no_embed_wit,
+        embed_wit,
     })
 }
 
@@ -447,6 +520,7 @@ pub async fn try_compile_with_kiln_cache(
         lib_world: flags.lib_world.clone(),
         param_overrides: flags.param_overrides.clone(),
         param_policy: flags.param_policy,
+        retain_wir: flags.retain_wir,
         ..Default::default()
     };
 
@@ -875,17 +949,72 @@ fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     Ok(wat)
 }
 
-pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
-    let flags = opts.flags();
-    let wasm = compile(&opts.input, &flags).await?;
+/// Append the WIT `component-type` section to `wasm`, using `world_imports`
+/// (the faithful plan read from the main compile's retained WIR, so no second
+/// optimize pass). `explicit` is true for `--embed-wit`: it makes a failure
+/// fatal, where the default-on path only warns and yields the un-embedded
+/// (still valid, self-describing) component.
+async fn embed_wit_section(
+    opts: &CompileOptions,
+    wasm: Vec<u8>,
+    world_imports: Vec<String>,
+    explicit: bool,
+) -> Result<Vec<u8>, CliExit> {
+    let input = &opts.input;
+    let path = Path::new(input);
+    let Ok(source) = fs::read_to_string(path) else {
+        // The file compiled moments ago; an unreadable source now is unexpected.
+        return Ok(wasm);
+    };
 
-    if opts.wat_to_stdout {
-        let wat = wasm_to_wat(&wasm)?;
-        print!("{wat}");
-        return Ok(());
+    // The embedded world FQ mirrors what was compiled: the `--lib` world, then
+    // `--world`, then the CLI default.
+    let world = opts
+        .lib_world
+        .clone()
+        .or_else(|| opts.target_world.clone())
+        .unwrap_or_else(|| "wasi:cli/command".to_string());
+
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    // Attach the manifest `[dependencies]` so a multi-package project's
+    // re-analysis resolves the same imports the main compile did; a quiet host
+    // avoids re-emitting diagnostics.
+    let manifest_pair = load_nearest_manifest(path);
+    let host = attach_manifest_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
+    );
+    let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
+    if !sem.is_complete() {
+        let msg = "WIT analysis did not complete";
+        if explicit {
+            return Err(CliExit::error(format!("--embed-wit: {msg}")));
+        }
+        eprintln!("warning: skipped embedding WIT component-type section: {msg}");
+        return Ok(wasm);
     }
 
-    // Format precedence: explicit `--format` > guessed from `-o` extension > wasm.
+    let emit_opts = WitEmitOptions {
+        scope: WitScope::Full,
+        world_fq: world,
+        default_interface_name: crate::wit::default_interface_name(input),
+        world_imports,
+    };
+
+    match wit_bundle::embed_component_type(&wasm, &sem, &emit_opts) {
+        Ok(embedded) => Ok(embedded),
+        Err(e) if explicit => Err(CliExit::error(format!("--embed-wit: {e}"))),
+        Err(e) => {
+            eprintln!("warning: skipped embedding WIT component-type section: {e}");
+            Ok(wasm)
+        }
+    }
+}
+
+pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
+    // Output format is independent of the compiled bytes; resolve it first so we
+    // know whether to retain WIR (only the wasm-output embedding path needs it).
     let format = opts
         .format
         .or_else(|| {
@@ -894,6 +1023,23 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
                 .and_then(|p| OutputFormat::from_extension(Path::new(p)))
         })
         .unwrap_or(OutputFormat::Wasm);
+    // WAT is a debug/inspection format, so it is left un-embedded.
+    let embed = (!opts.wat_to_stdout && format == OutputFormat::Wasm)
+        .then(|| opts.embed_decision())
+        .flatten();
+
+    let mut flags = opts.flags();
+    flags.retain_wir = embed.is_some();
+    let result = try_compile(&opts.input, &flags)
+        .await
+        .map_err(|_| CliExit::silent_failure(1))?;
+    let wasm = result.wasm;
+
+    if opts.wat_to_stdout {
+        let wat = wasm_to_wat(&wasm)?;
+        print!("{wat}");
+        return Ok(());
+    }
 
     let output_path = if let Some(path) = &opts.output {
         Path::new(path).to_path_buf()
@@ -905,14 +1051,56 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         Path::new(&opts.input).with_extension(ext)
     };
 
-    let bytes = match format {
-        OutputFormat::Wasm => wasm,
-        OutputFormat::Wat => wasm_to_wat(&wasm)?.into_bytes(),
+    let bytes = match (format, embed) {
+        (OutputFormat::Wasm, Some(explicit)) => {
+            let world_imports = result
+                .wir_package
+                .map(|p| p.imported_cm_interfaces)
+                .unwrap_or_default();
+            embed_wit_section(&opts, wasm, world_imports, explicit).await?
+        }
+        (OutputFormat::Wasm, None) => wasm,
+        (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
     eprintln!("Generated: {}", output_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod embed_policy_tests {
+    use super::{OptLevel, resolve_embed_decision};
+
+    #[test]
+    fn default_on_except_os() {
+        // Default (no flags): embed, non-explicit.
+        assert_eq!(
+            resolve_embed_decision(false, false, OptLevel::O2),
+            Some(false)
+        );
+        // `-Os`: default off (frontend delivery; WIT is dead weight).
+        assert_eq!(resolve_embed_decision(false, false, OptLevel::Os), None);
+    }
+
+    #[test]
+    fn no_embed_wit_opts_out_everywhere() {
+        assert_eq!(resolve_embed_decision(true, false, OptLevel::O2), None);
+        assert_eq!(resolve_embed_decision(true, false, OptLevel::Os), None);
+    }
+
+    #[test]
+    fn explicit_embed_wit_forces_on_even_under_os() {
+        // `--embed-wit` marks the decision explicit, so failures become fatal.
+        assert_eq!(
+            resolve_embed_decision(false, true, OptLevel::O2),
+            Some(true)
+        );
+        assert_eq!(
+            resolve_embed_decision(false, true, OptLevel::Os),
+            Some(true)
+        );
+    }
 }
 
 #[cfg(test)]

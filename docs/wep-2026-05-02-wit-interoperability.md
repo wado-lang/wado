@@ -190,14 +190,15 @@ form is unambiguous and minimal.
   embedded WIT directly.
 - `wado-compiler` still relies on `wado-from-idl`-generated `.wado` files as
   the source of truth; no path reads embedded WIT from external `.wasm` yet
-  (consumer side, still open). `wit-parser` and `wit-encoder` are wired into
-  `wado-compiler` for the producer side; `wit-component` lands with Phase 2
-  embedding and the consumer-side `component-type` reader.
-- Producer-side WIT embedding (the `component-type` custom section described
-  in [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is not yet wired into
-  codegen (Phase 2). `wado wit` text emission (Phase 1) is done, so the
-  contract is computable; embedding it into the binary is the remaining step
-  before a Wado component is consumable via the embedded-WIT path.
+  (consumer side, still open). `wit-parser`, `wit-encoder`, and `wit-component`
+  are all in `wado-compiler`'s `[dependencies]` for the producer side; the
+  consumer-side `component-type` reader still reuses these crates when it lands.
+- Producer-side WIT embedding (the `component-type` custom section described in
+  [WIT Bundling](./wep-2026-03-21-wit-bundling.md)) is **done** (Phase 2):
+  `wado compile` embeds by default via `wit_bundle::embed_component_type`. Note
+  the Phase 2 finding below — the Wado component is already self-describing, so
+  the section is additive full-fidelity metadata rather than the inspection
+  mechanism.
 
 Resolved since the first draft: HTTP handler specialization in
 `codegen/component.rs` is gone — CM imports/exports are now emitted from the
@@ -364,20 +365,14 @@ the package's own contract; consumers need an external WIT registry to
 resolve `wasi:*` references. Both are well-defined; the choice is
 deployment-policy, not technical.
 
-The default scope is `full`. It needs no configuration and produces a
-self-describing component, which is the first-class outcome for both
-single-file scripts and manifest-backed projects (see "Embedding policy"
-below). A project may change the default to `local` in `wado.toml`:
+The default scope is `full`. The scope table above applies to **`wado wit`
+text** (`wado wit --scope <full|local>`).
 
-```toml
-[wit]
-scope = "local"   # override the built-in `full` default
-```
-
-`[wit].scope` only changes which scope is used; it never decides _whether_
-WIT is embedded (see "Embedding policy" below for that). When WIT _is_
-embedded, the scope resolution order is: explicit `--embed-wit=<scope>`,
-then `[wit].scope`, then the built-in `full`.
+> Revised in the Phase 2 finding: scope does **not** apply to embedding. An
+> embedded `component-type` must be self-contained, so it is always `full`; a
+> `local` section is not encodable. The earlier plan for a `[wit].scope`
+> manifest key and an `--embed-wit=<scope>` resolution order is therefore
+> dropped — see §"Phase 2 finding" and the Phase 3 entry.
 
 Stdlib interfaces under `lib/wasi/**` are emitted with the same machinery
 as user interfaces; there is no special-case "stdlib" code path. Each
@@ -429,9 +424,14 @@ The section payload matches `wit_component::metadata::encode()` exactly:
    string encoding).
 3. A `producers` subsection identifying the Wado compiler version.
 
-Consumers extract via `wasm-tools component wit output.wasm`. Round-trip
-verification (Wado emits → wasm-tools decodes → matches the text from
-`wado wit`) is a required fixture for every world shape.
+Consumers run `wasm-tools component wit output.wasm`, but note (per the Phase 2
+finding above) that for a Wado _component_ this reconstructs WIT from the
+component's own type, **not** from the appended `component-type` section. The
+embedded section is consumed by tools that read it explicitly (`wkg`,
+`wasm-tools metadata`, relink flows) and decodes standalone as a WIT package.
+Round-trip verification therefore splits: (a) `decode(component)` matches
+`wado wit` semantically, and (b) the embedded payload decodes as a
+`DecodedWasm::WitPackage`. Both are covered by `tests/wit_bundle.rs`.
 
 ### Embedding policy
 
@@ -444,19 +444,17 @@ Two roles, clearly separated:
   with `wac`, publishable with `wkg`, transpilable with `jco`, and
   consumable by another Wado compiler.
 
-Because a component without embedded WIT is a second-class CM citizen,
-and because Wado treats single-file scripts as first-class, **`wado
-compile` embeds WIT by default** — with or without a `wado.toml`. The
-manifest is a tuning knob for the _scope_ (`full` vs `local`), never the
-switch that turns embedding on. `--no-wit` is the single, explicit
-opt-out.
+Because Wado treats single-file scripts as first-class, **`wado compile`
+embeds WIT by default** — with or without a `wado.toml`. `--no-embed-wit`
+is the single, explicit opt-out. (The section is always the self-contained
+full closure; there is no scope knob — see the Phase 2 finding.)
 
 `-Os` is the exception: it is the production build for frontend delivery
 (`jco`-transpiled to core Wasm + JS for the browser), where the WIT
 metadata is dead weight that never reaches a CM host. So `-Os` defaults
-to no embedding, exactly as if `--no-wit` were passed. An explicit
-`--embed-wit=<scope>` still forces embedding under `-Os` for the rare
-case that wants both the smallest symbols and a self-describing component.
+to no embedding, exactly as if `--no-embed-wit` were passed. An explicit
+`--embed-wit` still forces embedding under `-Os` for the rare case that
+wants both the smallest symbols and a self-describing component.
 
 Embedding is a property of producing a distributable artifact, so it
 applies to `wado compile` only. `wado run`, `wado serve`, and `wado test`
@@ -490,15 +488,17 @@ Design Questions.
 `wado compile` — embed WIT in the compiled component (default on):
 
 ```sh
-wado compile file.wado                     # embeds, scope = full (default)
-wado compile --embed-wit=local file.wado   # embeds, user-only WIT, refs upstream
-wado compile --no-wit file.wado            # explicit opt-out
+wado compile file.wado                  # embeds (default)
+wado compile --no-embed-wit file.wado   # explicit opt-out
+wado compile --embed-wit file.wado      # force on (e.g. under -Os)
 ```
 
-`--embed-wit=<scope>` overrides the resolved scope for one invocation; it
-always takes a value (`full` or `local`), and `--embed-wit` without a
-value is a CLI error. `--no-wit` takes no value and is mutually exclusive
-with `--embed-wit`.
+> Revised in the Phase 2 finding: the embedded section is always the
+> self-contained full closure, so `wado compile` has no scope value. Both
+> `--embed-wit` and `--no-embed-wit` take no value and are mutually
+> exclusive. The `--embed-wit=<scope>` / `[wit].scope` knobs sketched in this
+> section's earlier draft were dropped; `local` / `full` survives only on
+> `wado wit --scope` (text output).
 
 ### Input resolution
 
@@ -560,28 +560,72 @@ Each phase ends with green E2E tests for the listed fixtures.
     `default_interface_name`) instead. Only `wit-parser` and `wit-encoder` are
     pulled into `wado-compiler`; `wit-component` lands with Phase 2.
 
-- [ ] Phase 2 — `wado compile` embedding (default on, scope `full`)
-  - [ ] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
-        `wit_component::metadata::encode` → custom-section append.
-  - [ ] `--embed-wit=<scope>` and `--no-wit` flags on `CompileOptions`,
-        mutually exclusive; embedding defaults to `full` when neither is
-        given, except under `-Os` which defaults to no embedding (an
-        explicit `--embed-wit` still forces it). `wado run` / `serve` /
-        `test` never embed.
-  - [ ] Postprocess hook in `codegen/postprocess.rs` (or the immediate
-        caller of `build_component`).
-  - [ ] Round-trip fixture: for every Phase 1 fixture, compile (default
-        `full`), then run `wasm-tools component wit` on the output and
-        assert it matches `wado wit`.
+- [x] Phase 2 — `wado compile` embedding (default on, scope `full`)
+  - [x] `wado-compiler/src/wit_bundle.rs`: text → `Resolve` →
+        `wit_component::metadata::encode` → custom-section append
+        (`embed_component_type` / `encode_component_type`). `wit-parser` and
+        `wit-component` moved into `wado-compiler`'s `[dependencies]`.
+  - [x] `--embed-wit` and `--no-embed-wit` flags on `CompileOptions`,
+        mutually exclusive and value-less; embedding is on by default except
+        under `-Os` which defaults off (an explicit `--embed-wit` still forces
+        it). The embedded section is always the self-contained full closure, so
+        there is no scope knob on `wado compile` (see the finding below).
+        `wado run` / `serve` / `test` never embed (they do not route through
+        `compile::run`).
+  - [x] Hook: postprocess in the `wado compile` CLI path
+        (`compile::maybe_embed_wit`), not in `compile_with_options`. This
+        keeps the shared compile entry — used by `run`/`serve`/`test` —
+        embedding-free, matching "applies to `wado compile` only". The
+        faithful world import set comes from the same `resolve_world_imports`
+        the `wado wit` path uses; `Semantics` is re-derived with one extra
+        frontend pass (`wado_compiler::semantics`), since
+        `compile_with_options` consumes its own `Semantics` into `Package`.
+  - [x] Tests: `tests/wit_bundle.rs` asserts, per world shape, that the
+        un-embedded component already self-describes (`decode` →
+        `DecodedWasm::Component`), that embedding is byte-additive and leaves
+        the component decodable, and that the encoded payload decodes as a
+        standalone `DecodedWasm::WitPackage`. `compile::embed_policy_tests`
+        pins the default-on/`-Os`-off/`--no-embed-wit`/`--embed-wit`
+        resolution.
 
-- [ ] Phase 3 — Manifest scope override
-  - [ ] Parse `[wit].scope` in `wado-manifest`.
-  - [ ] `wado compile` uses `[wit].scope` as the scope when no CLI flag is
-        given; the built-in default stays `full`; `--embed-wit` overrides
-        the manifest; `--no-wit` opts out entirely.
-  - [ ] Update WEP: WIT Bundling status from "designed" to "implemented"
-        and reconcile its wording with the default-on, manifest-tunes-scope
-        rule documented here.
+#### Phase 2 finding: the component already self-describes
+
+A Wado artifact is a _full Component Model component_, not a core module, so it
+is already self-describing: `wit_parser::decode` (the `wasm-tools component wit`
+backend) reconstructs the WIT from the component's own typed CM imports/exports
+via its `decode_component` path — verified empirically on the CLI corpus. `decode`
+only consults a `component-type` payload when the _whole file_ is a WIT-package
+blob (`is_wit_package()` keys off top-level component-type exports); a
+`component-type` custom section on an already-formed component is opaquely
+carried, **never read** by `component wit`.
+
+The embedded section is therefore _additive full-fidelity metadata_, not the
+mechanism that makes the binary inspectable. Its value over the intrinsic type:
+the component's own type is always tree-shaken to the used surface, whereas the
+embedded payload carries the complete upstream interface bodies, exact package
+versions, and a `producers` record (the `metadata::encode` convention `wkg` /
+`wasm-tools metadata` / relink flows consume). The earlier framing in
+[WIT Bundling](./wep-2026-03-21-wit-bundling.md) ("a standalone `.wasm` cannot
+describe its own interface") holds for core modules, not for Wado's component
+output; the round-trip therefore splits in two: (a) `decode(component)` matches
+`wado wit` semantically, and (b) the embedded payload decodes as a WIT package.
+
+Consequence for scope: an embedded section must be self-contained, because
+`metadata::encode` types the world against a fully-resolved `Resolve`. So
+embedding always emits the **full** interface closure; a `local`
+(registry-referencing) document does not re-parse standalone. This is a Wasm CM
+binary property (component types are structural and self-contained), not a Wado
+choice. `local` / `full` therefore stays a `wado wit` _text_ concept (`wado wit
+--scope`) only. Consequently `wado compile` carries **no scope knob**:
+`--embed-wit` / `--no-embed-wit` take no value, and the originally-planned
+`[wit].scope` manifest override (Phase 3) is dropped — it would have nothing to
+tune for the binary.
+
+Phase 3 — Manifest scope override: dropped, not implemented. Embedding is
+always the self-contained full closure (see the finding above), so there is no
+embed-time scope to put in `wado.toml`. `wado wit --scope` remains the only
+place `local` / `full` is meaningful (text output). WIT Bundling's status is
+reconciled to "implemented, default-on, no scope knob".
 
 ## Open Design Questions
 
@@ -687,12 +731,13 @@ will get one when work starts.
       (`import Foo;` / `export Foo;`); brace-form removed. `WorldImportInfo`
       and `WorldExportInfo` carry `cm_interface_fq` resolved from the
       referenced `pub interface Foo`'s `#[cm(...)]`.
-- [ ] Producer side: emit WIT text and embed `component-type` in output
+- [x] Producer side: emit WIT text and embed `component-type` in output
       (WEP: WIT Bundling for the format; this WEP §"Producer Side: WIT
       Generation and Embedding" for the detailed design). Phase 0
-      (`Semantics` refactor) and Phase 1 (`wado wit` text) are done; Phase 2
-      (`wado compile` embeds WIT by default, scope `full`, `--no-wit` to opt
-      out) and Phase 3 (`[wit].scope` in `wado.toml`) remain.
+      (`Semantics` refactor), Phase 1 (`wado wit` text), and Phase 2
+      (`wado compile` embeds WIT by default, full closure, `--no-embed-wit` to
+      opt out) are done. Phase 3 (`[wit].scope` in `wado.toml`) was dropped —
+      embedding is always self-contained, so there is no embed-time scope to tune.
 - [ ] Decide world structure faithfulness level (L2 vs L3) and document.
 - [ ] Implement `contract` declaration with the chosen scope rules (revise
       WEP: World Conformance accordingly).

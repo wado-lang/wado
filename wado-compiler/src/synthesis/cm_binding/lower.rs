@@ -470,8 +470,8 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
         return;
     };
     let mem_cases: Vec<CmMemCase> = cases
-        .to_vec()
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|case| {
             let payload = case.payload.map(|ty| {
                 let tid = {

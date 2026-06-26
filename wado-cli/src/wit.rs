@@ -195,7 +195,7 @@ async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<St
 
 /// The default interface name: the manifest `[package].name` when the input
 /// resolves through a project, otherwise the entry file stem.
-fn default_interface_name(input: &str) -> String {
+pub(crate) fn default_interface_name(input: &str) -> String {
     if let Some((manifest, _root)) = crate::compile::load_nearest_manifest(Path::new(input))
         && let Some(package) = manifest.package
     {
