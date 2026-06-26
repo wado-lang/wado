@@ -242,6 +242,11 @@ pub fn build_component(
         component_plan,
     );
 
+    // Embed and instantiate linked CM components, aliasing each used export as
+    // a component func so the WASI-lowering pass below canon-lowers it into the
+    // core func the main module imports — same machinery, sub-component source.
+    embed_linked_components(&mut builder, &mut ctx, project, &wir_package.import_plan);
+
     // Lower WASI functions
     lower_wasi_functions(project, &mut builder, &mut ctx);
 
@@ -3704,6 +3709,73 @@ fn import_resource_using_interfaces(
                 &func.wasi_func_name,
                 ComponentExportKind::Func,
             );
+        }
+    }
+}
+
+/// Embed each linked CM component as a sub-component, instantiate it, and alias
+/// its exported interface functions as component funcs registered under the same
+/// local names the WASI-import path uses. [`lower_wasi_functions`] then
+/// canon-lowers them into core funcs, and they flow into the `wasi` instance and
+/// the main module exactly like host imports — the only difference is the source
+/// of the lifted func (a nested instance export vs a host import).
+fn embed_linked_components(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    import_plan: &[crate::wir::ImportEntry],
+) {
+    use crate::wir::ImportKind;
+    let component_fqs: IndexSet<&str> = import_plan
+        .iter()
+        .filter(|e| e.kind == ImportKind::Component)
+        .map(|e| e.fq.as_str())
+        .collect();
+    if component_fqs.is_empty() {
+        return;
+    }
+
+    for (namespace, asset) in &project.wasm_assets {
+        let imported_fqs: Vec<&String> = asset
+            .component_interface_fqs
+            .iter()
+            .filter(|fq| component_fqs.contains(fq.as_str()))
+            .collect();
+        if imported_fqs.is_empty() {
+            continue;
+        }
+
+        let label = sanitise_wasm_namespace_for_label(namespace);
+        let comp_idx = builder.component_raw(Some(&format!("linked-{label}")), &asset.bytes);
+        // A linked library component is self-contained (it carries its own
+        // memory/allocator), so it instantiates with no imports.
+        let inst_idx = builder.instantiate(
+            Some(&format!("linked-{label}-inst")),
+            comp_idx,
+            Vec::<(&str, ComponentExportKind, u32)>::new(),
+        );
+        ctx.register_instance(&format!("linked-{label}-inst"));
+
+        for fq in imported_fqs {
+            let iface_inst = builder.alias_export(inst_idx, fq, ComponentExportKind::Instance);
+            ctx.register_instance(&format!("linked-iface-{fq}"));
+            // (local core name, CM export name) per exported function.
+            let mut funcs: Vec<(String, String)> = Vec::new();
+            for iface in project.cm_interface_registry.interfaces() {
+                if &iface.path != fq {
+                    continue;
+                }
+                for f in &iface.functions {
+                    funcs.push((f.local_alias_name(), f.wasi_func_name.clone()));
+                }
+            }
+            for (local_name, cm_export_name) in funcs {
+                if ctx.has_comp_func(&local_name) {
+                    continue;
+                }
+                builder.alias_export(iface_inst, &cm_export_name, ComponentExportKind::Func);
+                ctx.register_comp_func(&local_name);
+            }
         }
     }
 }
