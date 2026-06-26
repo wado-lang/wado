@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782437760906,
+  "lastUpdate": 1782438987503,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35609,6 +35609,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fcac846455cfc33defaa4130c0da6b167f7eaa05"
         },
         "date": 1782437760284,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8135efada159ec0e7ea698eb9d2884026c96d771",
+          "message": "Merge pull request #1448 from wado-lang/claude/kiln-bug-fix-8laszd\n\nfix: canonicalize local module identity so each file loads once",
+          "timestamp": "2026-06-26T10:46:50+09:00",
+          "tree_id": "abeb0429a3b9e58e2bd14973d238a8991c888498",
+          "url": "https://github.com/wado-lang/wado/commit/8135efada159ec0e7ea698eb9d2884026c96d771"
+        },
+        "date": 1782438987004,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
