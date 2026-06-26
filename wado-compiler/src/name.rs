@@ -877,6 +877,56 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     normalize_module_path(&joined)
 }
 
+/// Canonicalize a resolved local module identity to the unique minimal form
+/// for its physical file, relative to the entry directory `entry_dir`.
+///
+/// Composing relative steps from the importer ([`resolve_module_path`]) is not
+/// canonical: a path that climbs *above* `entry_dir` and re-enters spells the
+/// same file non-minimally (`../src/gen/p.wado` vs `./gen/p.wado`), which
+/// lexical normalization cannot fold. Re-anchoring under `entry_dir` gives one
+/// identity per file on every import path, so the loader interns each once
+/// (#1423). Empty `entry_dir` (no entry context) returns the input normalized
+/// and otherwise unchanged, so such callers never regress.
+#[must_use]
+pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
+    if entry_dir.is_empty() {
+        return normalize_module_path(resolved);
+    }
+    // `relative_path` normalizes both arguments, so the anchored join needs no
+    // separate normalize pass.
+    crate::path::relative_path(entry_dir, &format!("{entry_dir}/{resolved}"))
+}
+
+/// The entry directory of an entry [`ModuleSource`], for use as the
+/// [`canonical_local_path`] anchor. `EntryPoint`'s filename's parent; empty
+/// for any other source or a parentless filename (both disable
+/// canonicalization, falling back to plain relative composition).
+#[must_use]
+pub fn entry_dir_of(entry_module: Option<&ModuleSource>) -> String {
+    match entry_module {
+        Some(ModuleSource::EntryPoint { filename }) => module_parent_dir(filename).to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The parent directory of a module path (everything before the last `/`, or
+/// empty if none). Shared by every site that derives a [`canonical_local_path`]
+/// anchor, so they agree on it.
+#[must_use]
+pub fn module_parent_dir(path: &str) -> &str {
+    get_parent_path(path)
+}
+
+/// The canonical loader identity for a relative `import_source` imported from a
+/// local module `from_path`, anchored at `entry_dir`: compose
+/// ([`resolve_module_path`]) then canonicalize ([`canonical_local_path`]). The
+/// one resolver shared by the loader, the analyze/elaborator re-resolution, and
+/// the CLI Kiln harvest, so all three agree on identities.
+#[must_use]
+pub fn resolve_local_identity(entry_dir: &str, from_path: &str, import_source: &str) -> String {
+    canonical_local_path(entry_dir, &resolve_module_path(from_path, import_source))
+}
+
 /// Resolve an import source to a `ModuleSource`.
 ///
 /// This is the primary function for resolving import paths to module identifiers.
@@ -970,7 +1020,8 @@ pub fn resolve_import_with_entry(
     if let ModuleSource::Local { path: from_path } = from_module
         && (from_path.starts_with("./") || from_path.starts_with("../"))
     {
-        let resolved = resolve_module_path(from_path, import_source);
+        let resolved =
+            resolve_local_identity(&entry_dir_of(entry_module), from_path, import_source);
         // If this resolves to the entry module's canonical name, return the
         // entry ModuleSource to maintain a single type identity.
         if let Some(entry) = entry_module {
@@ -985,8 +1036,16 @@ pub fn resolve_import_with_entry(
         return interner.local(&resolved);
     }
 
-    // Fallback: normalize and return as Local path
-    // This handles EntryPoint imports and bare imports
+    // Entry imports canonicalize against the entry dir, mirroring the loader.
+    if matches!(from_module, ModuleSource::EntryPoint { .. }) {
+        let resolved = canonical_local_path(
+            &entry_dir_of(entry_module),
+            &normalize_module_path(import_source),
+        );
+        return interner.local(&resolved);
+    }
+
+    // Fallback: normalize and return as Local path (bare/other imports).
     interner.local(&normalize_module_path(import_source))
 }
 

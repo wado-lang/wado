@@ -1005,17 +1005,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         interner: &mut ModuleSourceInterner,
         module: &Module,
         module_source: &ModuleSource,
+        entry: Option<&ModuleSource>,
         invocations: &crate::kiln::InvocationIndex,
     ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
             match item {
                 Item::Use(use_decl) => {
+                    // `entry` must be threaded so identities match the loader
+                    // (see `name::resolve_local_identity`).
                     let source = name::resolve_import_with_invocations(
                         interner,
                         module_source,
                         &use_decl.source,
-                        None,
+                        entry,
                         invocations,
                     );
                     for use_item in &use_decl.items {
@@ -1258,6 +1261,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &mut self.interner.borrow_mut(),
             module,
             &module_source,
+            Some(&self.entry_module_source),
             &self.invocations,
         );
 
@@ -1298,7 +1302,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     &mut self.interner.borrow_mut(),
                     &module_source,
                     &use_decl.source,
-                    None,
+                    Some(&self.entry_module_source),
                     &self.invocations,
                 );
 

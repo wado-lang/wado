@@ -172,7 +172,14 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         )
         .await
         .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
-        crate::compile::remap_index_decl_files(&mut outcome.invocations, &identities);
+        let conflict_errors = crate::compile::remap_and_report_conflicts(
+            &mut outcome.invocations,
+            &identities,
+            &host,
+        );
+        if conflict_errors > 0 {
+            return Err(CliExit::silent_failure(1));
+        }
         outcome
     };
 

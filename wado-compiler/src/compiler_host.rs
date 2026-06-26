@@ -168,6 +168,11 @@ pub enum Code {
     /// `wado check` re-ran the generator and the output bytes differ from
     /// the on-disk (committed) file. Promoted to error in CI default.
     KilnGeneratedStaleOnDisk,
+    /// Two distinct generator invocations resolve to the same loader identity
+    /// and `from` schema but redirect to different generated modules. The
+    /// redirect index cannot represent both, so the conflict is reported
+    /// instead of silently dropping one.
+    KilnRedirectConflict,
     /// A `#[compiler_item("...")]` attribute is malformed — the name
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
@@ -225,6 +230,7 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
+            Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",

@@ -89,9 +89,123 @@ fn split_root(path: &str) -> (String, &str) {
     (String::new(), path)
 }
 
+/// Express `target` as a path relative to the directory `base`, lexically.
+///
+/// Both arguments are normalized first ([`normalize`]). The result is the
+/// minimal `./`- or `../`-prefixed path that, joined with `base` and
+/// normalized, yields `target` again — the unique spelling of `target` as seen
+/// from `base`. Purely lexical (no filesystem, `wasm32`-safe).
+///
+/// `base` and `target` must share rootedness (both relative, or both absolute
+/// under the same root); a mismatch returns `normalize(target)` unchanged.
+///
+/// Examples:
+/// - base `/p/src`, target `/p/src/gen/x.wado` → `./gen/x.wado`
+/// - base `/p/src`, target `/p/shared/h.wado` → `../shared/h.wado`
+/// - base `.`, target `./x.wado` → `./x.wado`
+#[must_use]
+pub fn relative_path(base: &str, target: &str) -> String {
+    let base = normalize(base);
+    let target = normalize(target);
+    let (base_root, base_rest) = split_root(&base);
+    let (target_root, target_rest) = split_root(&target);
+    if base_root != target_root {
+        return target;
+    }
+
+    // `normalize` drops every `..` from an absolute path, so only relative
+    // paths carry them; a `..` at the same index is the same ancestor on both
+    // sides, so string equality gives the common prefix. Drop `.` (a `.` base or
+    // a leading `./`) — it would add a phantom segment that inflates the climb
+    // count (e.g. `relative_path(".", "../x")` → `../../x`).
+    let drop = |s: &&str| !s.is_empty() && *s != ".";
+    let base_comps: Vec<&str> = base_rest.split('/').filter(drop).collect();
+    let target_comps: Vec<&str> = target_rest.split('/').filter(drop).collect();
+
+    let common = base_comps
+        .iter()
+        .zip(&target_comps)
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    // Climb out of every base component past the common prefix (a trailing
+    // `..` is itself climbed with a `..`), then descend into target's tail.
+    let ups = base_comps.len() - common;
+    let mut out: Vec<&str> = std::iter::repeat_n("..", ups).collect();
+    out.extend(&target_comps[common..]);
+
+    if out.is_empty() {
+        ".".to_string()
+    } else if out[0] == ".." {
+        out.join("/")
+    } else {
+        format!("./{}", out.join("/"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relative_path_under_base() {
+        assert_eq!(relative_path("/p/src", "/p/src/gen/x.wado"), "./gen/x.wado");
+        assert_eq!(relative_path("/p/src", "/p/src/x.wado"), "./x.wado");
+        assert_eq!(relative_path(".", "./x.wado"), "./x.wado");
+        assert_eq!(relative_path("src", "src/gen/x.wado"), "./gen/x.wado");
+    }
+
+    #[test]
+    fn relative_path_above_base() {
+        assert_eq!(
+            relative_path("/p/src", "/p/shared/h.wado"),
+            "../shared/h.wado"
+        );
+        assert_eq!(relative_path("/p/a/b", "/p/x.wado"), "../../x.wado");
+        assert_eq!(relative_path("src", "shared/h.wado"), "../shared/h.wado");
+    }
+
+    #[test]
+    fn relative_path_escape_reentry_canonicalizes() {
+        // The #1423 case: `..`-escape that re-enters the base must collapse to
+        // the direct spelling — base joined with the non-canonical form
+        // normalizes to the same target, and `relative_path` yields the minimal
+        // form.
+        let base = "/p/src";
+        let target = normalize(&format!("{base}/../src/gen/parser.wado"));
+        assert_eq!(target, "/p/src/gen/parser.wado");
+        assert_eq!(relative_path(base, &target), "./gen/parser.wado");
+    }
+
+    #[test]
+    fn relative_path_same_dir_and_root() {
+        assert_eq!(relative_path("/p/src", "/p/src"), ".");
+        assert_eq!(relative_path(".", "."), ".");
+    }
+
+    // A `.`-rooted base (the common `wado compile ./main.wado` → entry_dir `.`)
+    // must not inflate the climb count with a phantom `.` segment.
+    #[test]
+    fn relative_path_dot_base() {
+        assert_eq!(relative_path(".", "gen/x.wado"), "./gen/x.wado");
+        assert_eq!(relative_path(".", "./gen/x.wado"), "./gen/x.wado");
+        assert_eq!(relative_path(".", "../shared.wado"), "../shared.wado");
+        assert_eq!(relative_path(".", "../../shared.wado"), "../../shared.wado");
+    }
+
+    #[test]
+    fn relative_path_relative_bases_with_parent() {
+        // Both climb above the cwd: the shared `..` prefix is common.
+        assert_eq!(relative_path("../a", "../a/x.wado"), "./x.wado");
+        assert_eq!(relative_path("../a", "../b.wado"), "../b.wado");
+        assert_eq!(relative_path("..", "../../b.wado"), "../b.wado");
+    }
+
+    #[test]
+    fn relative_path_root_mismatch_falls_back() {
+        // No relative spelling across an absolute/relative boundary.
+        assert_eq!(relative_path("/p/src", "rel/x.wado"), "rel/x.wado");
+    }
 
     #[test]
     fn relative_dot_segments() {
