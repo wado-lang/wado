@@ -2223,12 +2223,12 @@ type UserData = struct {
 
 **Field Visibility:**
 
-Struct fields follow the same visibility rules as other declarations. Fields without `pub` are private to the defining module. Fields marked `pub` are accessible from other modules.
+Struct fields follow the same visibility rules as other declarations (see [Visibility](#visibility)). A field without a modifier is private to the defining file; `internal` widens it to the package; `pub` exposes it to other Wado packages.
 
 ```wado
 pub struct Config {
-    pub name: String,   // accessible from other modules
-    secret: i32,        // private to this module
+    pub name: String,   // visible to other packages
+    secret: i32,        // private to this file
 }
 ```
 
@@ -3250,37 +3250,46 @@ Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns 
 
 ### Visibility
 
-Wado distinguishes between two kinds of "public" visibility:
+Visibility has two orthogonal axes: a Wado scope ladder (`internal` / `pub`)
+and a CM-surface flag (`export`). See [WEP: Visibility — `internal` / `pub` /
+`export`](./wep-2026-06-25-visibility-internal-pub-export.md).
 
-| Keyword  | Term              | Meaning                                                          |
-| -------- | ----------------- | ---------------------------------------------------------------- |
-| `pub`    | **module public** | Visible to other Wado modules that import this module            |
-| `export` | **world export**  | Exposed at the Component Model boundary (WASI world conformance) |
+| Keyword    | Axis    | Reach                                             |
+| ---------- | ------- | ------------------------------------------------- |
+| (none)     | scope   | The defining file (private)                       |
+| `internal` | scope   | Other files in the same package                   |
+| `pub`      | scope   | Other Wado packages — the library API             |
+| `export`   | CM flag | Also lowered at the CM boundary; CM-representable |
 
-The `pub` keyword controls **module public** visibility - whether a symbol can be accessed by other Wado modules:
+`pub` is the library boundary (Wado-native, so generics, closures, and traits
+may cross it). `export` is the Component Model boundary and is additive:
+`export ⟹ pub`, and an `export`ed signature must be CM-representable, checked at
+the definition site.
 
 ```wado
-// Private to this module (default)
-fn internal_helper() { ... }
+// Private to this file (default)
+fn helper() { ... }
 
-// Module public - accessible from other Wado modules
-pub fn api_function() -> i32 { ... }
+// Package-internal - accessible from other files in this package
+internal fn build_ast() -> Doc { ... }
 
-// World export - exposed at CM boundary
+// Library API - accessible from other Wado packages (Wado-native)
+pub fn map<T, U>(f: fn(T) -> U, xs: List<T>) -> List<U> { ... }
+
+// Library API + CM boundary export
 export fn run() { ... }
-
-// Both module public and world export
-pub export fn shared_entry() { ... }
 ```
 
-| Declaration           | Within module | Other Wado modules | CM world boundary |
-| --------------------- | ------------- | ------------------ | ----------------- |
-| `fn foo()`            | Yes           | No                 | No                |
-| `pub fn foo()`        | Yes           | Yes                | No                |
-| `export fn foo()`     | Yes           | No                 | Yes               |
-| `pub export fn foo()` | Yes           | Yes                | Yes               |
+| Declaration         | Same file | Same package | Other Wado packages | CM boundary |
+| ------------------- | --------- | ------------ | ------------------- | ----------- |
+| `fn foo()`          | Yes       | No           | No                  | No          |
+| `internal fn foo()` | Yes       | Yes          | No                  | No          |
+| `pub fn foo()`      | Yes       | Yes          | Yes                 | No          |
+| `export fn foo()`   | Yes       | Yes          | Yes                 | Yes         |
 
-All entity definitions can have `pub` visibility, including struct fields.
+A `pub`-only item reaches Wado consumers only (source dependency or
+provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only. All
+entity definitions take these modifiers, including struct fields.
 
 ### Module Source Types
 

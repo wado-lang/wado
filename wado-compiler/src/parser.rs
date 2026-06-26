@@ -997,6 +997,13 @@ impl Parser {
         // Parse any leading attributes
         let attrs = self.parse_attributes()?;
 
+        // TODO: package-internal visibility. `internal` is reserved and
+        // consumed as a nop until the three-tier visibility model is wired up.
+        // See docs/wep-2026-06-25-visibility-internal-pub-export.md.
+        if self.check(&TokenKind::Internal) {
+            self.advance();
+        }
+
         // Parse visibility: pub
         let is_pub = if self.check(&TokenKind::Pub) {
             self.advance();

@@ -155,8 +155,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let content_err = ErrorCode::HttpResponseContentCoding(Option::<String>::Some("gzip"));
     assert error_tag(&content_err) == "http-response-content-coding";
 
-    let internal = ErrorCode::InternalError(Option::<String>::Some("test"));
-    assert error_tag(&internal) == "internal-error";
+    let internal_err = ErrorCode::InternalError(Option::<String>::Some("test"));
+    assert error_tag(&internal_err) == "internal-error";
     let internal_none = ErrorCode::InternalError(null);
     assert error_tag(&internal_none) == "internal-error";
 
