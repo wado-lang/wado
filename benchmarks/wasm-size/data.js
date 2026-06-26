@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782445623219,
+  "lastUpdate": 1782456292710,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35697,6 +35697,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bad9a16cb3fa885bef1d99a2c1605881976f4974"
         },
         "date": 1782445622584,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9046aded2e0dd9eb28d00bd5ad7ae7d71ee56bfa",
+          "message": "Merge pull request #1450 from wado-lang/claude/wado-wasm-binary-embed-cyryi9\n\nfeat(compiler): embed WIT component-type section in compiled components",
+          "timestamp": "2026-06-26T15:34:52+09:00",
+          "tree_id": "9124b21e4a091e2af45f8b34fa3120730debf22d",
+          "url": "https://github.com/wado-lang/wado/commit/9046aded2e0dd9eb28d00bd5ad7ae7d71ee56bfa"
+        },
+        "date": 1782456292099,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
