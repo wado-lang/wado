@@ -24,8 +24,8 @@ use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
 
-/// The bindings synthesized for one linked component.
-pub struct LinkedComponentBindings {
+/// The Wado bindings synthesized from one decoded imported component.
+pub struct ComponentBindings {
     /// The AST module declaring the component's exported interfaces and types.
     pub module: Module,
     /// FQ names of every exported interface (drives import-plan classification).
@@ -36,12 +36,9 @@ pub struct LinkedComponentBindings {
 ///
 /// # Errors
 /// Returns a message naming the offending shape if the component exports a WIT
-/// construct not yet supported for linking (resources/handles, world-level
+/// construct not yet supported for import (resources/handles, world-level
 /// function exports, etc.).
-pub fn build_bindings(
-    resolve: &Resolve,
-    world: WorldId,
-) -> Result<LinkedComponentBindings, String> {
+pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
     let mut b = Builder::new();
     let mut interface_fqs = Vec::new();
 
@@ -54,14 +51,14 @@ pub fn build_bindings(
             }
             WorldItem::Function(f) => {
                 return Err(format!(
-                    "linking a component that exports the world-level function `{}` is not yet \
+                    "importing a component that exports the world-level function `{}` is not yet \
                      supported (only interface exports are)",
                     f.name
                 ));
             }
             WorldItem::Type { .. } => {
                 return Err(
-                    "linking a component that exports a world-level type is not yet supported"
+                    "importing a component that exports a world-level type is not yet supported"
                         .to_string(),
                 );
             }
@@ -82,7 +79,7 @@ pub fn build_bindings(
         b.count,
         false,
     );
-    Ok(LinkedComponentBindings {
+    Ok(ComponentBindings {
         module,
         interface_fqs,
     })
@@ -330,7 +327,7 @@ impl Builder {
             }
             other => {
                 self.errors.push(format!(
-                    "linking a component that exports the WIT type `{wit_name}` ({other:?}) is not \
+                    "importing a component that exports the WIT type `{wit_name}` ({other:?}) is not \
                      yet supported"
                 ));
             }
@@ -416,8 +413,10 @@ impl Builder {
                 self.named(&name.to_upper_camel_case(), Some(src))
             }
             None => {
-                self.errors
-                    .push("linking encountered an unnameable WIT leaf type".to_string());
+                self.errors.push(
+                    "encountered an unnameable WIT leaf type while importing a component"
+                        .to_string(),
+                );
                 unit()
             }
         }

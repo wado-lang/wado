@@ -772,7 +772,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _span = logger.span("elaborate/cm_interface_registry");
             let (mut cm_interface_registry, world_registry) =
                 CmInterfaceRegistry::build_from_stdlib();
-            // Fold linked CM components' interfaces and named types into the
+            // Fold imported CM components' interfaces and named types into the
             // registry (copy-on-write off the stdlib snapshot) so that
             // `Interface::method` calls resolve their CM signatures during
             // annotate — the same role build_from_stdlib plays for WASI. A
@@ -781,8 +781,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // interface imports, whereas a core-wasm asset module carries only
             // `#[canonical]` functions (no interfaces). Stdlib WASI modules
             // (Wasi/Core sources) also carry `#[cm]` interfaces but must NOT be
-            // treated as linked components — the `Wasm`-source guard excludes
-            // them.
+            // treated as component dependencies — the `Wasm`-source guard
+            // excludes them.
             for (ms, module) in modules {
                 if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
                     continue;

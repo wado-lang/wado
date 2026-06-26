@@ -135,4 +135,4 @@ It may include TODOs on WIP.
 - [Structured Logging and Tracing (`core:log`)](./wep-2026-06-25-core-log.md)
 - [Trait Derivation Policy — Bound-Driven Synthesis](./wep-2026-06-25-trait-derivation.md)
 - [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)
-- [Wasm CM Linking (`use`-based component import)](./wep-2026-06-26-wasm-cm-linking.md)
+- [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)

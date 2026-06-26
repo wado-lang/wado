@@ -54,9 +54,9 @@ pub enum ImportKind {
     /// combined shape — resources plus a getter — is encoded as one instance by
     /// codegen's dedicated resource-defining pass.
     ResourceDefiningInterface,
-    /// A function-bearing interface imported from a linked CM component (via
+    /// A function-bearing interface imported from a CM component dependency (via
     /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). Codegen imports
-    /// it like a host interface, then statically links the dependency component
+    /// it like a host interface, then composes the dependency component in
     /// with `wasm-compose` so the cross-component call fuses guest-to-guest.
     Component,
 }

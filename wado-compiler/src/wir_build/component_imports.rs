@@ -141,8 +141,8 @@ pub fn resolve_import_plan(
                 .is_some_and(|src| src != interface_info.path)
         });
         let kind = if registry.is_component_interface(&interface_info.path) {
-            // Imported like a host interface, but the dependency is linked in at
-            // codegen (wasm-compose) rather than provided by the host.
+            // Imported like a host interface, but the dependency is composed in
+            // at codegen (wasm-compose) rather than provided by the host.
             ImportKind::Component
         } else if uses_external_resources {
             ImportKind::ResourceUsingInterface
@@ -241,8 +241,8 @@ fn collect_export_interface_fqs(
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.
 ///
-/// Linked CM components (`ImportKind::Component`) are excluded: the dependency
-/// is composed into the output (`compose_linked_components`), so the final
+/// Imported CM components (`ImportKind::Component`) are excluded: the dependency
+/// is composed into the output (`compose_dependency_components`), so the final
 /// artifact does not import its interface — emitting it as a world import would
 /// misdescribe the composed component.
 #[must_use]

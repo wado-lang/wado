@@ -370,10 +370,10 @@ pub fn build_component(
     // freestanding world functions stay bare. See the function doc.
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
-    // Statically link any imported CM components: compose this component (which
-    // imports the linked interfaces) with the dependency components, so the
+    // Compose in any imported CM component dependencies: the program imports
+    // their interfaces, and each dependency is composed into the output, so the
     // cross-component calls fuse guest-to-guest and the result is standalone.
-    compose_linked_components(component_bytes, project, &wir_package.import_plan)
+    compose_dependency_components(component_bytes, project, &wir_package.import_plan)
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -1973,9 +1973,9 @@ fn generate_cm_imports(
         // Membership: the plan lists this FQ as a function-bearing interface.
         // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
         // so it is correctly excluded from this loop and handled by Phase 0.)
-        // A linked CM component's interface is imported here exactly like a
+        // An imported CM component's interface is imported here exactly like a
         // host function-interface; the dependency is wired in afterwards by
-        // `compose_linked_components`, so the cross-component call fuses
+        // `compose_dependency_components`, so the cross-component call fuses
         // guest-to-guest instead of going through a host trampoline.
         if !import_plan.iter().any(|e| {
             e.fq == interface_info.path
@@ -3720,9 +3720,9 @@ fn import_resource_using_interfaces(
     }
 }
 
-/// Statically link the program component (`program_bytes`, which imports the
-/// linked interfaces) with the dependency components, producing one standalone
-/// component. Uses `wasm-compose`'s in-memory graph: each dependency is
+/// Statically compose the program component (`program_bytes`, which imports the
+/// dependency interfaces) with its dependency components, producing one
+/// standalone component. Uses `wasm-compose`'s in-memory graph: each dependency is
 /// instantiated and its exported interface connected to the program's matching
 /// import; the program's remaining imports (host WASI) and the dependencies'
 /// own imports are surfaced (and merged by name) as the result's imports, and
@@ -3730,7 +3730,7 @@ fn import_resource_using_interfaces(
 /// sub-components of one composed component, wasmtime fuses it guest-to-guest
 /// and the Component Model reentrancy guard is elided (no `CannotEnterComponent`
 /// trap).
-fn compose_linked_components(
+fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
     import_plan: &[crate::wir::ImportEntry],
@@ -3739,12 +3739,12 @@ fn compose_linked_components(
     use wasm_compose::graph::{Component, CompositionGraph, EncodeOptions};
     use wasmparser::Validator;
 
-    let linked_fqs: IndexSet<&str> = import_plan
+    let dependency_fqs: IndexSet<&str> = import_plan
         .iter()
         .filter(|e| e.kind == ImportKind::Component)
         .map(|e| e.fq.as_str())
         .collect();
-    if linked_fqs.is_empty() {
+    if dependency_fqs.is_empty() {
         return program_bytes;
     }
 
@@ -3762,7 +3762,7 @@ fn compose_linked_components(
             let provides: Vec<&String> = asset
                 .component_interface_fqs
                 .iter()
-                .filter(|fq| linked_fqs.contains(fq.as_str()))
+                .filter(|fq| dependency_fqs.contains(fq.as_str()))
                 .collect();
             if provides.is_empty() {
                 continue;
@@ -3797,7 +3797,7 @@ fn compose_linked_components(
         Ok(bytes) => bytes,
         // Composition is a pure transform over already-valid components; a
         // failure is a compiler bug, not user error.
-        Err(e) => panic!("failed to link CM component dependencies: {e:?}"),
+        Err(e) => panic!("failed to compose CM component dependencies: {e:?}"),
     }
 }
 

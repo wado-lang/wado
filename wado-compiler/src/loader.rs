@@ -270,13 +270,13 @@ pub struct WasmExportSig {
 pub struct WasmAsset {
     /// Core wasm bytes (always binary; `.wat` is parsed at load time). For a
     /// component asset (`component_interface_fqs` non-empty) this is the whole
-    /// component binary, linked into the output at codegen.
+    /// component binary, composed into the output at codegen.
     pub bytes: Vec<u8>,
     /// Function exports (kind = func) ordered by their wasm order. Empty for a
     /// component asset (its surface is described by the WIT it carries).
     pub function_exports: Vec<WasmExportSig>,
     /// FQ names of the interfaces a *component* asset exports. Empty for a
-    /// core-wasm asset. Non-empty marks this asset as a CM component to link.
+    /// core-wasm asset. Non-empty marks this asset as a CM component to compose in.
     pub component_interface_fqs: Vec<String>,
 }
 
@@ -1396,7 +1396,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Handle a CM component import: decode the component's WIT, synthesize a
     /// Wado binding module (interfaces + named types with `#[cm(...)]`) directly
-    /// from the decoded type, and record the component bytes for linking at
+    /// from the decoded type, and record the component bytes for composition at
     /// codegen. The synthesized module flows through the normal frontend, so
     /// `use { Iface } from "./c.wasm"` resolves like any other module.
     fn handle_component_import(
@@ -1429,7 +1429,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         &self,
         source: &ModuleSource,
         bytes: &[u8],
-    ) -> Result<crate::wit_consume::LinkedComponentBindings, LoadError> {
+    ) -> Result<crate::wit_consume::ComponentBindings, LoadError> {
         let err = |message: String| LoadError::WasmImport {
             module_source: source.clone(),
             message,
