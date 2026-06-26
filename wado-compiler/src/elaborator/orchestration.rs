@@ -775,11 +775,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // registry (copy-on-write off the stdlib snapshot) so that
             // `Interface::method` calls resolve their CM signatures during
             // annotate — the same role build_from_stdlib plays for WASI. A
-            // component binding module is a non-stdlib module carrying
-            // `#[cm(...)]` interface imports (synthesized by the loader from a
-            // decoded component); ordinary user interfaces carry no such attr.
+            // component binding module is a `ModuleSource::Wasm` module the
+            // loader synthesized from a decoded component; it carries `#[cm]`
+            // interface imports, whereas a core-wasm asset module carries only
+            // `#[canonical]` functions (no interfaces). Stdlib WASI modules
+            // (Wasi/Core sources) also carry `#[cm]` interfaces but must NOT be
+            // treated as linked components — the `Wasm`-source guard excludes
+            // them.
             for (ms, module) in modules {
-                if stdlib_set.contains(ms) {
+                if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
                     continue;
                 }
                 let interface_fqs = component_interface_fqs(module);
