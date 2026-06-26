@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782456292710,
+  "lastUpdate": 1782485616893,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35741,6 +35741,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9046aded2e0dd9eb28d00bd5ad7ae7d71ee56bfa"
         },
         "date": 1782456292099,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85cf07385921093862e47473e32abf03161000f8",
+          "message": "Merge pull request #1451 from wado-lang/claude/wasm-cm-use-linking-gspdes\n\nfeat(cm): import functions from external Wasm components via `use`",
+          "timestamp": "2026-06-26T23:43:49+09:00",
+          "tree_id": "1af26df8d3e8c609524eee6a37b8ef8a9a977e30",
+          "url": "https://github.com/wado-lang/wado/commit/85cf07385921093862e47473e32abf03161000f8"
+        },
+        "date": 1782485616263,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
