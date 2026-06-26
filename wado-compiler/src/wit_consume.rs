@@ -407,18 +407,14 @@ impl Builder {
             unreachable!("non-Id leaf handled above");
         };
         let td = &resolve.types[id];
-        match td.name.as_deref() {
-            Some(name) => {
-                let src = type_source_fq(resolve, id, current_fq);
-                self.named(&name.to_upper_camel_case(), Some(src))
-            }
-            None => {
-                self.errors.push(
-                    "encountered an unnameable WIT leaf type while importing a component"
-                        .to_string(),
-                );
-                unit()
-            }
+        if let Some(name) = td.name.as_deref() {
+            let src = type_source_fq(resolve, id, current_fq);
+            self.named(&name.to_upper_camel_case(), Some(src))
+        } else {
+            self.errors.push(
+                "encountered an unnameable WIT leaf type while importing a component".to_string(),
+            );
+            unit()
         }
     }
 
