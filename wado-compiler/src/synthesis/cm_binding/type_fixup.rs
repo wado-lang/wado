@@ -650,7 +650,7 @@ impl TirMutVisitor for CallRewriteWalker<'_> {
             expr,
             self.adapters,
             self.entry_source,
-            &self.cm_interface_registry,
+            self.cm_interface_registry,
             self.type_table,
         );
     }

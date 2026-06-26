@@ -321,10 +321,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &mut Vec::new(),
                             ) {
-                                return Err(format!(
-                                    "export function `{}`: {reason}",
-                                    export.name
-                                ));
+                                return Err(format!("export function `{}`: {reason}", export.name));
                             }
                         }
                     }

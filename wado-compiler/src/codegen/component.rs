@@ -334,7 +334,13 @@ pub fn build_component(
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
     // World exports
-    emit_world_exports(&mut builder, &mut ctx, project, component_plan, result_unit_type);
+    emit_world_exports(
+        &mut builder,
+        &mut ctx,
+        project,
+        component_plan,
+        result_unit_type,
+    );
 
     // Test-name custom section: map each test export to its original (lossless)
     // name so `wado test` can display what the user wrote rather than the
@@ -1996,7 +2002,11 @@ fn generate_cm_imports(
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, &project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ty,
+                    &project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
         }
 
@@ -3438,7 +3448,11 @@ fn import_resource_using_interfaces(
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, &project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ty,
+                    &project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
         }
 

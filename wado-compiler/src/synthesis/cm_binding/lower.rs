@@ -253,11 +253,8 @@ pub(super) fn synthesize_lower_tuple(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        cm_interface_registry,
-        Some(wasi_package),
-    );
+    let layout =
+        cm_abi::layout_tuple_with_registry_scoped(elems, cm_interface_registry, Some(wasi_package));
     let mut stmts = Vec::new();
 
     // Element TypeIds come from the tuple's own type arguments — the
@@ -750,7 +747,9 @@ pub(super) fn synthesize_lower_list_to_memory(
     let elem_type_id = {
         let tt = type_table.borrow();
         match tt.get(list_type_id) {
-            crate::tir::ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+                if !type_args.is_empty() =>
+            {
                 type_args[0]
             }
             _ => {
@@ -808,7 +807,12 @@ pub(super) fn synthesize_lower_list_to_memory(
 
     // __i = 0; loop { if __i >= __len break; lower elem[__i] at __base + __i*size; __i += 1 }
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt("__list_i", i_local, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt(
+        "__list_i",
+        i_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
 
     let mut loop_body = Vec::new();
     loop_body.push(if_stmt(
@@ -841,7 +845,7 @@ pub(super) fn synthesize_lower_list_to_memory(
     // __elem = list.index_value(__i)
     let elem_local = alloc_local(next_local, locals, elem_type_id);
     let iv_info = LocalMethodName::new(
-        names.array.clone(),
+        names.array,
         Some("IndexValue<i32>".to_string()),
         "index_value".to_string(),
     );
@@ -893,7 +897,10 @@ pub(super) fn synthesize_lower_list_to_memory(
     // Store (base, len) at addr / addr+4.
     stmts.push(expr_stmt(builtin_call(
         "i32_store",
-        vec![addr.clone(), local_ref(base_local, "__list_base", TypeTable::I32)],
+        vec![
+            addr.clone(),
+            local_ref(base_local, "__list_base", TypeTable::I32),
+        ],
         TypeTable::UNIT,
     )));
     stmts.push(expr_stmt(builtin_call(
@@ -1691,26 +1698,25 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // case payload via the registry-backed variant helper, keyed on the
             // same resolved source. Lib-local variants register their cases
             // under the package's default-interface FQ, like WASI variants.
-            if let Some(src) = source {
-                if cm_interface_registry
+            if let Some(src) = source
+                && cm_interface_registry
                     .get_variant_cases_by_source(src, &n.name)
                     .is_some()
-                {
-                    let mut stmts = Vec::new();
-                    synthesize_lower_wasi_variant_to_memory(
-                        n,
-                        src,
-                        value,
-                        addr,
-                        next_local,
-                        &mut stmts,
-                        locals,
-                        cm_interface_registry,
-                        wasi_package,
-                        type_table,
-                    );
-                    return stmts;
-                }
+            {
+                let mut stmts = Vec::new();
+                synthesize_lower_wasi_variant_to_memory(
+                    n,
+                    src,
+                    value,
+                    addr,
+                    next_local,
+                    &mut stmts,
+                    locals,
+                    cm_interface_registry,
+                    wasi_package,
+                    type_table,
+                );
+                return stmts;
             }
             // Fall through to synthesize_lower for primitives and simple types
             synthesize_lower(&resolved, value, addr, next_local, locals, &names)

@@ -35,7 +35,8 @@ use crate::tir::{
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
     generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt, synth_span,
+    local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
+    synth_span,
 };
 
 use super::import_adapter::make_binding_function;
@@ -44,9 +45,8 @@ use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
     coerce_flat_lower, compute_export_flat_param_types, export_needs_param_lifting, field_access,
-    find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type,
-    type_id_to_ast_type, variant_payload, variant_tag, variant_test,
+    find_struct_decl, find_variant_decl, flat_types_from_type_id, flatten_export_type,
+    is_unit_type, type_id_to_ast_type, variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -187,15 +187,15 @@ fn lower_to_flat_inner(
             let elem_type_id = type_args[0];
             let elem_ast_type = {
                 let tt = ctx.type_table.borrow();
-                type_id_to_ast_type(elem_type_id, &tt, &ctx.cm_interface_registry)
+                type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
             let elem_size = crate::component_model::cm_size_with_registry(
                 &elem_ast_type,
-                &ctx.cm_interface_registry,
+                ctx.cm_interface_registry,
             );
             let elem_align = crate::component_model::cm_align_with_registry(
                 &elem_ast_type,
-                &ctx.cm_interface_registry,
+                ctx.cm_interface_registry,
             );
 
             // __arr = value
@@ -334,7 +334,7 @@ fn lower_to_flat_inner(
                 local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
                 next_local,
                 locals,
-                &ctx.cm_interface_registry,
+                ctx.cm_interface_registry,
                 ctx.cm_package,
                 ctx.type_table,
             ));
@@ -500,7 +500,12 @@ fn lower_to_flat_inner(
                 TypeTable::I32,
             );
             let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt("__res_disc", disc_local, TypeTable::I32, disc_expr));
+            stmts.push(let_stmt(
+                "__res_disc",
+                disc_local,
+                TypeTable::I32,
+                disc_expr,
+            ));
             result.push(FlatLocal {
                 index: disc_local,
                 cm_type: cm_abi::CmValType::I32,
@@ -510,7 +515,7 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 flat_types_from_type_id(type_id, tir_modules, &tt)
                     .get(1..)
-                    .map(|s| s.to_vec())
+                    .map(<[cm_abi::CmValType]>::to_vec)
                     .unwrap_or_default()
             };
             if !payload_flats.is_empty() {
@@ -527,9 +532,9 @@ fn lower_to_flat_inner(
                     .collect();
 
                 let lower_arm = |case_index: u32,
-                                     payload_tid: TypeId,
-                                     next_local: &mut u32,
-                                     locals: &mut Vec<TirLocal>|
+                                 payload_tid: TypeId,
+                                 next_local: &mut u32,
+                                 locals: &mut Vec<TirLocal>|
                  -> Vec<TirStmt> {
                     let mut arm_stmts: Vec<TirStmt> = Vec::new();
                     let payload = variant_payload(
@@ -731,7 +736,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                             .fields
                             .iter()
                             .map(|f| {
-                                type_id_to_ast_type(f.type_id, &tt, &lift_ctx.cm_interface_registry)
+                                type_id_to_ast_type(f.type_id, &tt, lift_ctx.cm_interface_registry)
                             })
                             .collect();
                         // Prefer the already-registered TypeId so the WIR
@@ -951,11 +956,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // `Result<T, E>` is a 2-case variant (Ok=0, Err=1) — lift it
                 // through the shared variant path with a synthetic decl carrying
                 // the concrete arm TypeIds.
-                let decl = synthetic_result_variant_decl(
-                    &type_table_cell.borrow(),
-                    target_type_id,
-                );
-                return lift_variant_from_flat_params(
+                let decl = synthetic_result_variant_decl(&type_table_cell.borrow(), target_type_id);
+                lift_variant_from_flat_params(
                     &decl.name.clone(),
                     &decl,
                     flat_param_locals,
@@ -967,7 +969,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     tir_modules,
                     type_table_cell,
                     lift_ctx,
-                );
+                )
             }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
             _ => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
@@ -1026,10 +1028,7 @@ pub(super) fn synthesize_lift_from_flat_params(
 /// Build a synthetic `TirVariantDecl` for a concrete `Result<T, E>` so it can be
 /// lifted/lowered through the shared named-variant path. `Result` is a 2-case
 /// variant (Ok=0, Err=1); its arm payload types are the instance's type args.
-fn synthetic_result_variant_decl(
-    type_table: &TypeTable,
-    result_type_id: TypeId,
-) -> TirVariantDecl {
+fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId) -> TirVariantDecl {
     let (ok_tid, err_tid) = match type_table.get(result_type_id) {
         ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
             (type_args[0], type_args[1])
@@ -1099,8 +1098,7 @@ fn coerce_payload_slots(
         } else {
             let have_tid = cm_val_type_to_type_id(have);
             let want_tid = cm_val_type_to_type_id(want);
-            let coerced =
-                coerce_flat_lift(local_ref(slot_local, "__p", have_tid), have, want);
+            let coerced = coerce_flat_lift(local_ref(slot_local, "__p", have_tid), have, want);
             let l = alloc_local(next_local, locals, want_tid);
             stmts.push(let_stmt("__coerce", l, want_tid, coerced));
             out_locals.push(l);
@@ -1159,7 +1157,7 @@ fn lift_variant_from_flat_params(
         variant_decl
             .cases
             .iter()
-            .map(|c| type_id_to_ast_type(c.payload, &tt, &lift_ctx.cm_interface_registry))
+            .map(|c| type_id_to_ast_type(c.payload, &tt, lift_ctx.cm_interface_registry))
             .collect()
     };
 
@@ -2157,7 +2155,12 @@ pub(super) fn synthesize_sync_export_binding(
         let ty = return_ast.expect("multi-flat result implies a return type");
         let mut next_local = param_count;
         let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-        body_stmts.push(let_stmt("__result", result_local, user_return_type, call_user));
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
 
         let size = crate::component_model::cm_size_with_registry(ty, cm_interface_registry);
         let align = crate::component_model::cm_align_with_registry(ty, cm_interface_registry);
@@ -2198,7 +2201,12 @@ pub(super) fn synthesize_sync_export_binding(
     } else {
         let mut next_local = param_count;
         let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
-        body_stmts.push(let_stmt("__result", result_local, user_return_type, call_user));
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
         let flat = synthesize_lower_to_flat(
             local_ref(result_local, "__result", user_return_type),
             user_return_type,

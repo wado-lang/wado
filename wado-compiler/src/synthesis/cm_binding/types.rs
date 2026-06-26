@@ -166,7 +166,10 @@ impl LiftContext<'_> {
         match ty {
             Type::Named(n) => {
                 if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
-                    && self.cm_interface_registry.lib_module_source_of(src).is_some()
+                    && self
+                        .cm_interface_registry
+                        .lib_module_source_of(src)
+                        .is_some()
                 {
                     if self
                         .cm_interface_registry
@@ -185,7 +188,7 @@ impl LiftContext<'_> {
                         return tt.make_variant(n.name.clone(), ms);
                     }
                 }
-                cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package)
+                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
             Type::Tuple(elems) if !elems.is_empty() => {
                 let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_type_id(e, tt)).collect();
@@ -219,9 +222,9 @@ impl LiftContext<'_> {
                     let err = self.cm_type_id(&g.args[1], tt);
                     return tt.make_result(ok, err);
                 }
-                cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package)
+                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
-            _ => cm_type_to_type_id(ty, tt, &self.cm_interface_registry, self.cm_package),
+            _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
         }
     }
 }
@@ -525,12 +528,12 @@ pub(super) fn check_cm_boundary_representable(
         // classified explicitly.
         match type_table.get(type_id) {
             // No CM value representation in any world.
-            R::Primitive(
-                PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128,
-            ) => Err(format!(
-                "`{}` has no Component Model value representation",
-                type_table.type_name(type_id)
-            )),
+            R::Primitive(PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128) => {
+                Err(format!(
+                    "`{}` has no Component Model value representation",
+                    type_table.type_name(type_id)
+                ))
+            }
             // Scalars, plain discriminants, bitflags, and resource/handle types
             // (`resource`, `own`/`borrow`, `stream`/`future`) — the last group
             // lowers to an i32 handle identically in every world.
@@ -566,8 +569,7 @@ pub(super) fn check_cm_boundary_representable(
                 let name = name.clone();
                 match find_variant_decl(&name, tir_modules) {
                     Some(decl) => {
-                        let payloads: Vec<TypeId> =
-                            decl.cases.iter().map(|c| c.payload).collect();
+                        let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
                         for p in payloads {
                             recurse(p, visited)?;
                         }
@@ -576,7 +578,9 @@ pub(super) fn check_cm_boundary_representable(
                     None => Ok(()),
                 }
             }
-            R::GenericInstance { name, type_args, .. } => {
+            R::GenericInstance {
+                name, type_args, ..
+            } => {
                 // Option/List/Tuple were handled above by the `as_*` accessors;
                 // `Result<T, E>` recurses into its arms. Any other generic
                 // instance has no concrete CM lowering at this boundary (it
@@ -629,7 +633,7 @@ pub(super) fn check_cm_boundary_representable(
 }
 
 /// Map a core-value `TypeId` (`i32`/`i64`/`f32`/`f64`) to its `CmValType`.
-/// Non-core TypeIds (which never appear as a flat slot) map to `I32`.
+/// Non-core `TypeIds` (which never appear as a flat slot) map to `I32`.
 pub(super) fn cm_val_type_from_type_id(tid: TypeId) -> cm_abi::CmValType {
     if tid == TypeTable::I64 {
         cm_abi::CmValType::I64

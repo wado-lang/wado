@@ -1000,7 +1000,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // rewrite as a CmRawCall directly (the name is dynamic).
         if is_stream_cm_method(&cm_name) {
             let parameterized =
-                parameterize_stream_cm_name(&cm_name, expr, self.tt, &self.cm_interface_registry);
+                parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry);
             if parameterized != cm_name {
                 rewrite_cm_instance_method(expr, "raw", &parameterized, self.entry_source);
                 return;

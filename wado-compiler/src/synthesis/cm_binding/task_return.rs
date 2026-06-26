@@ -111,7 +111,7 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                         &mut self.extra_locals,
                         self.tir_modules,
                         self.type_table,
-                        &self.cm_interface_registry,
+                        self.cm_interface_registry,
                         self.cm_package,
                         self.interner,
                     ));

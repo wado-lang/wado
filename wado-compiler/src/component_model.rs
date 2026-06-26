@@ -436,7 +436,6 @@ pub struct CmInterfaceRegistry {
     lib_interface_sources: IndexMap<String, ModuleSource>,
 }
 
-
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
 /// registration. Two registrations of the same `(interface, name)` pair
 /// indicate a stdlib bug (the same declaration emitted twice) — we want a
@@ -2494,6 +2493,12 @@ pub struct CmTypeGen {
     interface_hint: Option<String>,
 }
 
+impl Default for CmTypeGen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CmTypeGen {
     pub fn new() -> Self {
         Self {
@@ -2868,8 +2873,7 @@ impl CmTypeGen {
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        let variant_refs: Vec<&str> =
-                            variants.iter().map(String::as_str).collect();
+                        let variant_refs: Vec<&str> = variants.iter().map(String::as_str).collect();
                         let idx = sink.define(CmDefined::Enum(&variant_refs));
                         self.cache.insert(cache_key.clone(), idx);
 

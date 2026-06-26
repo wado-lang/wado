@@ -147,10 +147,7 @@ fn cases() -> Vec<Case> {
             Val::List(vec![Val::Tuple(vec![Val::String("k".into()), Val::U32(1)])]),
         ),
         // Tuples carrying aggregate (non-primitive) elements.
-        case(
-            "id-tuple-record",
-            Val::Tuple(vec![point(), Val::U32(7)]),
-        ),
+        case("id-tuple-record", Val::Tuple(vec![point(), Val::U32(7)])),
         case(
             "id-tuple-option",
             Val::Tuple(vec![Val::Option(b(Val::U32(9))), Val::U8(3)]),
@@ -225,7 +222,7 @@ fn run_round_trips(opt_level: OptLevel) {
                 .as_ref()
                 .and_then(|i| instance.get_export(&mut store, Some(i), export))
                 .map(|(_, idx)| idx)
-                .and_then(|idx| instance.get_func(&mut store, &idx));
+                .and_then(|idx| instance.get_func(&mut store, idx));
             let Some(func) = func else {
                 failures.push(format!("[{opt}] export `{export}` not found"));
                 continue;
