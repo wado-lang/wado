@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782438987503,
+  "lastUpdate": 1782445623219,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35653,6 +35653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8135efada159ec0e7ea698eb9d2884026c96d771"
         },
         "date": 1782438987004,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bad9a16cb3fa885bef1d99a2c1605881976f4974",
+          "message": "Merge pull request #1449 from wado-lang/claude/package-cm-catalog-red-t9upnx\n\nfeat(cm): round-trip the full Component Model value-type surface for library exports",
+          "timestamp": "2026-06-26T12:37:29+09:00",
+          "tree_id": "71c5dcfe86cf124495796dd26095dfca450b4eca",
+          "url": "https://github.com/wado-lang/wado/commit/bad9a16cb3fa885bef1d99a2c1605881976f4974"
+        },
+        "date": 1782445622584,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
