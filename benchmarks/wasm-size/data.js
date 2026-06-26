@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782433930173,
+  "lastUpdate": 1782437760906,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35565,6 +35565,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/02157750edaf5c43b449db7981c4ef5baef01f0c"
         },
         "date": 1782433929547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fcac846455cfc33defaa4130c0da6b167f7eaa05",
+          "message": "Merge pull request #1447 from wado-lang/claude/actions-parallel-steps-l8ukgv\n\nchore: collapse Tidy into a single job with parallel steps",
+          "timestamp": "2026-06-26T10:24:08+09:00",
+          "tree_id": "548c11c0db590dbc3d1576d4e470cd5907533302",
+          "url": "https://github.com/wado-lang/wado/commit/fcac846455cfc33defaa4130c0da6b167f7eaa05"
+        },
+        "date": 1782437760284,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
