@@ -265,13 +265,12 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         AmpEq, Ampersand, And, Arrow, As, Assert, Async, Break, Caret, CaretEq, CharLit, Colon,
         ColonColon, Comma, Const, Continue, Dot, DotDot, DotDotDot, DotDotEq, DotDotLt, Effect,
         Else, Enum, Eof, Eq, EqEq, Export, False, FatArrow, Flags, Fn, For, From, Global, Gt, GtEq,
-        GtGt, Hash, Ident, If, Impl, Import, In, Internal, Interface, LBrace, LBracket, LParen, Let,
-        Loop,
-        Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Mut, Not, NotEq, Null, NumberLit, Of, Or,
-        Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub, Question, RBrace, RBracket, RParen,
-        Reactive, Resource, Return, Semicolon, ShlEq, ShrEq, Slash, SlashEq, Star, StarEq, Stores,
-        StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type, Unique, Use, Variant,
-        While, With, World,
+        GtGt, Hash, Ident, If, Impl, Import, In, Interface, Internal, LBrace, LBracket, LParen,
+        Let, Loop, Lt, LtEq, LtLt, Match, Matches, Minus, MinusEq, Mut, Not, NotEq, Null,
+        NumberLit, Of, Or, Percent, PercentEq, Pipe, PipeEq, Plus, PlusEq, Pub, Question, RBrace,
+        RBracket, RParen, Reactive, Resource, Return, Semicolon, ShlEq, ShrEq, Slash, SlashEq,
+        Star, StarEq, Stores, StringLit, Struct, TemplateStringLit, Tilde, Trait, True, Type,
+        Unique, Use, Variant, While, With, World,
     };
     // `Error` is excluded: it only appears in malformed lex output, which
     // kiln gates out before reaching this function. Omitting it from the
