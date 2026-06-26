@@ -435,10 +435,8 @@ pub struct CmInterfaceRegistry {
     /// naming convention (`module_source_for_cm_interface`).
     lib_interface_sources: IndexMap<String, ModuleSource>,
 
-    /// FQ names of interfaces imported from a CM component dependency (via
-    /// `use { Iface } from "./c.wasm" with { type: "wasm" }`). The import plan
-    /// classifies these as [`crate::wir::ImportKind::Component`] so codegen
-    /// composes the dependency component in rather than leaving a host import.
+    /// FQs of interfaces imported from a CM component dependency. The plan
+    /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
     component_interfaces: IndexSet<String>,
 }
 
@@ -1315,11 +1313,9 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Register a CM component dependency's binding module: its `#[cm(...)]`
-    /// interfaces, functions, and named types go through the same
-    /// [`Self::register_module_decls`] path as the stdlib, and each exported
-    /// interface FQ is recorded as a component import so the plan classifies it
-    /// as [`crate::wir::ImportKind::Component`].
+    /// Register a component dependency's binding module via the stdlib's
+    /// [`Self::register_module_decls`] path, recording each interface FQ as a
+    /// component import for [`crate::wir::ImportKind::Component`] classification.
     pub fn register_component_decls(
         &mut self,
         module: &crate::ast::Module,

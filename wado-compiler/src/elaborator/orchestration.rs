@@ -3190,15 +3190,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 }
 
-/// Fold imported CM components' interfaces and named types into `registry`
-/// (copy-on-write off the stdlib snapshot) so `Interface::method` calls resolve
-/// their CM signatures. A component binding module is a `ModuleSource::Wasm`
-/// module the loader synthesized from a decoded component; it carries `#[cm]`
-/// interface imports, whereas a core-wasm asset module carries only
-/// `#[canonical]` functions. Stdlib WASI modules (Wasi/Core sources) also carry
-/// `#[cm]` interfaces but must NOT be treated as component dependencies — the
-/// `Wasm`-source guard excludes them. Shared by elaboration and the dump
-/// pipeline, which both rebuild the registry from the stdlib snapshot.
+/// Fold component-dependency interfaces into `registry` (copy-on-write) so
+/// `Interface::method` calls resolve their CM signatures. Component binding
+/// modules are loader-synthesized `ModuleSource::Wasm` modules; the `Wasm`-source
+/// guard excludes stdlib WASI. Shared by elaboration and the dump pipeline.
 pub(crate) fn fold_component_interfaces(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,
@@ -3215,9 +3210,8 @@ pub(crate) fn fold_component_interfaces(
     }
 }
 
-/// The FQ names of CM interfaces a loader-synthesized component-binding module
-/// exports. Empty for a core-wasm asset module (whose decls carry
-/// `#[canonical(...)]`, not `#[cm(...)]` interface imports).
+/// Exported interface FQs of a component-binding module. Empty for a core-wasm
+/// asset (whose decls carry `#[canonical(...)]`, not `#[cm(...)]` interfaces).
 fn component_interface_fqs(module: &Module) -> Vec<String> {
     module
         .items

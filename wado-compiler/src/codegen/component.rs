@@ -370,9 +370,7 @@ pub fn build_component(
     // freestanding world functions stay bare. See the function doc.
     append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
 
-    // Compose in any imported CM component dependencies: the program imports
-    // their interfaces, and each dependency is composed into the output, so the
-    // cross-component calls fuse guest-to-guest and the result is standalone.
+    // Compose in imported CM component dependencies so the result is standalone.
     compose_dependency_components(component_bytes, project, &wir_package.import_plan)
 }
 
@@ -1973,10 +1971,8 @@ fn generate_cm_imports(
         // Membership: the plan lists this FQ as a function-bearing interface.
         // (The shared `wasi:cli/types` is `SharedTypes`, not `FunctionInterface`,
         // so it is correctly excluded from this loop and handled by Phase 0.)
-        // An imported CM component's interface is imported here exactly like a
-        // host function-interface; the dependency is wired in afterwards by
-        // `compose_dependency_components`, so the cross-component call fuses
-        // guest-to-guest instead of going through a host trampoline.
+        // A `Component` import is emitted like a host function-interface here;
+        // `compose_dependency_components` wires in the dependency afterwards.
         if !import_plan.iter().any(|e| {
             e.fq == interface_info.path
                 && matches!(
@@ -3720,16 +3716,11 @@ fn import_resource_using_interfaces(
     }
 }
 
-/// Statically compose the program component (`program_bytes`, which imports the
-/// dependency interfaces) with its dependency components, producing one
-/// standalone component. Uses `wasm-compose`'s in-memory graph: each dependency is
-/// instantiated and its exported interface connected to the program's matching
-/// import; the program's remaining imports (host WASI) and the dependencies'
-/// own imports are surfaced (and merged by name) as the result's imports, and
-/// the program's exports are re-exported. Because the call crosses two
-/// sub-components of one composed component, wasmtime fuses it guest-to-guest
-/// and the Component Model reentrancy guard is elided (no `CannotEnterComponent`
-/// trap).
+/// Compose `program_bytes` with its `ImportKind::Component` dependencies into
+/// one standalone component via `wasm-compose`. Each dependency's exported
+/// interface is connected to the program's matching import; leftover host
+/// imports are merged by name. The fused guest-to-guest call elides the CM
+/// reentrancy guard (no `CannotEnterComponent` trap a host trampoline would hit).
 fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
@@ -3756,8 +3747,7 @@ fn compose_dependency_components(
         let program_id = graph.add_component(program)?;
         let program_inst = graph.instantiate(program_id)?;
 
-        // Each dependency component, instantiated once; its exported interfaces
-        // connected to the program's matching imports.
+        // Instantiate each dependency, connecting its exports to program imports.
         for asset in project.wasm_assets.values() {
             let provides: Vec<&String> = asset
                 .component_interface_fqs
@@ -3795,8 +3785,7 @@ fn compose_dependency_components(
 
     match compose() {
         Ok(bytes) => bytes,
-        // Composition is a pure transform over already-valid components; a
-        // failure is a compiler bug, not user error.
+        // Pure transform over valid components: a failure is a compiler bug.
         Err(e) => panic!("failed to compose CM component dependencies: {e:?}"),
     }
 }

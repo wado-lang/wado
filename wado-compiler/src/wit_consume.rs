@@ -1,17 +1,12 @@
 //! Build a Wado AST module from a decoded CM component's WIT type.
 //!
-//! The consumer side of WIT interoperability: an external `.wasm` component is
-//! decoded with `wit_component::decode`, and this module turns the resulting
-//! `wit_parser::Resolve` into an `ast::Module` carrying `#[cm(...)]`-annotated
-//! interfaces, functions, and named types — the same shape `wado-from-idl`
-//! emits for the stdlib, but built directly as AST (no source text). Inserting
-//! that module into the loader's set lets the normal frontend
-//! (bind/analyze/annotate) produce symbols, types, and `CmInterfaceRegistry`
-//! entries with no special path.
+//! The consumer side of WIT interoperability: turns the `wit_parser::Resolve`
+//! from `wit_component::decode` into an `ast::Module` of `#[cm(...)]`-annotated
+//! interfaces, functions, and types — the shape `wado-from-idl` emits for the
+//! stdlib, but built directly as AST. The normal frontend then handles it.
 //!
-//! Type mapping reuses the shared structural vocabulary in [`crate::wit_emit`]
-//! (`CmShape`) so the producer (Wado → WIT) and this consumer (WIT → Wado)
-//! cannot drift in how `option`/`list`/`tuple`/`result` are structured.
+//! Type mapping reuses [`crate::wit_emit`]'s `CmShape` so producer and consumer
+//! cannot drift on how `option`/`list`/`tuple`/`result` are structured.
 
 use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{

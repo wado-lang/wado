@@ -268,23 +268,18 @@ pub struct WasmExportSig {
 /// extracted export signatures used by TIR synthesis.
 #[derive(Debug, Clone)]
 pub struct WasmAsset {
-    /// Core wasm bytes (always binary; `.wat` is parsed at load time). For a
-    /// component asset (`component_interface_fqs` non-empty) this is the whole
-    /// component binary, composed into the output at codegen.
+    /// Binary bytes (`.wat` is parsed at load time). For a component asset, the
+    /// whole component binary, composed into the output at codegen.
     pub bytes: Vec<u8>,
-    /// Function exports (kind = func) ordered by their wasm order. Empty for a
-    /// component asset (its surface is described by the WIT it carries).
+    /// Function exports in wasm order. Empty for a component asset.
     pub function_exports: Vec<WasmExportSig>,
-    /// FQ names of the interfaces a *component* asset exports. Empty for a
-    /// core-wasm asset. Non-empty marks this asset as a CM component to compose in.
+    /// Exported interface FQs; non-empty marks this as a CM component to compose in.
     pub component_interface_fqs: Vec<String>,
 }
 
-/// Resolve a `use` declaration's import source to its `ModuleSource`, honoring
-/// the wasm-asset `with { type: "wat" | "wasm" }` form — which resolves to
-/// `ModuleSource::Wasm` — so symbol, effect, and type resolution in the
-/// elaborator agree with the identity the loader registered the module under.
-/// Mirrors `analyze::resolve_use_decl_module_source`.
+/// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
+/// the `with { type: "wat" | "wasm" }` form to `ModuleSource::Wasm`. Mirrors
+/// `analyze::resolve_use_decl_module_source`.
 pub fn resolve_use_decl_source(
     interner: &mut ModuleSourceInterner,
     from: &ModuleSource,
@@ -307,8 +302,7 @@ pub fn resolve_use_decl_source(
     )
 }
 
-/// Whether `bytes` is a Component Model binary (vs a core wasm module), read
-/// from the preamble's encoding rather than a hard-coded byte offset.
+/// Whether `bytes` is a CM component (vs a core module), per the preamble encoding.
 fn is_wasm_component(bytes: &[u8]) -> bool {
     use wasmparser::{Encoding, Parser, Payload};
     Parser::new(0)
@@ -1340,9 +1334,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.fetch_wasm_asset_bytes(&source, &path).await?
         };
 
-        // A `with { type: "wasm" }` asset that is a CM component (not a core
-        // module) takes the component path: decode its WIT and synthesize Wado
-        // bindings directly from the decoded type.
+        // A CM component takes the component path; a core module falls through.
         if kind == WasmAssetKind::Wasm && is_wasm_component(&raw_bytes) {
             return self.handle_component_import(&source, &namespace, raw_bytes);
         }
@@ -1394,11 +1386,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Handle a CM component import: decode the component's WIT, synthesize a
-    /// Wado binding module (interfaces + named types with `#[cm(...)]`) directly
-    /// from the decoded type, and record the component bytes for composition at
-    /// codegen. The synthesized module flows through the normal frontend, so
-    /// `use { Iface } from "./c.wasm"` resolves like any other module.
+    /// Decode the component's WIT into a `#[cm(...)]` binding module and record
+    /// its bytes for composition at codegen. The synthesized module flows
+    /// through the normal frontend, so the import resolves like any other module.
     fn handle_component_import(
         &mut self,
         source: &ModuleSource,

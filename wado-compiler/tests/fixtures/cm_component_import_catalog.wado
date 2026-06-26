@@ -1,8 +1,6 @@
-// CM component import: import an interface from an external `.wasm` component
-// (`sub/cm-catalog.wasm`, the value-type catalog compiled with `--lib`) and call
-// its identity functions. The compiler composes the dependency in via
-// wasm-compose, so the test world runs the round-trip against the real
-// component — `lift(lower(x)) == x` across the component boundary.
+// Import an interface from an external `.wasm` component and round-trip values
+// across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
+// test runs `lift(lower(x)) == x` against the real component.
 use { CmCatalog, Color } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {

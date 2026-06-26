@@ -241,10 +241,8 @@ fn collect_export_interface_fqs(
 
 /// The flat sorted FQ list, for the WIT producer's world import refs.
 ///
-/// Imported CM components (`ImportKind::Component`) are excluded: the dependency
-/// is composed into the output (`compose_dependency_components`), so the final
-/// artifact does not import its interface — emitting it as a world import would
-/// misdescribe the composed component.
+/// `ImportKind::Component` is excluded: the dependency is composed in, so the
+/// final artifact does not import its interface.
 #[must_use]
 pub fn import_plan_fqs(plan: &[ImportEntry]) -> Vec<String> {
     let mut out: Vec<String> = plan

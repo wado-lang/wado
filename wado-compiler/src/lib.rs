@@ -1218,12 +1218,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
 
             let (mut cm_interface_registry, world_registry) =
                 component_model::CmInterfaceRegistry::build_from_stdlib();
-            // Mirror elaboration: fold imported CM components' interfaces into
-            // the registry so `Interface::method` calls resolve during WIR
-            // build. The dump path rebuilds the registry from the stdlib
-            // snapshot, so without this re-fold the dependency's methods stay
-            // unresolved. Stdlib modules are never `ModuleSource::Wasm`, so an
-            // empty stdlib set is sufficient here.
+            // Mirror elaboration's fold so CM imports resolve during WIR build
+            // (the dump path rebuilds the registry from the stdlib snapshot).
+            // Stdlib modules are never `Wasm`, so an empty stdlib set suffices.
             crate::elaborator::orchestration::fold_component_interfaces(
                 &mut cm_interface_registry,
                 &load_result.modules,
