@@ -368,6 +368,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         lib_world: None,
         param_overrides: opts.param_overrides,
         param_policy: opts.param_policy,
+        retain_wir: false,
     };
     let cranelift_opt = opts.opt_level.to_wasmtime();
     let wasm = compile::compile(&opts.input, &flags).await?;

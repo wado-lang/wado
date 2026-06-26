@@ -76,6 +76,7 @@ impl TestOptions {
             lib_world: None,
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
+            retain_wir: false,
         }
     }
 }

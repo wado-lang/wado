@@ -1,30 +1,19 @@
 //! Embed a `component-type` custom section into a compiled component.
 //!
-//! This is the producer-side embedding step of WIT interoperability (WEP
-//! `wep-2026-05-02-wit-interoperability.md`, Phase 2; format from
-//! `wep-2026-03-21-wit-bundling.md`). [`wit_emit`](crate::wit_emit) produces the
-//! WIT *text*; this module turns that text into the binary `component-type`
-//! section and appends it to the component the codegen already emitted.
+//! Producer-side embedding step of WIT interoperability (WEP
+//! `wep-2026-05-02-wit-interoperability.md`, Phase 2). [`wit_emit`](crate::wit_emit)
+//! renders the WIT *text*; this module encodes it to the binary `component-type`
+//! section and appends it to the component codegen emitted.
 //!
-//! ## What the section is, and what it is not
-//!
-//! A Wado-compiled artifact is a *full Component Model component*, not a core
-//! module. Such a component is already self-describing: its typed CM
-//! imports/exports let `wasm-tools component wit` (i.e. `wit_parser::decode`)
-//! reconstruct WIT directly via its `decode_component` path, with no custom
-//! section involved. `wit_parser::decode` only consults a `component-type`
-//! payload when the *whole file* is a WIT-package blob (the wit-bindgen → core
-//! module → `wasm-tools component new` flow); a `component-type` custom section
-//! on an already-formed component is opaquely carried, never read by
-//! `component wit`.
-//!
-//! The embedded section is therefore *additive metadata*, not the mechanism
-//! that makes the component inspectable. Its value: the component's intrinsic
-//! type is always tree-shaken to the used surface, whereas the embedded payload
-//! carries the **full-fidelity contract** — complete upstream interface bodies,
-//! exact package versions, and a `producers` record — matching the
-//! `wit_component::metadata::encode` toolchain convention so `wkg`,
-//! `wasm-tools metadata`, and relink flows see a faithful, full-scope WIT.
+//! The section is *additive*: a Wado artifact is already a self-describing
+//! component, so `wasm-tools component wit` (`wit_parser::decode`) recovers WIT
+//! from the component's own types and does not read this section (it consults a
+//! `component-type` payload only for a WIT-package blob / core module). The
+//! section's value is full fidelity — the component's own type is tree-shaken to
+//! the used surface, whereas the encoded payload carries the complete upstream
+//! interfaces, exact versions, and a `producers` record (the
+//! `wit_component::metadata::encode` convention `wkg` / `wasm-tools metadata`
+//! consume).
 
 use std::borrow::Cow;
 

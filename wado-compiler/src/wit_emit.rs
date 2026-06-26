@@ -63,10 +63,9 @@ pub enum WitEmitError {
         /// Human-readable description of the offending type.
         description: String,
     },
-    /// The emitted WIT text could not be re-parsed, the target world could not
-    /// be selected, or the `component-type` metadata could not be encoded while
-    /// embedding (see [`crate::wit_bundle`]). A bug in the emitter or an
-    /// unexpected world FQ, not user-actionable beyond reporting.
+    /// Re-parsing the emitted WIT, selecting the world, or encoding the
+    /// `component-type` metadata failed while embedding (see
+    /// [`crate::wit_bundle`]) — a compiler bug or an invalid world FQ.
     Embed {
         /// Human-readable description of the failure.
         description: String,

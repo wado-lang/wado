@@ -167,6 +167,10 @@ pub struct CompileFlags {
     pub param_overrides: wado_compiler::hashmap::IndexMap<String, String>,
     /// `--param-*` policy levels. Forwarded to `CompilerOptions::param_policy`.
     pub param_policy: wado_compiler::param_resolution::ParamPolicy,
+    /// Retain the WIR module in the result. `wado compile` sets it when
+    /// embedding WIT, to read the faithful import plan
+    /// (`imported_cm_interfaces`) without a second compile.
+    pub retain_wir: bool,
 }
 
 impl CompileOptions {
@@ -186,6 +190,7 @@ impl CompileOptions {
             lib_world: self.lib_world.clone(),
             param_overrides: self.param_overrides.clone(),
             param_policy: self.param_policy,
+            retain_wir: false,
         }
     }
 }
@@ -515,6 +520,7 @@ pub async fn try_compile_with_kiln_cache(
         lib_world: flags.lib_world.clone(),
         param_overrides: flags.param_overrides.clone(),
         param_policy: flags.param_policy,
+        retain_wir: flags.retain_wir,
         ..Default::default()
     };
 
@@ -943,47 +949,57 @@ fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {
     Ok(wat)
 }
 
-/// Embed the WIT `component-type` section into `wasm` per `opts.embed_decision`,
-/// or return `wasm` unchanged when embedding is off. The component is already a
-/// valid, self-describing artifact, so a non-explicit embedding failure warns
-/// and yields the un-embedded bytes; an explicit `--embed-wit` makes it fatal.
-async fn maybe_embed_wit(opts: &CompileOptions, wasm: Vec<u8>) -> Result<Vec<u8>, CliExit> {
-    let Some(explicit) = opts.embed_decision() else {
-        return Ok(wasm);
-    };
-
+/// Append the WIT `component-type` section to `wasm`, using `world_imports`
+/// (the faithful plan read from the main compile's retained WIR, so no second
+/// optimize pass). `explicit` is true for `--embed-wit`: it makes a failure
+/// fatal, where the default-on path only warns and yields the un-embedded
+/// (still valid, self-describing) component.
+async fn embed_wit_section(
+    opts: &CompileOptions,
+    wasm: Vec<u8>,
+    world_imports: Vec<String>,
+    explicit: bool,
+) -> Result<Vec<u8>, CliExit> {
     let input = &opts.input;
-    let Ok(source) = fs::read_to_string(input) else {
+    let path = Path::new(input);
+    let Ok(source) = fs::read_to_string(path) else {
         // The file compiled moments ago; an unreadable source now is unexpected.
         return Ok(wasm);
     };
 
     // The embedded world FQ mirrors what was compiled: the `--lib` world, then
-    // `--world`, then the CLI default — matching `wado wit`.
+    // `--world`, then the CLI default.
     let world = opts
         .lib_world
         .clone()
         .or_else(|| opts.target_world.clone())
         .unwrap_or_else(|| "wasi:cli/command".to_string());
 
-    let base_path = Path::new(input)
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_default();
-    // Quiet host: diagnostics were already surfaced by the main compile.
-    let host = FilesystemCompilerHost::silent(base_path);
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    // Attach the manifest `[dependencies]` so a multi-package project's
+    // re-analysis resolves the same imports the main compile did; a quiet host
+    // avoids re-emitting diagnostics.
+    let manifest_pair = load_nearest_manifest(path);
+    let host = attach_manifest_deps(
+        FilesystemCompilerHost::silent(base_path.clone()),
+        manifest_pair.as_ref(),
+        &base_path,
+    );
     let sem = wado_compiler::semantics(&source, &host, Some(input)).await;
     if !sem.is_complete() {
+        let msg = "WIT analysis did not complete";
+        if explicit {
+            return Err(CliExit::error(format!("--embed-wit: {msg}")));
+        }
+        eprintln!("warning: skipped embedding WIT component-type section: {msg}");
         return Ok(wasm);
     }
 
-    // Embedding always uses the full, self-contained closure (`wit_bundle`
-    // re-forces this); a `local` section is not encodable.
     let emit_opts = WitEmitOptions {
         scope: WitScope::Full,
-        world_fq: world.clone(),
+        world_fq: world,
         default_interface_name: crate::wit::default_interface_name(input),
-        world_imports: crate::wit::resolve_world_imports(&source, input, &world).await,
+        world_imports,
     };
 
     match wit_bundle::embed_component_type(&wasm, &sem, &emit_opts) {
@@ -997,16 +1013,8 @@ async fn maybe_embed_wit(opts: &CompileOptions, wasm: Vec<u8>) -> Result<Vec<u8>
 }
 
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
-    let flags = opts.flags();
-    let wasm = compile(&opts.input, &flags).await?;
-
-    if opts.wat_to_stdout {
-        let wat = wasm_to_wat(&wasm)?;
-        print!("{wat}");
-        return Ok(());
-    }
-
-    // Format precedence: explicit `--format` > guessed from `-o` extension > wasm.
+    // Output format is independent of the compiled bytes; resolve it first so we
+    // know whether to retain WIR (only the wasm-output embedding path needs it).
     let format = opts
         .format
         .or_else(|| {
@@ -1015,6 +1023,23 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
                 .and_then(|p| OutputFormat::from_extension(Path::new(p)))
         })
         .unwrap_or(OutputFormat::Wasm);
+    // WAT is a debug/inspection format, so it is left un-embedded.
+    let embed = (!opts.wat_to_stdout && format == OutputFormat::Wasm)
+        .then(|| opts.embed_decision())
+        .flatten();
+
+    let mut flags = opts.flags();
+    flags.retain_wir = embed.is_some();
+    let result = try_compile(&opts.input, &flags)
+        .await
+        .map_err(|_| CliExit::silent_failure(1))?;
+    let wasm = result.wasm;
+
+    if opts.wat_to_stdout {
+        let wat = wasm_to_wat(&wasm)?;
+        print!("{wat}");
+        return Ok(());
+    }
 
     let output_path = if let Some(path) = &opts.output {
         Path::new(path).to_path_buf()
@@ -1026,12 +1051,16 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         Path::new(&opts.input).with_extension(ext)
     };
 
-    let bytes = match format {
-        // Embed the WIT `component-type` section into the distributable wasm
-        // artifact (default on). WAT output is an inspection/debug format, so it
-        // is left un-embedded to keep the text readable.
-        OutputFormat::Wasm => maybe_embed_wit(&opts, wasm).await?,
-        OutputFormat::Wat => wasm_to_wat(&wasm)?.into_bytes(),
+    let bytes = match (format, embed) {
+        (OutputFormat::Wasm, Some(explicit)) => {
+            let world_imports = result
+                .wir_package
+                .map(|p| p.imported_cm_interfaces)
+                .unwrap_or_default();
+            embed_wit_section(&opts, wasm, world_imports, explicit).await?
+        }
+        (OutputFormat::Wasm, None) => wasm,
+        (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;

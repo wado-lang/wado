@@ -165,7 +165,7 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
 /// re-emitted) and read the faithful import set from the WIR-level plan
 /// (`NirPackage::imported_cm_interfaces`). Returns empty on any failure; the
 /// caller has already validated the program with `semantics`.
-pub(crate) async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<String> {
+async fn resolve_world_imports(source: &str, input: &str, world: &str) -> Vec<String> {
     let base_path = Path::new(input)
         .parent()
         .map(Path::to_path_buf)

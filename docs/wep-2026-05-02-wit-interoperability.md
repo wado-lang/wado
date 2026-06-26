@@ -621,11 +621,11 @@ choice. `local` / `full` therefore stays a `wado wit` _text_ concept (`wado wit
 `[wit].scope` manifest override (Phase 3) is dropped — it would have nothing to
 tune for the binary.
 
-- [x] Phase 3 — Manifest scope override: **dropped.** Embedding is always the
-      self-contained full closure (see the finding above), so there is no
-      embed-time scope to put in `wado.toml`. `wado wit --scope` remains the
-      only place `local` / `full` is meaningful (text output). WIT Bundling's
-      status is reconciled to "implemented, default-on, no scope knob".
+Phase 3 — Manifest scope override: dropped, not implemented. Embedding is
+always the self-contained full closure (see the finding above), so there is no
+embed-time scope to put in `wado.toml`. `wado wit --scope` remains the only
+place `local` / `full` is meaningful (text output). WIT Bundling's status is
+reconciled to "implemented, default-on, no scope knob".
 
 ## Open Design Questions
 
