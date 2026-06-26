@@ -42,10 +42,19 @@ pub struct WorldExportPlan {
     pub is_async: bool,
     /// CM-resolved parameter types at the component boundary. Codegen
     /// iterates this list to build the export's CM signature without
-    /// needing per-world discriminators.
+    /// needing per-world discriminators. Empty for `--lib` exports, which
+    /// carry their raw Wado types in [`Self::param_types`] instead and let
+    /// codegen build the CM types via [`crate::component_model::CmTypeGen`].
     pub cm_params: Vec<(String, CmExportType)>,
     /// CM-resolved return type at the component boundary.
     pub cm_result: CmExportType,
+    /// Raw Wado parameter types `(name, type)` for `--lib` exports; empty for
+    /// the WASI worlds (which use [`Self::cm_params`]). The lib export path
+    /// defines its own CM value types top-level from these, so it never goes
+    /// through the WASI-only [`resolve_cm_export_type`].
+    pub param_types: Vec<(String, Type)>,
+    /// Raw Wado return type for `--lib` exports; `None` for the WASI worlds.
+    pub result_type: Option<Type>,
     /// Fully-qualified CM interface name this export was synthesized from
     /// (`WorldExportInfo::from_interface_fq`), e.g.
     /// `"wasi:http/handler@0.3.0-rc-2026-03-15"` or
@@ -242,24 +251,42 @@ fn build_world_export_plans(
                 .cloned()
                 .unwrap_or_else(|| export.name.clone());
 
-            // Resolve params and return into CM-level boundary types so
-            // codegen can build the export signature uniformly across
-            // worlds. See [`CmExportType`].
-            let cm_params = export
-                .params
-                .iter()
-                .map(|(name, ty)| {
-                    (
-                        name.clone(),
-                        resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix),
-                    )
-                })
-                .collect();
-            let cm_result = export
-                .return_type
-                .as_ref()
-                .map(|ty| resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix))
-                .unwrap_or(CmExportType::Unit);
+            // Library exports carry their raw Wado types; codegen builds the
+            // CM value types (and the named types they reference) top-level via
+            // the CM type engine. The WASI worlds resolve to `CmExportType`
+            // here via the registry-backed `resolve_cm_export_type`, whose set
+            // of recognised shapes is the WASI export surface only.
+            let (cm_params, cm_result, param_types, result_type) = if is_lib_world {
+                (
+                    Vec::new(),
+                    CmExportType::Unit,
+                    export.params.clone(),
+                    export.return_type.clone(),
+                )
+            } else {
+                let cm_params = export
+                    .params
+                    .iter()
+                    .map(|(name, ty)| {
+                        (
+                            name.clone(),
+                            resolve_cm_export_type(
+                                ty,
+                                cm_interface_registry,
+                                world_namespace_prefix,
+                            ),
+                        )
+                    })
+                    .collect();
+                let cm_result = export
+                    .return_type
+                    .as_ref()
+                    .map(|ty| {
+                        resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix)
+                    })
+                    .unwrap_or(CmExportType::Unit);
+                (cm_params, cm_result, Vec::new(), None)
+            };
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
@@ -269,6 +296,8 @@ fn build_world_export_plans(
                 is_async: export.is_async,
                 cm_params,
                 cm_result,
+                param_types,
+                result_type,
                 // Library exports use a synchronous lift; the WASI worlds keep
                 // the async/task-return lift.
                 sync_lift: is_lib_world,
@@ -500,21 +529,21 @@ mod tests {
 
         // Bare unit forms
         assert!(matches!(
-            resolve_cm_export_type(&unit_named(), registry, None),
+            resolve_cm_export_type(&unit_named(), &registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&empty_tuple(), registry, None),
+            resolve_cm_export_type(&empty_tuple(), &registry, None),
             CmExportType::Unit
         ));
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         assert!(matches!(
-            resolve_cm_export_type(&result_of(unit_named(), unit_named()), registry, None),
+            resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry, None),
             CmExportType::Unit
         ));
         assert!(matches!(
-            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), registry, None),
+            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), &registry, None),
             CmExportType::Unit
         ));
     }
@@ -527,7 +556,7 @@ mod tests {
         // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
         // http world scope. The arms resolve to wasi:http/types.
         let http = result_of(named("Response"), named("ErrorCode"));
-        match resolve_cm_export_type(&http, registry, Some("wasi:http/")) {
+        match resolve_cm_export_type(&http, &registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert!(
                     matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -545,7 +574,7 @@ mod tests {
         // exists in wasi:http; the kiln world scope must resolve it to
         // core:kiln/types rather than the http resource.
         let kiln = result_of(named("Response"), named("Error"));
-        match resolve_cm_export_type(&kiln, registry, Some("core:kiln/")) {
+        match resolve_cm_export_type(&kiln, &registry, Some("core:kiln/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert!(
                     matches!(*ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -566,7 +595,7 @@ mod tests {
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), registry, None) {
+        match resolve_cm_export_type(&named("Request"), &registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -590,7 +619,7 @@ mod tests {
 
         // `RawRequest` is a struct declared in `core:kiln/types` — exercises
         // the `find_kiln_*` half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("RawRequest"), registry, None) {
+        match resolve_cm_export_type(&named("RawRequest"), &registry, None) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

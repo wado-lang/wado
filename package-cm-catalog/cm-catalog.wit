@@ -6,8 +6,11 @@ interface cm-catalog {
     green,
     blue,
   }
-  record empty {  }
   type meters = f64;
+  variant mixed {
+    as-int(u32),
+    as-float(f32),
+  }
   flags perms {
     read,
     write,
@@ -46,11 +49,12 @@ interface cm-catalog {
   id-result-err: func(v: result<_, string>) -> result<_, string>;
   id-result-unit: func(v: result) -> result;
   id-record: func(v: point) -> point;
-  id-record-empty: func(v: empty) -> empty;
   id-enum: func(v: color) -> color;
   id-variant: func(v: shape) -> shape;
   id-flags: func(v: perms) -> perms;
   id-newtype: func(v: meters) -> meters;
+  id-mixed: func(v: mixed) -> mixed;
+  id-result-fu: func(v: result<f32, u32>) -> result<f32, u32>;
   id-list-option: func(v: list<option<u32>>) -> list<option<u32>>;
   id-option-list: func(v: option<list<u8>>) -> option<list<u8>>;
   id-list-record: func(v: list<point>) -> list<point>;
@@ -58,6 +62,10 @@ interface cm-catalog {
   id-list-tuple: func(v: list<tuple<u32, string>>) -> list<tuple<u32, string>>;
   id-result-list: func(v: result<list<point>, string>) -> result<list<point>, string>;
   id-assoc-array: func(v: list<tuple<string, u32>>) -> list<tuple<string, u32>>;
+  id-tuple-record: func(v: tuple<point, u32>) -> tuple<point, u32>;
+  id-tuple-option: func(v: tuple<option<u32>, u8>) -> tuple<option<u32>, u8>;
+  id-tuple-list: func(v: tuple<list<string>, u32>) -> tuple<list<string>, u32>;
+  id-list-tuple-record: func(v: list<tuple<point, u32>>) -> list<tuple<point, u32>>;
 }
 
 world command {

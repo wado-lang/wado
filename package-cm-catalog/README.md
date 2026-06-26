@@ -17,8 +17,7 @@ Covered (value types):
 - Primitives: `bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`.
 - Containers: `list`, `tuple`, `option`, and all four `result` forms
   (`result<o, e>`, `result<o>`, `result<_, e>`, `result`).
-- Named types: `record` (including empty), `variant`, `enum`, `flags`, type
-  alias (newtype).
+- Named types: `record`, `variant`, `enum`, `flags`, type alias (newtype).
 - Nested compositions: `list<option<_>>`, `option<list<_>>`, `list<record>`,
   `result<list<_>, _>`, and so on.
 
@@ -44,9 +43,8 @@ emitter.
 `wado wit` enumerates every `export fn`, so the WIT artifact is complete today.
 
 `wado compile --lib package-cm-catalog` synthesizes and emits the lift/lower
-adapters for each export under a library world named after the package. It
-currently compiles the primitive value types; containers, the four `result`
-forms, `string` returns, and user-defined named types (record/enum/variant/
-flags/newtype) are still being wired (the per-type status is the point of this
-catalog — it surfaces exactly which CM shapes the lift/lower path supports). See
-WEP `wep-2026-05-02-wit-interoperability.md` ("World-less libraries").
+adapters for each export under a library world named after the package. The
+whole value-type surface above compiles and round-trips: `lift(lower(x)) == x`
+holds for every export, verified by `wado-compiler/tests/cm_catalog.rs` at both
+`-O0` and `-O2`. See WEP `wep-2026-05-02-wit-interoperability.md`
+("World-less libraries").

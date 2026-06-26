@@ -38,9 +38,9 @@ pub struct Package {
     pub module_name: String,
 
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub cm_interface_registry: &'static CmInterfaceRegistry,
+    pub cm_interface_registry: Arc<CmInterfaceRegistry>,
     /// Registry of world definitions from lib/wasi/*.wado
-    pub world_registry: &'static WorldRegistry,
+    pub world_registry: Arc<WorldRegistry>,
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
@@ -136,8 +136,8 @@ impl Package {
         trait_env: Arc<TraitEnv>,
         implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
-        cm_interface_registry: &'static CmInterfaceRegistry,
-        world_registry: &'static WorldRegistry,
+        cm_interface_registry: Arc<CmInterfaceRegistry>,
+        world_registry: Arc<WorldRegistry>,
         builtin_registry: BuiltinRegistry,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     ) -> Self {

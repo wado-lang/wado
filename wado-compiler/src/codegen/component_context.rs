@@ -54,6 +54,13 @@ pub struct ComponentModelContext {
     // Core instance indices
     core_instance_names: IndexMap<String, u32>,
     next_core_instance_idx: u32,
+
+    /// Named CM types `(cm_name, type_idx)` that a `--lib` default-interface
+    /// export defines top-level, collected by `emit_world_exports` and
+    /// re-exported into the default-interface instance by
+    /// `append_interface_instance_exports`. Empty for the WASI worlds, whose
+    /// interface types come from imported instances.
+    lib_export_types: Vec<(String, u32)>,
 }
 
 impl ComponentModelContext {
@@ -74,7 +81,19 @@ impl ComponentModelContext {
             next_core_module_idx: 0,
             core_instance_names: IndexMap::default(),
             next_core_instance_idx: 0,
+            lib_export_types: Vec::new(),
         }
+    }
+
+    /// Record a named CM type defined by a `--lib` default-interface export, to
+    /// be re-exported into the interface instance.
+    pub fn push_lib_export_type(&mut self, cm_name: String, idx: u32) {
+        self.lib_export_types.push((cm_name, idx));
+    }
+
+    /// The named CM types defined by `--lib` default-interface exports.
+    pub fn lib_export_types(&self) -> &[(String, u32)] {
+        &self.lib_export_types
     }
 
     /// Register a component type and return its index

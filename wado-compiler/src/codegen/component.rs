@@ -13,7 +13,7 @@
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use super::postprocess;
 use crate::ast::Type;
-use crate::component_model::{CmFunctionInfo, CmInstanceTypeGen, CmVariantCase};
+use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::{CanonicalIntrinsic, CmFuturePayload, CmScalarType, CmStreamPayload, WirPackage};
@@ -334,7 +334,13 @@ pub fn build_component(
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
     // World exports
-    emit_world_exports(&mut builder, &mut ctx, component_plan, result_unit_type);
+    emit_world_exports(
+        &mut builder,
+        &mut ctx,
+        project,
+        component_plan,
+        result_unit_type,
+    );
 
     // Test-name custom section: map each test export to its original (lossless)
     // name so `wado test` can display what the user wrote rather than the
@@ -412,7 +418,7 @@ fn emit_cm_val_type(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    mut shared_type_gen: Option<&mut CmTypeGen>,
     project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
@@ -494,18 +500,20 @@ fn emit_cm_val_type(
                     ))
                 } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
                     // Complex ok types (records, options, variants, etc.) use shared type gen
-                    type_gen.set_next_idx(*local_type_idx);
                     let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                         .iter()
                         .map(|(k, &v)| (k.as_str(), v))
                         .collect();
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: instance_type,
+                        next_idx: local_type_idx,
+                    };
                     let ok_val = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ok,
-                        instance_type,
-                        proj.cm_interface_registry,
+                        &proj.cm_interface_registry,
                         &resource_exports,
                     );
-                    *local_type_idx = type_gen.next_idx();
                     Some(ok_val)
                 } else {
                     Some(type_to_cm_primitive_with_resources(
@@ -612,19 +620,20 @@ fn emit_cm_val_type(
             }
             // Complex types (e.g. WASI records like Instant) use shared type gen
             if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
-                type_gen.set_next_idx(*local_type_idx);
                 let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                     .iter()
                     .map(|(k, &v)| (k.as_str(), v))
                     .collect();
-                let val = type_gen.ast_type_to_cm(
+                let mut sink = crate::component_model::InstanceSink {
+                    it: instance_type,
+                    next_idx: local_type_idx,
+                };
+                return type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    instance_type,
-                    proj.cm_interface_registry,
+                    &proj.cm_interface_registry,
                     &resource_exports,
                 );
-                *local_type_idx = type_gen.next_idx();
-                return val;
             }
             type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
         }
@@ -665,7 +674,7 @@ fn build_cm_tuple_types(
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmInstanceTypeGen>,
+    mut shared_type_gen: Option<&mut CmTypeGen>,
     project: Option<&NirPackage>,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
@@ -1655,12 +1664,59 @@ fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
     }
 }
 
+/// [`crate::component_model::CmTypeSink`] that emits CM defined types at the
+/// component's top level (via the builder) and records each named type for the
+/// `--lib` default-interface instance. Used for bare world-export value types,
+/// which — unlike interface-instance types — must live in the top-level type
+/// space the lifted func signatures reference.
+struct TopLevelSink<'a> {
+    builder: &'a mut ComponentBuilder,
+    ctx: &'a mut ComponentModelContext,
+}
+
+impl crate::component_model::CmTypeSink for TopLevelSink<'_> {
+    fn define(&mut self, defined: crate::component_model::CmDefined<'_>) -> u32 {
+        // Reserve the ctx index first (mirrors `intern_cm_type`) so it matches
+        // the builder's appended type index.
+        let idx = self.ctx.register_anon_type();
+        let (_, enc) = self.builder.ty(None);
+        crate::component_model::emit_cm_defined(enc.defined_type(), defined);
+        idx
+    }
+
+    fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
+        // Top-level types are not aliased; the instance export names them.
+        self.ctx.push_lib_export_type(cm_name.to_string(), idx);
+        idx
+    }
+}
+
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &NirPackage,
     component_plan: &crate::wir_build::component_plan::ComponentPlan,
     result_unit_type: u32,
 ) {
+    // Shared across all `--lib` exports so a named type (e.g. `point`) is
+    // defined once and reused. The interface hint resolves lib-local named
+    // types against the package's own default-interface FQ in the registry.
+    let is_lib_world = component_plan.world_exports.iter().any(|e| e.sync_lift);
+    let lib_iface_fq = component_plan
+        .world_exports
+        .iter()
+        .find(|e| e.sync_lift)
+        .and_then(|e| e.from_interface_fq.clone());
+    // One engine shared across all lib exports (dedups named types). The
+    // interface hint resolves lib-local named types against the package's
+    // default-interface FQ; a functions-only (direct-export) lib has no named
+    // types and needs no hint.
+    let mut lib_type_gen = is_lib_world.then(|| match lib_iface_fq.as_deref() {
+        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
+        None => crate::component_model::CmTypeGen::new(),
+    });
+    let no_resources: IndexMap<&str, u32> = IndexMap::default();
+
     for export in &component_plan.world_exports {
         // The Component Model requires kebab-case extern names. Core export
         // names allow underscores, so a `--lib` export `fn id_bool` is aliased
@@ -1680,34 +1736,84 @@ fn emit_world_exports(
             ExportKind::Func,
         );
 
-        let func_type = ctx.register_type(&func_type_name);
-        {
-            let (_, enc) = builder.ty(Some(&func_type_name));
+        let func_type = if export.sync_lift {
+            // `--lib` export: build the param/result CM value types (and any
+            // named types they reference) top-level from the raw Wado types via
+            // the shared engine, *before* the func type so their indices precede
+            // it. Named types land in `ctx.lib_export_types` for the instance.
+            let type_gen = lib_type_gen
+                .as_mut()
+                .expect("lib type-gen present for sync-lift export");
+            let mut param_vals: Vec<(String, ComponentValType)> = Vec::new();
+            for (pname, pty) in &export.param_types {
+                let resolved = project.cm_interface_registry.resolve_type(pty);
+                let mut sink = TopLevelSink {
+                    builder: &mut *builder,
+                    ctx: &mut *ctx,
+                };
+                let val = type_gen.ast_type_to_cm(
+                    &mut sink,
+                    &resolved,
+                    &project.cm_interface_registry,
+                    &no_resources,
+                );
+                param_vals.push((pname.clone(), val));
+            }
+            let result_val = export.result_type.as_ref().map(|rty| {
+                let resolved = project.cm_interface_registry.resolve_type(rty);
+                let mut sink = TopLevelSink {
+                    builder: &mut *builder,
+                    ctx: &mut *ctx,
+                };
+                type_gen.ast_type_to_cm(
+                    &mut sink,
+                    &resolved,
+                    &project.cm_interface_registry,
+                    &no_resources,
+                )
+            });
 
-            // Resources and variants follow the `{pkg}-{cm-name}` naming
-            // convention emitted by `import_wasi_http_types` /
-            // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
-            // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
-            let param_vals: Vec<(String, ComponentValType)> = export
-                .cm_params
-                .iter()
-                .map(|(name, cm_ty)| {
-                    (
-                        name.clone(),
-                        cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
-                    )
-                })
-                .collect();
-            let param_refs: Vec<(&str, ComponentValType)> = param_vals
-                .iter()
-                .map(|(n, val)| (n.as_str(), *val))
-                .collect();
-            let result_val = cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
+            let func_type = ctx.register_type(&func_type_name);
+            let (_, enc) = builder.ty(Some(&func_type_name));
+            let param_refs: Vec<(&str, ComponentValType)> =
+                param_vals.iter().map(|(n, v)| (n.as_str(), *v)).collect();
             enc.function()
                 .async_(export.is_async)
                 .params(param_refs)
-                .result(Some(result_val));
-        }
+                .result(result_val);
+            func_type
+        } else {
+            let func_type = ctx.register_type(&func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&func_type_name));
+
+                // Resources and variants follow the `{pkg}-{cm-name}` naming
+                // convention emitted by `import_wasi_http_types` /
+                // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
+                // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
+                let param_vals: Vec<(String, ComponentValType)> = export
+                    .cm_params
+                    .iter()
+                    .map(|(name, cm_ty)| {
+                        (
+                            name.clone(),
+                            cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
+                        )
+                    })
+                    .collect();
+                let param_refs: Vec<(&str, ComponentValType)> = param_vals
+                    .iter()
+                    .map(|(n, val)| (n.as_str(), *val))
+                    .collect();
+                let result_val =
+                    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
+                enc.function()
+                    .async_(export.is_async)
+                    .params(param_refs)
+                    .result(Some(result_val));
+            }
+            func_type
+        };
 
         ctx.register_comp_func(cm_name);
         // `realloc` is always supplied to the canon. The Wado runtime always
@@ -1891,12 +1997,16 @@ fn generate_cm_imports(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &mut needed_resources,
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ty,
+                    &project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
         }
 
@@ -2070,8 +2180,7 @@ fn generate_cm_imports(
             // `interface_hint` lets `ast_type_to_cm` resolve ambiguous names
             // (e.g. `ErrorCode`, declared independently in multiple WASI
             // packages) against this emitter's owning interface.
-            let mut shared_type_gen =
-                CmInstanceTypeGen::with_interface_hint(local_type_idx, &interface_info.path);
+            let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             for (name, &idx) in &enum_export_indices {
                 shared_type_gen.register_existing(&format!("enum:{name}"), idx);
             }
@@ -2082,8 +2191,7 @@ fn generate_cm_imports(
                         .iter()
                         .map(|c| {
                             let payload = c.payload.as_ref().map(|ty| {
-                                shared_type_gen.set_next_idx(local_type_idx);
-                                let val = emit_cm_val_type(
+                                emit_cm_val_type(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
@@ -2094,9 +2202,7 @@ fn generate_cm_imports(
                                     Some(&mut shared_type_gen),
                                     Some(project),
                                     ctx,
-                                );
-                                local_type_idx = shared_type_gen.next_idx().max(local_type_idx);
-                                val
+                                )
                             });
                             (c.cm_name.as_str(), payload)
                         })
@@ -2218,19 +2324,20 @@ fn generate_cm_imports(
                                     .get_struct_fields_by_source(s, &named.name)
                                     .is_some()
                             }) {
-                            shared_type_gen.set_next_idx(local_type_idx);
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
                                 .map(|(k, &v)| (k.as_str(), v))
                                 .collect();
-                            let val = shared_type_gen.ast_type_to_cm(
+                            let mut sink = crate::component_model::InstanceSink {
+                                it: &mut instance_type,
+                                next_idx: &mut local_type_idx,
+                            };
+                            shared_type_gen.ast_type_to_cm(
+                                &mut sink,
                                 &resolved_ty,
-                                &mut instance_type,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &resource_exports,
-                            );
-                            local_type_idx = shared_type_gen.next_idx();
-                            val
+                            )
                         } else {
                             wado_type_to_cm_val_type(
                                 project,
@@ -2263,19 +2370,20 @@ fn generate_cm_imports(
                                 .is_some()
                         })
                     {
-                        shared_type_gen.set_next_idx(local_type_idx);
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
                             .map(|(k, &v)| (k.as_str(), v))
                             .collect();
-                        let val = shared_type_gen.ast_type_to_cm(
+                        let mut sink = crate::component_model::InstanceSink {
+                            it: &mut instance_type,
+                            next_idx: &mut local_type_idx,
+                        };
+                        shared_type_gen.ast_type_to_cm(
+                            &mut sink,
                             &resolved_ty,
-                            &mut instance_type,
-                            project.cm_interface_registry,
+                            &project.cm_interface_registry,
                             &resource_exports,
-                        );
-                        local_type_idx = shared_type_gen.next_idx();
-                        val
+                        )
                     } else {
                         emit_cm_val_type(
                             &resolved_ty,
@@ -2463,8 +2571,10 @@ fn import_resource_defining_interface(
         // on demand when the parameter/return types are processed.
         // Use interface hint to disambiguate types shared across packages
         // (e.g., ErrorCode exists in http, filesystem, sockets).
-        let resource_count = http_resources.len() as u32;
-        let mut type_gen = CmInstanceTypeGen::with_interface_hint(resource_count, types_fq);
+        // Type indices start after the SubResource exports; the sink shares
+        // this counter with the func-type allocations below.
+        let mut type_idx = http_resources.len() as u32;
+        let mut type_gen = CmTypeGen::with_interface_hint(types_fq);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()
@@ -2494,10 +2604,14 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: &mut instance_type,
+                        next_idx: &mut type_idx,
+                    };
                     let cm_type = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ty,
-                        &mut instance_type,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2505,10 +2619,14 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
+                let mut sink = crate::component_model::InstanceSink {
+                    it: &mut instance_type,
+                    next_idx: &mut type_idx,
+                };
                 type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    &mut instance_type,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2524,7 +2642,8 @@ fn import_resource_defining_interface(
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
-            let func_type_idx = type_gen.alloc_idx();
+            let func_type_idx = type_idx;
+            type_idx += 1;
 
             instance_type.export(
                 &func.wasi_func_name,
@@ -2568,10 +2687,14 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
+                    let mut sink = crate::component_model::InstanceSink {
+                        it: &mut instance_type,
+                        next_idx: &mut type_idx,
+                    };
                     let cm_type = type_gen.ast_type_to_cm(
+                        &mut sink,
                         ty,
-                        &mut instance_type,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &resource_exports,
                     );
                     (cm_name.clone(), cm_type)
@@ -2579,10 +2702,14 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
+                let mut sink = crate::component_model::InstanceSink {
+                    it: &mut instance_type,
+                    next_idx: &mut type_idx,
+                };
                 type_gen.ast_type_to_cm(
+                    &mut sink,
                     ty,
-                    &mut instance_type,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &resource_exports,
                 )
             });
@@ -2598,7 +2725,8 @@ fn import_resource_defining_interface(
             } else {
                 func_encoder.params(param_refs).result(cm_result);
             }
-            let func_type_idx = type_gen.alloc_idx();
+            let func_type_idx = type_idx;
+            type_idx += 1;
 
             instance_type.export(
                 &func.wasi_func_name,
@@ -2708,7 +2836,7 @@ fn component_type_idx_for_signature_type(
     project: &NirPackage,
     ty: &Type,
 ) -> u32 {
-    let registry = project.cm_interface_registry;
+    let registry = &project.cm_interface_registry;
     match ty {
         Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
             component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
@@ -3229,7 +3357,7 @@ fn resource_using_references_defining_interface(
     import_plan: &[crate::wir::ImportEntry],
     iface_fq: &str,
 ) -> bool {
-    let registry = project.cm_interface_registry;
+    let registry = &project.cm_interface_registry;
     let Some(iface) = registry.interfaces().find(|i| i.path == iface_fq) else {
         return false;
     };
@@ -3315,12 +3443,16 @@ fn import_resource_using_interfaces(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &mut needed_resources,
                 );
             }
             for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, project.cm_interface_registry, &mut needed_resources);
+                collect_resources_in_type(
+                    ty,
+                    &project.cm_interface_registry,
+                    &mut needed_resources,
+                );
             }
         }
 
@@ -3608,10 +3740,10 @@ fn lower_wasi_functions(
                 crate::component_model::return_type_requires_outptr(&resolved)
                     || crate::component_model::cm_named_type_return_needs_outptr(
                         &resolved,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                     )
             });
-            let needs_memory = func.needs_memory_with_registry(project.cm_interface_registry)
+            let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
                 || returns_via_outptr;
             let needs_realloc = needs_memory;
 
@@ -3700,11 +3832,17 @@ fn append_interface_instance_exports(
     for (i, (&fq, group)) in groups.iter().enumerate() {
         let instance_idx = base_instance_idx + i as u32;
         let mut type_items: Vec<(String, u32)> = Vec::new();
-        for export in group {
-            for (_, cm_ty) in &export.cm_params {
-                collect_type_items(cm_ty, ctx, &mut type_items);
+        if group.iter().any(|e| e.sync_lift) {
+            // `--lib` default interface: its named types were defined top-level
+            // by `emit_world_exports` and recorded on the context.
+            type_items.extend(ctx.lib_export_types().iter().cloned());
+        } else {
+            for export in group {
+                for (_, cm_ty) in &export.cm_params {
+                    collect_type_items(cm_ty, ctx, &mut type_items);
+                }
+                collect_type_items(&export.cm_result, ctx, &mut type_items);
             }
-            collect_type_items(&export.cm_result, ctx, &mut type_items);
         }
 
         let mut items: Vec<(&str, ComponentExportKind, u32)> = type_items
@@ -3712,10 +3850,13 @@ fn append_interface_instance_exports(
             .map(|(name, idx)| (name.as_str(), ComponentExportKind::Type, *idx))
             .collect();
         for export in group {
+            // The instance item name and the lifted-func lookup both use the
+            // kebab CM name (`emit_world_exports` registers under it); the
+            // underscore `export.name` is only the core-module symbol.
             items.push((
-                export.name.as_str(),
+                export.cm_export_name.as_str(),
                 ComponentExportKind::Func,
-                ctx.comp_func_idx(&export.name),
+                ctx.comp_func_idx(&export.cm_export_name),
             ));
         }
 

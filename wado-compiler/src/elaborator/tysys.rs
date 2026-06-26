@@ -107,7 +107,7 @@ pub(crate) struct TypeSystem {
     /// call but lives on [`super::orchestration::AnnotateState`] instead
     /// of here — the elaborator never asks "what does world X export?",
     /// only post-elaborator stages (link, synthesis, DCE) do.
-    pub(crate) cm_interface_registry: &'static CmInterfaceRegistry,
+    pub(crate) cm_interface_registry: std::sync::Arc<CmInterfaceRegistry>,
     pub(crate) builtin_registry: Rc<BuiltinRegistry>,
 
     /// Pre-loaded file contents for `#include_str` / `#include_bytes`.

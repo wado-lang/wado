@@ -17,30 +17,32 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::CmInterfaceRegistry;
+use crate::module_source::ModuleSource;
+use crate::name::LocalMethodName;
 use crate::tir::{
-    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
-    alloc_local, assign, binary, builtin_call, cast, expr_stmt, i32_const, i64_const,
-    internal_call, let_mut_stmt, let_stmt, local_ref, synth_span,
+    alloc_local, assign, binary, block, break_stmt, builtin_call, cast, expr_stmt,
+    generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    local_ref, loop_stmt, synth_span,
 };
 
 use super::types::{
-    binary_add, cm_type_to_type_id, field_access, flatten_param_type, kebab_to_pascal, variant_tag,
-    variant_test,
+    binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, field_access,
+    flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
-/// Join two CM flat slot types like `component_model::join_val_types` (mismatch
-/// widens to `i64`), so a lowered flat arg matches the core import's signature.
+/// Join two CM flat slot types via the single Canonical ABI join
+/// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
+/// signature: `{i32, f32}` widens to `i32`, any other mismatch to `i64`.
 fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
-    match (a, b) {
-        (Some(a), Some(b)) if a == b => a,
-        (Some(_), Some(_)) => TypeTable::I64,
-        (Some(t), None) | (None, Some(t)) => t,
-        (None, None) => TypeTable::I32,
-    }
+    super::types::cm_val_type_to_type_id(cm_abi::CmValType::join(
+        a.map(cm_val_type_from_type_id),
+        b.map(cm_val_type_from_type_id),
+    ))
 }
 
 /// Zero constant matching a CM flat slot type (i32/i64/f32/f64).
@@ -251,10 +253,18 @@ pub(super) fn synthesize_lower_tuple(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) -> Vec<TirStmt> {
-    let names =
-        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
-    let layout = cm_abi::layout_tuple(elems);
+    let layout =
+        cm_abi::layout_tuple_with_registry_scoped(elems, cm_interface_registry, Some(wasi_package));
     let mut stmts = Vec::new();
+
+    // Element TypeIds come from the tuple's own type arguments — the
+    // elaborator-registered types with correct module sources. Re-deriving them
+    // via `cm_type_to_type_id` can't resolve a lib-local struct's source and
+    // would fall back to i32, breaking FieldAccess on aggregate elements.
+    let elem_type_ids = type_table
+        .borrow()
+        .as_tuple(value.type_id)
+        .unwrap_or_default();
 
     // Materialize the tuple value into a local so we can access fields
     let tuple_local = *next_local;
@@ -270,11 +280,12 @@ pub(super) fn synthesize_lower_tuple(
             binary_add(addr.clone(), i32_const(offset))
         };
 
-        // Determine the type_id for this field
-        let field_type_id = {
+        // Prefer the registered element TypeId; fall back only if the tuple
+        // type lacks args (shouldn't happen for a well-formed tuple value).
+        let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = type_table.borrow_mut();
             cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
-        };
+        });
 
         // Extract the i-th field from the tuple using FieldAccess
         let field_expr = TirExpr::new(
@@ -291,40 +302,43 @@ pub(super) fn synthesize_lower_tuple(
             synth_span(),
         );
 
-        // Recursively lower: for tuples use synthesize_lower_tuple, otherwise synthesize_lower
-        let field_stmts = if let Type::Tuple(sub_elems) = elem_ty {
-            synthesize_lower_tuple(
-                sub_elems,
-                field_expr,
-                field_addr,
-                next_local,
-                locals,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            )
-        } else {
-            synthesize_lower(elem_ty, field_expr, field_addr, next_local, locals, &names)
-        };
-        stmts.extend(field_stmts);
+        // Recursively lower each element through the full registry-aware
+        // memory lowerer so aggregate elements (records, variants, options,
+        // lists, results, nested tuples) lay out their payload correctly
+        // rather than being stored as an opaque i32 GC ref.
+        stmts.extend(synthesize_lower_wasi_type_to_memory(
+            elem_ty,
+            field_expr,
+            field_addr,
+            next_local,
+            locals,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        ));
     }
 
     stmts
 }
 
-/// Lower a WASI variant (GC struct) to a linear memory buffer at the given address.
+/// A variant case for memory lowering: its Wado (Pascal) case name and, for a
+/// payload-bearing case, the payload's CM AST `Type` and GC `TypeId`.
+pub(super) type CmMemCase = (String, Option<(Type, TypeId)>);
+
+/// Lower a variant GC value to a linear-memory buffer at `addr`, given its cases.
 ///
-/// Memory layout (Canonical ABI):
-/// - discriminant byte at offset 0
-/// - payload at `align_to(1, payload_align)`, lowered using `synthesize_lower`
-///
-/// For each variant case with a payload, generates:
-///   if `variant_test(value`, `case_i`) { `store_payload(payload_addr`, `variant_payload(value`, i)) }
-pub(super) fn synthesize_lower_wasi_variant_to_memory(
-    named: &NamedType,
-    source: &str,
+/// Memory layout (Canonical ABI): a 1-byte discriminant at offset 0, then the
+/// active case's payload at `align_to(1, max_payload_align)`; each case lowers
+/// via a `Match` arm. `disc_of` builds the discriminant byte from the
+/// materialised value — registry variants use `variant_tag` (the full tag),
+/// while `Result` uses `variant_test` on its Err case. Shared by the
+/// registry-backed variant path and the `Result` path; `Option` keeps its own
+/// helper (its `None` is a null ref that would trap `variant_tag`).
+fn synthesize_lower_variant_to_memory(
     value: TirExpr,
     addr: TirExpr,
+    cases: Vec<CmMemCase>,
+    disc_of: impl Fn(TirExpr) -> TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
@@ -332,72 +346,45 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let name = named.name.as_str();
-    let cases = if let Some(c) = cm_interface_registry.get_variant_cases_by_source(source, name) {
-        c.to_vec()
-    } else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
-
     let value_type_id = value.type_id;
 
-    // Materialize value into a local so we can reference it multiple times
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("__variant_val", value_local, value_type_id, value));
 
-    // Store discriminant byte
     stmts.push(expr_stmt(builtin_call(
         "i32_store8",
         vec![
             addr.clone(),
-            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
+            disc_of(local_ref(value_local, "__variant_val", value_type_id)),
         ],
         TypeTable::UNIT,
     )));
 
-    // Compute payload offset (aligned to max payload alignment)
     let mut max_payload_align = 1u32;
-    for case in &cases {
-        if let Some(payload_ty) = &case.payload {
+    for (_, payload) in &cases {
+        if let Some((payload_ty, _)) = payload {
             max_payload_align = max_payload_align.max(
                 crate::component_model::cm_align_with_registry(payload_ty, cm_interface_registry),
             );
         }
     }
     let payload_offset = cm_abi::align_to(1, max_payload_align);
-
     let payload_addr = if payload_offset == 0 {
         addr
     } else {
         binary_add(addr, i32_const(payload_offset as i32))
     };
 
-    // Build a single Match over the materialised value with one arm
-    // per case. Payload-bearing arms bind the payload to a fresh
-    // local and run the recursive memory-lowering helper on it;
-    // unit-payload arms have an empty body. Variant `Match` is
-    // exhaustive at TIR level, so no wildcard arm is needed.
     let span = synth_span();
     let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
-    for case in &cases {
-        let case_name = kebab_to_pascal(&case.cm_name);
-        if let Some(payload_ty) = &case.payload {
-            let payload_type_id = {
-                let mut tt = type_table.borrow_mut();
-                cm_type_to_type_id(payload_ty, &mut tt, cm_interface_registry, wasi_package)
-            };
+    for (case_name, payload) in cases {
+        if let Some((payload_ty, payload_type_id)) = payload {
             let binding_local = alloc_local(next_local, locals, payload_type_id);
             let binding_name = format!("__variant_payload_{binding_local}");
             let payload_expr = local_ref(binding_local, &binding_name, payload_type_id);
 
             let case_stmts = synthesize_lower_wasi_type_to_memory(
-                payload_ty,
+                &payload_ty,
                 payload_expr,
                 payload_addr.clone(),
                 next_local,
@@ -457,6 +444,59 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     }
 }
 
+/// Lower a registry-backed variant (WASI or lib-local) GC value to memory.
+/// Resolves the cases from the registry, then delegates to
+/// [`synthesize_lower_variant_to_memory`].
+pub(super) fn synthesize_lower_wasi_variant_to_memory(
+    named: &NamedType,
+    source: &str,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let name = named.name.as_str();
+    let Some(cases) = cm_interface_registry.get_variant_cases_by_source(source, name) else {
+        // Fallback: store as i32
+        stmts.push(expr_stmt(builtin_call(
+            "i32_store8",
+            vec![addr, variant_tag(value)],
+            TypeTable::UNIT,
+        )));
+        return;
+    };
+    let mem_cases: Vec<CmMemCase> = cases
+        .to_vec()
+        .into_iter()
+        .map(|case| {
+            let payload = case.payload.map(|ty| {
+                let tid = {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(&ty, &mut tt, cm_interface_registry, wasi_package)
+                };
+                (ty, tid)
+            });
+            (kebab_to_pascal(&case.cm_name), payload)
+        })
+        .collect();
+    synthesize_lower_variant_to_memory(
+        value,
+        addr,
+        mem_cases,
+        variant_tag,
+        next_local,
+        stmts,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
+}
+
 /// Lower an `Option<T>` value to linear memory at the given address.
 ///
 /// Memory layout (Canonical ABI for `option<T>`):
@@ -512,9 +552,29 @@ pub(super) fn synthesize_lower_option_to_memory(
     // `Match` arm — canonical post-Phase 10 shape. The None arm is
     // empty; the Match's exhaustiveness on `Option<T>` removes the
     // need for a wildcard else.
+    //
+    // Take the payload TypeId from the Option's own type argument (the
+    // elaborator-registered type, correct module source) rather than
+    // re-deriving it via `cm_type_to_type_id`, which can't resolve a lib-local
+    // struct source and would fall back to i32.
     let inner_type_id = {
-        let mut tt = type_table.borrow_mut();
-        cm_type_to_type_id(inner_type, &mut tt, cm_interface_registry, wasi_package)
+        let tt = type_table.borrow();
+        match tt.get(value_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+                if !type_args.is_empty() =>
+            {
+                type_args[0]
+            }
+            _ => {
+                drop(tt);
+                cm_type_to_type_id(
+                    inner_type,
+                    &mut type_table.borrow_mut(),
+                    cm_interface_registry,
+                    wasi_package,
+                )
+            }
+        }
     };
 
     let payload_binding_local = alloc_local(next_local, locals, inner_type_id);
@@ -576,6 +636,283 @@ pub(super) fn synthesize_lower_option_to_memory(
         span,
     );
     stmts.push(TirStmt::new(TirStmtKind::Expr(match_expr), span));
+}
+
+/// Lower a `Result<T, E>` (GC value) to a CM `result` at `addr`. `Result` is a
+/// 2-case variant (Ok=0, Err=1), so it shares [`synthesize_lower_variant_to_memory`]:
+/// build its case list (Ok/Err names from compiler items, payload types from the
+/// instance's type args; unit arms carry no payload) and delegate.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn synthesize_lower_result_to_memory(
+    ok_type: &Type,
+    err_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let value_type_id = value.type_id;
+    let (ok_name, err_name, err_index, ok_tid, err_tid) = {
+        let tt = type_table.borrow();
+        let (_, _, ok_name, _) = tt
+            .compiler_items()
+            .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        let (_, _, err_name, err_index) = tt
+            .compiler_items()
+            .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        let (ok_tid, err_tid) = match tt.get(value_type_id) {
+            ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            _ => (TypeTable::UNIT, TypeTable::UNIT),
+        };
+        (
+            ok_name.to_string(),
+            err_name.to_string(),
+            err_index,
+            ok_tid,
+            err_tid,
+        )
+    };
+
+    let arm = |name: String, ty: &Type, tid: TypeId| -> CmMemCase {
+        if is_unit_type(ty) {
+            (name, None)
+        } else {
+            (name, Some((ty.clone(), tid)))
+        }
+    };
+    let cases = vec![
+        arm(ok_name, ok_type, ok_tid),
+        arm(err_name.clone(), err_type, err_tid),
+    ];
+
+    // disc byte: `variant_test(Err)` → 1 when Err, 0 when Ok. (`variant_tag`,
+    // used for registry variants, mis-resolves the generic `Result` struct.)
+    let disc_of = move |v: TirExpr| variant_test(v, err_index, &err_name);
+    synthesize_lower_variant_to_memory(
+        value,
+        addr,
+        cases,
+        disc_of,
+        next_local,
+        stmts,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
+}
+
+/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
+/// linear memory plus the `(ptr, len)` pair stored at `addr`.
+///
+/// Allocates `len * elem_size` bytes, then loops lowering each element at its
+/// stride via the full recursive [`synthesize_lower_wasi_type_to_memory`], so
+/// ref-bearing elements (strings, tuples, records, options) lower correctly
+/// rather than being stored as opaque `i32` handles.
+pub(super) fn synthesize_lower_list_to_memory(
+    elem_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) -> Vec<TirStmt> {
+    let names =
+        super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
+    let list_type_id = value.type_id;
+    let elem_resolved = cm_interface_registry.resolve_type(elem_type);
+
+    let elem_size = crate::component_model::cm_size_with_registry_scoped(
+        &elem_resolved,
+        cm_interface_registry,
+        Some(wasi_package),
+    ) as i32;
+    let elem_align = crate::component_model::cm_align_with_registry_scoped(
+        &elem_resolved,
+        cm_interface_registry,
+        Some(wasi_package),
+    ) as i32;
+    // Take the element TypeId from the list's own type arguments — it is the
+    // elaborator-registered type (correct module source), unlike a fresh
+    // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
+    // would fall back to i32.
+    let elem_type_id = {
+        let tt = type_table.borrow();
+        match tt.get(list_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. }
+                if !type_args.is_empty() =>
+            {
+                type_args[0]
+            }
+            _ => {
+                drop(tt);
+                let mut tt = type_table.borrow_mut();
+                cm_type_to_type_id(&elem_resolved, &mut tt, cm_interface_registry, wasi_package)
+            }
+        }
+    };
+
+    let mut stmts = Vec::new();
+
+    // Materialize the list so we can call len/index_value on it repeatedly.
+    let list_local = alloc_local(next_local, locals, list_type_id);
+    stmts.push(let_stmt("__list_val", list_local, list_type_id, value));
+
+    // __len = List::len(list)
+    let len_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__list_len",
+        len_local,
+        TypeTable::I32,
+        generic_method_call(
+            local_ref(list_local, "__list_val", list_type_id),
+            &names.array,
+            "len",
+            ModuleSource::list(),
+            vec![],
+            TypeTable::I32,
+        ),
+    ));
+
+    // __base = realloc(0, 0, elem_align, __len * elem_size)
+    let base_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__list_base",
+        base_local,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(elem_align),
+                binary(
+                    TirBinaryOp::Mul,
+                    local_ref(len_local, "__list_len", TypeTable::I32),
+                    i32_const(elem_size),
+                    TypeTable::I32,
+                ),
+            ],
+            TypeTable::I32,
+        ),
+    ));
+
+    // __i = 0; loop { if __i >= __len break; lower elem[__i] at __base + __i*size; __i += 1 }
+    let i_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_mut_stmt(
+        "__list_i",
+        i_local,
+        TypeTable::I32,
+        i32_const(0),
+    ));
+
+    let mut loop_body = Vec::new();
+    loop_body.push(if_stmt(
+        binary(
+            TirBinaryOp::GtEq,
+            local_ref(i_local, "__list_i", TypeTable::I32),
+            local_ref(len_local, "__list_len", TypeTable::I32),
+            TypeTable::BOOL,
+        ),
+        block(vec![break_stmt()]),
+        None,
+    ));
+    let addr_local = alloc_local(next_local, locals, TypeTable::I32);
+    loop_body.push(let_stmt(
+        "__list_addr",
+        addr_local,
+        TypeTable::I32,
+        binary(
+            TirBinaryOp::Add,
+            local_ref(base_local, "__list_base", TypeTable::I32),
+            binary(
+                TirBinaryOp::Mul,
+                local_ref(i_local, "__list_i", TypeTable::I32),
+                i32_const(elem_size),
+                TypeTable::I32,
+            ),
+            TypeTable::I32,
+        ),
+    ));
+    // __elem = list.index_value(__i)
+    let elem_local = alloc_local(next_local, locals, elem_type_id);
+    let iv_info = LocalMethodName::new(
+        names.array,
+        Some("IndexValue<i32>".to_string()),
+        "index_value".to_string(),
+    );
+    let iv_mangled = iv_info.to_mangled_name();
+    loop_body.push(let_stmt(
+        "__list_elem",
+        elem_local,
+        elem_type_id,
+        TirExpr::new(
+            TirExprKind::method_call(
+                Box::new(local_ref(list_local, "__list_val", list_type_id)),
+                FunctionRef {
+                    module_source: ModuleSource::list(),
+                    name: iv_mangled,
+                    monomorph_info: None,
+                    method_info: Some(iv_info),
+                },
+                vec![],
+                vec![CallArg::new(
+                    local_ref(i_local, "__list_i", TypeTable::I32),
+                    false,
+                )],
+            ),
+            elem_type_id,
+            synth_span(),
+        ),
+    ));
+    loop_body.extend(synthesize_lower_wasi_type_to_memory(
+        &elem_resolved,
+        local_ref(elem_local, "__list_elem", elem_type_id),
+        local_ref(addr_local, "__list_addr", TypeTable::I32),
+        next_local,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    ));
+    loop_body.push(expr_stmt(assign(
+        local_ref(i_local, "__list_i", TypeTable::I32),
+        binary(
+            TirBinaryOp::Add,
+            local_ref(i_local, "__list_i", TypeTable::I32),
+            i32_const(1),
+            TypeTable::I32,
+        ),
+    )));
+    stmts.push(loop_stmt(block(loop_body)));
+
+    // Store (base, len) at addr / addr+4.
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            addr.clone(),
+            local_ref(base_local, "__list_base", TypeTable::I32),
+        ],
+        TypeTable::UNIT,
+    )));
+    stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(addr, i32_const(4)),
+            local_ref(len_local, "__list_len", TypeTable::I32),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    stmts
 }
 
 /// Flatten a WASI type value (GC ref) to flat CM ABI args (i32/i64/f32/f64).
@@ -739,21 +1076,16 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                         for (i, flat_val) in case_flat.into_iter().enumerate() {
                             if i < payload_locals.len() {
                                 let (pl, pt) = payload_locals[i];
-                                // A case may produce a narrower flat than the
-                                // joined slot (e.g. i32 into an i64 slot); cast.
-                                //
-                                // For every WASI variant bound today the cases
-                                // agree on each slot's type, so this cast is a
-                                // no-op. If a future binding mixes kinds/widths
-                                // at one slot, `flatten_param_type` joins to i32
-                                // and `cast` does a *numeric* conversion, not a
-                                // bit reinterpret — revisit this (and the join
-                                // rule) before binding such a variant.
-                                let v = if flat_val.type_id == pt {
-                                    flat_val
-                                } else {
-                                    cast(flat_val, pt)
-                                };
+                                // Join this case's payload flat into the shared
+                                // slot, bit-reinterpreting when the join widened
+                                // the slot to a different core class (e.g. an
+                                // `f32` case sharing an `i32`-joined slot).
+                                let flat_val_ty = flat_val.type_id;
+                                let v = coerce_flat_lower(
+                                    flat_val,
+                                    cm_val_type_from_type_id(flat_val_ty),
+                                    cm_val_type_from_type_id(pt),
+                                );
                                 case_stmts.push(expr_stmt(assign(
                                     local_ref(pl, &format!("{prefix}_p{i}"), pt),
                                     v,
@@ -1301,7 +1633,10 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // records. Callers (e.g. the `List<T>` element lower)
             // populate `source_interface` via `type_id_to_ast_type` so
             // this lookup does not need a fallback path.
-            let source = n.source_interface.as_deref();
+            // Resolve via the registry so lib-local records (no
+            // `source_interface` on the nested type) are found by name under
+            // their package's default-interface FQ, like WASI/kiln records.
+            let source = cm_interface_registry.resolve_cm_source_for(n, Some(wasi_package));
             if let Some(fields) = source.and_then(|s| {
                 cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
             }) {
@@ -1359,6 +1694,30 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                 }
                 return stmts;
             }
+            // Named `variant` (sum type with payloads): lower disc + active
+            // case payload via the registry-backed variant helper, keyed on the
+            // same resolved source. Lib-local variants register their cases
+            // under the package's default-interface FQ, like WASI variants.
+            if let Some(src) = source
+                && cm_interface_registry
+                    .get_variant_cases_by_source(src, &n.name)
+                    .is_some()
+            {
+                let mut stmts = Vec::new();
+                synthesize_lower_wasi_variant_to_memory(
+                    n,
+                    src,
+                    value,
+                    addr,
+                    next_local,
+                    &mut stmts,
+                    locals,
+                    cm_interface_registry,
+                    wasi_package,
+                    type_table,
+                );
+                return stmts;
+            }
             // Fall through to synthesize_lower for primitives and simple types
             synthesize_lower(&resolved, value, addr, next_local, locals, &names)
         }
@@ -1372,6 +1731,52 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             wasi_package,
             type_table,
         ),
+        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
+            let inner = cm_interface_registry.resolve_type(&g.args[0]);
+            let mut stmts = Vec::new();
+            synthesize_lower_option_to_memory(
+                &inner,
+                value,
+                addr,
+                next_local,
+                &mut stmts,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts
+        }
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+            synthesize_lower_list_to_memory(
+                &g.args[0],
+                value,
+                addr,
+                next_local,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            )
+        }
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+            let ok = cm_interface_registry.resolve_type(&g.args[0]);
+            let err = cm_interface_registry.resolve_type(&g.args[1]);
+            let mut stmts = Vec::new();
+            synthesize_lower_result_to_memory(
+                &ok,
+                &err,
+                value,
+                addr,
+                next_local,
+                &mut stmts,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts
+        }
         _ => synthesize_lower(&resolved, value, addr, next_local, locals, &names),
     }
 }

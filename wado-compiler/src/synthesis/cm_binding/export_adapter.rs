@@ -29,23 +29,24 @@ use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
     TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirVariantDecl, TypeId, TypeTable,
+    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
     generic_method_call, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, option_none, option_some, param_local, return_stmt, synth_span,
+    local_ref, loop_stmt, null_expr, option_none, option_some, param_local, return_stmt,
+    synth_span,
 };
 
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-    LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero,
-    compute_export_flat_param_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, type_id_to_ast_type,
-    variant_payload, variant_tag, variant_test,
+    LiftContext, binary_add, binary_ne, cm_val_type_to_type_id, cm_zero, coerce_flat_lift,
+    coerce_flat_lower, compute_export_flat_param_types, export_needs_param_lifting, field_access,
+    find_struct_decl, find_variant_decl, flat_types_from_type_id, flatten_export_type,
+    is_unit_type, type_id_to_ast_type, variant_payload, variant_tag, variant_test,
 };
 
 /// Build the export binding function name for a world export.
@@ -465,6 +466,136 @@ fn lower_to_flat_inner(
 
             result
         }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Result" && type_args.len() == 2 => {
+            // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
+            // 1 = Err. The active arm's payload lowers into the shared joined
+            // slots (the other arm leaves them zero), per the Canonical ABI's
+            // variant join.
+            let ok_type_id = type_args[0];
+            let err_type_id = type_args[1];
+            let mut result = Vec::new();
+
+            let res_local = alloc_local(next_local, locals, type_id);
+            stmts.push(let_stmt("__res_val", res_local, type_id, value));
+
+            let (ok_index, err_name, err_index) = {
+                let tt = ctx.type_table.borrow();
+                let items = tt.compiler_items();
+                let (_, _, _, ok_i) =
+                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+                let (_, _, err_n, err_i) =
+                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+                (ok_i, err_n.to_string(), err_i)
+            };
+
+            // disc: variant_test(Err) → 1 when Err, 0 when Ok.
+            let disc_expr = cast(
+                variant_test(
+                    local_ref(res_local, "__res_val", type_id),
+                    err_index,
+                    &err_name,
+                ),
+                TypeTable::I32,
+            );
+            let disc_local = alloc_local(next_local, locals, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__res_disc",
+                disc_local,
+                TypeTable::I32,
+                disc_expr,
+            ));
+            result.push(FlatLocal {
+                index: disc_local,
+                cm_type: cm_abi::CmValType::I32,
+            });
+
+            let payload_flats: Vec<cm_abi::CmValType> = {
+                let tt = ctx.type_table.borrow();
+                flat_types_from_type_id(type_id, tir_modules, &tt)
+                    .get(1..)
+                    .map(<[cm_abi::CmValType]>::to_vec)
+                    .unwrap_or_default()
+            };
+            if !payload_flats.is_empty() {
+                let slot_locals: Vec<(u32, cm_abi::CmValType, String)> = payload_flats
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &vt)| {
+                        let tid = cm_val_type_to_type_id(vt);
+                        let l = alloc_local(next_local, locals, tid);
+                        let name = format!("__res_slot_{i}");
+                        stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
+                        (l, vt, name)
+                    })
+                    .collect();
+
+                let lower_arm = |case_index: u32,
+                                 payload_tid: TypeId,
+                                 next_local: &mut u32,
+                                 locals: &mut Vec<TirLocal>|
+                 -> Vec<TirStmt> {
+                    let mut arm_stmts: Vec<TirStmt> = Vec::new();
+                    let payload = variant_payload(
+                        local_ref(res_local, "__res_val", type_id),
+                        case_index,
+                        payload_tid,
+                    );
+                    let lowered = synthesize_lower_to_flat(
+                        payload,
+                        payload_tid,
+                        next_local,
+                        &mut arm_stmts,
+                        locals,
+                        tir_modules,
+                        ctx,
+                    );
+                    for (i, flat_val) in lowered.iter().enumerate() {
+                        if i < slot_locals.len() {
+                            let (target_local, target_vt, ref target_name) = slot_locals[i];
+                            let target_type = cm_val_type_to_type_id(target_vt);
+                            let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                            // Join the case payload into the shared slot,
+                            // bit-reinterpreting on a class mismatch.
+                            let val = coerce_flat_lower(
+                                local_ref(flat_val.index, "__flat", source_type),
+                                flat_val.cm_type,
+                                target_vt,
+                            );
+                            arm_stmts.push(expr_stmt(assign(
+                                local_ref(target_local, target_name, target_type),
+                                val,
+                            )));
+                        }
+                    }
+                    arm_stmts
+                };
+
+                let ok_stmts = lower_arm(ok_index, ok_type_id, next_local, locals);
+                let err_stmts = lower_arm(err_index, err_type_id, next_local, locals);
+
+                stmts.push(if_stmt(
+                    binary(
+                        TirBinaryOp::Eq,
+                        local_ref(disc_local, "__res_disc", TypeTable::I32),
+                        i32_const(ok_index as i32),
+                        TypeTable::BOOL,
+                    ),
+                    block(ok_stmts),
+                    Some(block(err_stmts)),
+                ));
+
+                for (l, vt, _) in slot_locals {
+                    result.push(FlatLocal {
+                        index: l,
+                        cm_type: vt,
+                    });
+                }
+            }
+
+            result
+        }
         ResolvedType::Struct { name, .. } if name != &names.string => {
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
@@ -502,8 +633,23 @@ fn lower_to_flat_inner(
                 }]
             }
         }
+        ResolvedType::Newtype { base_type, .. } => {
+            // Newtypes share their base's representation; lower through the base.
+            let base = *base_type;
+            let base_resolved = ctx.type_table.borrow().get(base).clone();
+            lower_to_flat_inner(
+                cast(value, base),
+                base,
+                &base_resolved,
+                next_local,
+                stmts,
+                locals,
+                tir_modules,
+                ctx,
+            )
+        }
         _ => {
-            // For other types (including complex variants, newtypes, etc.), lower as i32
+            // For other types (including complex variants, etc.), lower as i32
             let local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
             vec![FlatLocal {
@@ -648,23 +794,36 @@ pub(super) fn synthesize_lift_from_flat_params(
                         offset,
                     );
                 }
+                // Named `variant` (sum type with payloads): reconstruct the GC
+                // value from flat params. The CM `variant` flat ABI is
+                // `(disc: i32, ...joined-payload-flats)`; each case's payload
+                // shares the joined slots positionally, so lift the active
+                // case's payload recursively from `flat[1..]`.
+                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
+                    return lift_variant_from_flat_params(
+                        &named.name,
+                        &variant_decl,
+                        flat_param_locals,
+                        flat_types,
+                        target_type_id,
+                        next_local,
+                        stmts,
+                        locals,
+                        tir_modules,
+                        type_table_cell,
+                        lift_ctx,
+                    );
+                }
                 // Resource handles, enums, unknown types → i32 passthrough
                 (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {
-            n if n == names.array
-                && generic.args.len() == 1
-                && matches!(generic.args[0], Type::Named(ref n) if n.name == "u8") =>
-            {
-                // List<u8> flat ABI: (ptr: i32, len: i32) pointing to linear memory
-                let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
-                let lifted = internal_call("memory_to_gc_array", vec![ptr, len], target_type_id);
-                (lifted, 2)
-            }
             n if n == names.array => {
-                // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory
+                // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory.
+                // (A former `List<u8>` fast path via `memory_to_gc_array` produced a
+                // bare `Array<u8>` mislabeled as `List<u8>`; the general path below
+                // builds the real `List<T>` struct, so all element types share it.)
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
                 let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
                 let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
@@ -793,6 +952,25 @@ pub(super) fn synthesize_lift_from_flat_params(
                     total_flat,
                 )
             }
+            "Result" if generic.args.len() == 2 => {
+                // `Result<T, E>` is a 2-case variant (Ok=0, Err=1) — lift it
+                // through the shared variant path with a synthetic decl carrying
+                // the concrete arm TypeIds.
+                let decl = synthetic_result_variant_decl(&type_table_cell.borrow(), target_type_id);
+                lift_variant_from_flat_params(
+                    &decl.name.clone(),
+                    &decl,
+                    flat_param_locals,
+                    flat_types,
+                    target_type_id,
+                    next_local,
+                    stmts,
+                    locals,
+                    tir_modules,
+                    type_table_cell,
+                    lift_ctx,
+                )
+            }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
             _ => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
         },
@@ -845,6 +1023,221 @@ pub(super) fn synthesize_lift_from_flat_params(
             0,
         ),
     }
+}
+
+/// Build a synthetic `TirVariantDecl` for a concrete `Result<T, E>` so it can be
+/// lifted/lowered through the shared named-variant path. `Result` is a 2-case
+/// variant (Ok=0, Err=1); its arm payload types are the instance's type args.
+fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId) -> TirVariantDecl {
+    let (ok_tid, err_tid) = match type_table.get(result_type_id) {
+        ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            (type_args[0], type_args[1])
+        }
+        _ => (TypeTable::UNIT, TypeTable::UNIT),
+    };
+    let items = type_table.compiler_items();
+    let (_, _, ok_name, ok_index) =
+        items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+    let (_, _, err_name, err_index) =
+        items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+    let result_name = items
+        .variant_name(crate::compiler_item::CompilerItem::Result)
+        .to_string();
+    let case = |name: &str, index: u32, payload: TypeId| TirVariantCase {
+        name: name.to_string(),
+        index,
+        payload,
+        span: synth_span(),
+        serde_rename: None,
+    };
+    TirVariantDecl {
+        name: result_name,
+        module_source: ModuleSource::default(),
+        is_pub: true,
+        type_params: Vec::new(),
+        cases: vec![
+            case(ok_name, ok_index, ok_tid),
+            case(err_name, err_index, err_tid),
+        ],
+        span: synth_span(),
+        serde_rename_all: None,
+    }
+}
+
+/// Re-map a variant/result case's payload flat slots from the declared (joined)
+/// slot types to the case's natural flat types, inserting a bit-preserving
+/// coercion ([`coerce_flat_lift`]) wherever the join widened a slot to a
+/// different core class. Returns `(local_indices, natural_flat_types)` to feed
+/// the recursive payload lift; coercion `let`s are appended to `stmts` so they
+/// run only inside the active case's branch.
+#[allow(clippy::too_many_arguments)]
+fn coerce_payload_slots(
+    payload_ty: &Type,
+    slot_locals: &[u32],
+    slot_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table_cell: &RefCell<TypeTable>,
+) -> (Vec<u32>, Vec<cm_abi::CmValType>) {
+    let natural: Vec<cm_abi::CmValType> = {
+        let tt = type_table_cell.borrow();
+        let mut out = Vec::new();
+        flatten_export_type(payload_ty, &mut out, tir_modules, &tt);
+        out
+    };
+    let mut out_locals = Vec::with_capacity(natural.len());
+    for (j, &want) in natural.iter().enumerate() {
+        let Some(slot_local) = slot_locals.get(j).copied() else {
+            break;
+        };
+        let have = slot_types.get(j).copied().unwrap_or(want);
+        if have == want {
+            out_locals.push(slot_local);
+        } else {
+            let have_tid = cm_val_type_to_type_id(have);
+            let want_tid = cm_val_type_to_type_id(want);
+            let coerced = coerce_flat_lift(local_ref(slot_local, "__p", have_tid), have, want);
+            let l = alloc_local(next_local, locals, want_tid);
+            stmts.push(let_stmt("__coerce", l, want_tid, coerced));
+            out_locals.push(l);
+        }
+    }
+    (out_locals, natural)
+}
+
+/// Lift a named `variant` value from flat CM params.
+///
+/// The CM `variant` flat ABI is `(disc: i32, ...joined-payload-flats)` where the
+/// payload slots are the positional join of every case's flattening. This reads
+/// the discriminant, then for the active case lifts its payload recursively from
+/// `flat[1..]` and constructs the GC value via `VariantConstruct`, dispatching
+/// through an if/else chain (mirroring the memory-based `synthesize_lift_wasi_variant`).
+///
+/// Returns the lifted expression and the number of flat params consumed (the
+/// discriminant plus the widest case's payload flattening).
+#[allow(clippy::too_many_arguments)]
+fn lift_variant_from_flat_params(
+    _name: &str,
+    variant_decl: &TirVariantDecl,
+    flat_param_locals: &[u32],
+    flat_types: &[cm_abi::CmValType],
+    variant_type_id: TypeId,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table_cell: &RefCell<TypeTable>,
+    lift_ctx: LiftContext<'_>,
+) -> (TirExpr, usize) {
+    // Widest case payload flattening sets the consumed slot count.
+    let max_payload_flats = {
+        let tt = type_table_cell.borrow();
+        variant_decl
+            .cases
+            .iter()
+            .map(|c| flat_types_from_type_id(c.payload, tir_modules, &tt).len())
+            .max()
+            .unwrap_or(0)
+    };
+    let total_flat = 1 + max_payload_flats;
+
+    let result_local = alloc_local(next_local, locals, variant_type_id);
+    stmts.push(let_mut_stmt(
+        "__var_lift",
+        result_local,
+        variant_type_id,
+        null_expr(variant_type_id),
+    ));
+
+    // Per-case payload AST surfaces, computed while the borrow is live.
+    let case_payload_tys: Vec<Type> = {
+        let tt = type_table_cell.borrow();
+        variant_decl
+            .cases
+            .iter()
+            .map(|c| type_id_to_ast_type(c.payload, &tt, lift_ctx.cm_interface_registry))
+            .collect()
+    };
+
+    let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+    let disc_local = alloc_local(next_local, locals, TypeTable::I32);
+    stmts.push(let_stmt("__var_disc", disc_local, TypeTable::I32, disc));
+
+    // Build the if/else chain from the last case backwards: the final case is
+    // the trailing `else`, earlier cases test `disc == i`.
+    let case_count = variant_decl.cases.len();
+    let mut current_else: Option<TirBlock> = None;
+    for (i, case) in variant_decl.cases.iter().enumerate().rev() {
+        let payload_ty = &case_payload_tys[i];
+        let mut case_stmts: Vec<TirStmt> = Vec::new();
+        let payload = if is_unit_type(payload_ty) {
+            None
+        } else {
+            // Re-map the joined payload slots to this case's natural flat types,
+            // bit-reinterpreting where the join widened the slot to a different
+            // core class.
+            let (payload_locals, payload_types) = coerce_payload_slots(
+                payload_ty,
+                &flat_param_locals[1..],
+                &flat_types[1..],
+                next_local,
+                &mut case_stmts,
+                locals,
+                tir_modules,
+                type_table_cell,
+            );
+            let (lifted, _) = synthesize_lift_from_flat_params(
+                payload_ty,
+                &payload_locals,
+                &payload_types,
+                case.payload,
+                next_local,
+                &mut case_stmts,
+                locals,
+                tir_modules,
+                type_table_cell,
+                lift_ctx,
+            );
+            Some(Box::new(lifted))
+        };
+        case_stmts.push(expr_stmt(assign(
+            local_ref(result_local, "__var_lift", variant_type_id),
+            TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: variant_type_id,
+                    case_index: case.index,
+                    case_name: case.name.clone(),
+                    payload,
+                },
+                variant_type_id,
+                synth_span(),
+            ),
+        )));
+
+        if i == case_count - 1 {
+            current_else = Some(block(case_stmts));
+        } else {
+            let cond = binary(
+                TirBinaryOp::Eq,
+                local_ref(disc_local, "__var_disc", TypeTable::I32),
+                i32_const(case.index as i32),
+                TypeTable::BOOL,
+            );
+            current_else = Some(block(vec![if_stmt(cond, block(case_stmts), current_else)]));
+        }
+    }
+    if let Some(outer) = current_else {
+        for stmt in outer.stmts {
+            stmts.push(stmt);
+        }
+    }
+
+    (
+        local_ref(result_local, "__var_lift", variant_type_id),
+        total_flat,
+    )
 }
 
 /// Build the adapter parameters and call arguments for an export binding.
@@ -1172,10 +1565,11 @@ pub(super) fn synthesize_result_export_binding(
             if 1 + i < flat_locals.len() {
                 let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                 let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut val = local_ref(flat_val.index, "__flat", source_type);
-                if flat_val.cm_type != flat_return_types[1 + i] {
-                    val = cast(val, target_type);
-                }
+                let val = coerce_flat_lower(
+                    local_ref(flat_val.index, "__flat", source_type),
+                    flat_val.cm_type,
+                    flat_return_types[1 + i],
+                );
                 ok_stmts.push(expr_stmt(assign(
                     local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
@@ -1246,10 +1640,11 @@ pub(super) fn synthesize_result_export_binding(
             if 1 + i < flat_locals.len() {
                 let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                 let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut val = local_ref(flat_val.index, "__flat", source_type);
-                if flat_val.cm_type != flat_return_types[1 + i] {
-                    val = cast(val, target_type);
-                }
+                let val = coerce_flat_lower(
+                    local_ref(flat_val.index, "__flat", source_type),
+                    flat_val.cm_type,
+                    flat_return_types[1 + i],
+                );
                 err_stmts.push(expr_stmt(assign(
                     local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
@@ -1414,10 +1809,11 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 if 1 + i < flat_locals.len() {
                     let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
                     let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                    let mut val = local_ref(flat_val.index, "__flat", source_type);
-                    if flat_val.cm_type != flat_types[1 + i] {
-                        val = cast(val, target_type);
-                    }
+                    let val = coerce_flat_lower(
+                        local_ref(flat_val.index, "__flat", source_type),
+                        flat_val.cm_type,
+                        flat_types[1 + i],
+                    );
                     case_stmts.push(expr_stmt(assign(
                         local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                         val,
@@ -1681,6 +2077,7 @@ pub(super) fn synthesize_sync_export_binding(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     world_params: &[(String, Type)],
+    return_ast: Option<&Type>,
     cm_interface_registry: &CmInterfaceRegistry,
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
@@ -1732,12 +2129,99 @@ pub(super) fn synthesize_sync_export_binding(
     let is_unit_return = matches!(tt.get(user_return_type), ResolvedType::Unit);
     drop(tt);
 
+    // Lower the user result into the canonical lifted form. The sync canon lift
+    // expects the core function to return the *flattened* result: directly when
+    // it flattens to a single core value, or — for multi-value results — via a
+    // single i32 pointer into linear memory (the out-pointer convention).
+    // Flat count from the canonical ABI: a result flattening to >1 core value
+    // returns via the out-pointer convention.
+    let flat_count = return_ast
+        .map(|ty| {
+            let tt = type_table.borrow();
+            super::types::compute_export_flat_return_types(ty, tir_modules, &tt).len()
+        })
+        .unwrap_or(0);
+
     let adapter_return = if is_unit_return {
         body_stmts.push(expr_stmt(call_user));
         TypeTable::UNIT
+    } else if flat_count > 1 {
+        // Out-pointer return: allocate, lower the result into linear memory,
+        // and return the i32 pointer (the canonical sync-lift convention for
+        // multi-value results — strings, lists, tuples, records, options,
+        // results).
+        let ty = return_ast.expect("multi-flat result implies a return type");
+        let mut next_local = param_count;
+        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
+
+        let size = crate::component_model::cm_size_with_registry(ty, cm_interface_registry);
+        let align = crate::component_model::cm_align_with_registry(ty, cm_interface_registry);
+        let ptr_local = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
+        body_stmts.push(let_stmt(
+            "__ret_ptr",
+            ptr_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![
+                    i32_const(0),
+                    i32_const(0),
+                    i32_const(align as i32),
+                    i32_const(size as i32),
+                ],
+                TypeTable::I32,
+            ),
+        ));
+
+        let store = synthesize_lower_wasi_type_to_memory(
+            ty,
+            local_ref(result_local, "__result", user_return_type),
+            local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
+            &mut next_local,
+            &mut locals,
+            cm_interface_registry,
+            cm_package,
+            type_table,
+        );
+        body_stmts.extend(store);
+        body_stmts.push(return_stmt(Some(local_ref(
+            ptr_local,
+            "__ret_ptr",
+            TypeTable::I32,
+        ))));
+        TypeTable::I32
     } else {
-        body_stmts.push(return_stmt(Some(call_user)));
-        user_return_type
+        let mut next_local = param_count;
+        let result_local = alloc_local(&mut next_local, &mut locals, user_return_type);
+        body_stmts.push(let_stmt(
+            "__result",
+            result_local,
+            user_return_type,
+            call_user,
+        ));
+        let flat = synthesize_lower_to_flat(
+            local_ref(result_local, "__result", user_return_type),
+            user_return_type,
+            &mut next_local,
+            &mut body_stmts,
+            &mut locals,
+            tir_modules,
+            lift_ctx,
+        );
+        match flat.first() {
+            None => TypeTable::UNIT,
+            Some(f) => {
+                let tid = cm_val_type_to_type_id(f.cm_type);
+                body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
+                tid
+            }
+        }
     };
 
     let body = block(body_stmts);

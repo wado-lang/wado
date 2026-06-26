@@ -1,14 +1,17 @@
-//! CM type catalog: one `identity` export per Component Model value type.
+//! CM value-type catalog as a fixture: one `identity` export per Component
+//! Model value type, each returning its argument unchanged.
 //!
-//! Each function returns its argument unchanged, so the export exercises both
-//! lowering (the parameter) and lifting (the result) for that exact type. The
-//! function name encodes the type so the generated WIT is a self-describing
-//! enumeration of the value-type ABI surface.
+//! Two harnesses consume this file:
 //!
-//! Scope: value types only. Async (`future`/`stream`) and handles
-//! (`own`/`borrow` of resources) are intentionally omitted — identity is not
-//! meaningful for a single-use future or a non-duplicable handle, and they get
-//! their own catalog once their boundary semantics are settled.
+//! - `e2e.rs` discovers it as a `test`-world fixture (the empty `test` block
+//!   below). That run only confirms a library-shaped source — `export fn`s plus
+//!   a `test` block — compiles and instantiates under the test world; the
+//!   `export fn`s are dropped in the test world, so it does not exercise
+//!   lift/lower.
+//! - `cm_catalog.rs` compiles this same source as a `--lib` (library world) and
+//!   round-trips a crafted Component Model value through each `id_*` export,
+//!   asserting `lift(lower(x)) == x`. That is the lift/lower binding test for
+//!   value types outside any WASI world.
 
 // --- Named types referenced by the identity exports below ---
 
@@ -39,7 +42,7 @@ pub type Meters = f64;
 
 // A variant whose cases flatten to the same slot size but different core
 // classes (`u32`→i32 vs `f32`→f32). The CM flat-ABI join widens the shared
-// slot to one class, so the other case's payload is bit-reinterpreted.
+// slot to one class, so the other case's payload must be bit-reinterpreted.
 pub variant Mixed {
     AsInt(u32),
     AsFloat(f32),
@@ -143,7 +146,7 @@ export fn id_mixed(v: Mixed) -> Mixed {
     return v;
 }
 // `result` whose Ok/Err arms flatten to the same slot size but different core
-// classes (`f32` vs `u32`); exercises the join reinterpret on the Ok arm.
+// classes (`f32` vs `u32`); exercises the join reinterpret on the Err arm.
 export fn id_result_fu(v: Result<f32, u32>) -> Result<f32, u32> {
     return v;
 }
@@ -189,3 +192,12 @@ export fn id_tuple_list(v: [List<String>, u32]) -> [List<String>, u32] {
 export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
     return v;
 }
+
+// The empty test block makes `e2e.rs` accept this as a test-world fixture: it
+// confirms a library-shaped source compiles and instantiates under the test
+// world. The lift/lower round-trip lives in `cm_catalog.rs`.
+test "library shape compiles under the test world" {
+}
+
+__DATA__
+{"test": {}}

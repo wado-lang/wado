@@ -117,9 +117,15 @@ interface stdout {
 
 interface geometry {
     record point { x: s32, y: s32 }
-    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+    distance: func(p1: point, p2: point) -> f64;
 }
 ```
+
+A `&T` over a value type (here `&Point`) is transparent at the CM boundary:
+Wado value semantics copy the argument, so it maps to the bare value type
+(`point`), not `borrow<point>`. `borrow<T>` / `own<T>` are reserved for
+resources — a value-type record/variant/enum/flags can never be borrowed. See
+[Reference → CM mapping](#reference--cm-mapping).
 
 ### Default Interface (Implicit Grouping)
 
@@ -136,7 +142,7 @@ export fn origin() -> Point { ... }
 // Generated WIT — default interface named "geometry"
 interface geometry {
     record point { x: s32, y: s32 }
-    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+    distance: func(p1: point, p2: point) -> f64;
     origin: func() -> point;
 }
 
@@ -145,7 +151,13 @@ world geometry {
 }
 ```
 
-When only functions are exported (no types), they become direct world exports instead of forming an interface, since CM allows this and it is more idiomatic:
+The world and the default interface both derive from `[package].name`, so a
+single-interface package produces `world geometry { export geometry; }`. WIT
+keeps worlds and interfaces in separate namespaces, so the shared name is valid
+and unambiguous — it is the common single-package shape (e.g. as produced by
+`cargo-component`). It reads slightly redundant but needs no disambiguation.
+
+When only functions are exported (no referenced user types), they become direct world exports instead of forming an interface:
 
 ```wado
 export fn run() { ... }
@@ -159,7 +171,25 @@ world my-app {
 
 This also applies to world-conformance entry points like `export fn run()` (wasi:cli/command) and `export fn handle(...)` (wasi:http/service), which are always direct world exports regardless of other exports.
 
-### Explicit Interface (Fine-Grained Control)
+### Why named types force an interface
+
+The split is not "CM forbids direct exports with types" — a world can define
+types locally (a `world` item can be a type definition) and export functions
+that reference them. The real reason is reuse: a world's export list admits
+only functions and interfaces, never a bare type, so a named type can be
+surfaced to consumers as a reusable, `use`-able entity **only through an
+exported interface**. A type defined directly in a world is world-local and
+invisible to other components.
+
+So the rule follows the reusability goal, not a representation limit:
+
+- Functions are always directly exportable; their parameter/result types can
+  be inline-structural (`list`, `tuple`, `option`, `result`, anonymous record
+  shapes).
+- Any export that references a **named** user type (`struct` / `variant` /
+  `enum` / `flags` / type alias) is grouped into the default interface so the
+  type is exported as a named, reusable definition. Keeping it as a world-local
+  type would make it uncallable-by-name from other components.
 
 When a component needs to export multiple interfaces, or when the default grouping is not sufficient, use explicit `interface` blocks. The block **lists names** of items defined elsewhere — it does not contain definitions:
 
@@ -187,13 +217,13 @@ export interface Colors {
 ```wit
 interface geometry {
     record point { x: s32, y: s32 }
-    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+    distance: func(p1: point, p2: point) -> f64;
     origin: func() -> point;
 }
 
 interface colors {
     record color { r: u8, g: u8, b: u8 }
-    blend: func(a: borrow<color>, b: borrow<color>) -> color;
+    blend: func(a: color, b: color) -> color;
 }
 
 world my-app {
@@ -233,7 +263,7 @@ world my-app {
 
 interface geometry {
     record point { x: s32, y: s32 }
-    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+    distance: func(p1: point, p2: point) -> f64;
 }
 ```
 
@@ -300,6 +330,41 @@ export interface Geometry {
 
 This avoids forcing developers to manually list every type dependency.
 
+### Shared Types Across Interfaces
+
+A named type referenced by two exported interfaces must remain **one** type, or
+consumers see two structurally-equal but distinct WIT types and lose type
+identity across the boundary. WIT models this with `use`: the type is defined in
+exactly one owning interface, and every other interface references it via `use
+owner.{T}`.
+
+```wado
+struct Point { x: i32, y: i32 }
+fn origin() -> Point { ... }
+fn translate(p: Point, dx: i32, dy: i32) -> Point { ... }
+
+export interface Geometry { origin }      // owns Point (first referencer)
+export interface Transforms { translate } // borrows it
+```
+
+```wit
+interface geometry {
+    record point { x: s32, y: s32 }
+    origin: func() -> point;
+}
+
+interface transforms {
+    use geometry.{point};
+    translate: func(p: point, dx: s32, dy: s32) -> point;
+}
+```
+
+The owning interface is chosen deterministically (first referencer in
+module-then-declaration order). Transitive inclusion defines the type once in
+the owner; later interfaces emit a `use` instead of a second definition. The
+same applies to the implicit default interface when it coexists with explicit
+ones.
+
 ## WIT to Wado Type Mapping
 
 ### Primitive Types
@@ -324,14 +389,35 @@ This avoids forcing developers to manually list every type dependency.
 
 ### User-Defined Types
 
-| WIT          | Wado       | Notes                                     |
-| ------------ | ---------- | ----------------------------------------- |
-| `record`     | `struct`   | Named fields                              |
-| `variant`    | `variant`  | Tagged union with payloads                |
-| `enum`       | `enum`     | Discriminated values without payloads     |
-| `flags`      | `flags`    | Bitfield (parsed but not yet implemented) |
-| `resource`   | `resource` | Handle type (not yet implemented)         |
-| `type alias` | `type`     | Type synonym                              |
+| WIT          | Wado       | Notes                                 |
+| ------------ | ---------- | ------------------------------------- |
+| `record`     | `struct`   | Named fields                          |
+| `variant`    | `variant`  | Tagged union with payloads            |
+| `enum`       | `enum`     | Discriminated values without payloads |
+| `flags`      | `flags`    | Bitfield                              |
+| `resource`   | `resource` | Handle type                           |
+| `type alias` | `type`     | Type synonym                          |
+
+The producer side (`wado wit`) emits all of these, including `flags` and the
+reconstruction of `resource` interfaces (methods, constructors, statics, and
+`borrow` of `self`). Consuming an external resource from a `.wasm`/`.wit` the
+compiler has never seen is the open item tracked in
+[WIT Interoperability](./wep-2026-05-02-wit-interoperability.md).
+
+### Reference → CM mapping
+
+Wado references (`&T`, `&mut T`) have no value-type equivalent in the Component
+Model, because Wado values are copied across the boundary:
+
+| Wado                    | WIT                | Notes                                   |
+| ----------------------- | ------------------ | --------------------------------------- |
+| `&Resource`             | `borrow<resource>` | A non-owning resource handle            |
+| `Resource` (owned)      | `own<resource>`    | Ownership transfers across the boundary |
+| `&T` / `&mut T` (value) | `T`                | Transparent; the value type is copied   |
+
+Only resources have `borrow`/`own`. A `&` over a value type
+(record/variant/enum/flags/primitive/container) is peeled and the bare value
+type is emitted.
 
 ### Functions
 

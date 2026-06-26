@@ -256,6 +256,43 @@ pub fn layout_option_with_registry_scoped(
     }
 }
 
+/// Registry-aware layout for a tuple (positional elements).
+pub fn layout_tuple_with_registry(
+    elements: &[Type],
+    registry: &crate::component_model::CmInterfaceRegistry,
+) -> CmLayout {
+    layout_tuple_with_registry_scoped(elements, registry, None)
+}
+
+/// Package-scoped registry-aware layout for a tuple. Unlike [`layout_tuple`],
+/// element sizes/alignments are resolved through the registry, so a tuple
+/// carrying a named record/variant/newtype lays out at the correct offsets.
+pub fn layout_tuple_with_registry_scoped(
+    elements: &[Type],
+    registry: &crate::component_model::CmInterfaceRegistry,
+    wasi_package: Option<&str>,
+) -> CmLayout {
+    let mut offset: u32 = 0;
+    let mut max_align: u32 = 1;
+    let mut offsets = Vec::with_capacity(elements.len());
+    for ty in elements {
+        let field_align =
+            crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package);
+        let field_size =
+            crate::component_model::cm_size_with_registry_scoped(ty, registry, wasi_package);
+        offset = align_to(offset, field_align);
+        offsets.push(offset);
+        offset += field_size;
+        max_align = max_align.max(field_align);
+    }
+    let size = align_to(offset, max_align);
+    CmLayout {
+        size,
+        align: max_align,
+        offsets,
+    }
+}
+
 /// Registry-aware layout for result<T, E>.
 pub fn layout_result_with_registry(
     ok: &Type,
@@ -304,19 +341,18 @@ pub enum CmValType {
 }
 
 impl CmValType {
-    /// Join two value types for union flattening (Canonical ABI `join` operation).
-    /// When one side is absent, uses the other. When both present, picks the larger type.
+    /// Join two value types for variant union flattening, per the Canonical ABI
+    /// `join` operation: equal types stay; `{i32, f32}` (either order) widens to
+    /// `i32`; any other mismatch widens to `i64`. This is order-independent —
+    /// picking the "larger" type is wrong, e.g. `join(f32, i32)` must be `i32`,
+    /// not `f32`.
     pub fn join(a: Option<Self>, b: Option<Self>) -> Self {
         match (a, b) {
             (Some(a), None) | (None, Some(a)) => a,
             (None, None) => Self::I32,
-            (Some(a), Some(b)) => {
-                if a.size() >= b.size() {
-                    a
-                } else {
-                    b
-                }
-            }
+            (Some(a), Some(b)) if a == b => a,
+            (Some(a), Some(b)) if a.size() == 4 && b.size() == 4 => Self::I32,
+            (Some(_), Some(_)) => Self::I64,
         }
     }
 
@@ -478,6 +514,23 @@ pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_canonical_join() {
+        use CmValType::*;
+        assert_eq!(CmValType::join(Some(I32), Some(I32)), I32);
+        assert_eq!(CmValType::join(Some(F64), Some(F64)), F64);
+        // {i32, f32} widens to i32 — order-independent (the bug was f32-first).
+        assert_eq!(CmValType::join(Some(I32), Some(F32)), I32);
+        assert_eq!(CmValType::join(Some(F32), Some(I32)), I32);
+        assert_eq!(CmValType::join(Some(I64), Some(F64)), I64);
+        assert_eq!(CmValType::join(Some(F64), Some(I64)), I64);
+        assert_eq!(CmValType::join(Some(I32), Some(I64)), I64);
+        assert_eq!(CmValType::join(Some(F64), Some(I32)), I64);
+        assert_eq!(CmValType::join(Some(F32), None), F32);
+        assert_eq!(CmValType::join(None, Some(I64)), I64);
+        assert_eq!(CmValType::join(None, None), I32);
+    }
 
     #[test]
     fn test_primitive_sizes() {

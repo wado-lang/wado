@@ -70,9 +70,9 @@ pub struct NirPackage {
     /// Module name for the output (derived from filename)
     pub module_name: String,
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub cm_interface_registry: &'static CmInterfaceRegistry,
+    pub cm_interface_registry: std::sync::Arc<CmInterfaceRegistry>,
     /// Registry of world definitions from lib/wasi/*.wado
-    pub world_registry: &'static WorldRegistry,
+    pub world_registry: std::sync::Arc<WorldRegistry>,
 
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,

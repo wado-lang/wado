@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{ResolvedType, TirFunction, TirModule, TypeTable};
+use crate::tir::{ResolvedType, TirFunction, TirModule, TypeId, TypeTable};
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
@@ -128,7 +128,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 collect_effect_calls_in_block(
                     body,
                     &mut seen_effects,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                 );
             }
         }
@@ -166,7 +166,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                 .unwrap_or_else(|| project.interner.borrow_mut().wasi(&func_info.package));
                 let produced = synthesize_adapter(
                     &func_info,
-                    project.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &entry_type_table,
                     &project.interner,
                     &owner_module,
@@ -198,7 +198,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         body,
                         &adapters,
                         &entry_source,
-                        project.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &entry_type_table,
                     );
                 }
@@ -302,6 +302,30 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                         }
                     }
 
+                    // Reject any param/return type with no Component Model value
+                    // representation in any world (empty records, 128-bit/v128
+                    // scalars) with a proper compile error rather than emitting
+                    // an invalid component or panicking in codegen. Handle/async
+                    // types pass — they lower to i32 handles in every world — so
+                    // this needs no `--lib`-vs-WASI branch.
+                    {
+                        let user_func = user_func_rc.borrow();
+                        let tt = entry_type_table.borrow();
+                        let mut to_check: Vec<TypeId> =
+                            user_func.params.iter().map(|p| p.type_id).collect();
+                        to_check.push(user_func.return_type);
+                        for tid in to_check {
+                            if let Err(reason) = types::check_cm_boundary_representable(
+                                tid,
+                                &tt,
+                                &project.tir_modules,
+                                &mut Vec::new(),
+                            ) {
+                                return Err(format!("export function `{}`: {reason}", export.name));
+                            }
+                        }
+                    }
+
                     // Validate return-type compatibility with the world. The
                     // dispatch below routes a `Result<_, _>`-returning world
                     // export to dedicated adapters for the async, Result, and
@@ -373,7 +397,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             );
@@ -385,7 +409,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.cm_interface_registry,
+                            &project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -400,7 +424,8 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                             &project.tir_modules,
                             &entry_type_table,
                             &export.params,
-                            project.cm_interface_registry,
+                            export.return_type.as_ref(),
+                            &project.cm_interface_registry,
                             &binding_cm_package,
                             &project.interner,
                         )
@@ -437,7 +462,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
-                                project.cm_interface_registry,
+                                &project.cm_interface_registry,
                                 &binding_cm_package,
                                 &project.interner,
                             )
@@ -467,7 +492,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
                                     &project.tir_modules,
                                     &entry_type_table,
                                     &export.params,
-                                    project.cm_interface_registry,
+                                    &project.cm_interface_registry,
                                     &binding_cm_package,
                                     &project.interner,
                                 )
@@ -787,11 +812,11 @@ mod tests {
     fn flatten_param_newtype_u64() {
         let (reg, _) = CmInterfaceRegistry::build_from_stdlib();
         assert_eq!(
-            flatten_param_type(&named_type("Duration"), reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&named_type("Duration"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
         assert_eq!(
-            flatten_param_type(&named_type("Mark"), reg, &CmStdlibNames::for_tests()),
+            flatten_param_type(&named_type("Mark"), &reg, &CmStdlibNames::for_tests()),
             vec![TypeTable::I64]
         );
     }
@@ -1045,7 +1070,7 @@ mod tests {
         let elem_ty = named_type("IpAddress");
         let expected_size = u64::from(crate::component_model::cm_size_with_registry_scoped(
             &elem_ty,
-            registry,
+            &registry,
             Some("sockets"),
         ));
         // Sanity: registry-derived size differs from the 4-byte fallback.
@@ -1056,7 +1081,7 @@ mod tests {
         let type_table = std::cell::RefCell::new(tt);
         let interner = std::cell::RefCell::new(ModuleSourceInterner::new());
         let ctx = LiftContext {
-            cm_interface_registry: registry,
+            cm_interface_registry: &registry,
             type_table: &type_table,
             cm_package: "sockets",
             interner: &interner,

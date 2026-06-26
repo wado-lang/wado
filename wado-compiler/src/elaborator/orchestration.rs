@@ -81,7 +81,7 @@ pub(crate) struct AnnotateState {
     /// the driver state respects the `TypeSystem` membership rule
     /// ("would this fit the type system itself?" — see
     /// [`super::tysys`] module docs).
-    pub(crate) world_registry: &'static WorldRegistry,
+    pub(crate) world_registry: std::sync::Arc<WorldRegistry>,
     /// Topological order of modules; the per-module body walk in
     /// [`Elaborator::build_tir_from_state`] visits sources in this order
     /// so a `TirModule`'s position in the result map matches the

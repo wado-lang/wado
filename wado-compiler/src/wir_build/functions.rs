@@ -104,7 +104,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 /// the core module imports them from the "wasi" namespace.
 /// Uses `flatten_cm_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
-    let cm_interface_registry = ctx.package.cm_interface_registry;
+    let cm_interface_registry = &ctx.package.cm_interface_registry;
 
     for interface_info in cm_interface_registry.interfaces() {
         for func in &interface_info.functions {

@@ -24,7 +24,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LiftContext, binary_add, canonical_wasi_package, cm_flags_byte_size, cm_type_to_type_id,
-    is_unit_type, kebab_to_pascal, module_source_for_cm_interface,
+    is_unit_type, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -348,9 +348,10 @@ fn try_lift_wasi_struct(
     // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
-        let mut tt = ctx.type_table.borrow_mut();
-        let module_source = module_source_for_cm_interface(&mut ctx.interner.borrow_mut(), source);
-        tt.make_struct(named.name.clone(), module_source)
+        let module_source = ctx.module_source_for(source);
+        ctx.type_table
+            .borrow_mut()
+            .make_struct(named.name.clone(), module_source)
     };
 
     // Lift each field — Wado field names come directly from this interface's
@@ -630,8 +631,10 @@ fn synthesize_lift_list(
     // These are needed by the monomorphizer to instantiate List::with_capacity and .push().
     let (elem_type_id, array_type_id, list_struct_name) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_tid =
-            cm_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        // `cm_type_id` resolves a lib-local record/variant element to its
+        // registered GC TypeId (not the i32 fallback), so the monomorphized
+        // `List<ElemType>::push` accepts the lifted ref.
+        let elem_tid = ctx.cm_type_id(elem_ty, &mut tt);
         let list_tid = tt.make_list(elem_tid);
         let list_name = tt
             .compiler_struct_name(crate::compiler_item::CompilerItem::List)
@@ -736,6 +739,7 @@ fn synthesize_lift_list(
         elem_ty,
         local_ref(elem_addr_local, "__elem_addr", TypeTable::I32),
         &string_name_for_free(ctx),
+        ctx,
     ));
 
     // __i = __i + 1
@@ -845,6 +849,7 @@ fn synthesize_lift_option_inner(
         inner_ty,
         payload_addr,
         &string_name_for_free(ctx),
+        ctx,
     ));
 
     stmts.push(if_stmt(
@@ -1006,7 +1011,11 @@ fn synthesize_lift_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_tuple(elems);
+    let layout = cm_abi::layout_tuple_with_registry_scoped(
+        elems,
+        ctx.cm_interface_registry,
+        Some(ctx.cm_package),
+    );
     let mut elem_exprs = Vec::new();
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
@@ -1018,10 +1027,7 @@ fn synthesize_lift_tuple(
     }
     let tuple_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_type_ids: Vec<TypeId> = elems
-            .iter()
-            .map(|t| cm_type_to_type_id(t, &mut tt, ctx.cm_interface_registry, ctx.cm_package))
-            .collect();
+        let elem_type_ids: Vec<TypeId> = elems.iter().map(|t| ctx.cm_type_id(t, &mut tt)).collect();
         tt.make_tuple(elem_type_ids)
     };
     // CM lift bindings synthesise tuple values that flow across the
@@ -1056,7 +1062,12 @@ fn string_name_for_free(ctx: &LiftContext<'_>) -> String {
         .to_string()
 }
 
-fn synthesize_free_element(ty: &Type, addr: TirExpr, string_name: &str) -> Vec<TirStmt> {
+fn synthesize_free_element(
+    ty: &Type,
+    addr: TirExpr,
+    string_name: &str,
+    ctx: &LiftContext<'_>,
+) -> Vec<TirStmt> {
     match ty {
         Type::Named(named) if named.name == string_name => {
             let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
@@ -1072,11 +1083,22 @@ fn synthesize_free_element(ty: &Type, addr: TirExpr, string_name: &str) -> Vec<T
             ))]
         }
         Type::Tuple(elems) if !elems.is_empty() => {
-            let layout = cm_abi::layout_tuple(elems);
+            // Registry-aware offsets so a String following a named element
+            // (e.g. `[Point, String]`) is freed at its true offset.
+            let layout = cm_abi::layout_tuple_with_registry_scoped(
+                elems,
+                ctx.cm_interface_registry,
+                Some(ctx.cm_package),
+            );
             let mut free_stmts = Vec::new();
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
-                free_stmts.extend(synthesize_free_element(elem_ty, elem_addr, string_name));
+                free_stmts.extend(synthesize_free_element(
+                    elem_ty,
+                    elem_addr,
+                    string_name,
+                    ctx,
+                ));
             }
             free_stmts
         }

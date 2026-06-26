@@ -12,6 +12,7 @@ use wasm_encoder::ValType;
 
 use crate::ast::{Attribute, CmImport, GenericType, Type};
 use crate::module_source::ModuleSource;
+use crate::name::to_kebab;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{CmFuturePayload, CmScalarType};
 
@@ -424,6 +425,15 @@ pub struct CmInterfaceRegistry {
     /// Fields: Vec<(`cm_field_name`, `field_type`)>
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
+
+    /// `--lib` interface FQ -> the entry `ModuleSource` whose decls were
+    /// registered under it. Records the provenance of library-local types so
+    /// consumers resolve a CM interface to its Wado `ModuleSource` (and
+    /// recognise it as lib-local) via [`Self::lib_module_source_of`] — without
+    /// sniffing `wasi:`/`core:` prefixes off the FQ. WASI/core interfaces are
+    /// absent here; their `ModuleSource` is derived from the FQ by the canonical
+    /// naming convention (`module_source_for_cm_interface`).
+    lib_interface_sources: IndexMap<String, ModuleSource>,
 }
 
 /// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
@@ -958,13 +968,27 @@ impl CmInterfaceRegistry {
     ///
     /// Parses the embedded wasi:* modules and registers their interface methods.
     /// Also collects newtypes and world definitions.
-    pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
-        use std::sync::OnceLock;
+    /// The stdlib registries, shared via `Arc`. Built once (the parse + register
+    /// bootstrap is expensive) and handed out as cheap `Arc` clones. A `--lib`
+    /// compile augments its own clone with the package's local types via
+    /// `Arc::make_mut`, so the shared stdlib copy is never mutated.
+    pub fn build_from_stdlib() -> (
+        std::sync::Arc<Self>,
+        std::sync::Arc<crate::world_registry::WorldRegistry>,
+    ) {
+        use std::sync::{Arc, OnceLock};
 
-        static INSTANCE: OnceLock<(CmInterfaceRegistry, crate::world_registry::WorldRegistry)> =
-            OnceLock::new();
+        static INSTANCE: OnceLock<(
+            Arc<CmInterfaceRegistry>,
+            Arc<crate::world_registry::WorldRegistry>,
+        )> = OnceLock::new();
 
-        INSTANCE.get_or_init(Self::build_from_stdlib_inner)
+        INSTANCE
+            .get_or_init(|| {
+                let (cm, world) = Self::build_from_stdlib_inner();
+                (Arc::new(cm), Arc::new(world))
+            })
+            .clone()
     }
 
     fn build_from_stdlib_inner() -> (Self, crate::world_registry::WorldRegistry) {
@@ -1285,6 +1309,103 @@ impl CmInterfaceRegistry {
         }
     }
 
+    /// Register a `--lib` entry module's own named types under the synthesized
+    /// default-interface FQ.
+    ///
+    /// Unlike [`Self::register_module_decls`], library types carry no
+    /// `#[cm(...)]` attribute — they are the package's own declarations, not WIT
+    /// bindings — so CM names are derived by kebab-casing the Wado identifiers
+    /// and the source interface is the library's default-interface FQ. After
+    /// this runs, both the export type plan (`resolve_cm_export_type`) and the
+    /// CM type emitter (`ast_type_to_cm`) resolve these types through the
+    /// registry exactly like WASI types, with no library-specific path.
+    pub fn register_lib_local_decls(
+        &mut self,
+        module: &crate::ast::Module,
+        iface_fq: &str,
+        entry_source: ModuleSource,
+    ) {
+        use crate::ast::Item;
+
+        // Record the FQ -> entry ModuleSource so consumers resolve lib-local
+        // types' module source (and detect lib-local provenance) without
+        // prefix-sniffing the FQ.
+        self.lib_interface_sources
+            .insert(iface_fq.to_string(), entry_source);
+
+        for item in &module.items {
+            match item {
+                Item::Newtype(alias) => register_unique(
+                    &mut self.newtypes,
+                    "newtype",
+                    iface_fq.to_string(),
+                    alias.name.clone(),
+                    alias.ty.clone(),
+                ),
+                Item::Struct(struct_def) => {
+                    let fields: Vec<(String, Type)> = struct_def
+                        .fields
+                        .iter()
+                        .map(|f| (to_kebab(&f.name), f.ty.clone()))
+                        .collect();
+                    let wado_fields: Vec<(String, String, Type)> = struct_def
+                        .fields
+                        .iter()
+                        .map(|f| (f.name.clone(), to_kebab(&f.name), f.ty.clone()))
+                        .collect();
+                    register_unique(
+                        &mut self.structs,
+                        "struct",
+                        iface_fq.to_string(),
+                        struct_def.name.clone(),
+                        (to_kebab(&struct_def.name), fields, wado_fields),
+                    );
+                }
+                Item::Flags(flags_def) => {
+                    let members: Vec<String> =
+                        flags_def.flags.iter().map(|m| to_kebab(&m.name)).collect();
+                    register_unique(
+                        &mut self.flags,
+                        "flags",
+                        iface_fq.to_string(),
+                        flags_def.name.clone(),
+                        (to_kebab(&flags_def.name), members),
+                    );
+                }
+                Item::Enum(enum_def) => {
+                    let variants: Vec<String> =
+                        enum_def.cases.iter().map(|c| to_kebab(&c.name)).collect();
+                    register_unique(
+                        &mut self.enums,
+                        "enum",
+                        iface_fq.to_string(),
+                        enum_def.name.clone(),
+                        (to_kebab(&enum_def.name), variants),
+                    );
+                }
+                Item::Variant(variant_def) => {
+                    let cases: Vec<CmVariantCase> = variant_def
+                        .cases
+                        .iter()
+                        .map(|c| CmVariantCase {
+                            cm_name: to_kebab(&c.name),
+                            wado_name: c.name.clone(),
+                            payload: c.payload.clone(),
+                        })
+                        .collect();
+                    register_unique(
+                        &mut self.variants,
+                        "variant",
+                        iface_fq.to_string(),
+                        variant_def.name.clone(),
+                        (to_kebab(&variant_def.name), cases),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Register world declarations from a WASI module. `interface_decls`
     /// must already contain every `pub interface Foo` known to the
     /// compilation, so that interface exports (`export Foo;`) and interface
@@ -1542,6 +1663,14 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_wasi_flags_source(&named.name))
     }
 
+    /// The entry `ModuleSource` a `--lib` interface FQ was registered under, or
+    /// `None` for a WASI/core interface (or an unknown FQ). A `Some` result also
+    /// identifies the FQ as lib-local, replacing `!fq.starts_with("wasi:"/"core:")`
+    /// prefix checks at consumer sites.
+    pub fn lib_module_source_of(&self, iface_fq: &str) -> Option<&ModuleSource> {
+        self.lib_interface_sources.get(iface_fq)
+    }
+
     /// Resolve a named type to its source interface across all CM namespaces
     /// (`wasi:*` and `core:kiln/*`). The Kiln-specific lookup is only
     /// consulted when the WASI lookup misses, preserving the strict
@@ -1564,6 +1693,14 @@ impl CmInterfaceRegistry {
         self.find_kiln_struct_source(&named.name)
             .or_else(|| self.find_kiln_variant_source(&named.name))
             .or_else(|| self.find_kiln_enum_source(&named.name))
+            // Lib-local types (`wado compile --lib`) are registered by name
+            // under the package's default-interface FQ (neither `wasi:` nor
+            // `core:`), so the prefix-scoped lookups above miss them. A bare
+            // by-name scan resolves them when the name is unambiguous.
+            .or_else(|| find_unique_source_in(&self.structs, &named.name))
+            .or_else(|| find_unique_source_in(&self.variants, &named.name))
+            .or_else(|| find_unique_source_in(&self.enums, &named.name))
+            .or_else(|| find_unique_source_in(&self.flags, &named.name))
     }
 
     /// Resolve a named type to a source interface within `namespace_prefix`
@@ -2224,7 +2361,95 @@ impl CmInterfaceRegistry {
     }
 }
 
-use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds};
+use wasm_encoder::{
+    ComponentTypeRef, ComponentValType, InstanceType, PrimitiveValType, TypeBounds,
+};
+
+/// One Component Model defined-type shape, with its inner value types already
+/// resolved. The [`CmTypeGen`] engine builds these and hands them to a
+/// [`CmTypeSink`], which decides where they land.
+pub enum CmDefined<'a> {
+    Record(&'a [(&'a str, ComponentValType)]),
+    Variant(&'a [(&'a str, Option<ComponentValType>)]),
+    Enum(&'a [&'a str]),
+    Flags(&'a [&'a str]),
+    List(ComponentValType),
+    Tuple(&'a [ComponentValType]),
+    Option(ComponentValType),
+    Result {
+        ok: Option<ComponentValType>,
+        err: Option<ComponentValType>,
+    },
+    Own(u32),
+    Borrow(u32),
+    Future(Option<ComponentValType>),
+    Stream(Option<ComponentValType>),
+}
+
+/// Emission target for the CM type engine. Decouples *what* type to build (the
+/// engine's registry-driven recursion) from *where* it lands: an interface
+/// [`InstanceType`] (WASI imports, exported interface types) via [`InstanceSink`],
+/// or the component's top-level type space (bare `--lib` world exports) via the
+/// codegen-side `TopLevelSink`. Object-safe so the engine holds `&mut dyn`.
+pub trait CmTypeSink {
+    /// Emit one defined type and return its index in this sink's type space.
+    fn define(&mut self, defined: CmDefined<'_>) -> u32;
+    /// Make defined type `idx` a named CM type `cm_name`; return the index to
+    /// reference it by afterwards (an instance alias index, or `idx` itself for
+    /// the top-level sink).
+    fn name(&mut self, cm_name: &str, idx: u32) -> u32;
+}
+
+/// [`CmTypeSink`] that emits into an interface [`InstanceType`], sharing the
+/// caller's type-index counter so the engine and any direct emissions stay in
+/// lockstep. Reproduces the historical `CmInstanceTypeGen` behavior exactly.
+pub struct InstanceSink<'a> {
+    pub it: &'a mut InstanceType,
+    pub next_idx: &'a mut u32,
+}
+
+impl InstanceSink<'_> {
+    fn alloc(&mut self) -> u32 {
+        let idx = *self.next_idx;
+        *self.next_idx += 1;
+        idx
+    }
+}
+
+impl CmTypeSink for InstanceSink<'_> {
+    fn define(&mut self, defined: CmDefined<'_>) -> u32 {
+        emit_cm_defined(self.it.ty().defined_type(), defined);
+        self.alloc()
+    }
+
+    fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
+        self.it
+            .export(cm_name, ComponentTypeRef::Type(TypeBounds::Eq(idx)));
+        self.alloc()
+    }
+}
+
+/// Write one [`CmDefined`] shape into a defined-type encoder. Shared by every
+/// [`CmTypeSink`] so the shape → wasm-encoder mapping lives in one place.
+pub(crate) fn emit_cm_defined(
+    enc: wasm_encoder::ComponentDefinedTypeEncoder<'_>,
+    defined: CmDefined<'_>,
+) {
+    match defined {
+        CmDefined::Record(fields) => enc.record(fields.iter().copied()),
+        CmDefined::Variant(cases) => enc.variant(cases.iter().copied()),
+        CmDefined::Enum(names) => enc.enum_type(names.iter().copied()),
+        CmDefined::Flags(names) => enc.flags(names.iter().copied()),
+        CmDefined::List(elem) => enc.list(elem),
+        CmDefined::Tuple(elems) => enc.tuple(elems.iter().copied()),
+        CmDefined::Option(inner) => enc.option(inner),
+        CmDefined::Result { ok, err } => enc.result(ok, err),
+        CmDefined::Own(resource) => enc.own(resource),
+        CmDefined::Borrow(resource) => enc.borrow(resource),
+        CmDefined::Future(payload) => enc.future(payload),
+        CmDefined::Stream(payload) => enc.stream(payload),
+    }
+}
 
 /// Map a Wado primitive type name to its Component Model [`PrimitiveValType`].
 ///
@@ -2252,13 +2477,15 @@ pub fn wado_primitive_name_to_cm(name: &str) -> Option<PrimitiveValType> {
     Some(prim)
 }
 
-/// Helper for generating CM types within an [`InstanceType`] from registry metadata.
+/// Registry-driven recursive builder for Component Model types.
 ///
-/// Tracks type indices and deduplicates types (borrow, list, result, etc.)
-/// within a single instance type definition. Used by codegen to replace
-/// hardcoded type indices with metadata-driven generation.
-pub struct CmInstanceTypeGen {
-    next_idx: u32,
+/// Given a Wado [`Type`] and the [`CmInterfaceRegistry`], it walks the type,
+/// resolves named types to their CM metadata, and emits the corresponding CM
+/// defined types through a [`CmTypeSink`] — an [`InstanceSink`] for interface
+/// instance types, or the codegen top-level sink for bare world exports. It
+/// owns only the dedup cache and the disambiguation hint; type-index allocation
+/// lives in the sink, so one engine serves both targets.
+pub struct CmTypeGen {
     cache: IndexMap<String, u32>,
     /// Optional interface path hint for disambiguating types with the same name
     /// across different WASI interfaces (e.g., "wasi:http/types@..." to select
@@ -2266,19 +2493,23 @@ pub struct CmInstanceTypeGen {
     interface_hint: Option<String>,
 }
 
-impl CmInstanceTypeGen {
-    pub fn new(start_idx: u32) -> Self {
+impl Default for CmTypeGen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CmTypeGen {
+    pub fn new() -> Self {
         Self {
-            next_idx: start_idx,
             cache: IndexMap::default(),
             interface_hint: None,
         }
     }
 
     /// Create a new generator with an interface hint for type disambiguation.
-    pub fn with_interface_hint(start_idx: u32, interface_hint: &str) -> Self {
+    pub fn with_interface_hint(interface_hint: &str) -> Self {
         Self {
-            next_idx: start_idx,
             cache: IndexMap::default(),
             interface_hint: Some(interface_hint.to_string()),
         }
@@ -2287,22 +2518,6 @@ impl CmInstanceTypeGen {
     /// Register a pre-existing type index for cache lookups
     pub fn register_existing(&mut self, key: &str, idx: u32) {
         self.cache.insert(key.to_string(), idx);
-    }
-
-    pub fn alloc_idx(&mut self) -> u32 {
-        let idx = self.next_idx;
-        self.next_idx += 1;
-        idx
-    }
-
-    /// Returns the next type index that will be allocated.
-    pub fn next_idx(&self) -> u32 {
-        self.next_idx
-    }
-
-    /// Update the next type index (when external code has allocated indices in between calls).
-    pub fn set_next_idx(&mut self, idx: u32) {
-        self.next_idx = idx;
     }
 
     /// Compute a stable cache key for an AST type (ignoring spans)
@@ -2328,7 +2543,7 @@ impl CmInstanceTypeGen {
     /// Handles payload types recursively via `ast_type_to_cm`.
     fn define_variant(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         cm_name: &str,
         cases: &[CmVariantCase],
         cm_interface_registry: &CmInterfaceRegistry,
@@ -2345,12 +2560,7 @@ impl CmInstanceTypeGen {
             .map(|case| {
                 case.payload.as_ref().map(|ty| {
                     let resolved = cm_interface_registry.resolve_type(ty);
-                    self.ast_type_to_cm(
-                        &resolved,
-                        instance_type,
-                        cm_interface_registry,
-                        resource_exports,
-                    )
+                    self.ast_type_to_cm(sink, &resolved, cm_interface_registry, resource_exports)
                 })
             })
             .collect();
@@ -2360,15 +2570,9 @@ impl CmInstanceTypeGen {
             .zip(payload_cm_types.iter())
             .map(|(case, payload_cm)| (case.cm_name.as_str(), *payload_cm))
             .collect();
-        instance_type.ty().defined_type().variant(variant_cases);
-        let variant_idx = self.alloc_idx();
-
+        let variant_idx = sink.define(CmDefined::Variant(&variant_cases));
         // Export to make it "named" (required by CM spec for records/variants)
-        instance_type.export(
-            cm_name,
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
-        );
-        let export_idx = self.alloc_idx();
+        let export_idx = sink.name(cm_name, variant_idx);
 
         self.cache.insert(cache_key, export_idx);
         export_idx
@@ -2377,7 +2581,7 @@ impl CmInstanceTypeGen {
     /// Define a record (struct) type and its named export, returning the exported type index.
     fn define_record(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         cm_name: &str,
         fields: &[(String, Type)],
         cm_interface_registry: &CmInterfaceRegistry,
@@ -2393,12 +2597,8 @@ impl CmInstanceTypeGen {
             .iter()
             .map(|(field_name, field_ty)| {
                 let resolved = cm_interface_registry.resolve_type(field_ty);
-                let cm_type = self.ast_type_to_cm(
-                    &resolved,
-                    instance_type,
-                    cm_interface_registry,
-                    resource_exports,
-                );
+                let cm_type =
+                    self.ast_type_to_cm(sink, &resolved, cm_interface_registry, resource_exports);
                 (field_name.clone(), cm_type)
             })
             .collect();
@@ -2407,15 +2607,9 @@ impl CmInstanceTypeGen {
             .iter()
             .map(|(n, t)| (n.as_str(), *t))
             .collect();
-        instance_type.ty().defined_type().record(field_refs);
-        let record_idx = self.alloc_idx();
-
+        let record_idx = sink.define(CmDefined::Record(&field_refs));
         // Export the record type (required by CM spec)
-        instance_type.export(
-            cm_name,
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(record_idx)),
-        );
-        let export_idx = self.alloc_idx();
+        let export_idx = sink.name(cm_name, record_idx);
 
         self.cache.insert(cache_key, export_idx);
         export_idx
@@ -2424,7 +2618,7 @@ impl CmInstanceTypeGen {
     /// Define an option<T> type, returning the type index.
     fn define_option(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         inner: ComponentValType,
         key_suffix: &str,
     ) -> u32 {
@@ -2432,8 +2626,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().option(inner);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Option(inner));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2441,7 +2634,7 @@ impl CmInstanceTypeGen {
     /// Define a stream<T> type, returning the type index.
     fn define_stream(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         elem: Option<ComponentValType>,
         key_suffix: &str,
     ) -> u32 {
@@ -2449,8 +2642,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().stream(elem);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Stream(elem));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2458,7 +2650,7 @@ impl CmInstanceTypeGen {
     /// Define a future<T> type, returning the type index.
     fn define_future(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         inner: Option<ComponentValType>,
         key_suffix: &str,
     ) -> u32 {
@@ -2466,8 +2658,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().future(inner);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Future(inner));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2475,7 +2666,7 @@ impl CmInstanceTypeGen {
     /// Define a borrow type, returning the type index.
     fn define_borrow(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         resource_export_idx: u32,
         resource_cm_name: &str,
     ) -> u32 {
@@ -2483,11 +2674,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type
-            .ty()
-            .defined_type()
-            .borrow(resource_export_idx);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Borrow(resource_export_idx));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2495,7 +2682,7 @@ impl CmInstanceTypeGen {
     /// Define a list type, returning the type index.
     fn define_list(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         elem_type: ComponentValType,
         key_suffix: &str,
     ) -> u32 {
@@ -2503,8 +2690,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().list(elem_type);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::List(elem_type));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2512,7 +2698,7 @@ impl CmInstanceTypeGen {
     /// Define a tuple type, returning the type index.
     fn define_tuple(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         elems: Vec<ComponentValType>,
         key_suffix: &str,
     ) -> u32 {
@@ -2520,8 +2706,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().tuple(elems);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Tuple(&elems));
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2529,7 +2714,7 @@ impl CmInstanceTypeGen {
     /// Define a result type, returning the type index.
     fn define_result(
         &mut self,
-        instance_type: &mut InstanceType,
+        sink: &mut dyn CmTypeSink,
         ok_type: Option<ComponentValType>,
         err_type: Option<ComponentValType>,
         key_suffix: &str,
@@ -2538,8 +2723,10 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type.ty().defined_type().result(ok_type, err_type);
-        let idx = self.alloc_idx();
+        let idx = sink.define(CmDefined::Result {
+            ok: ok_type,
+            err: err_type,
+        });
         self.cache.insert(cache_key, idx);
         idx
     }
@@ -2551,8 +2738,8 @@ impl CmInstanceTypeGen {
     /// export indices within the instance type.
     pub fn ast_type_to_cm(
         &mut self,
+        sink: &mut dyn CmTypeSink,
         ty: &Type,
-        instance_type: &mut InstanceType,
         cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> ComponentValType {
@@ -2560,6 +2747,8 @@ impl CmInstanceTypeGen {
             Type::Named(named) => match named.name.as_str() {
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
                 "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
+                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
                 "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
                 "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
                 "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
@@ -2626,8 +2815,7 @@ impl CmInstanceTypeGen {
                             return ComponentValType::Type(idx);
                         }
                         let export_idx = resource_exports[cm_name];
-                        instance_type.ty().defined_type().own(export_idx);
-                        let idx = self.alloc_idx();
+                        let idx = sink.define(CmDefined::Own(export_idx));
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
                     } else if let Some(cases) = {
@@ -2654,7 +2842,7 @@ impl CmInstanceTypeGen {
                                 .to_string()
                         };
                         let idx = self.define_variant(
-                            instance_type,
+                            sink,
                             &cm_name,
                             &cases,
                             cm_interface_registry,
@@ -2670,7 +2858,7 @@ impl CmInstanceTypeGen {
                             .expect("struct cm_name present when fields are")
                             .to_string();
                         let idx = self.define_record(
-                            instance_type,
+                            sink,
                             &cm_name,
                             &fields,
                             cm_interface_registry,
@@ -2685,21 +2873,14 @@ impl CmInstanceTypeGen {
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        instance_type
-                            .ty()
-                            .defined_type()
-                            .enum_type(variants.iter().map(String::as_str));
-                        let idx = self.alloc_idx();
+                        let variant_refs: Vec<&str> = variants.iter().map(String::as_str).collect();
+                        let idx = sink.define(CmDefined::Enum(&variant_refs));
                         self.cache.insert(cache_key.clone(), idx);
 
                         if let Some(cm_name) =
                             cm_interface_registry.get_enum_cm_name_by_source(source, name)
                         {
-                            instance_type.export(
-                                cm_name,
-                                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(idx)),
-                            );
-                            let export_idx = self.alloc_idx();
+                            let export_idx = sink.name(cm_name, idx);
                             self.cache.insert(cache_key, export_idx);
                             return ComponentValType::Type(export_idx);
                         }
@@ -2713,12 +2894,20 @@ impl CmInstanceTypeGen {
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        instance_type
-                            .ty()
-                            .defined_type()
-                            .flags(members.iter().map(String::as_str));
-                        let idx = self.alloc_idx();
-                        self.cache.insert(cache_key, idx);
+                        let member_refs: Vec<&str> = members.iter().map(String::as_str).collect();
+                        let idx = sink.define(CmDefined::Flags(&member_refs));
+                        self.cache.insert(cache_key.clone(), idx);
+
+                        // Export to make it a named type (as for record/variant/
+                        // enum) so an exported interface instance can reference it.
+                        if let Some(cm_name) =
+                            cm_interface_registry.get_flags_cm_name_by_source(source, name)
+                        {
+                            let export_idx = sink.name(cm_name, idx);
+                            self.cache.insert(cache_key, export_idx);
+                            return ComponentValType::Type(export_idx);
+                        }
+
                         ComponentValType::Type(idx)
                     } else {
                         panic!("unsupported named type for CM instance: {name} (source={source})")
@@ -2736,7 +2925,7 @@ impl CmInstanceTypeGen {
                         cm_interface_registry.get_resource_cm_name_by_source(source, &n.name)
                 {
                     let export_idx = resource_exports[cm_name];
-                    let idx = self.define_borrow(instance_type, export_idx, cm_name);
+                    let idx = self.define_borrow(sink, export_idx, cm_name);
                     return ComponentValType::Type(idx);
                 }
                 panic!("unsupported reference type for CM instance: {ty:?}")
@@ -2744,13 +2933,13 @@ impl CmInstanceTypeGen {
             Type::Generic(generic) => match generic.name.as_str() {
                 "List" => {
                     let elem_cm = self.ast_type_to_cm(
+                        sink,
                         &generic.args[0],
-                        instance_type,
                         cm_interface_registry,
                         resource_exports,
                     );
                     let key = Self::type_key(&generic.args[0]);
-                    let idx = self.define_list(instance_type, elem_cm, &key);
+                    let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
                 "Result" => {
@@ -2762,8 +2951,8 @@ impl CmInstanceTypeGen {
                         None
                     } else {
                         Some(self.ast_type_to_cm(
+                            sink,
                             &generic.args[0],
-                            instance_type,
                             cm_interface_registry,
                             resource_exports,
                         ))
@@ -2772,8 +2961,8 @@ impl CmInstanceTypeGen {
                         None
                     } else {
                         Some(self.ast_type_to_cm(
+                            sink,
                             &generic.args[1],
-                            instance_type,
                             cm_interface_registry,
                             resource_exports,
                         ))
@@ -2783,18 +2972,18 @@ impl CmInstanceTypeGen {
                         Self::type_key(&generic.args[0]),
                         Self::type_key(&generic.args[1])
                     );
-                    let idx = self.define_result(instance_type, ok_type, err_type, &key);
+                    let idx = self.define_result(sink, ok_type, err_type, &key);
                     ComponentValType::Type(idx)
                 }
                 "Option" => {
                     let inner_cm = self.ast_type_to_cm(
+                        sink,
                         &generic.args[0],
-                        instance_type,
                         cm_interface_registry,
                         resource_exports,
                     );
                     let key = Self::type_key(&generic.args[0]);
-                    let idx = self.define_option(instance_type, inner_cm, &key);
+                    let idx = self.define_option(sink, inner_cm, &key);
                     ComponentValType::Type(idx)
                 }
                 "Stream" => {
@@ -2802,14 +2991,14 @@ impl CmInstanceTypeGen {
                         (None, "unit".to_string())
                     } else {
                         let cm = self.ast_type_to_cm(
+                            sink,
                             &generic.args[0],
-                            instance_type,
                             cm_interface_registry,
                             resource_exports,
                         );
                         (Some(cm), Self::type_key(&generic.args[0]))
                     };
-                    let idx = self.define_stream(instance_type, elem, &key);
+                    let idx = self.define_stream(sink, elem, &key);
                     ComponentValType::Type(idx)
                 }
                 "Future" => {
@@ -2817,14 +3006,14 @@ impl CmInstanceTypeGen {
                         (None, "unit".to_string())
                     } else {
                         let cm = self.ast_type_to_cm(
+                            sink,
                             &generic.args[0],
-                            instance_type,
                             cm_interface_registry,
                             resource_exports,
                         );
                         (Some(cm), Self::type_key(&generic.args[0]))
                     };
-                    let idx = self.define_future(instance_type, inner, &key);
+                    let idx = self.define_future(sink, inner, &key);
                     ComponentValType::Type(idx)
                 }
                 "AsyncCall" if generic.args.len() == 1 => {
@@ -2833,8 +3022,8 @@ impl CmInstanceTypeGen {
                     // Transparently unwrap here so downstream code sees the
                     // CM signature.
                     self.ast_type_to_cm(
+                        sink,
                         &generic.args[0],
-                        instance_type,
                         cm_interface_registry,
                         resource_exports,
                     )
@@ -2847,21 +3036,14 @@ impl CmInstanceTypeGen {
             Type::Tuple(elems) => {
                 let cm_elems: Vec<ComponentValType> = elems
                     .iter()
-                    .map(|e| {
-                        self.ast_type_to_cm(
-                            e,
-                            instance_type,
-                            cm_interface_registry,
-                            resource_exports,
-                        )
-                    })
+                    .map(|e| self.ast_type_to_cm(sink, e, cm_interface_registry, resource_exports))
                     .collect();
                 let key = elems
                     .iter()
                     .map(Self::type_key)
                     .collect::<Vec<_>>()
                     .join(",");
-                let idx = self.define_tuple(instance_type, cm_elems, &key);
+                let idx = self.define_tuple(sink, cm_elems, &key);
                 ComponentValType::Type(idx)
             }
             _ => panic!("unsupported type for CM instance: {ty:?}"),
@@ -3383,6 +3565,9 @@ pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
             }
             _ => crate::cm_abi::cm_size(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry(elems, registry).size
+        }
         _ => crate::cm_abi::cm_size(ty),
     }
 }
@@ -3423,6 +3608,9 @@ pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 
                 .max(cm_align_with_registry(&g.args[1], registry)),
             _ => crate::cm_abi::cm_align(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry(elems, registry).align
+        }
         _ => crate::cm_abi::cm_align(ty),
     }
 }
@@ -3543,6 +3731,9 @@ pub fn cm_size_with_registry_scoped(
             }
             _ => crate::cm_abi::cm_size(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).size
+        }
         _ => crate::cm_abi::cm_size(ty),
     }
 }
@@ -3603,6 +3794,9 @@ pub fn cm_align_with_registry_scoped(
                 )),
             _ => crate::cm_abi::cm_align(ty),
         },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).align
+        }
         _ => crate::cm_abi::cm_align(ty),
     }
 }
