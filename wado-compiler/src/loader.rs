@@ -290,6 +290,27 @@ impl WasmAsset {
     }
 }
 
+/// Resolve a `use` declaration's import source to its `ModuleSource`, honoring
+/// the wasm-asset `with { type: "wat" | "wasm" }` form — which resolves to
+/// `ModuleSource::Wasm` — so symbol, effect, and type resolution in the
+/// elaborator agree with the identity the loader registered the module under.
+/// Mirrors `analyze::resolve_use_decl_module_source`.
+pub fn resolve_use_decl_source(
+    interner: &mut ModuleSourceInterner,
+    from: &ModuleSource,
+    use_decl: &crate::ast::UseDecl,
+    entry: Option<&ModuleSource>,
+    invocations: &crate::kiln::InvocationIndex,
+) -> ModuleSource {
+    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref())
+        && let Ok(path) =
+            resolve_wasm_asset_path(from, &use_decl.source, &crate::name::entry_dir_of(entry))
+    {
+        return interner.wasm(&path, kind);
+    }
+    crate::name::resolve_import_with_invocations(interner, from, &use_decl.source, entry, invocations)
+}
+
 /// Whether `bytes` is a Component Model binary (vs a core wasm module). The
 /// component preamble is `\0asm` magic, version `0x000d`, layer `0x0001`; a
 /// core module's layer byte is `0x00`.

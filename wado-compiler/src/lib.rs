@@ -687,21 +687,6 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
-    // Capture the synthesized binding modules of any linked CM components,
-    // paired with the interface FQs they export, so their `#[cm(...)]` decls
-    // can be folded into this compilation's CM registry below (before `sem` is
-    // destructured).
-    let component_modules: Vec<(crate::ast::Module, Vec<String>)> = wasm_assets
-        .iter()
-        .filter(|(_, asset)| asset.is_component())
-        .filter_map(|(namespace, asset)| {
-            sem.modules
-                .iter()
-                .find(|(ms, _)| ms.wasm_canonical_namespace().as_deref() == Some(namespace.as_str()))
-                .map(|(_, module)| (module.clone(), asset.component_interface_fqs.clone()))
-        })
-        .collect();
-
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -737,17 +722,6 @@ fn compile_after_load<H: CompilerHost>(
             fq,
             entry_module_source.clone(),
         );
-    }
-
-    // Fold linked CM components' interfaces and named types into this
-    // compilation's CM registry (copy-on-write, leaving the stdlib snapshot
-    // untouched) so the import plan and binding synthesis treat them like any
-    // other CM interface — except classified as `ImportKind::Component`.
-    if !component_modules.is_empty() {
-        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
-        for (module, interface_fqs) in &component_modules {
-            registry.register_component_decls(module, interface_fqs);
-        }
     }
 
     debug_assert_eq!(
