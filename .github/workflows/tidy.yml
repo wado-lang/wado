@@ -13,30 +13,13 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # Single job. The required-check name stays "Tidy" for branch protection
-  # compatibility. Everything that used to be split across `precheck`,
-  # `tidy-rust`, `tidy-wado`, and the `tidy` aggregator now lives here.
+  # One job replaces the old precheck/tidy-rust/tidy-wado/aggregator fan-out.
+  # Required-check name stays "Tidy". Setup runs once; no patch artifacts.
   #
-  # Why one job instead of the old fan-out/fan-in:
-  #   * Setup (checkout, submodule, rust-cache, mise) is paid ONCE instead of
-  #     four times.
-  #   * No patch artifacts: the old design uploaded each job's `git diff` and
-  #     re-applied both with `git apply --3way` in the aggregator, purely to
-  #     merge results from two separate runners. One runner means one working
-  #     tree, so we just `git add -A && commit && push` directly.
-  #
-  # What does NOT speed up: the two whole-workspace compiles. `cargo build`
-  # (binaries) and `clippy-fix` (clippy-driver check) produce separate
-  # artifacts and serialize on cargo's target-dir lock, so they run
-  # sequentially here rather than truly in parallel as they did on two runners.
-  # We order `cargo build` first so the dependency artifacts it produces are
-  # reused by the later clippy pass (only the workspace crates are re-checked).
-  #
-  # Where parallel steps DO help: the post-build, binary-bound regenerators
-  # write disjoint output trees (WIR goldens, format goldens, Gale kilns,
-  # stdlib docs), so they run as `background` steps and join at `wait-all`.
-  # Whole-tree formatters (`format-md`, `format-wado`) run after the barrier to
-  # avoid racing the regenerators on shared paths.
+  # The two whole-workspace compiles (`cargo build`, `clippy-fix`) serialize on
+  # cargo's target lock, so they can't run in parallel here — build goes first
+  # so clippy reuses its dependency artifacts. The post-build regenerators write
+  # disjoint trees, so they run as `background` steps joined at `wait-all`.
   tidy:
     name: Tidy
     runs-on: ubuntu-latest
@@ -46,23 +29,17 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
-          # The push at the end authenticates with a GitHub App token (a
-          # GITHUB_TOKEN push would not retrigger workflows). Don't persist the
-          # default credentials so the app-token remote is the sole auth.
+          # The final push uses a GitHub App token; don't keep the default creds.
           persist-credentials: false
 
-      # Detects when the latest commit on the PR was produced by this workflow
-      # itself ("chore: tidy" by a GitHub App bot). In that case the heavy steps
-      # are skipped and the job short-circuits to success. This avoids
-      # re-running tidy on its own (idempotent) output and prevents a buggy step
-      # from producing an infinite push loop.
+      # Skip the heavy steps when the latest commit is tidy's own output, so we
+      # don't re-tidy idempotent output or spin up a push loop.
       - name: Precheck — short-circuit on a tidy bot commit
         id: precheck
         run: |
           msg=$(git log -1 --pretty=%s)
           email=$(git log -1 --pretty=%ae)
           if [ "$msg" = "chore: tidy" ] && [[ "$email" == *"[bot]"* ]]; then
-            echo "Latest commit is a tidy bot commit; short-circuiting."
             echo "should-run=false" >> "$GITHUB_OUTPUT"
           else
             echo "should-run=true" >> "$GITHUB_OUTPUT"
@@ -90,10 +67,8 @@ jobs:
         if: steps.precheck.outputs.should-run == 'true'
         run: cargo build --bin wado --bin wado-dev-tools
 
-      # Post-build regenerators with disjoint output trees, run concurrently.
-      # Each calls the prebuilt binary/script directly (no `cargo run`) so none
-      # contends for the cargo target lock; `mise run doc-stdlib` is the lone
-      # cargo user and only blocks itself, not the binary-only lanes.
+      # Disjoint output trees → run concurrently. Each calls the prebuilt binary
+      # directly so only `doc-stdlib` touches the cargo lock (blocking itself).
       - name: Regenerate WIR golden fixtures
         if: steps.precheck.outputs.should-run == 'true'
         background: true
@@ -124,9 +99,7 @@ jobs:
         wait-all: true
         run: echo "All regenerators completed."
 
-      # Whole-tree formatters, after the barrier so they never race a
-      # regenerator on a shared path. `format-md` formats the docs/stdlib-*.md
-      # just emitted by `doc-stdlib`; both invoke the prebuilt binary directly.
+      # Whole-tree formatters, after the barrier so they don't race a regenerator.
       - name: Format Markdown
         if: steps.precheck.outputs.should-run == 'true'
         run: ./target/debug/wado-dev-tools format-md
@@ -135,17 +108,13 @@ jobs:
         if: steps.precheck.outputs.should-run == 'true'
         run: ./target/debug/wado format -w .
 
-      # Second whole-workspace compile (clippy-driver). Runs last: it reuses the
-      # dependency artifacts from `cargo build` and only re-checks the workspace
-      # crates, and serializing it keeps the cargo target lock uncontended.
+      # Second compile; runs last to keep the cargo lock uncontended.
       - name: Clippy autofix and rustfmt
         if: steps.precheck.outputs.should-run == 'true'
         run: |
           mise run clippy-fix
           cargo fmt --all
 
-      # --- Join: stage changes, then commit/push from this same working tree.
-      # No patch artifacts or 3-way merge — everything happened in one tree.
       - name: Determine push capability
         id: cap
         if: steps.precheck.outputs.should-run == 'true'
@@ -181,13 +150,10 @@ jobs:
           private-key: "${{ secrets.GH_APP_PRIVATE_KEY }}"
           permission-contents: write
 
-      # Internal PR (head repo == this repo): push a `chore: tidy` commit and
-      # exit green. The push retriggers this workflow; the next run hits the
-      # precheck short-circuit and stays green. We deliberately do NOT fail
-      # here: the push itself starts a fresh CI round, so the PR is never
-      # momentarily all-green and auto-merge cannot fire prematurely. A red
-      # check on the (now superseded) run only confuses tooling and coding
-      # agents into thinking tidy is broken.
+      # Internal PR: push `chore: tidy` and exit green. The push retriggers this
+      # workflow, which then short-circuits — so the PR is never momentarily
+      # all-green and auto-merge can't fire early. Failing here would only mislead
+      # tooling on a superseded run.
       - name: Commit and push (internal PR only)
         if: >-
           steps.precheck.outputs.should-run == 'true' &&
@@ -204,9 +170,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin "HEAD:${{ github.head_ref }}"
 
-      # Fork PR (no write access, secrets unavailable): skip the push, emit
-      # guidance for the fork author, and exit non-zero so the check stays red
-      # until tidy is satisfied.
+      # Fork PR: can't push, so emit guidance and stay red until tidy is satisfied.
       - name: Report tidy result
         if: >-
           steps.precheck.outputs.should-run == 'true' &&
