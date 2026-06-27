@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782548884103,
+  "lastUpdate": 1782563226941,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35917,6 +35917,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2f85b30dd226bd3631e9847ea097ccad5e15316a"
         },
         "date": 1782548883775,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8e2c2f137e03cdd8893cf63544f67022702025bc",
+          "message": "Merge pull request #1457 from wado-lang/claude/brotli-wasm-wado-example-ihit3s\n\nfeat: registry dependency resolution and an OCI component example",
+          "timestamp": "2026-06-27T21:17:23+09:00",
+          "tree_id": "fe432a5172aa5b93386a8263a8656b82b1461671",
+          "url": "https://github.com/wado-lang/wado/commit/8e2c2f137e03cdd8893cf63544f67022702025bc"
+        },
+        "date": 1782563226392,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
