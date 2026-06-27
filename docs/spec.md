@@ -3453,7 +3453,7 @@ In hosts that cannot execute generators (today's wasm32-bundled LSP / browser pl
 
 ### Wasm Module and Component Imports
 
-A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler inspects the binary header and dispatches on whether the file is a **core module** or a **Component Model component** — both `.wasm` shapes use `type: "wasm"`; the distinction is detected, not declared.
+A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler detects from the binary header whether the file is a **core module** or a **Component Model component** — both `.wasm` shapes use `type: "wasm"`; the distinction is detected, not declared. A single `use` may pull several names (functions from a core module, interfaces from a component).
 
 | Imported file             | Exposes as                                     | Call style                                |
 | ------------------------- | ---------------------------------------------- | ----------------------------------------- |
@@ -3475,7 +3475,7 @@ export fn run() with Compress, Decompress {
 }
 ```
 
-Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries). The dependency component is statically composed into the output (via `wasm-compose`), so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path.
+Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries). The dependency component is statically composed into the output, so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path.
 
 ### Namespace Import
 
