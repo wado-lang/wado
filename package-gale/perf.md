@@ -262,8 +262,8 @@ zero-fills via `array.new_default`, so nine over-sized arrays dominated
 ~3.7× is intrinsic to the array-heavy build on WasmGC — raising the inline
 threshold only worsens it (sharp 14→15 cliff: 18 → 55 ms). Not `value_copy`
 (generated NIR is clean). The benchmark never walks the tree, so the cursor's
-real win (O(1) navigation, no per-node alloc) is unmeasured. Reverted on this
-branch; the spike is preserved at commits `9b92e249` / `e48cef13` for a retry.
+real win (O(1) navigation, no per-node alloc) is unmeasured. Reverted in
+`37d6597`; the spike is preserved at `9b92e249` / `e48cef13` for a retry.
 A separate closure-`&mut` boxing ICE this surfaced was fixed independently
 (`closure_mut_ref_local`).
 
