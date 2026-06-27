@@ -261,9 +261,11 @@ zero-fills via `array.new_default`, so nine over-sized arrays dominated
 (131 ms); exact-sizing the arrays cut it to 18 ms but no further. The residual
 ~3.7× is intrinsic to the array-heavy build on WasmGC — raising the inline
 threshold only worsens it (sharp 14→15 cliff: 18 → 55 ms). Not `value_copy`
-(generated NIR is clean). The benchmark never walks the tree, so the cursor's
-real win (O(1) navigation, no per-node alloc) is unmeasured. Reverted in
-`37d6597`; the spike is preserved at `9b92e249` / `e48cef13` for a retry.
+(generated NIR is clean). The walk-heavy `syntax-highlight` (build **and** walk
+the whole CST) was the obvious place to win, but cursor lost there too — 64.7 ms
+vs 39.4 ms — because `children()` boxes a `CstChild` + `Cst` per visited node,
+moving allocation from build-time to walk-time instead of removing it. Reverted
+in `37d6597`; the spike is preserved at `9b92e249` / `e48cef13` for a retry.
 A separate closure-`&mut` boxing ICE this surfaced was fixed independently
 (`closure_mut_ref_local`).
 
