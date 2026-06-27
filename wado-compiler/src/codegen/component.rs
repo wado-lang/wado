@@ -567,24 +567,6 @@ fn emit_cm_val_type(
             *local_type_idx += 1;
             ComponentValType::Type(idx)
         }
-        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => {
-            let tuple_types = build_cm_tuple_types(
-                &g.args,
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen.as_deref_mut(),
-                project,
-                ctx,
-            );
-            instance_type.ty().defined_type().tuple(tuple_types);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
-        }
         Type::Tuple(elems) if !elems.is_empty() => {
             let tuple_types = build_cm_tuple_types(
                 elems,

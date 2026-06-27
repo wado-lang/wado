@@ -318,7 +318,7 @@ impl CmFunctionInfo {
             Type::Named(named) => named.name == "String",
             Type::Generic(generic) => matches!(
                 generic.name.as_str(),
-                "List" | "Option" | "Result" | "Tuple" | "Stream" | "Future"
+                "List" | "Option" | "Result" | "Stream" | "Future"
             ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
@@ -2356,14 +2356,9 @@ impl CmInterfaceRegistry {
                         out,
                     );
                 }
-                // A tuple resolves to `Generic("Tuple", elems)`; flatten each.
-                "Tuple" => {
-                    for elem in &g.args {
-                        self.cm_flatten_into(elem, out);
-                    }
-                }
                 // Fail loudly rather than silently mis-flattening an unhandled
-                // CM generic to an i32 handle (matches `ast_type_to_cm`).
+                // CM generic to an i32 handle (matches `ast_type_to_cm`). A
+                // tuple is `Type::Tuple`, handled below — never `Generic`.
                 other => panic!("unsupported generic type for CM flattening: {other}"),
             },
             Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
@@ -3249,8 +3244,6 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             "Result" => ValType::I32,
             // Future<T> is represented as i32 handle
             "Future" => ValType::I32,
-            // Tuple types map to i32 for simplicity (struct pointer)
-            "Tuple" => ValType::I32,
             // List<T> is represented as a GC array reference (handled as i32 in WASI context)
             "List" => ValType::I32,
             // Option<T> is represented as i32 discriminant
@@ -3355,15 +3348,12 @@ fn is_param_type_supported_with_types(
                 || resources.contains(name)
                 || structs.contains(name)
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" | "Result" | "Future" | "Option" | "List" => true,
-            // All tuple elements must themselves be supported param types.
-            "Tuple" => generic
-                .args
-                .iter()
-                .all(|arg| is_param_type_supported_with_types(arg, enums, resources, structs)),
-            _ => false,
-        },
+        Type::Generic(generic) => {
+            matches!(
+                generic.name.as_str(),
+                "Stream" | "Result" | "Future" | "Option" | "List"
+            )
+        }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - passed as i32 handle at CM boundary
             if let Type::Named(named) = inner.as_ref() {
@@ -3372,7 +3362,7 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
-        // A tuple may also be spelled `Type::Tuple`; each element must be supported.
+        // Tuple param: each element must itself be supported.
         Type::Tuple(elems) => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
@@ -3431,13 +3421,7 @@ fn is_return_type_supported_with_types(
                 }
                 "List" | "Option" => {
                     // A list/option element is any supported value type (e.g.
-                    // `list<list<u8>>`, `list<tuple<field-name, field-value>>`).
-                    generic.args.iter().all(|arg| {
-                        is_return_type_supported_with_types(arg, enums, resources, structs)
-                    })
-                }
-                "Tuple" => {
-                    // All tuple elements must be supported return types
+                    // `list<list<u8>>`, `list<[field-name, field-value]>`).
                     generic.args.iter().all(|arg| {
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
@@ -3445,7 +3429,7 @@ fn is_return_type_supported_with_types(
                 _ => false,
             }
         }
-        // Handle [...] tuple syntax
+        // A tuple is spelled `[...]`; each element must be supported.
         Type::Tuple(elements) => {
             // Empty tuple () is the unit type, which is always supported
             if elements.is_empty() {
@@ -4056,26 +4040,21 @@ mod tests {
             "List<String> should be supported"
         );
 
-        // List<Tuple<String, String>> should be supported
-        let tuple_ss = Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
-            name: "Tuple".to_string(),
-            args: vec![
-                Type::Named(NamedType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "String".to_string(),
-                    span: make_span(),
-                    source_interface: None,
-                }),
-                Type::Named(NamedType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "String".to_string(),
-                    span: make_span(),
-                    source_interface: None,
-                }),
-            ],
-            span: make_span(),
-        });
+        // List<[String, String]> should be supported
+        let tuple_ss = Type::Tuple(vec![
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: "String".to_string(),
+                span: make_span(),
+                source_interface: None,
+            }),
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: "String".to_string(),
+                span: make_span(),
+                source_interface: None,
+            }),
+        ]);
         let array_tuple = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
             name: "List".to_string(),
@@ -4084,7 +4063,7 @@ mod tests {
         });
         assert!(
             is_return_type_supported(&array_tuple),
-            "List<Tuple<String, String>> should be supported"
+            "List<[String, String]> should be supported"
         );
 
         // Option<String> should be supported

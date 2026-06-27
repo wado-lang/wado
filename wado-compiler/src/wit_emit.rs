@@ -884,7 +884,6 @@ fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
         AstType::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
             "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
-            "Tuple" => CmShape::Tuple(g.args.clone()),
             "Result" if g.args.len() == 2 => CmShape::Result {
                 ok: non_unit_ast(&g.args[0]),
                 err: non_unit_ast(&g.args[1]),

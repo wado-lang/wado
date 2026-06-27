@@ -40,7 +40,7 @@ use super::lower::{
 };
 use super::types::{
     LiftContext, binary_add, cm_param_align, cm_param_size, cm_param_store_plan,
-    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting, tuple_elems,
+    cm_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -590,7 +590,7 @@ pub(super) fn synthesize_adapter(
                 param_mapping.push((start, 1));
             }
             // Tuple param: single GC tuple, binding body lowers to flat args.
-            _ if tuple_elems(param_type).is_some_and(|e| !e.is_empty()) => {
+            Type::Tuple(elems) if !elems.is_empty() => {
                 let tuple_type_id = {
                     let mut tt = type_table.borrow_mut();
                     cm_type_to_type_id(
@@ -1027,9 +1027,8 @@ pub(super) fn synthesize_adapter(
                     type_table,
                 );
             }
-            // Tuple param: flatten each element to its flat args, in order. A
-            // tuple is spelled `Type::Tuple` or `Generic("Tuple", …)`.
-            _ if tuple_elems(param_type).is_some_and(|e| !e.is_empty()) => {
+            // Tuple param: flatten each element to its flat args, in order.
+            Type::Tuple(elems) if !elems.is_empty() => {
                 assert!(
                     !func_info.is_async,
                     "CM import '{}#{}' takes a tuple parameter on an async \

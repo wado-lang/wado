@@ -336,16 +336,6 @@ pub fn cm_type_to_type_id(
                     let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                     type_table.make_async_call(inner)
                 }
-                // A tuple resolves to `Generic("Tuple", elems)`; build the GC
-                // tuple type from its element types (mirrors the `Type::Tuple` arm).
-                "Tuple" if !g.args.is_empty() => {
-                    let elems: Vec<TypeId> = g
-                        .args
-                        .iter()
-                        .map(|t| cm_type_to_type_id(t, type_table, registry, wasi_package))
-                        .collect();
-                    type_table.make_tuple(elems)
-                }
                 // Own/Borrow are handle types represented as i32
                 "Own" | "Borrow" => TypeTable::I32,
                 _ => TypeTable::UNIT,
@@ -890,16 +880,6 @@ pub(super) fn cm_param_store_plan(
             _ => vec![(0, "i32_store")],
         },
         _ => vec![(0, "i32_store")],
-    }
-}
-
-/// A tuple's element types, whether spelled `Type::Tuple` (surface form) or
-/// `Generic("Tuple", …)` (the resolved form). `None` for non-tuples.
-pub(super) fn tuple_elems(ty: &Type) -> Option<&[Type]> {
-    match ty {
-        Type::Tuple(elems) => Some(elems),
-        Type::Generic(g) if g.name == "Tuple" => Some(&g.args),
-        _ => None,
     }
 }
 

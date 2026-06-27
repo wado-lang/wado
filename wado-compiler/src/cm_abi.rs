@@ -157,11 +157,6 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
                 cm_align_result(&generic.args[0], &generic.args[1]),
             )
         }
-        // Tuple<T, U, ...>
-        "Tuple" => {
-            let layout = layout_tuple(&generic.args);
-            layout.size
-        }
         // Stream<T>, Future<T> are i32 handles
         "Stream" | "Future" => 4,
         // Own<T>, Borrow<T> are i32 handles
@@ -176,7 +171,6 @@ fn cm_align_generic(generic: &GenericType) -> u32 {
         "List" => 4, // (ptr: i32, len: i32) — aligned to i32
         "Option" if generic.args.len() == 1 => cm_align_option(&generic.args[0]),
         "Result" if generic.args.len() == 2 => cm_align_result(&generic.args[0], &generic.args[1]),
-        "Tuple" => generic.args.iter().map(cm_align).max().unwrap_or(1),
         "Stream" | "Future" | "Own" | "Borrow" => 4,
         _ => 4,
     }
@@ -370,7 +364,6 @@ pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<crate::component_model:
     use crate::component_model::CmPrimitiveType;
     let elements = match ty {
         Type::Tuple(elems) if !elems.is_empty() => elems,
-        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => &g.args,
         _ => return None,
     };
     let mut prims = Vec::new();

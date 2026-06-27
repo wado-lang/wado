@@ -1224,8 +1224,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
         }
         // Tuple → each element's flat args, in order (mirrors `cm_flatten`'s
-        // tuple expansion so the lowered values match the flat signature). A
-        // tuple is spelled `Type::Tuple` or `Generic("Tuple", …)`.
+        // tuple expansion so the lowered values match the flat signature).
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
             elems,
             value,
@@ -1238,20 +1237,6 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             wasi_package,
             type_table,
         ),
-        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => {
-            synthesize_flatten_tuple_to_flat_args(
-                &g.args,
-                value,
-                prefix,
-                next_local,
-                stmts,
-                locals,
-                flat_args,
-                cm_interface_registry,
-                wasi_package,
-                type_table,
-            );
-        }
         // CM record → its fields' flat args (recursion handles nested records,
         // e.g. `SourceSpan` inside `Option<SourceSpan>`).
         Type::Named(n)
