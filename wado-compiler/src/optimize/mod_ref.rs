@@ -16,11 +16,8 @@
 //!
 //! ## Client API
 //!
-//! Passes consume the summary through three predicates:
+//! Passes consume the summary through two predicates:
 //!
-//! - [`ModRef::is_re_evaluation_safe`] — can an expression with this
-//!   summary be moved to a later program point without changing
-//!   observable behavior?
 //! - [`ModRef::may_clobber`] — could the writes implied by `self`
 //!   invalidate any read implied by `other`? Wasm-semantics-accurate:
 //!   `calls` are treated as touching only globals / GC heap / linear
@@ -78,14 +75,6 @@ use crate::nir_arena::{
 pub(super) struct Channel {
     pub reads: bool,
     pub writes: bool,
-}
-
-impl Channel {
-    #[allow(dead_code)] // consumed by ModRef::join — exposed for future passes
-    fn join(&mut self, other: Channel) {
-        self.reads |= other.reads;
-        self.writes |= other.writes;
-    }
 }
 
 /// Control-flow effect of an instruction tree.
@@ -151,11 +140,6 @@ pub(super) struct ModRef {
     /// see; locals are NOT clobbered by calls (Wasm locals are private
     /// to the calling frame and not addressable from another function).
     pub calls: bool,
-    /// Tree allocates one or more fresh GC objects. Distinct from
-    /// `heap.writes`: allocation does not clobber existing heap state,
-    /// but it produces a new object identity and so prevents
-    /// re-evaluation at a different program point.
-    pub allocates: bool,
     /// Tree may trap at runtime (null dereference, OOB index, integer
     /// divide / remainder by zero, narrowing cast out of range, …).
     /// Independent of [`Control::NonLocal`].
@@ -208,42 +192,6 @@ impl ModRef {
         mr
     }
 
-    /// Merge another summary into `self`. Sets union, flags OR,
-    /// control takes [`Ord`] max.
-    #[allow(dead_code)]
-    pub fn join(&mut self, other: ModRef) {
-        self.local_reads.extend(other.local_reads);
-        self.local_writes.extend(other.local_writes);
-        self.global_reads.extend(other.global_reads);
-        self.global_writes.extend(other.global_writes);
-        self.heap.join(other.heap);
-        self.memory.join(other.memory);
-        self.control.join(other.control);
-        self.calls |= other.calls;
-        self.allocates |= other.allocates;
-        self.may_trap |= other.may_trap;
-    }
-
-    /// True iff re-evaluating an expression with this summary at a
-    /// later program point cannot change observable behavior.
-    ///
-    /// Rejects calls, allocations (would create a new identity), any
-    /// heap or memory access, any write, and any non-local control
-    /// transfer. Trapping ops are NOT rejected — re-evaluation
-    /// preserves the trap condition.
-    #[allow(dead_code)]
-    pub fn is_re_evaluation_safe(&self) -> bool {
-        !self.calls
-            && !self.allocates
-            && !self.heap.reads
-            && !self.heap.writes
-            && !self.memory.reads
-            && !self.memory.writes
-            && self.local_writes.is_empty()
-            && self.global_writes.is_empty()
-            && matches!(self.control, Control::Linear)
-    }
-
     /// True iff `self`'s writes (or any call inside `self`) might
     /// invalidate any of `other`'s reads.
     ///
@@ -272,16 +220,11 @@ impl ModRef {
         false
     }
 
-    /// [`accumulate_expr`] for an operand. A promoted constant mods / refs
-    /// nothing, except a `String`, whose materialisation allocates (below).
+    /// [`accumulate_expr`] for an operand. A pooled `Operand::Value` is a
+    /// scalar / null / unit constant — a pure leaf that mods / refs nothing.
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
-            // A promoted constant is a pure leaf except `String`, whose WIR
-            // A pooled `Operand::Value` is now only a scalar / null / unit
-            // constant — never an allocation. String and bytes literals are
-            // `StructLiteral`s over a packed `Array<u8>` and are accounted for
-            // by the aggregate arms.
             Operand::Value(_) => {}
         }
     }
@@ -332,27 +275,23 @@ impl ModRef {
                 self.accumulate_operand(body, index, scope);
             }
 
-            // === Heap allocations ===
+            // === Aggregate constructors — recurse into element operands ===
             ExprKind::StructLiteral { fields, .. } => {
-                self.allocates = true;
                 for f in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
                     self.accumulate_operand(body, f, scope);
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                self.allocates = true;
                 for e in elements.clone() {
                     self.accumulate_operand(body, e, scope);
                 }
             }
             ExprKind::VariantConstruct { payload, .. } => {
-                self.allocates = true;
                 if let Some(p) = *payload {
                     self.accumulate_operand(body, p, scope);
                 }
             }
             ExprKind::ClosureToCanonical { functor, .. } => {
-                self.allocates = true;
                 let functor = *functor;
                 self.accumulate_operand(body, functor, scope);
             }
@@ -508,17 +447,9 @@ impl ModRef {
                 }
             }
 
-            // === GC-allocating literals ===
-            //
-            // Bytes literals lower to a fresh
-            // `array.new_data<u8>(...)` (wir_build/primitive_ops.rs:134):
-            // NOT a pure value-producing leaf; each evaluation site builds a
-            // distinct heap object with its own identity. (String literals are
-            // promoted to `Operand::Value`; their allocation is recognised in
-            // `accumulate_operand`.)
-            ExprKind::PackedArray(_) => {
-                self.allocates = true;
-            }
+            // Constant packed array (string / bytes literal backing): a pure
+            // value-producing leaf — no reads, writes, or calls.
+            ExprKind::PackedArray(_) => {}
 
             // Tombstone: no parent, no children, mods / refs nothing.
             ExprKind::Dead => {}
@@ -1016,16 +947,14 @@ mod tests {
         assert!(mr.heap.reads);
         assert!(!mr.heap.writes);
         assert!(mr.may_trap);
-        assert!(!mr.allocates);
     }
 
     #[test]
-    fn struct_literal_allocates_but_does_not_write_heap() {
+    fn struct_literal_does_not_write_heap() {
         let mr = mr_expr(|b| {
             let l = local(b, 0);
             struct_literal(b, vec![l.into()])
         });
-        assert!(mr.allocates);
         assert!(!mr.heap.writes);
     }
 
@@ -1154,25 +1083,6 @@ mod tests {
     // -----------------------------------------------------------------
     // Predicates
     // -----------------------------------------------------------------
-
-    #[test]
-    fn pure_expression_is_re_evaluation_safe() {
-        let mr = mr_expr(|b| {
-            let l = int(b, 5);
-            let r = local(b, 0);
-            bin(b, l, NirBinaryOp::Add, r)
-        });
-        assert!(mr.is_re_evaluation_safe());
-    }
-
-    #[test]
-    fn heap_read_is_not_re_evaluation_safe() {
-        let mr = mr_expr(|b| {
-            let l = local(b, 0);
-            field_access(b, l)
-        });
-        assert!(!mr.is_re_evaluation_safe());
-    }
 
     #[test]
     fn may_clobber_local_write_vs_local_read() {
@@ -1387,72 +1297,6 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // GC-allocating literals (String / Bytes) — see B1 finding
-    // -----------------------------------------------------------------
-
-    // A string literal lowers to `StructLiteral String { repr: PackedArray, used }`
-    // — a fresh GC object at each use site. Returned as the operand a real
-    // `&"..."` would reference.
-    fn string_val(body: &mut Body, s: &str) -> Operand {
-        let repr = pe(body, ExprKind::PackedArray(s.as_bytes().to_vec()));
-        let used = body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(s.len() as u64, ty()),
-            ty(),
-        );
-        Operand::Expr(pe(
-            body,
-            ExprKind::StructLiteral {
-                struct_type: ty(),
-                struct_name: "String".to_string(),
-                fields: vec![
-                    crate::nir_arena::ArenaStructField {
-                        name: "repr".to_string(),
-                        value: Operand::Expr(repr),
-                        field_index: 0,
-                    },
-                    crate::nir_arena::ArenaStructField {
-                        name: "used".to_string(),
-                        value: Operand::Value(used),
-                        field_index: 1,
-                    },
-                ],
-            },
-        ))
-    }
-
-    fn bytes_lit(body: &mut Body) -> ExprId {
-        pe(body, ExprKind::PackedArray(vec![1, 2, 3]))
-    }
-
-    #[test]
-    fn string_literal_allocates() {
-        // Materialises to struct.new String { repr: array.new_data<u8>(...) }
-        // (wir_build/primitive_ops.rs:82) — a fresh GC object with a distinct
-        // identity at each use site. is_re_evaluation_safe must therefore
-        // reject even though the string is a promoted constant value.
-        let mr = mr_expr(|b| {
-            let s = string_val(b, "hello");
-            pe(
-                b,
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    expr: s,
-                },
-            )
-        });
-        assert!(mr.allocates);
-        assert!(!mr.is_re_evaluation_safe());
-    }
-
-    #[test]
-    fn bytes_literal_allocates() {
-        // Lowered to array.new_data<u8>("..."). Distinct heap identity.
-        let mr = mr_expr(bytes_lit);
-        assert!(mr.allocates);
-        assert!(!mr.is_re_evaluation_safe());
-    }
-
-    // -----------------------------------------------------------------
     // VariantTag / VariantTest are heap reads that may trap — see D2
     // -----------------------------------------------------------------
 
@@ -1658,13 +1502,6 @@ mod tests {
             })
             .heap
             .writes
-        );
-        assert!(
-            mr_expr(|b| {
-                let v = int(b, 0);
-                struct_literal(b, vec![v])
-            })
-            .allocates
         );
         assert!(mr_expr(|b| call(b, vec![])).calls);
         assert_eq!(mr_stmt(ret_none).control, Control::NonLocal);
