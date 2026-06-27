@@ -516,27 +516,45 @@ fn compute_receiver_mutating(
             p0_of.insert(key, p0.local_index);
         }
     }
+    // Walk each body once to extract a fixpoint-invariant summary: whether it
+    // writes through its receiver directly, and the bodied callees it invokes on
+    // a self projection (the only verdicts that vary as `mutating` grows). The
+    // fixpoint then iterates these summaries with cheap set lookups instead of
+    // re-walking every body each round.
+    struct Summary {
+        key: (ModuleSource, String),
+        direct: bool,
+        pending: Vec<(ModuleSource, String)>,
+    }
+    let mut summaries: Vec<Summary> = Vec::new();
+    for func_rc in &project.functions {
+        let f = func_rc.borrow();
+        let key = (f.module_source.clone(), f.name.clone());
+        let (Some(body), Some(&p0)) = (f.body.as_ref(), p0_of.get(&key)) else {
+            continue;
+        };
+        let (direct, pending) =
+            summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
+        summaries.push(Summary {
+            key,
+            direct,
+            pending,
+        });
+    }
     let mut mutating: IndexSet<(ModuleSource, String)> = IndexSet::default();
+    for s in &summaries {
+        if s.direct {
+            mutating.insert(s.key.clone());
+        }
+    }
     loop {
         let mut changed = false;
-        for func_rc in &project.functions {
-            let f = func_rc.borrow();
-            let key = (f.module_source.clone(), f.name.clone());
-            if mutating.contains(&key) {
+        for s in &summaries {
+            if mutating.contains(&s.key) {
                 continue;
             }
-            let (Some(body), Some(&p0)) = (f.body.as_ref(), p0_of.get(&key)) else {
-                continue;
-            };
-            if body_writes_through_receiver(
-                body,
-                p0,
-                &mutating,
-                &has_body,
-                first_param_types,
-                type_table,
-            ) {
-                mutating.insert(key);
+            if s.pending.iter().any(|k| mutating.contains(k)) {
+                mutating.insert(s.key.clone());
                 changed = true;
             }
         }
@@ -547,40 +565,48 @@ fn compute_receiver_mutating(
     (mutating, has_body)
 }
 
-/// Whether `body` writes through param-0's projection root `p0`, using the
-/// partial `mutating` set for the recursive method-call clause (monotone, so a
-/// `false` here is re-derived on the next fixpoint round if `mutating` grows).
-fn body_writes_through_receiver(
+/// One walk of `body` extracting param-0's receiver-write summary:
+///
+/// - `direct`: a fixpoint-invariant write through param-0's projection root
+///   `p0` — `self.f = …` / `*self = …`, `&mut <self projection>`, a `mut` call
+///   argument rooted at self, or a receiver-projecting method call into a
+///   bodyless callee that mutates its receiver (verdict fixed by the callee's
+///   declared first-param type, conservative when unknown).
+/// - `pending`: keys of bodied callees invoked on a self projection. Their
+///   verdict is `mutating.contains(key)`, resolved by the fixpoint as the set
+///   grows. `direct` short-circuits the walk; `pending` is collected only while
+///   no direct write has been seen.
+fn summarize_receiver_writes(
     body: &Body,
     p0: u32,
-    mutating: &IndexSet<(ModuleSource, String)>,
     has_body: &IndexSet<(ModuleSource, String)>,
     first_param_types: &IndexMap<(ModuleSource, String), TypeId>,
     type_table: &TypeTable,
-) -> bool {
+) -> (bool, Vec<(ModuleSource, String)>) {
     let projects_p0 = |e: crate::nir_arena::ExprId| -> bool {
         super::arena_query::projection_root_local(body, e) == Some(p0)
     };
-    let mut found = false;
+    let mut direct = false;
+    let mut pending: Vec<(ModuleSource, String)> = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
-        if found {
+        if direct {
             return;
         }
         let NodeRef::Expr(e) = node else { return };
         match &body.exprs[e].kind {
             // A write to a projection of self: `self.f = …`, `*self = …`.
-            ExprKind::Assign { target, .. } if projects_p0(*target) => found = true,
+            ExprKind::Assign { target, .. } if projects_p0(*target) => direct = true,
             // `&mut <self projection>` hands a mutable place out.
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } if inner.as_expr().is_some_and(projects_p0) => found = true,
+            } if inner.as_expr().is_some_and(projects_p0) => direct = true,
             ExprKind::Call { args, .. } => {
                 if args
                     .iter()
                     .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
                 {
-                    found = true;
+                    direct = true;
                 }
             }
             ExprKind::MethodCall {
@@ -591,31 +617,32 @@ fn body_writes_through_receiver(
             } => {
                 if receiver.as_expr().is_some_and(projects_p0) {
                     // self-rooted receiver: mutated iff the callee mutates its
-                    // own receiver. Unknown (bodyless) callee → conservative.
+                    // own receiver. Bodied callee → defer to the fixpoint;
+                    // unknown (bodyless) callee → conservative.
                     let key = (func.module_source.clone(), func.name.clone());
-                    let inner_mut = if has_body.contains(&key) {
-                        mutating.contains(&key)
+                    if has_body.contains(&key) {
+                        pending.push(key);
                     } else {
-                        match first_param_types.get(&key) {
+                        let inner_mut = match first_param_types.get(&key) {
                             Some(&tp) => matches!(type_table.get(tp), ResolvedType::MutRef(_)),
                             None => true,
+                        };
+                        if inner_mut {
+                            direct = true;
                         }
-                    };
-                    if inner_mut {
-                        found = true;
                     }
                 }
                 if args
                     .iter()
                     .any(|a| a.is_mut && a.expr.as_expr().is_some_and(projects_p0))
                 {
-                    found = true;
+                    direct = true;
                 }
             }
             _ => {}
         }
     });
-    found
+    (direct, pending)
 }
 
 /// Flag the roots of mutable-escape sites in a single node:
