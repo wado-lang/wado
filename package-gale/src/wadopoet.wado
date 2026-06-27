@@ -214,6 +214,27 @@ impl Display for CharLit {
     }
 }
 
+pub type CharRangePat = RangeInclusive<char>;
+
+pub fn char_range_pat(range: RangeInclusive<char>) -> CharRangePat {
+    return range as CharRangePat;
+}
+
+impl Display for CharRangePat {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let range = *self as RangeInclusive<char>;
+        f.write_char('\'');
+        write_literal_char(f, range.start, '\'');
+        f.write_char('\'');
+        if range.start != range.end {
+            f.write_str(&"..=");
+            f.write_char('\'');
+            write_literal_char(f, range.end, '\'');
+            f.write_char('\'');
+        }
+    }
+}
+
 pub struct FieldSpec {
     pub name: String,
     pub type_str: String,
