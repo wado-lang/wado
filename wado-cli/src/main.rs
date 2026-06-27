@@ -12,6 +12,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Clone, Copy)]
 enum Cmd {
     Init,
+    Update,
     Compile,
     Check,
     Run,
@@ -29,6 +30,7 @@ enum Cmd {
 impl Cmd {
     const ALL: &[Self] = &[
         Self::Init,
+        Self::Update,
         Self::Compile,
         Self::Check,
         Self::Run,
@@ -46,6 +48,7 @@ impl Cmd {
     const fn name(self) -> &'static str {
         match self {
             Self::Init => "init",
+            Self::Update => "update",
             Self::Compile => "compile",
             Self::Check => "check",
             Self::Run => "run",
@@ -67,7 +70,7 @@ impl Cmd {
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
-            Self::Init | Self::Syntax | Self::Lsp => "[options]",
+            Self::Init | Self::Update | Self::Syntax | Self::Lsp => "[options]",
             Self::Query => "<kind> [options] <file.wado>",
         }
     }
@@ -75,6 +78,7 @@ impl Cmd {
     const fn desc(self) -> &'static str {
         match self {
             Self::Init => "Create a new wado.toml manifest",
+            Self::Update => "Resolve dependencies and write wado.lock",
             Self::Compile => "Compile a Wado source file",
             Self::Check => "Verify Kiln generators match committed source (CI)",
             Self::Run => "Compile and run a Wado CLI program",
@@ -184,6 +188,10 @@ async fn dispatch() -> Result<(), CliExit> {
                 Cmd::Init => {
                     let opts = wado_cli::init::parse_args(parser)?;
                     wado_cli::init::run(opts)
+                }
+                Cmd::Update => {
+                    let opts = wado_cli::update::parse_args(parser)?;
+                    Box::pin(wado_cli::update::run(opts)).await
                 }
                 // Each subcommand's future is boxed so `dispatch`'s state
                 // machine doesn't recursively inline all 12 subcommands'

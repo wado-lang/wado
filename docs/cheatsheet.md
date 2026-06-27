@@ -48,6 +48,25 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 };
 ```
 
+### Wasm Imports
+
+A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
+compiler detects from the binary whether the file is a **core module** or a
+**Component Model component** — both use `type: "wasm"`. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md).
+
+```wado
+// Core wasm / wat: each export becomes a free function.
+use { sin, cos } from "./libm.wat" with { type: "wat" };
+use { helper }   from "./mod.wasm" with { type: "wasm" };
+
+// CM component: each exported interface becomes a Wado `interface`,
+// called like a WASI method (effectful).
+use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
+let out = Compress::compress(bytes);              // requires `with Compress`
+```
+
+Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-mapping-at-component-boundaries).
+
 ## Value Semantics
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).

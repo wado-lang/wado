@@ -142,6 +142,7 @@ pub fn resolve_lib_input(
             Err(e) => return Err(CliExit::error(e)),
         }
     };
+    emit_manifest_warnings(&project);
 
     let pkg = project
         .manifest
@@ -178,6 +179,15 @@ fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
         manifest,
         root: dir.to_path_buf(),
     })
+}
+
+// Call at a command boundary, not inside `discover`/`load_from_dir`, so commands
+// that walk many directories (`wado test`, `wado format`) don't re-emit per dir.
+pub fn emit_manifest_warnings(project: &ProjectManifest) {
+    let path = project.root.join(MANIFEST_FILENAME);
+    for w in project.manifest.warnings() {
+        eprintln!("warning: {}: {w}", path.display());
+    }
 }
 
 /// Resolve an entry point from a project manifest, returning a `CliExit` error
@@ -224,6 +234,7 @@ pub fn resolve_input(
             }
             other => CliExit::error(other),
         })?;
+        emit_manifest_warnings(&project);
         let entry = entry_point_or_error(&project, kind)?;
         return Ok(entry.to_string_lossy().into_owned());
     }
@@ -243,6 +254,7 @@ pub fn resolve_input(
             return Err(CliExit::error(e));
         }
     };
+    emit_manifest_warnings(&project);
 
     let path = entry_point_or_error(&project, kind)?;
     Ok(path.to_string_lossy().into_owned())

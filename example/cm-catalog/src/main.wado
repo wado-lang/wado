@@ -1,0 +1,21 @@
+// Imports the wado:cm-catalog CM component (fetched into ./build by
+// `wado update`; see README.md) and round-trips values through it.
+
+use { println, Stdout } from "core:cli";
+use { CmCatalog } from "../build/cm-catalog.wasm" with { type: "wasm" };
+
+export fn run() with Stdout, CmCatalog {
+    let n = CmCatalog::id_u32(42);
+    let s = CmCatalog::id_string("hello");
+    let bytes: List<u8> = [1, 2, 3];
+    let back = CmCatalog::id_list_u8(bytes);
+
+    println(`id_u32(42)      = {n}`);
+    println(`id_string       = {s}`);
+    println(`id_list_u8 len  = {back.len()}`);
+
+    assert n == 42;
+    assert s == "hello";
+    assert back.len() == 3;
+    println("round-trip OK");
+}

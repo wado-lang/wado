@@ -73,7 +73,11 @@ fn validate_dependencies(manifest: &Manifest) -> Result<(), ManifestError> {
 }
 
 fn validate_dep_key(name: &str) -> Result<(), ManifestError> {
-    validate_name("dependency key", name)
+    // Validate each `:`-separated segment of a coordinate / `lib:` nickname key.
+    for segment in name.split(':') {
+        validate_name("dependency key", segment)?;
+    }
+    Ok(())
 }
 
 fn validate_dep_source(

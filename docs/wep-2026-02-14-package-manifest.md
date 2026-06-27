@@ -29,7 +29,7 @@ lib = "src/lib.wado"
 "wasi:cli/command" = "src/main.wado"
 
 [registries]
-default = "https://wa.dev"
+default = "oci://ghcr.io/acme"
 
 [dependencies]
 "docs:regex" = { version = "^0.1.0" }                                            # direct coordinate
@@ -130,7 +130,7 @@ use { parse, render } from "lib:markdown"; // OK: pub / export
 // use { tokenize } from "lib:markdown";    // ERROR: private
 ```
 
-When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below.
+When published as a `.wasm` component (e.g., to an OCI registry), only `export` items appear in the component's CM interface; `pub`-only items reach Wado consumers via the provider-metadata path below.
 
 Crossing the package boundary requires `pub` (or `export`): a consumer may import only the `pub` / `export` items of a dependency's `lib`, never its `internal` or private items. This is a settled rule; enforcing it for wado-to-wado source dependencies is not yet implemented.
 
@@ -153,7 +153,7 @@ Named registry aliases. Keys are short names; values are registry URLs. The spec
 
 ```toml
 [registries]
-default = "https://wa.dev"
+default = "oci://ghcr.io/acme"
 custom = "https://registry.example.com"
 ```
 
@@ -164,6 +164,12 @@ custom = "https://registry.example.com"
 ```
 
 A registry dependency with no `registry` field requires `default` to be set. If `default` is not defined and `registry` is omitted, it is an error.
+
+### Registry backend
+
+Registry resolution and publishing use **OCI** (the OCI Distribution Spec): a component is an OCI artifact in a container registry (e.g. `ghcr.io`), and the content digest provides integrity. A registry URL takes the form `oci://<host>/<prefix>`; an open coordinate `ns:pkg` resolves to the repository `<host>/<prefix>/<ns>/<pkg>`, with the version as an image tag.
+
+The earlier **warg** protocol is dropped. Its registry (`bytecodealliance/registry`) is archived and the ecosystem (`wasm-pkg-tools`) defaults to OCI. A warg-only registry such as wa.dev is reachable only through the external `wkg` tool, not natively; Wado neither implements nor wraps warg. Publishing is likewise done with `wkg`, not a Wado subcommand.
 
 ### `[dependencies]` and `[dev-dependencies]`
 
@@ -373,7 +379,7 @@ package identity = registry URL + namespace:name  (for registry deps)
                  = git URL                         (for git deps)
 
 resolution key   = (package identity, major version)
-                   e.g., (wa/std:http, 1) and (wa/std:http, 2)
+                   e.g., (ghcr.io/acme/std:http, 1) and (ghcr.io/acme/std:http, 2)
 ```
 
 When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping.
@@ -383,11 +389,11 @@ The existing `resolve_import(from_module_source, import_source)` signature alrea
 ```
 resolve_import(from=EntryPoint, "myns:foo")
   → CompilerHost looks up my-app's wado.toml → "myns:foo" version 2.0.0
-  → returns ModuleSource::Dependency { id: "registry+https://wa.dev/myns:foo@2.0.0" }
+  → returns ModuleSource::Dependency { id: "registry+oci://ghcr.io/acme/myns:foo@2.0.0" }
 
-resolve_import(from=Dependency{id="registry+https://wa.dev/user:router@1.0.0"}, "myns:foo")
+resolve_import(from=Dependency{id="registry+oci://ghcr.io/acme/user:router@1.0.0"}, "myns:foo")
   → CompilerHost looks up router's wado.toml → "myns:foo" version 1.0.0
-  → returns ModuleSource::Dependency { id: "registry+https://wa.dev/myns:foo@1.0.0" }
+  → returns ModuleSource::Dependency { id: "registry+oci://ghcr.io/acme/myns:foo@1.0.0" }
 ```
 
 The compiler sees distinct `ModuleSource::Dependency` values (different `id`) and compiles each independently. No changes to the compiler are needed — the `CompilerHost` implementation in the CLI handles all version-aware routing. Type isolation is natural — two separately compiled modules never share types.
@@ -431,28 +437,28 @@ world = { "wasi:cli/command" = "src/main.wado" }
 deps = []
 
 [[package]]
-id = "registry+https://wa.dev/docs:regex"
+id = "registry+oci://ghcr.io/acme/docs:regex"
 version = "0.1.2"
 integrity = "sha256:a1b2c3d4e5f6..."
 lib = "src/lib.wado"
-deps = ["registry+https://wa.dev/docs:regex-utils@0.3.0"]
+deps = ["registry+oci://ghcr.io/acme/docs:regex-utils@0.3.0"]
 
 [[package]]
-id = "registry+https://wa.dev/docs:regex-utils"
+id = "registry+oci://ghcr.io/acme/docs:regex-utils"
 version = "0.3.0"
 integrity = "sha256:f6e5d4c3b2a1..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-id = "registry+https://wa.dev/std:json"
+id = "registry+oci://ghcr.io/acme/std:json"
 version = "1.2.0"
 integrity = "sha256:c3d4e5f6a1b2..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-id = "registry+https://wa.dev/tools:utils"
+id = "registry+oci://ghcr.io/acme/tools:utils"
 version = "0.5.1"
 integrity = "sha256:b2c3d4e5f6a1..."
 lib = "src/lib.wado"
@@ -463,10 +469,10 @@ id = "git+https://github.com/user/router.git/user:router"
 version = "1.0.2"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
 lib = "src/lib.wado"
-deps = ["registry+https://wa.dev/tools:utils@0.5.1", "registry+https://wa.dev/std:json@1.2.0"]
+deps = ["registry+oci://ghcr.io/acme/tools:utils@0.5.1", "registry+oci://ghcr.io/acme/std:json@1.2.0"]
 ```
 
-Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` field is the resolved package id — the source prefix combined with the package identity (e.g., `registry+https://wa.dev/docs:regex` or `git+https://github.com/user/router.git/user:router`). The `deps` array references other entries using `id@version` format.
+Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` field is the resolved package id — the source prefix combined with the package identity (e.g., `registry+oci://ghcr.io/acme/docs:regex` or `git+https://github.com/user/router.git/user:router`). The `deps` array references other entries using `id@version` format.
 
 #### Header Fields
 
