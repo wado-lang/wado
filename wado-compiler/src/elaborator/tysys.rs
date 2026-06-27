@@ -426,11 +426,9 @@ impl TypeSystem {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
             ResolvedType::Struct { name, .. } => name,
             ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
+                name, type_args, ..
             } => {
-                if TypeTable::is_tuple_type(&name, &module_source) {
+                if TypeTable::is_tuple_type(&name) {
                     let parts: Vec<String> = type_args
                         .iter()
                         .map(|&t| self.type_id_to_string(t))

@@ -748,7 +748,7 @@ impl<'a> Emitter<'a> {
             } => match name.as_str() {
                 "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
                 "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
-                "Tuple" => CmShape::Tuple(type_args.clone()),
+                n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
                 "Result" if type_args.len() == 2 => CmShape::Result {
                     ok: self.non_unit(type_args[0]),
                     err: self.non_unit(type_args[1]),

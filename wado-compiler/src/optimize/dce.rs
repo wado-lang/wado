@@ -1114,12 +1114,11 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::GenericInstance {
-                name,
-                type_args,
-                module_source,
-            } if TypeTable::is_tuple_type(&name, &module_source) => {
-                // Tuple method call: synthesized as non-monomorphized
-                // with struct_name `"Tuple<f64,f64>"`.
+                name, type_args, ..
+            } if TypeTable::is_tuple_type(&name) => {
+                // Tuple method call: synthesized as non-monomorphized with
+                // struct_name `"[]<f64,f64>"` (reserved tuple dispatch key
+                // plus concrete element args).
                 let type_arg_names: Vec<String> = type_args
                     .iter()
                     .map(|t| self.type_table.mangle_type_name(*t))

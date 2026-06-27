@@ -1108,7 +1108,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args,
             } => {
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if TypeTable::is_tuple_type(&name, &module_source)
+                if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
                     if index < type_args.len() {
@@ -1298,10 +1298,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Handle tuple indexing: t[0] is equivalent to t.0
         if let ResolvedType::GenericInstance {
             ref name,
-            ref module_source,
             type_args: ref elements,
+            ..
         } = base_type
-            && TypeTable::is_tuple_type(name, module_source)
+            && TypeTable::is_tuple_type(name)
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -3565,10 +3565,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ty {
             ResolvedType::TypePack { .. } => true,
             ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                name, type_args, ..
+            } if TypeTable::is_tuple_type(&name) => {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
@@ -3619,10 +3617,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
                     if let ResolvedType::GenericInstance {
                         name,
-                        module_source,
                         type_args: inner_elems,
+                        ..
                     } = spread_type
-                        && TypeTable::is_tuple_type(&name, &module_source)
+                        && TypeTable::is_tuple_type(&name)
                     {
                         // A concrete tuple spread expands inline to one element
                         // per field.

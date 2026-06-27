@@ -188,7 +188,7 @@ use crate::symbol::SymbolTable;
 /// one; otherwise fall back to the first AST entry, then the first
 /// synthesised entry. The union prevents an AST-layer entry from masking
 /// a same-keyed synthesised entry (e.g. core's variadic
-/// `impl<..T> Inspect for [..T]` registers `("Tuple", "Inspect")` at the
+/// `impl<..T> Inspect for [..T]` registers `("[]", "Inspect")` at the
 /// AST layer; a user `struct Tuple` whose auto-derived `Tuple^Inspect`
 /// lives in the synthesised layer must still be reachable when its module
 /// matches the hint).

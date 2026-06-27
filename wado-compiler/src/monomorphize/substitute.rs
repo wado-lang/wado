@@ -127,14 +127,14 @@ impl Monomorphizer {
             } => {
                 // Skip List and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "List" || TypeTable::is_tuple_type(&name, &module_source) {
+                if name == "List" || TypeTable::is_tuple_type(&name) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
                         .collect();
                     return if new_args == type_args {
                         type_id
-                    } else if TypeTable::is_tuple_type(&name, &module_source) {
+                    } else if TypeTable::is_tuple_type(&name) {
                         type_table.make_tuple(new_args)
                     } else {
                         type_table.make_generic_instance(name, module_source, new_args)
@@ -313,7 +313,7 @@ impl Monomorphizer {
                 // recursively through `self.substitute_type` so that
                 // nested `GenericInstance`s inside the tuple still get
                 // their monomorphized-struct rewrite.
-                if TypeTable::is_tuple_type(&name, &module_source) {
+                if TypeTable::is_tuple_type(&name) {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match type_table.get(e).clone() {

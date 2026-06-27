@@ -637,11 +637,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (TypeTable::ARRAY_TYPE_NAME.to_string(), Some(vec![*elem]))
             }
             ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
+                name, type_args, ..
             } => {
-                if TypeTable::is_tuple_type(name, module_source) {
+                if TypeTable::is_tuple_type(name) {
                     // Tuples implement a trait when all elements implement it
                     let elems = type_args.clone();
                     return elems

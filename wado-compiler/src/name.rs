@@ -1163,6 +1163,8 @@ pub enum TypeNameInfo {
     Named(String),
     /// A generic instance with type argument names already resolved
     Generic { name: String, args: Vec<String> },
+    /// A built-in tuple `[T1, T2, …]` with element names already resolved
+    Tuple(Vec<String>),
     /// Option<T> with inner type name
     Option(String),
     /// A function type with param count and return type name
@@ -1191,6 +1193,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Unit => "()".to_string(),
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
+        TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
         TypeNameInfo::Function {
             param_count,
@@ -1230,6 +1233,15 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     } else {
         format!("{}<{}>", base_name, type_args.join(","))
     }
+}
+
+/// Build a tuple type's mangled identity from its element names.
+///
+/// The built-in tuple's user-facing and mangled spelling is `[T1, T2, …]`
+/// (not `Tuple<…>`), shared by every site that names a tuple so they cannot
+/// drift. Example: `mangle_tuple_type(&["i32", "String"])` → `"[i32,String]"`.
+pub fn mangle_tuple_type(elems: &[String]) -> String {
+    format!("[{}]", elems.join(","))
 }
 
 /// Build a monomorphized method name from struct name, type args, and method name.

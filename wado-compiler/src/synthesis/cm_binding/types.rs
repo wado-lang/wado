@@ -1063,11 +1063,9 @@ pub(super) fn flat_types_from_type_id_into(
             }
         }
         ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
+            name, type_args, ..
         } => {
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 for &elem in type_args {
                     flat_types_from_type_id_into(elem, out, tir_modules, type_table);
                 }
@@ -1297,9 +1295,7 @@ pub(super) fn type_id_to_ast_type(
         } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
+            name, type_args, ..
         } => {
             let args: Vec<Type> = type_args
                 .iter()
@@ -1308,7 +1304,7 @@ pub(super) fn type_id_to_ast_type(
             // The tuple family is a `GenericInstance`, but its CM surface is a
             // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
             // the tuple arm rather than the generic catch-all.
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 Type::Tuple(args)
             } else {
                 Type::Generic(GenericType {

@@ -422,13 +422,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            // Tuples (GenericInstance with name "Tuple") have special built-in methods.
+            // Tuples (the reserved-name `[]` generic) have special built-in methods.
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 type_args,
             } => {
-                if TypeTable::is_tuple_type(name, module_source) {
+                if TypeTable::is_tuple_type(name) {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {

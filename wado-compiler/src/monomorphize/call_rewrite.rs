@@ -633,12 +633,11 @@ impl Monomorphizer {
                 );
             }
         }
-        // Tuple variadic impl: rewrite Tuple^Eq::eq → Tuple<i32,i32,i32>^Eq::eq
-        // TODO: LocalMethodName.struct_name does not carry module_source,
-        // so we cannot use TypeTable::is_tuple_type here. This is safe because
-        // only built-in tuples use TUPLE_TYPE_NAME as struct_name in method info.
+        // Tuple variadic impl: rewrite `[]^Eq::eq` → `[]<i32,i32,i32>^Eq::eq`.
+        // The reserved tuple base name `[]` is unique to built-in tuples, so a
+        // bare-name check on `struct_name` identifies them without ambiguity.
         if let Some(ref info) = method_func.method_info
-            && info.struct_name == TypeTable::TUPLE_TYPE_NAME
+            && TypeTable::is_tuple_type(&info.struct_name)
         {
             let mono = method_func.monomorph_info.as_ref();
             let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
