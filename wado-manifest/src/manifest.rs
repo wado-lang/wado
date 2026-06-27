@@ -377,7 +377,8 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
         let publish_source = if has_git {
             Some(Box::new(build_git_source(name, &raw)?))
         } else if has_package {
-            Some(Box::new(build_registry_source(name, &raw)?))
+            let package = raw.package.clone().expect("has_package checked");
+            Some(Box::new(build_registry_source(name, package, &raw)?))
         } else {
             None
         };
@@ -404,7 +405,16 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
 
     if has_package {
         return Ok(Dependency {
-            source: build_registry_source(name, &raw)?,
+            source: build_registry_source(name, raw.package.clone().expect("has_package"), &raw)?,
+        });
+    }
+
+    // Open coordinate: the key is itself the registry identity
+    // (`"ns:pkg" = { version = "..." }`), `package` omitted, default registry
+    // unless `registry` names one. See WEP: Package Manifest.
+    if raw.version.is_some() && is_open_coordinate(name) {
+        return Ok(Dependency {
+            source: build_registry_source(name, name.to_string(), &raw)?,
         });
     }
 
@@ -413,6 +423,21 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
         message: "dependency must specify one of: `git`, `package`, `path`, or `workspace = true`"
             .to_string(),
     })
+}
+
+/// A dependency key is an open coordinate `ns:pkg` (exactly two non-empty
+/// segments) whose namespace is not a reserved/indirection prefix. Such a key
+/// is its own registry identity, so `package` may be omitted.
+fn is_open_coordinate(key: &str) -> bool {
+    match key.split_once(':') {
+        Some((ns, pkg)) => {
+            !ns.is_empty()
+                && !pkg.is_empty()
+                && !pkg.contains(':')
+                && !matches!(ns, "wasi" | "core" | "lib")
+        }
+        None => false,
+    }
 }
 
 fn build_git_source(name: &str, raw: &RawDependency) -> Result<DependencySource, ManifestError> {
@@ -442,11 +467,13 @@ fn build_git_source(name: &str, raw: &RawDependency) -> Result<DependencySource,
     Ok(DependencySource::Git { url, pin })
 }
 
+/// `package` is the resolved registry identity: the explicit `package` field
+/// for a `lib:` nickname, or the dependency key itself for an open coordinate.
 fn build_registry_source(
     name: &str,
+    package: String,
     raw: &RawDependency,
 ) -> Result<DependencySource, ManifestError> {
-    let package = raw.package.clone().expect("caller checked package is Some");
     let version = raw
         .version
         .clone()
@@ -513,6 +540,78 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
                 pin: GitPin::Version(v),
             } if url == "https://github.com/user/router.git" && v == "^1.0.0"
         ));
+    }
+
+    #[test]
+    fn parse_open_coordinate_registry_dep() {
+        // WEP form: the key is itself the package identity, `package` omitted,
+        // default registry. See wep-2026-02-14-package-manifest.md.
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "main.wado"
+
+[registries]
+default = "https://wa.dev"
+
+[dependencies]
+"mizchi:brotli" = { version = "^0.2.0" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let dep = &m.dependencies["mizchi:brotli"];
+        assert!(matches!(
+            &dep.source,
+            DependencySource::Registry {
+                registry: None,
+                package,
+                version,
+            } if package == "mizchi:brotli" && version == "^0.2.0"
+        ));
+    }
+
+    #[test]
+    fn parse_open_coordinate_with_explicit_registry() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+custom = "https://registry.example.com"
+
+[dependencies]
+"mizchi:brotli" = { registry = "custom", version = "^0.2.0" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let dep = &m.dependencies["mizchi:brotli"];
+        assert!(matches!(
+            &dep.source,
+            DependencySource::Registry {
+                registry: Some(reg),
+                package,
+                version,
+            } if reg == "custom" && package == "mizchi:brotli" && version == "^0.2.0"
+        ));
+    }
+
+    #[test]
+    fn open_coordinate_without_default_registry_rejected() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"mizchi:brotli" = { version = "^0.2.0" }
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::NoDefaultRegistry { .. }),
+            "expected NoDefaultRegistry, got {err:?}"
+        );
     }
 
     #[test]

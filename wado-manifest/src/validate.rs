@@ -73,7 +73,13 @@ fn validate_dependencies(manifest: &Manifest) -> Result<(), ManifestError> {
 }
 
 fn validate_dep_key(name: &str) -> Result<(), ManifestError> {
-    validate_name("dependency key", name)
+    // A key is a specifier: an open coordinate `ns:pkg` or a `lib:nick`
+    // nickname (or a bare nickname). Each `:`-separated segment matches
+    // `[a-zA-Z0-9_-]+`.
+    for segment in name.split(':') {
+        validate_name("dependency key", segment)?;
+    }
+    Ok(())
 }
 
 fn validate_dep_source(
