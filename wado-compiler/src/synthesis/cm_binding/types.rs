@@ -146,7 +146,10 @@ impl LiftContext<'_> {
     /// check, so the resulting struct/variant `TypeId` matches the
     /// elaborator-registered one in every world.
     pub(super) fn module_source_for(&self, source: &str) -> ModuleSource {
-        if let Some(entry) = self.cm_interface_registry.lib_module_source_of(source) {
+        if let Some(entry) = self
+            .cm_interface_registry
+            .cm_interface_module_source_of(source)
+        {
             return entry.clone();
         }
         module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
@@ -168,7 +171,7 @@ impl LiftContext<'_> {
                 if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
                     && self
                         .cm_interface_registry
-                        .lib_module_source_of(src)
+                        .cm_interface_module_source_of(src)
                         .is_some()
                 {
                     if self
@@ -283,6 +286,15 @@ pub fn cm_type_to_type_id(
                     canonical_wasi_package(registry, named.name.as_str()).and_then(|pkg| {
                         type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
                     })
+                })
+                // Component-imported (and `--lib`) types the cm-package prefix
+                // lookup can't match: resolve via the FQ -> ModuleSource provenance.
+                .or_else(|| {
+                    named
+                        .source_interface
+                        .as_deref()
+                        .and_then(|fq| registry.cm_interface_module_source_of(fq))
+                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 })
                 .unwrap_or(TypeTable::I32),
         },
@@ -721,100 +733,24 @@ pub(super) fn coerce_flat_lower(
     flat_from_int_bits(sized, have)
 }
 
-/// Compute the flat ABI parameter types for a WASI function parameter.
+/// Compute the flat ABI parameter types for a CM function parameter.
+///
+/// Adapter mapping [`CmInterfaceRegistry::cm_flatten`] to `TypeId`s; the
+/// `names.string` guard handles a non-`"String"` prelude String name first.
 pub fn flatten_param_type(
     ty: &Type,
     cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<TypeId> {
-    fn cm_val_to_type_id(v: &cm_abi::CmValType) -> TypeId {
-        match v {
-            cm_abi::CmValType::I32 => TypeTable::I32,
-            cm_abi::CmValType::I64 => TypeTable::I64,
-            cm_abi::CmValType::F32 => TypeTable::F32,
-            cm_abi::CmValType::F64 => TypeTable::F64,
-        }
-    }
-
     let resolved = cm_interface_registry.resolve_type(ty);
-    match &resolved {
-        Type::Named(named) => {
-            if named.name == names.string {
-                return vec![TypeTable::I32, TypeTable::I32];
-            }
-            match named.name.as_str() {
-                // Unit (here spelled `Named("()")`, e.g. a `Result<(), ()>` arg)
-                // has no flat slots — match `flatten_cm_param_type`'s `"()" => {}`.
-                "()" => Vec::new(),
-                "i32" | "u32" | "bool" | "char" | "i8" | "u8" | "i16" | "u16" => {
-                    vec![TypeTable::I32]
-                }
-                "i64" | "u64" => vec![TypeTable::I64],
-                "f32" => vec![TypeTable::F32],
-                "f64" => vec![TypeTable::F64],
-                name => {
-                    // Without a resolved CM-interface source the reference is
-                    // not a CM variant/struct — flatten to a single i32 handle.
-                    let Some(source) = named
-                        .source_interface
-                        .as_deref()
-                        .filter(|s| crate::component_model::source_uses_cm_abi(s))
-                    else {
-                        return vec![TypeTable::I32];
-                    };
-                    // WASI variant: discriminant + join of all case payload flat types.
-                    if let Some(cases) =
-                        cm_interface_registry.get_variant_cases_by_source(source, name)
-                    {
-                        let mut result = vec![TypeTable::I32]; // discriminant
-                        let case_flats: Vec<Vec<TypeId>> = cases
-                            .iter()
-                            .map(|c| {
-                                c.payload
-                                    .as_ref()
-                                    .map(|t| flatten_param_type(t, cm_interface_registry, names))
-                                    .unwrap_or_default()
-                            })
-                            .collect();
-                        let max_len = case_flats.iter().map(Vec::len).max().unwrap_or(0);
-                        for i in 0..max_len {
-                            // Single Canonical ABI join over the cases' i-th slots
-                            // ({i32,f32}→i32, other mismatch→i64).
-                            let joined = case_flats
-                                .iter()
-                                .filter_map(|f| f.get(i).copied())
-                                .map(cm_val_type_from_type_id)
-                                .reduce(|a, b| cm_abi::CmValType::join(Some(a), Some(b)))
-                                .map(cm_val_type_to_type_id)
-                                .unwrap_or(TypeTable::I32);
-                            result.push(joined);
-                        }
-                        return result;
-                    }
-                    // WASI struct (record): concatenation of all field flat types.
-                    if let Some(fields) = cm_interface_registry
-                        .get_struct_fields_with_wado_names_by_source(source, name)
-                    {
-                        return fields
-                            .iter()
-                            .flat_map(|(_, _, ft)| {
-                                flatten_param_type(ft, cm_interface_registry, names)
-                            })
-                            .collect();
-                    }
-                    // Resource handles, enums, flags, etc.: single i32
-                    vec![TypeTable::I32]
-                }
-            }
-        }
-        Type::Generic(g) if g.name == "Stream" => vec![TypeTable::I32],
-        Type::Reference(_) | Type::MutReference(_) => vec![TypeTable::I32],
-        Type::Tuple(elems) if elems.is_empty() => vec![],
-        _ => {
-            let flat = cm_abi::cm_flat_types(&resolved);
-            flat.iter().map(cm_val_to_type_id).collect()
-        }
+    if matches!(&resolved, Type::Named(n) if n.name == names.string) {
+        return vec![TypeTable::I32, TypeTable::I32];
     }
+    cm_interface_registry
+        .cm_flatten(&resolved)
+        .into_iter()
+        .map(cm_val_type_to_type_id)
+        .collect()
 }
 
 /// Compute the CM Canonical ABI byte size for a flags type given its label count.
@@ -1121,11 +1057,9 @@ pub(super) fn flat_types_from_type_id_into(
             }
         }
         ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
+            name, type_args, ..
         } => {
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 for &elem in type_args {
                     flat_types_from_type_id_into(elem, out, tir_modules, type_table);
                 }
@@ -1355,9 +1289,7 @@ pub(super) fn type_id_to_ast_type(
         } => cm_named(name, module_source),
         ResolvedType::Resource { name, .. } => named_no_source(name),
         ResolvedType::GenericInstance {
-            name,
-            type_args,
-            module_source,
+            name, type_args, ..
         } => {
             let args: Vec<Type> = type_args
                 .iter()
@@ -1366,7 +1298,7 @@ pub(super) fn type_id_to_ast_type(
             // The tuple family is a `GenericInstance`, but its CM surface is a
             // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
             // the tuple arm rather than the generic catch-all.
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 Type::Tuple(args)
             } else {
                 Type::Generic(GenericType {

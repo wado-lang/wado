@@ -1088,7 +1088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         matches!(
             table.get(base),
             ResolvedType::GenericInstance { name, module_source, .. }
-                if TypeTable::is_tuple_type(name, module_source)
+                if TypeTable::is_tuple_type(name)
         )
     }
 

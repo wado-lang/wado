@@ -41,12 +41,12 @@ struct tuple//[i32, i32, i32] {  // TypeId(6)
     mut 2: i32,
 }
 
-struct tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>] {  // TypeId(7)
+struct tuple//[[i32,i32,i32], [i32,i32,i32]] {  // TypeId(7)
     mut 0: ref "tuple//[i32, i32, i32]",
     mut 1: ref "tuple//[i32, i32, i32]",
 }
 
-struct tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>] {  // TypeId(8)
+struct tuple//[[i32,i32], [i32,i32], [i32,i32]] {  // TypeId(8)
     mut 0: ref "tuple//[i32, i32]",
     mut 1: ref "tuple//[i32, i32]",
     mut 2: ref "tuple//[i32, i32]",
@@ -57,7 +57,7 @@ struct tuple//[i32, core:prelude/string.wado/String] {  // TypeId(9)
     mut 1: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>] {  // TypeId(10)
+struct tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]] {  // TypeId(10)
     mut 0: ref "tuple//[i32, core:prelude/string.wado/String]",
     mut 1: ref "tuple//[i32, core:prelude/string.wado/String]",
 }
@@ -66,7 +66,7 @@ struct tuple//[i32] {  // TypeId(11)
     mut 0: i32,
 }
 
-struct tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>] {  // TypeId(12)
+struct tuple//[[i32], [i32]] {  // TypeId(12)
     mut 0: ref "tuple//[i32]",
     mut 1: ref "tuple//[i32]",
 }
@@ -198,12 +198,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_0_zip_homogeneous"() {
     a = struct.new "tuple//[i32, i32, i32]" { 0: 1, 1: 2, 2: 3 };
     b = struct.new "tuple//[i32, i32, i32]" { 0: 4, 1: 5, 2: 6 };
     sum = 0;
-    __sroa___sroa___tuple_3_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_3_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa___tuple_3_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa___tuple_3_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.1;
-    __sroa___sroa___tuple_3_2_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.0.2;
-    __sroa___sroa___tuple_3_2_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32,i32>, core:prelude/types.wado/Tuple<i32,i32,i32>]" { 0: a, 1: b }.1.2;
+    __sroa___sroa___tuple_3_0_0 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_3_0_1 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_3_1_0 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.0.1;
+    __sroa___sroa___tuple_3_1_1 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.1.1;
+    __sroa___sroa___tuple_3_2_0 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.0.2;
+    __sroa___sroa___tuple_3_2_1 = struct.new "tuple//[[i32,i32,i32], [i32,i32,i32]]" { 0: a, 1: b }.1.2;
     __cond = local.tee sum((local.tee sum((local.tee sum((0 + __sroa___sroa___tuple_3_0_0) + __sroa___sroa___tuple_3_0_1) + __sroa___sroa___tuple_3_1_0) + __sroa___sroa___tuple_3_1_1) + __sroa___sroa___tuple_3_2_0) + __sroa___sroa___tuple_3_2_1) == 21;
     if @unlikely(__cond == 0) {
         cold_path;
@@ -235,10 +235,10 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_1_zip_heterogeneous"() {
     let __sroa___sroa_zipped_0_1: i32;
     a = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } };
     b = struct.new "tuple//[i32, core:prelude/string.wado/String]" { 0: 2, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 } };
-    __sroa___sroa_zipped_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa_zipped_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.1.0;
-    __sroa___sroa_zipped_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.0.1;
-    __sroa___sroa_zipped_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>, core:prelude/types.wado/Tuple<i32,core:prelude/string.wado/String>]" { 0: a, 1: b }.1.1;
+    __sroa___sroa_zipped_0_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: a, 1: b }.0.0;
+    __sroa___sroa_zipped_0_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: a, 1: b }.1.0;
+    __sroa___sroa_zipped_1_0 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: a, 1: b }.0.1;
+    __sroa___sroa_zipped_1_1 = struct.new "tuple//[[i32,core:prelude/string.wado/String], [i32,core:prelude/string.wado/String]]" { 0: a, 1: b }.1.1;
     __cond_4 = __sroa___sroa_zipped_0_0 == 1;
     if @unlikely(__cond_4 == 0) {
         cold_path;
@@ -291,12 +291,12 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_2_zip_three_tuples"() {
     b = struct.new "tuple//[i32, i32]" { 0: 3, 1: 4 };
     c = struct.new "tuple//[i32, i32]" { 0: 5, 1: 6 };
     sum = 0;
-    __sroa___sroa___tuple_4_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.0;
-    __sroa___sroa___tuple_4_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.0;
-    __sroa___sroa___tuple_4_0_2 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.0;
-    __sroa___sroa___tuple_4_1_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.0.1;
-    __sroa___sroa___tuple_4_1_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.1.1;
-    __sroa___sroa___tuple_4_1_2 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>, core:prelude/types.wado/Tuple<i32,i32>]" { 0: a, 1: b, 2: c }.2.1;
+    __sroa___sroa___tuple_4_0_0 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.0.0;
+    __sroa___sroa___tuple_4_0_1 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.1.0;
+    __sroa___sroa___tuple_4_0_2 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.2.0;
+    __sroa___sroa___tuple_4_1_0 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.0.1;
+    __sroa___sroa___tuple_4_1_1 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.1.1;
+    __sroa___sroa___tuple_4_1_2 = struct.new "tuple//[[i32,i32], [i32,i32], [i32,i32]]" { 0: a, 1: b, 2: c }.2.1;
     __cond = local.tee sum(((local.tee sum(((0 + __sroa___sroa___tuple_4_0_0) + __sroa___sroa___tuple_4_0_1) + __sroa___sroa___tuple_4_0_2) + __sroa___sroa___tuple_4_1_0) + __sroa___sroa___tuple_4_1_1) + __sroa___sroa___tuple_4_1_2) == 21;
     if @unlikely(__cond == 0) {
         cold_path;
@@ -320,8 +320,8 @@ fn "wado-compiler/tests/fixtures/tuple_zip.wado/__test_3_zip_single_element"() {
     let __sroa___sroa___tuple_2_0_1: i32;
     a = struct.new "tuple//[i32]" { 0: 42 };
     b = struct.new "tuple//[i32]" { 0: 99 };
-    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>]" { 0: a, 1: b }.0.0;
-    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[core:prelude/types.wado/Tuple<i32>, core:prelude/types.wado/Tuple<i32>]" { 0: a, 1: b }.1.0;
+    __sroa___sroa___tuple_2_0_0 = struct.new "tuple//[[i32], [i32]]" { 0: a, 1: b }.0.0;
+    __sroa___sroa___tuple_2_0_1 = struct.new "tuple//[[i32], [i32]]" { 0: a, 1: b }.1.0;
     __cond_6 = __sroa___sroa___tuple_2_0_0 == 42;
     if @unlikely(__cond_6 == 0) {
         cold_path;

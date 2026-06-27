@@ -5470,10 +5470,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match ty {
             ResolvedType::TypePack { .. } => true,
             ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } if TypeTable::is_tuple_type(&name, &module_source) => {
+                name, type_args, ..
+            } if TypeTable::is_tuple_type(&name) => {
                 type_args.iter().any(|e| self.type_contains_pack(*e))
             }
             _ => false,
@@ -5544,10 +5542,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 } else if let ResolvedType::GenericInstance {
                     name,
-                    module_source,
                     type_args: inner_elems,
+                    ..
                 } = spread_type
-                    && TypeTable::is_tuple_type(&name, &module_source)
+                    && TypeTable::is_tuple_type(&name)
                 {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
@@ -7550,14 +7548,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source,
                     type_args,
                 } => {
-                    // Tuple projection (`t.0`): a tuple is a `GenericInstance`
-                    // named "Tuple" with no struct decl, so the struct-fields
-                    // lookup below would miss and fall to the `(0, …)`
-                    // fallback — collapsing every `t.N` onto field 0, which
-                    // SROA then keys on. Resolve the numeric field name into
-                    // the element index directly, mirroring the elaborator's
-                    // `lookup_field_type` tuple branch (expr.rs:1513).
-                    if crate::tir::TypeTable::is_tuple_type(&name, &module_source)
+                    // Tuple projection (`t.0`): a tuple has no struct decl, so the
+                    // struct-fields lookup below misses and the `(0, …)` fallback would
+                    // collapse every `t.N` onto field 0. Resolve the numeric field name
+                    // into the element index directly.
+                    if crate::tir::TypeTable::is_tuple_type(&name)
                         && let Ok(index) = field_name.parse::<usize>()
                         && index < type_args.len()
                     {

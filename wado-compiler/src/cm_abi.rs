@@ -157,11 +157,6 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
                 cm_align_result(&generic.args[0], &generic.args[1]),
             )
         }
-        // Tuple<T, U, ...>
-        "Tuple" => {
-            let layout = layout_tuple(&generic.args);
-            layout.size
-        }
         // Stream<T>, Future<T> are i32 handles
         "Stream" | "Future" => 4,
         // Own<T>, Borrow<T> are i32 handles
@@ -176,7 +171,6 @@ fn cm_align_generic(generic: &GenericType) -> u32 {
         "List" => 4, // (ptr: i32, len: i32) — aligned to i32
         "Option" if generic.args.len() == 1 => cm_align_option(&generic.args[0]),
         "Result" if generic.args.len() == 2 => cm_align_result(&generic.args[0], &generic.args[1]),
-        "Tuple" => generic.args.iter().map(cm_align).max().unwrap_or(1),
         "Stream" | "Future" | "Own" | "Borrow" => 4,
         _ => 4,
     }
@@ -364,81 +358,12 @@ impl CmValType {
     }
 }
 
-/// Flatten a type into its core Wasm value types for the flat ABI.
-///
-/// Compound types like String and list<T> are lowered to (i32, i32) pairs.
-/// Simple types map to their corresponding core value type.
-pub fn cm_flat_types(ty: &Type) -> Vec<CmValType> {
-    let mut out = Vec::new();
-    flatten_type(ty, &mut out);
-    out
-}
-
-fn flatten_type(ty: &Type, out: &mut Vec<CmValType>) {
-    match ty {
-        Type::Named(named) => match named.name.as_str() {
-            "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
-                out.push(CmValType::I32);
-            }
-            "i64" | "u64" => out.push(CmValType::I64),
-            "f32" => out.push(CmValType::F32),
-            "f64" => out.push(CmValType::F64),
-            "String" => {
-                out.push(CmValType::I32); // ptr
-                out.push(CmValType::I32); // len
-            }
-            "()" => {} // unit — no values
-            // Resource handles, enums — i32
-            _ => out.push(CmValType::I32),
-        },
-        Type::Generic(generic) => match generic.name.as_str() {
-            "List" => {
-                out.push(CmValType::I32); // ptr
-                out.push(CmValType::I32); // len
-            }
-            "Stream" | "Future" | "Own" | "Borrow" => out.push(CmValType::I32),
-            "Option" if generic.args.len() == 1 => {
-                // option<T> flattens to: discriminant i32 + flatten(T)
-                out.push(CmValType::I32);
-                flatten_type(&generic.args[0], out);
-            }
-            "Result" if generic.args.len() == 2 => {
-                // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
-                out.push(CmValType::I32);
-                let mut ok_flat = Vec::new();
-                let mut err_flat = Vec::new();
-                flatten_type(&generic.args[0], &mut ok_flat);
-                flatten_type(&generic.args[1], &mut err_flat);
-                // Union: take the longer list, using join on overlapping positions
-                let max_len = ok_flat.len().max(err_flat.len());
-                for i in 0..max_len {
-                    let ok_val = ok_flat.get(i).copied();
-                    let err_val = err_flat.get(i).copied();
-                    out.push(CmValType::join(ok_val, err_val));
-                }
-            }
-            _ => out.push(CmValType::I32),
-        },
-        Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
-        Type::Tuple(elems) => {
-            if elems.is_empty() {
-                return; // unit
-            }
-            for elem in elems {
-                flatten_type(elem, out);
-            }
-        }
-        _ => {}
-    }
-}
-
 /// For tuple return types, return the list of `CmPrimitiveType`s.
 /// Returns `None` if the type is not a tuple or not all elements are primitives.
 pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<crate::component_model::CmPrimitiveType>> {
     use crate::component_model::CmPrimitiveType;
     let elements = match ty {
         Type::Tuple(elems) if !elems.is_empty() => elems,
-        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => &g.args,
         _ => return None,
     };
     let mut prims = Vec::new();
@@ -781,43 +706,6 @@ mod tests {
         let result = generic_type("Result", vec![opt_string, named_type("i32")]);
         assert_eq!(cm_size(&result), 16);
         assert_eq!(cm_align(&result), 4);
-    }
-
-    #[test]
-    fn test_flat_primitives() {
-        assert_eq!(cm_flat_types(&named_type("i32")), vec![CmValType::I32]);
-        assert_eq!(cm_flat_types(&named_type("i64")), vec![CmValType::I64]);
-        assert_eq!(cm_flat_types(&named_type("f32")), vec![CmValType::F32]);
-        assert_eq!(cm_flat_types(&named_type("f64")), vec![CmValType::F64]);
-        assert_eq!(cm_flat_types(&named_type("bool")), vec![CmValType::I32]);
-        assert_eq!(cm_flat_types(&named_type("char")), vec![CmValType::I32]);
-        assert_eq!(cm_flat_types(&named_type("u8")), vec![CmValType::I32]);
-    }
-
-    #[test]
-    fn test_flat_string() {
-        assert_eq!(
-            cm_flat_types(&named_type("String")),
-            vec![CmValType::I32, CmValType::I32]
-        );
-    }
-
-    #[test]
-    fn test_flat_list() {
-        let list = generic_type("List", vec![named_type("i32")]);
-        assert_eq!(cm_flat_types(&list), vec![CmValType::I32, CmValType::I32]);
-    }
-
-    #[test]
-    fn test_flat_unit() {
-        assert_eq!(cm_flat_types(&named_type("()")), vec![]);
-        assert_eq!(cm_flat_types(&Type::Tuple(vec![])), vec![]);
-    }
-
-    #[test]
-    fn test_flat_tuple() {
-        let tuple = Type::Tuple(vec![named_type("i32"), named_type("f64")]);
-        assert_eq!(cm_flat_types(&tuple), vec![CmValType::I32, CmValType::F64]);
     }
 
     #[test]

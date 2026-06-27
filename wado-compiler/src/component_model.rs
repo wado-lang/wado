@@ -318,7 +318,7 @@ impl CmFunctionInfo {
             Type::Named(named) => named.name == "String",
             Type::Generic(generic) => matches!(
                 generic.name.as_str(),
-                "List" | "Option" | "Result" | "Tuple" | "Stream" | "Future"
+                "List" | "Option" | "Result" | "Stream" | "Future"
             ),
             Type::Tuple(elems) => !elems.is_empty(),
             _ => false,
@@ -426,14 +426,10 @@ pub struct CmInterfaceRegistry {
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
 
-    /// `--lib` interface FQ -> the entry `ModuleSource` whose decls were
-    /// registered under it. Records the provenance of library-local types so
-    /// consumers resolve a CM interface to its Wado `ModuleSource` (and
-    /// recognise it as lib-local) via [`Self::lib_module_source_of`] — without
-    /// sniffing `wasi:`/`core:` prefixes off the FQ. WASI/core interfaces are
-    /// absent here; their `ModuleSource` is derived from the FQ by the canonical
-    /// naming convention (`module_source_for_cm_interface`).
-    lib_interface_sources: IndexMap<String, ModuleSource>,
+    /// CM interface FQ -> `ModuleSource` for non-stdlib namespaces (`--lib`
+    /// locals and component imports). WASI/core interfaces are absent; their
+    /// source is derived from the FQ by `module_source_for_cm_interface`.
+    cm_interface_module_sources: IndexMap<String, ModuleSource>,
 
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
@@ -1320,10 +1316,13 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &crate::ast::Module,
         interface_fqs: &[String],
+        module_source: &ModuleSource,
     ) {
         self.register_module_decls(module);
         for fq in interface_fqs {
             self.component_interfaces.insert(fq.clone());
+            self.cm_interface_module_sources
+                .insert(fq.clone(), module_source.clone());
         }
     }
 
@@ -1354,7 +1353,7 @@ impl CmInterfaceRegistry {
         // Record the FQ -> entry ModuleSource so consumers resolve lib-local
         // types' module source (and detect lib-local provenance) without
         // prefix-sniffing the FQ.
-        self.lib_interface_sources
+        self.cm_interface_module_sources
             .insert(iface_fq.to_string(), entry_source);
 
         for item in &module.items {
@@ -1687,12 +1686,12 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_wasi_flags_source(&named.name))
     }
 
-    /// The entry `ModuleSource` a `--lib` interface FQ was registered under, or
-    /// `None` for a WASI/core interface (or an unknown FQ). A `Some` result also
-    /// identifies the FQ as lib-local, replacing `!fq.starts_with("wasi:"/"core:")`
-    /// prefix checks at consumer sites.
-    pub fn lib_module_source_of(&self, iface_fq: &str) -> Option<&ModuleSource> {
-        self.lib_interface_sources.get(iface_fq)
+    /// The `ModuleSource` a CM interface FQ was registered under — the entry
+    /// module for a `--lib` local, or the dependency `ModuleSource::Wasm` for a
+    /// component import. `None` for a WASI/core interface (whose source is
+    /// derived from the FQ by naming convention) or an unknown FQ.
+    pub fn cm_interface_module_source_of(&self, iface_fq: &str) -> Option<&ModuleSource> {
+        self.cm_interface_module_sources.get(iface_fq)
     }
 
     /// Resolve a named type to its source interface across all CM namespaces
@@ -2255,6 +2254,114 @@ impl CmInterfaceRegistry {
         })
     }
 
+    /// Whether `source` names an interface whose values follow the CM canonical
+    /// ABI: a stdlib CM namespace (`wasi:`, `core:kiln/`) or a component import
+    /// (whose package namespace is arbitrary, so tracked explicitly).
+    pub fn is_cm_source(&self, source: &str) -> bool {
+        source.starts_with("wasi:")
+            || source.starts_with("core:kiln/")
+            || self.component_interfaces.contains(source)
+    }
+
+    /// Flatten a CM type into its canonical-ABI core value sequence. Single
+    /// source of truth for how a value-type maps to flat core params/results.
+    pub fn cm_flatten(&self, ty: &Type) -> Vec<crate::cm_abi::CmValType> {
+        let mut out = Vec::new();
+        self.cm_flatten_into(ty, &mut out);
+        out
+    }
+
+    fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<crate::cm_abi::CmValType>) {
+        use crate::cm_abi::CmValType;
+        let resolved = self.resolve_type(ty);
+        match &resolved {
+            Type::Named(named) => match named.name.as_str() {
+                "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
+                    out.push(CmValType::I32);
+                }
+                "i64" | "u64" => out.push(CmValType::I64),
+                "f32" => out.push(CmValType::F32),
+                "f64" => out.push(CmValType::F64),
+                "String" => {
+                    out.push(CmValType::I32);
+                    out.push(CmValType::I32);
+                }
+                "()" => {}
+                name => {
+                    if let Some(source) = self.resolve_cm_source_for(named, None) {
+                        if let Some(fields) = self
+                            .get_struct_fields_by_source(source, name)
+                            .map(<[(String, Type)]>::to_vec)
+                        {
+                            for (_, field_ty) in &fields {
+                                self.cm_flatten_into(field_ty, out);
+                            }
+                            return;
+                        }
+                        if let Some(cases) = self
+                            .get_variant_cases_by_source(source, name)
+                            .map(<[CmVariantCase]>::to_vec)
+                        {
+                            out.push(CmValType::I32);
+                            self.push_joined_payloads(cases.iter().map(|c| c.payload.clone()), out);
+                            return;
+                        }
+                    }
+                    out.push(CmValType::I32);
+                }
+            },
+            Type::Generic(g) => match g.name.as_str() {
+                "List" => {
+                    out.push(CmValType::I32);
+                    out.push(CmValType::I32);
+                }
+                "Stream" | "Future" | "Own" | "Borrow" => out.push(CmValType::I32),
+                "Option" if g.args.len() == 1 => {
+                    out.push(CmValType::I32);
+                    self.cm_flatten_into(&g.args[0], out);
+                }
+                "Result" if g.args.len() == 2 => {
+                    out.push(CmValType::I32);
+                    self.push_joined_payloads(
+                        [Some(g.args[0].clone()), Some(g.args[1].clone())].into_iter(),
+                        out,
+                    );
+                }
+                other => panic!("unsupported generic type for CM flattening: {other}"),
+            },
+            Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
+            Type::Tuple(elems) => {
+                for elem in elems {
+                    self.cm_flatten_into(elem, out);
+                }
+            }
+            other => panic!("unsupported type for CM flattening: {other:?}"),
+        }
+    }
+
+    /// Push the per-slot Canonical ABI `join` of optional payload types (variant
+    /// cases or a result's ok/err); a `None` payload contributes no slots.
+    fn push_joined_payloads(
+        &self,
+        payloads: impl Iterator<Item = Option<Type>>,
+        out: &mut Vec<crate::cm_abi::CmValType>,
+    ) {
+        use crate::cm_abi::CmValType;
+        let groups: Vec<Vec<CmValType>> = payloads
+            .map(|p| p.map(|t| self.cm_flatten(&t)).unwrap_or_default())
+            .collect();
+        let max_len = groups.iter().map(Vec::len).max().unwrap_or(0);
+        for i in 0..max_len {
+            let mut acc: Option<CmValType> = None;
+            for g in &groups {
+                if let Some(v) = g.get(i).copied() {
+                    acc = Some(CmValType::join(acc, Some(v)));
+                }
+            }
+            out.push(acc.unwrap_or(CmValType::I32));
+        }
+    }
+
     /// Get the local name for a function in an interface
     pub fn get_local_name(&self, interface_path: &str, wasi_func_name: &str) -> Option<&String> {
         self.local_aliases
@@ -2813,7 +2920,7 @@ impl CmTypeGen {
                     let source_owned: String = named
                         .source_interface
                         .as_deref()
-                        .filter(|s| source_uses_cm_abi(s))
+                        .filter(|s| cm_interface_registry.is_cm_source(s))
                         .map(str::to_string)
                         .or(interface_hint_match)
                         .or_else(|| {
@@ -3101,8 +3208,6 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             "Result" => ValType::I32,
             // Future<T> is represented as i32 handle
             "Future" => ValType::I32,
-            // Tuple types map to i32 for simplicity (struct pointer)
-            "Tuple" => ValType::I32,
             // List<T> is represented as a GC array reference (handled as i32 in WASI context)
             "List" => ValType::I32,
             // Option<T> is represented as i32 discriminant
@@ -3117,155 +3222,24 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
         other => panic!("unsupported type variant in cm_type_to_valtype: {other:?}"),
     }
 }
-
-/// Join two `ValType` options following CM union rules.
-///
-/// If both sides have the same type, use that. Otherwise, widen to i64.
-/// If only one side is present, use that side's type.
-fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
-    match (a, b) {
-        (Some(a), Some(b)) if a == b => a,
-        (Some(_), Some(_)) => ValType::I64,
-        (Some(a), None) | (None, Some(a)) => a,
-        (None, None) => ValType::I32,
-    }
-}
-
-/// True when a type's `source_interface` denotes a Component Model interface
-/// whose values follow the canonical ABI — records flatten to their fields,
-/// strings to (ptr, len), options/variants to a discriminant plus payload —
-/// rather than being passed as opaque Wado GC structs.
-///
-/// This covers the WASI interfaces and the `core:kiln` host interfaces the
-/// Kiln generator world imports (`KilnHost`, plus the `core:kiln/types`
-/// request/response records). The check is on the *explicit* source so it is
-/// safe to widen: every stdlib `core:kiln` type carries its `#[cm(...)]`
-/// source after the registry's two-pass bootstrap, and plain Wado structs
-/// have no `source_interface` at all.
-pub fn source_uses_cm_abi(source: &str) -> bool {
-    source.starts_with("wasi:") || source.starts_with("core:kiln/")
-}
-
 /// Flatten a pre-resolved AST type into CM core-level `ValType`s.
 ///
-/// Compound types like String and `List<T>` are lowered to (ptr: i32, len: i32)
-/// in the Component Model core ABI. This function pushes the appropriate number
-/// of `ValType`s for each parameter.
+/// Adapter over [`CmInterfaceRegistry::cm_flatten`] yielding `wasm_encoder::ValType`s.
 pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
-    match ty {
-        Type::Named(named) => match named.name.as_str() {
-            // String is lowered to (ptr: i32, len: i32) in CM core ABI
-            "String" => {
-                out.push(ValType::I32); // ptr
-                out.push(ValType::I32); // len
-            }
-            "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => {
-                out.push(ValType::I32);
-            }
-            "i64" | "u64" => out.push(ValType::I64),
-            "f32" => out.push(ValType::F32),
-            "f64" => out.push(ValType::F64),
-            // Unit type — no core values
-            "()" => {}
-            // Struct (record) types flatten to concatenation of field flat
-            // types. Source is taken from the Named reference when present,
-            // otherwise we fall back to the unique `wasi:*` registrant.
-            name if named
-                .source_interface
-                .as_deref()
-                .filter(|s| source_uses_cm_abi(s))
-                .or_else(|| registry.find_wasi_struct_source(name))
-                .and_then(|s| registry.get_struct_fields_by_source(s, name))
-                .is_some() =>
-            {
-                let source = named
-                    .source_interface
-                    .as_deref()
-                    .filter(|s| source_uses_cm_abi(s))
-                    .or_else(|| registry.find_wasi_struct_source(name))
-                    .expect("already matched above");
-                let fields = registry
-                    .get_struct_fields_by_source(source, name)
-                    .expect("already matched above");
-                for (_, field_ty) in fields {
-                    flatten_cm_param_type(field_ty, out, registry);
-                }
-            }
-            // Variant types flatten to: discriminant i32 + union(max payload)
-            name if named
-                .source_interface
-                .as_deref()
-                .filter(|s| source_uses_cm_abi(s))
-                .or_else(|| registry.find_wasi_variant_source(name))
-                .and_then(|s| registry.get_variant_cases_by_source(s, name))
-                .is_some() =>
-            {
-                out.push(ValType::I32); // discriminant
-                let source = named
-                    .source_interface
-                    .as_deref()
-                    .filter(|s| source_uses_cm_abi(s))
-                    .or_else(|| registry.find_wasi_variant_source(name))
-                    .expect("already matched above");
-                if let Some(cases) = registry.get_variant_cases_by_source(source, name) {
-                    let mut max_flat: Vec<ValType> = Vec::new();
-                    for case in cases {
-                        if let Some(payload_ty) = &case.payload {
-                            let mut case_flat = Vec::new();
-                            flatten_cm_param_type(payload_ty, &mut case_flat, registry);
-                            let len = case_flat.len().max(max_flat.len());
-                            for i in 0..len {
-                                let old = max_flat.get(i).copied();
-                                let new = case_flat.get(i).copied();
-                                if i < max_flat.len() {
-                                    max_flat[i] = join_val_types(old, new);
-                                } else {
-                                    max_flat.push(join_val_types(old, new));
-                                }
-                            }
-                        }
-                    }
-                    out.extend(max_flat);
-                }
-            }
-            // Resource handles, enums, etc.
-            _ => out.push(ValType::I32),
-        },
-        Type::Generic(generic) => match generic.name.as_str() {
-            // list<T> is lowered to (ptr: i32, len: i32) in CM core ABI
-            "List" => {
-                out.push(ValType::I32); // ptr
-                out.push(ValType::I32); // len
-            }
-            // Stream and Future are single i32 handles
-            "Stream" | "Future" => out.push(ValType::I32),
-            // option<T> flattens to: discriminant i32 + flatten(T)
-            "Option" if generic.args.len() == 1 => {
-                out.push(ValType::I32); // discriminant
-                flatten_cm_param_type(&generic.args[0], out, registry);
-            }
-            // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
-            "Result" if generic.args.len() == 2 => {
-                out.push(ValType::I32); // discriminant
-                let mut ok_flat = Vec::new();
-                let mut err_flat = Vec::new();
-                flatten_cm_param_type(&generic.args[0], &mut ok_flat, registry);
-                flatten_cm_param_type(&generic.args[1], &mut err_flat, registry);
-                let max_len = ok_flat.len().max(err_flat.len());
-                for i in 0..max_len {
-                    let ok_val = ok_flat.get(i).copied();
-                    let err_val = err_flat.get(i).copied();
-                    out.push(join_val_types(ok_val, err_val));
-                }
-            }
-            _ => out.push(ValType::I32),
-        },
-        // borrow<resource> - i32 handle
-        Type::Reference(_) | Type::MutReference(_) => out.push(ValType::I32),
-        // Unit type - no core values
-        Type::Tuple(elems) if elems.is_empty() => {}
-        Type::Tuple(_) => out.push(ValType::I32),
-        _ => out.push(ValType::I32),
+    out.extend(
+        registry
+            .cm_flatten(ty)
+            .into_iter()
+            .map(cm_val_type_to_val_type),
+    );
+}
+
+pub fn cm_val_type_to_val_type(v: crate::cm_abi::CmValType) -> ValType {
+    match v {
+        crate::cm_abi::CmValType::I32 => ValType::I32,
+        crate::cm_abi::CmValType::I64 => ValType::I64,
+        crate::cm_abi::CmValType::F32 => ValType::F32,
+        crate::cm_abi::CmValType::F64 => ValType::F64,
     }
 }
 
@@ -3349,6 +3323,9 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
+        Type::Tuple(elems) => elems
+            .iter()
+            .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
         _ => false,
     }
 }
@@ -3404,13 +3381,7 @@ fn is_return_type_supported_with_types(
                 }
                 "List" | "Option" => {
                     // A list/option element is any supported value type (e.g.
-                    // `list<list<u8>>`, `list<tuple<field-name, field-value>>`).
-                    generic.args.iter().all(|arg| {
-                        is_return_type_supported_with_types(arg, enums, resources, structs)
-                    })
-                }
-                "Tuple" => {
-                    // All tuple elements must be supported return types
+                    // `list<list<u8>>`, `list<[field-name, field-value]>`).
                     generic.args.iter().all(|arg| {
                         is_return_type_supported_with_types(arg, enums, resources, structs)
                     })
@@ -3418,7 +3389,6 @@ fn is_return_type_supported_with_types(
                 _ => false,
             }
         }
-        // Handle [...] tuple syntax
         Type::Tuple(elements) => {
             // Empty tuple () is the unit type, which is always supported
             if elements.is_empty() {
@@ -3470,56 +3440,27 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
     true
 }
 
-/// Check if a return type requires an outptr parameter in Component Model ABI
-///
-/// Complex types (list, string, option, result) are returned via linear memory
-/// rather than as direct return values. The function signature changes to:
-/// - Add an outptr: i32 parameter
-/// - Return nothing (result is written to outptr)
-pub fn return_type_requires_outptr(ty: &Type) -> bool {
-    // Check if an AST type represents unit () — can be Tuple([]) or Named("()")
-    let is_unit = |t: &Type| -> bool {
-        matches!(t, Type::Tuple(e) if e.is_empty()) || matches!(t, Type::Named(n) if n.name == "()")
-    };
-    match ty {
-        // Simple types are returned directly
-        Type::Named(named) => matches!(
-            named.name.as_str(),
-            "String" // String (list<u8> in CM) requires outptr
-        ),
-        // Generic types that require outptr
-        Type::Generic(generic) => match generic.name.as_str() {
-            // Result<(), ()> returns a single i32 discriminant — no outptr needed
-            "Result"
-                if generic.args.len() == 2
-                    && is_unit(&generic.args[0])
-                    && is_unit(&generic.args[1]) =>
-            {
-                false
-            }
-            "List" | "Option" | "Result" | "Tuple" => true,
-            _ => false,
-        },
-        // Tuple types [...] require outptr (non-empty tuples only)
-        Type::Tuple(elems) => !elems.is_empty(),
-        _ => false,
-    }
+/// Canonical ABI maximum flat results before a return must use an outptr.
+pub const MAX_FLAT_RESULTS: usize = 1;
+
+/// Whether a return type must be returned via an outptr rather than as flat
+/// core results. Single source of truth shared by the import-binding synthesizer
+/// and the core functype builder, so the two never disagree on a signature.
+pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
+    registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
+        || cm_named_type_return_needs_outptr(ty, registry)
 }
 
-/// Check if a named WASI type is a variant with payload cases, requiring outptr return.
-///
-/// Types like `Method` (which has `Other(String)`) flatten to more than
-/// `MAX_FLAT_RESULTS` core values, so they must be returned via an outptr.
-/// Generic `cm_flat_types` doesn't know about WASI variant cases; this
-/// registry-aware check fills that gap.
+/// Whether a named CM type is a record or payload-bearing variant (returned via
+/// an outptr). Resolves the source through the registry so WASI, `--lib`, and
+/// component-imported types are all recognised.
 pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     if let Type::Named(named) = ty
-        && let Some(source) = registry.resolve_wasi_source_for(named, None)
+        && let Some(source) = registry.resolve_cm_source_for(named, None)
     {
         if let Some(cases) = registry.get_variant_cases_by_source(source, &named.name) {
             return cases.iter().any(|case| case.payload.is_some());
         }
-        // WASI structs (records) always need outptr — they have multiple fields
         if registry
             .get_struct_fields_by_source(source, &named.name)
             .is_some()
@@ -3658,17 +3599,15 @@ pub fn cm_variant_size_align(
 
 /// Package-scoped variant of `cm_variant_size_align`.
 ///
-/// When the reference's `source_interface` is populated (stdlib bootstrap),
-/// that exact source is used. Otherwise the unique `wasi:*` registrant for
-/// the name is used. `wasi_package` is kept as a parameter so that existing
-/// callers can still supply it; it is currently unused here because source
-/// resolution is already unambiguous.
+/// When the reference's `source_interface` is populated (stdlib bootstrap or a
+/// component import) that exact source is used; otherwise the name is resolved
+/// through the registry, biased by `wasi_package`.
 pub fn cm_variant_size_align_scoped(
     named: &crate::ast::NamedType,
     registry: &CmInterfaceRegistry,
-    _wasi_package: Option<&str>,
+    wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
-    let source = registry.resolve_wasi_source_for(named, None)?;
+    let source = registry.resolve_cm_source_for(named, wasi_package)?;
     let cases = registry.get_variant_cases_by_source(source, &named.name)?;
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
@@ -4053,26 +3992,21 @@ mod tests {
             "List<String> should be supported"
         );
 
-        // List<Tuple<String, String>> should be supported
-        let tuple_ss = Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
-            name: "Tuple".to_string(),
-            args: vec![
-                Type::Named(NamedType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "String".to_string(),
-                    span: make_span(),
-                    source_interface: None,
-                }),
-                Type::Named(NamedType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "String".to_string(),
-                    span: make_span(),
-                    source_interface: None,
-                }),
-            ],
-            span: make_span(),
-        });
+        // List<[String, String]> should be supported
+        let tuple_ss = Type::Tuple(vec![
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: "String".to_string(),
+                span: make_span(),
+                source_interface: None,
+            }),
+            Type::Named(NamedType {
+                id: crate::ast::AstId::fresh(),
+                name: "String".to_string(),
+                span: make_span(),
+                source_interface: None,
+            }),
+        ]);
         let array_tuple = Type::Generic(GenericType {
             id: crate::ast::AstId::fresh(),
             name: "List".to_string(),
@@ -4081,7 +4015,7 @@ mod tests {
         });
         assert!(
             is_return_type_supported(&array_tuple),
-            "List<Tuple<String, String>> should be supported"
+            "List<[String, String]> should be supported"
         );
 
         // Option<String> should be supported

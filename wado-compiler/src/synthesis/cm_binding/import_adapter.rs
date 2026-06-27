@@ -16,7 +16,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::cm_abi;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -36,7 +35,7 @@ use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_
 use super::lower::{
     flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
     synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
-    synthesize_lower, synthesize_lower_option_to_memory, synthesize_lower_tuple,
+    synthesize_lower_option_to_memory, synthesize_lower_wasi_type_to_memory,
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
@@ -62,9 +61,6 @@ pub(super) struct AdapterArtifacts {
     pub adapter: Rc<RefCell<TirFunction>>,
     pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
 }
-
-/// Canonical ABI: maximum number of flat return values before outptr is used.
-const MAX_FLAT_RESULTS: usize = 1;
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
 ///
@@ -144,11 +140,10 @@ fn synthesize_lift_flat_result(
             )
         } else {
             // Err with a flat payload — the remaining flat values encode the error.
-            // Only lift when the error type is a named WASI variant/enum carrying
-            // a resolved source_interface; otherwise fall back to a bare Err.
+            // `try_lift_wasi_variant_or_enum` returns None for non-CM types, so
+            // we fall back to a bare Err.
             let lifted_variant = if let Type::Named(n) = err_ty
                 && let Some(source) = n.source_interface.as_deref()
-                && crate::component_model::source_uses_cm_abi(source)
             {
                 try_lift_wasi_variant_or_enum(
                     n,
@@ -266,11 +261,7 @@ fn wasi_return_type_id(
         TypeTable::I32
     } else {
         let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
-            cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-                || crate::component_model::cm_named_type_return_needs_outptr(
-                    rt,
-                    cm_interface_registry,
-                )
+            crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
         });
         if needs_outptr {
             // Outptr: raw call returns void; result is read from outptr
@@ -382,19 +373,12 @@ pub(super) fn synthesize_adapter(
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
-    // Derive outptr needs from return type using Canonical ABI layout.
-    // Also check WASI variants with payload cases (e.g., Method with Other(String)):
-    // cm_flat_types treats unknown named types as i32, missing their true flat count.
-    //
-    // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
-    // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
-    // wrapper at registration time, see `CmInterfaceRegistry::register`). The
-    // wrapping is re-applied below when emitting the Wado-visible adapter
-    // return type.
+    // For `async fn ... -> AsyncCall<T>` imports, `func_info.return_type` already
+    // stores the CM-ABI `T` (the registry strips `AsyncCall<T>` at registration);
+    // the wrapper is re-applied below for the Wado-visible adapter return type.
     let cm_return_type: Option<Type> = func_info.return_type.clone();
     let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
-        cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-            || crate::component_model::cm_named_type_return_needs_outptr(rt, cm_interface_registry)
+        crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
     });
     let pkg = Some(func_info.package.as_str());
     let outptr_alloc = if needs_outptr {
@@ -595,6 +579,28 @@ pub(super) fn synthesize_adapter(
                     span: synth_span(),
                 });
                 locals.push(TirLocal::synth(next_local, result_type_id, false));
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
+            // Tuple param: single GC tuple, binding body lowers to flat args.
+            Type::Tuple(elems) if !elems.is_empty() => {
+                let tuple_type_id = {
+                    let mut tt = type_table.borrow_mut();
+                    cm_type_to_type_id(
+                        param_type,
+                        &mut tt,
+                        cm_interface_registry,
+                        &func_info.package,
+                    )
+                };
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: tuple_type_id,
+                    local_index: next_local,
+                    is_mut: false,
+                    span: synth_span(),
+                });
+                locals.push(TirLocal::synth(next_local, tuple_type_id, false));
                 next_local += 1;
                 param_mapping.push((start, 1));
             }
@@ -866,31 +872,21 @@ pub(super) fn synthesize_adapter(
                         synth_span(),
                     ),
                 ));
-                // Lower element to linear memory at __addr
+                // Use the full memory lowerer so aggregate elements lay out their
+                // payload correctly instead of being stored as an i32.
                 let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
                 let addr_ref =
                     local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
-                let lower_stmts = if let Type::Tuple(sub_elems) = elem_type {
-                    synthesize_lower_tuple(
-                        sub_elems,
-                        elem_ref,
-                        addr_ref,
-                        &mut next_local,
-                        &mut locals,
-                        cm_interface_registry,
-                        &func_info.package,
-                        type_table,
-                    )
-                } else {
-                    synthesize_lower(
-                        elem_type,
-                        elem_ref,
-                        addr_ref,
-                        &mut next_local,
-                        &mut locals,
-                        &names,
-                    )
-                };
+                let lower_stmts = synthesize_lower_wasi_type_to_memory(
+                    elem_type,
+                    elem_ref,
+                    addr_ref,
+                    &mut next_local,
+                    &mut locals,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
                 loop_body.extend(lower_stmts);
                 // __i += 1
                 loop_body.push(expr_stmt(assign(
@@ -1011,6 +1007,26 @@ pub(super) fn synthesize_adapter(
                 synthesize_flatten_result_to_flat_args(
                     &g.args[0],
                     &g.args[1],
+                    local_ref(param_local, param_name, params[start_idx].type_id),
+                    &format!("__{param_name}"),
+                    &mut next_local,
+                    &mut body_stmts,
+                    &mut locals,
+                    &mut flat_args,
+                    cm_interface_registry,
+                    &func_info.package,
+                    type_table,
+                );
+            }
+            Type::Tuple(elems) if !elems.is_empty() => {
+                assert!(
+                    !func_info.is_async,
+                    "CM import '{}#{}' takes a tuple parameter on an async \
+                     function; async tuple-param lowering is not yet implemented",
+                    func_info.interface_name, func_info.method_name
+                );
+                synthesize_flatten_value_to_flat_args(
+                    param_type,
                     local_ref(param_local, param_name, params[start_idx].type_id),
                     &format!("__{param_name}"),
                     &mut next_local,

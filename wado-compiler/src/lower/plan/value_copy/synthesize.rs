@@ -314,11 +314,9 @@ fn build_copy_return_expr(
         ));
     }
     if let ResolvedType::GenericInstance {
-        name,
-        module_source,
-        type_args,
+        name, type_args, ..
     } = resolved
-        && TypeTable::is_tuple_type(name, module_source)
+        && TypeTable::is_tuple_type(name)
     {
         return Some(build_tuple_copy(
             type_id, &mangled, type_args, v_local, type_table, span,
@@ -495,7 +493,7 @@ fn is_synth_safe_element(
             // Tuples / String / List<T> / known struct templates are
             // safe; unknown generic-instance names whose template
             // isn't a registered struct are not.
-            if TypeTable::is_tuple_type(&name, &module_source) {
+            if TypeTable::is_tuple_type(&name) {
                 return true;
             }
             let (list_name, string_name, box_name) = {

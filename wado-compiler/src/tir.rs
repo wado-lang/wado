@@ -685,9 +685,11 @@ impl TypeTable {
     pub const UNKNOWN: TypeId = TypeId(17);
     pub const ERROR: TypeId = TypeId(18);
 
-    /// Internal name for built-in tuple types in `GenericInstance`.
-    /// Distinguished from user-defined structs named "Tuple" by `module_source.is_core()`.
-    pub const TUPLE_TYPE_NAME: &'static str = "Tuple";
+    /// Reserved `GenericInstance` base name of the built-in tuple. Not a
+    /// writable type name, so it can never collide with a user-defined
+    /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
+    /// check sound. User-facing spelling is `[T1, T2, …]`.
+    pub const TUPLE_TYPE_NAME: &'static str = "[]";
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
     /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
@@ -720,9 +722,9 @@ impl TypeTable {
         }
     }
 
-    /// Check if a name and `module_source` identify a built-in tuple type.
-    pub fn is_tuple_type(name: &str, module_source: &ModuleSource) -> bool {
-        name == Self::TUPLE_TYPE_NAME && module_source.is_core()
+    /// Whether a `GenericInstance` base name is the built-in tuple.
+    pub fn is_tuple_type(name: &str) -> bool {
+        name == Self::TUPLE_TYPE_NAME
     }
 
     pub fn new() -> Self {
@@ -1254,12 +1256,12 @@ impl TypeTable {
         })
     }
 
-    /// Check if a type is a built-in tuple (`GenericInstance` named "Tuple" from a core module).
+    /// Whether a type is a built-in tuple.
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
-            ResolvedType::GenericInstance { name, module_source, .. }
-                if Self::is_tuple_type(name, module_source)
+            ResolvedType::GenericInstance { name, .. }
+                if Self::is_tuple_type(name)
         )
     }
 
@@ -1286,11 +1288,9 @@ impl TypeTable {
     /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
         if let ResolvedType::GenericInstance {
-            name,
-            module_source,
-            type_args,
+            name, type_args, ..
         } = self.get(id)
-            && Self::is_tuple_type(name, module_source)
+            && Self::is_tuple_type(name)
         {
             Some(type_args.clone())
         } else {
@@ -1409,6 +1409,21 @@ impl TypeTable {
             module_source: module_source.clone(),
         };
         self.intern_map.get(&key).copied()
+    }
+
+    /// Find any decl-backed named type by exact `(name, module_source)` key,
+    /// for CM types whose interface FQ maps to a concrete `ModuleSource`
+    /// (component imports, `--lib` locals) rather than a cm-package prefix.
+    pub fn find_named_type_by_source(
+        &self,
+        name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<TypeId> {
+        self.find_struct_type(name, module_source)
+            .or_else(|| self.find_variant_type(name, module_source))
+            .or_else(|| self.find_enum_type(name, module_source))
+            .or_else(|| self.find_flags_type(name, module_source))
+            .or_else(|| self.find_resource_type(name, module_source))
     }
 
     /// Find any decl-backed named type (resource, enum, variant, struct,
@@ -1861,7 +1876,7 @@ impl TypeTable {
                 module_source,
                 type_args,
             } => {
-                if Self::is_tuple_type(&name, &module_source) {
+                if Self::is_tuple_type(&name) {
                     // Tuples need TypePack expansion: splice pack elements
                     // into the tuple's type-arg list.
                     let mut new_elems: Vec<TypeId> = Vec::new();
@@ -2274,12 +2289,10 @@ impl TypeTable {
                 format!("{}::{}", self.type_name(*param_id), assoc_name)
             }
             ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
+                name, type_args, ..
             } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| self.type_name(*t)).collect();
-                if Self::is_tuple_type(name, module_source) {
+                if Self::is_tuple_type(name) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
                     format!("{}<{}>", name, arg_names.join(", "))
@@ -2350,7 +2363,11 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_name_resolving_newtypes(*t))
                     .collect();
-                crate::name::mangle_generic_name(name, &args)
+                if Self::is_tuple_type(name) {
+                    crate::name::mangle_tuple_type(&args)
+                } else {
+                    crate::name::mangle_generic_name(name, &args)
+                }
             }
             ResolvedType::BuiltinArray(elem) => {
                 let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
@@ -2522,6 +2539,11 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
+                // A tuple is module-independent, so it carries no module prefix
+                // (its elements stay qualified).
+                if Self::is_tuple_type(name) {
+                    return crate::name::mangle_tuple_type(&args);
+                }
                 let unqualified = crate::name::mangle_generic_name(name, &args);
                 format!("{module_source}/{unqualified}")
             }
@@ -2643,6 +2665,9 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
+                if Self::is_tuple_type(name) {
+                    return TypeNameInfo::Tuple(args);
+                }
                 TypeNameInfo::Generic {
                     name: name.clone(),
                     args,

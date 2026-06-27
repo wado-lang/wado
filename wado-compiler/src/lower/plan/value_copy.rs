@@ -57,7 +57,7 @@ pub fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
             if name == box_name {
                 return false;
             }
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 // Empty tuples are unit-shaped; non-empty tuples need
                 // element-wise deep copy.
                 return !type_args.is_empty();

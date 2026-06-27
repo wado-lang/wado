@@ -1029,35 +1029,19 @@ impl Monomorphizer {
                     self.try_queue_function(key, mangled);
                 }
 
-                // Tuple variadic impl: receiver is a built-in tuple type, method
-                // is on `"Tuple"` (e.g., `Tuple^Eq::eq` from the variadic
-                // `impl<..T: Eq> Eq for [..T]`). The elaborator already creates
-                // monomorph_info with the generic name and impl_type_args (the
-                // concrete tuple element types).
-                //
-                // Guard on the *receiver's* type, not just the method's struct
-                // name. A user-defined `struct Tuple { ... }` in another module
-                // shares the simple name `"Tuple"` with the built-in tuple base
-                // (both go through `get_type_name_static` -> `TUPLE_TYPE_NAME`),
-                // so a name-only check incorrectly queues a variadic-style
-                // instantiation for that user struct — the resulting
-                // `Tuple^Inspect::inspect` (empty type_args) lands in the
-                // caller's module and collides with the user-struct's
-                // auto-derived impl. `is_tuple_type` checks the receiver's
-                // `ResolvedType` + defining module, which disambiguates.
+                // Tuple variadic impl (e.g. `[]^Eq::eq` from `impl<..T: Eq> Eq for [..T]`):
+                // the reserved base name `[]` is unique to built-in tuples.
                 let receiver_is_builtin_tuple = {
                     let inner = type_table.peel_refs(receiver.type_id);
                     match type_table.get(inner) {
-                        ResolvedType::GenericInstance {
-                            name,
-                            module_source,
-                            ..
-                        } => TypeTable::is_tuple_type(name, module_source),
+                        ResolvedType::GenericInstance { name, .. } => {
+                            TypeTable::is_tuple_type(name)
+                        }
                         _ => false,
                     }
                 };
                 if let Some(ref info) = method_func.method_info
-                    && info.struct_name == TypeTable::TUPLE_TYPE_NAME
+                    && TypeTable::is_tuple_type(&info.struct_name)
                     && receiver_is_builtin_tuple
                 {
                     let mono = method_func.monomorph_info.as_ref();
@@ -3776,7 +3760,7 @@ fn try_lower_comparison(
             module_source,
             ..
         } => {
-            if TypeTable::is_tuple_type(name, module_source) {
+            if TypeTable::is_tuple_type(name) {
                 // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
                 // and already lowered to method calls by the elaborator.
                 return None;

@@ -1164,7 +1164,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_>
                 ref name,
                 ref module_source,
                 ..
-            } if TypeTable::is_tuple_type(name, module_source) => {
+            } if TypeTable::is_tuple_type(name) => {
                 // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
             }
             _ => {
@@ -2251,7 +2251,7 @@ fn generate_inspect_alt_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_,
             continue;
         }
         let resolved = tt.get(type_id).clone();
-        if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name, module_source))
+        if matches!(resolved, ResolvedType::GenericInstance { ref name, ref module_source, .. } if TypeTable::is_tuple_type(name))
         {
             // Tuple InspectAlt is provided by variadic impl in core:prelude/tuple.wado
             continue;
@@ -3346,7 +3346,7 @@ fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<Strin
                 name,
                 type_args,
                 module_source,
-            } if TypeTable::is_tuple_type(name, module_source) => {
+            } if TypeTable::is_tuple_type(name) => {
                 if !type_args.iter().all(|e| is_concrete(*e)) {
                     return None;
                 }

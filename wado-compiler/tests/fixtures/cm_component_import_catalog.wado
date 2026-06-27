@@ -1,7 +1,13 @@
 // Import an interface from an external `.wasm` component and round-trip values
 // across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
-// test runs `lift(lower(x)) == x` against the real component.
-use { CmCatalog, Color } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+// test runs `lift(lower(x)) == x` against the real component across the full
+// value-type surface. Every aggregate is checked by whole-value `==` (the
+// auto-derived `Eq`), not just by shape, so a lossy lift/lower fails the assert.
+//
+// Expected values are bound to typed `let`s: a bare `[a, b]` / integer literal
+// on the right of `==` would otherwise default to a tuple / `i32`, since `==`
+// does not flow the call's result type back into the literal (issue #1453).
+use { CmCatalog, Color, Point, Shape, Perms, Mixed } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -19,12 +25,101 @@ test "primitives round-trip" {
 }
 
 test "string round-trip" {
-    let s: String = "hello";
-    assert CmCatalog::id_string(s) == "hello";
+    assert CmCatalog::id_string("hello") == "hello";
+    // Empty, multibyte (2/3-byte UTF-8), and emoji (4-byte) strings must
+    // round-trip byte-exact through the (ptr, len) lowering.
+    assert CmCatalog::id_string("") == "";
+    assert CmCatalog::id_string("café — naïve") == "café — naïve";
+    assert CmCatalog::id_string("日本語のテスト") == "日本語のテスト";
+    assert CmCatalog::id_string("emoji 🎉🚀🦀 end") == "emoji 🎉🚀🦀 end";
 }
 
 test "enum round-trip" {
     assert CmCatalog::id_enum(Color::Green) == Color::Green;
+}
+
+test "newtype round-trip" {
+    assert CmCatalog::id_newtype(2.5) == 2.5;
+}
+
+test "list round-trip" {
+    let xs: List<u8> = [1, 2, 3];
+    assert CmCatalog::id_list_u8(xs) == xs;
+    let ss: List<String> = ["a", "bb"];
+    assert CmCatalog::id_list_string(ss) == ss;
+    let empty: List<u8> = [];
+    assert CmCatalog::id_list_u8(empty) == empty;
+}
+
+test "option round-trip" {
+    let o5: Option<u32> = Option::Some(5);
+    assert CmCatalog::id_option_u32(o5) == o5;
+    let on: Option<u32> = null;
+    assert CmCatalog::id_option_u32(on) == on;
+    let os: Option<String> = Option::Some("x");
+    assert CmCatalog::id_option_string(os) == os;
+    let osn: Option<String> = null;
+    assert CmCatalog::id_option_string(osn) == osn;
+}
+
+test "result round-trip" {
+    let ok: Result<u32, String> = Result::Ok(9);
+    assert CmCatalog::id_result_both(ok) == ok;
+    let err: Result<u32, String> = Result::Err("nope");
+    assert CmCatalog::id_result_both(err) == err;
+    // Ok/Err of different core classes (f32 vs u32) share one joined slot.
+    let okf: Result<f32, u32> = Result::Ok(1.5);
+    assert CmCatalog::id_result_fu(okf) == okf;
+    let erru: Result<f32, u32> = Result::Err(42);
+    assert CmCatalog::id_result_fu(erru) == erru;
+}
+
+test "record round-trip" {
+    let p = Point { x: 1.5, y: 2.5 };
+    assert CmCatalog::id_record(p) == p;
+}
+
+test "variant round-trip" {
+    assert CmCatalog::id_variant(Shape::Circle(2.0)) == Shape::Circle(2.0);
+    assert CmCatalog::id_variant(Shape::Rect([3.0, 4.0])) == Shape::Rect([3.0, 4.0]);
+    assert CmCatalog::id_variant(Shape::Nothing) == Shape::Nothing;
+    assert CmCatalog::id_mixed(Mixed::AsInt(7)) == Mixed::AsInt(7);
+    assert CmCatalog::id_mixed(Mixed::AsFloat(1.5)) == Mixed::AsFloat(1.5);
+}
+
+test "flags round-trip" {
+    let p = Perms::Read | Perms::Write;
+    assert CmCatalog::id_flags(p) == p;
+}
+
+test "tuple round-trip" {
+    let pair: [u32, String] = [7, "x"];
+    assert CmCatalog::id_tuple_pair(pair) == pair;
+    let triple: [u8, bool, char] = [5, true, 'Z'];
+    assert CmCatalog::id_tuple_triple(triple) == triple;
+}
+
+test "nested containers round-trip" {
+    let lr: List<Point> = [Point { x: 1.0, y: 2.0 }];
+    assert CmCatalog::id_list_record(lr) == lr;
+    let orr: Option<Point> = Option::Some(Point { x: 1.0, y: 2.0 });
+    assert CmCatalog::id_option_record(orr) == orr;
+    let tr: [Point, u32] = [Point { x: 1.0, y: 2.0 }, 9];
+    assert CmCatalog::id_tuple_record(tr) == tr;
+    let ol: Option<List<u8>> = Option::Some([1, 2]);
+    assert CmCatalog::id_option_list(ol) == ol;
+    let rl: Result<List<Point>, String> = Result::Ok([Point { x: 1.0, y: 2.0 }]);
+    assert CmCatalog::id_result_list(rl) == rl;
+    let lt: List<[u32, String]> = [[1, "a"]];
+    assert CmCatalog::id_list_tuple(lt) == lt;
+    let assoc: List<[String, u32]> = [["k", 1]];
+    assert CmCatalog::id_assoc_array(assoc) == assoc;
+    let lo: List<Option<u32>> = [Option::Some(1)];
+    assert CmCatalog::id_list_option(lo) == lo;
+    let to: [Option<u32>, u8] = [Option::Some(3), 4];
+    assert CmCatalog::id_tuple_option(to) == to;
+    let ltr: List<[Point, u32]> = [[Point { x: 1.0, y: 2.0 }, 9]];
+    assert CmCatalog::id_list_tuple_record(ltr) == ltr;
 }
 
 __DATA__

@@ -79,8 +79,8 @@ pub(super) fn unify(
                 module_source: actual_module_source,
                 type_args: actual_elems,
             },
-        ) if TypeTable::is_tuple_type(expected_name, expected_module_source)
-            && TypeTable::is_tuple_type(actual_name, actual_module_source)
+        ) if TypeTable::is_tuple_type(expected_name)
+            && TypeTable::is_tuple_type(actual_name)
             && expected_elems
                 .iter()
                 .any(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })) =>
@@ -146,7 +146,7 @@ pub(super) fn unify(
                 type_args: actual_elems,
             },
         ) if name == &list_name
-            && TypeTable::is_tuple_type(actual_name, actual_module_source)
+            && TypeTable::is_tuple_type(actual_name)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

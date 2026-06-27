@@ -708,23 +708,20 @@ pub(super) fn synthesize_lower_result_to_memory(
     );
 }
 
-/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
-/// linear memory plus the `(ptr, len)` pair stored at `addr`.
+/// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
+/// returning the statements plus the locals holding `(base_ptr, len)`.
 ///
-/// Allocates `len * elem_size` bytes, then loops lowering each element at its
-/// stride via the full recursive [`synthesize_lower_wasi_type_to_memory`], so
-/// ref-bearing elements (strings, tuples, records, options) lower correctly
-/// rather than being stored as opaque `i32` handles.
-pub(super) fn synthesize_lower_list_to_memory(
+/// Lowers each element via the recursive [`synthesize_lower_wasi_type_to_memory`]
+/// so ref-bearing elements lower correctly rather than as opaque `i32` handles.
+pub(super) fn synthesize_lower_list_to_buffer(
     elem_type: &Type,
     value: TirExpr,
-    addr: TirExpr,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
     cm_interface_registry: &CmInterfaceRegistry,
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
-) -> Vec<TirStmt> {
+) -> (Vec<TirStmt>, u32, u32) {
     let names =
         super::types::CmStdlibNames::from_compiler_items(type_table.borrow().compiler_items());
     let list_type_id = value.type_id;
@@ -894,7 +891,30 @@ pub(super) fn synthesize_lower_list_to_memory(
     )));
     stmts.push(loop_stmt(block(loop_body)));
 
-    // Store (base, len) at addr / addr+4.
+    (stmts, base_local, len_local)
+}
+
+/// Lower a `List<T>` (GC value) to a CM `list` at `addr`: an element buffer in
+/// linear memory plus the `(ptr, len)` pair stored at `addr` / `addr + 4`.
+pub(super) fn synthesize_lower_list_to_memory(
+    elem_type: &Type,
+    value: TirExpr,
+    addr: TirExpr,
+    next_local: &mut u32,
+    locals: &mut Vec<TirLocal>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) -> Vec<TirStmt> {
+    let (mut stmts, base_local, len_local) = synthesize_lower_list_to_buffer(
+        elem_type,
+        value,
+        next_local,
+        locals,
+        cm_interface_registry,
+        wasi_package,
+        type_table,
+    );
     stmts.push(expr_stmt(builtin_call(
         "i32_store",
         vec![
@@ -911,7 +931,6 @@ pub(super) fn synthesize_lower_list_to_memory(
         ],
         TypeTable::UNIT,
     )));
-
     stmts
 }
 
@@ -1183,39 +1202,119 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
-        // CM record → its fields' flat args via `flatten_cm_record_fields`,
-        // in declared order; anything else — primitive, handle, or a plain
-        // Wado GC struct (no `source_interface`) — passes through. A single
-        // registry lookup gates it, and recursion handles nested records
-        // (e.g. `SourceSpan` inside `Option<SourceSpan>`).
-        _ => {
-            if let Type::Named(n) = &resolved
-                && let Some(fields) = n.source_interface.as_deref().and_then(|s| {
-                    cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
-                })
-            {
-                let value_type_id = value.type_id;
-                let val_local = alloc_local(next_local, locals, value_type_id);
-                let val_name = format!("{prefix}_rec");
-                stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
-                flatten_cm_record_fields(
-                    fields,
-                    val_local,
-                    &val_name,
-                    value_type_id,
-                    prefix,
-                    next_local,
-                    stmts,
-                    locals,
-                    flat_args,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
-            } else {
-                flat_args.push(value);
-            }
+        // List<T> → (ptr, len): lower into an element buffer, push base/len.
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+            let (list_stmts, base_local, len_local) = synthesize_lower_list_to_buffer(
+                &g.args[0],
+                value,
+                next_local,
+                locals,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+            stmts.extend(list_stmts);
+            flat_args.push(local_ref(base_local, "__list_base", TypeTable::I32));
+            flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
         }
+        Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
+            elems,
+            value,
+            prefix,
+            next_local,
+            stmts,
+            locals,
+            flat_args,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        ),
+        // CM record → its fields' flat args (recursion handles nested records).
+        Type::Named(n)
+            if n.source_interface.as_deref().is_some_and(|s| {
+                cm_interface_registry
+                    .get_struct_fields_with_wado_names_by_source(s, &n.name)
+                    .is_some()
+            }) =>
+        {
+            let source = n.source_interface.as_deref().expect("matched above");
+            let fields = cm_interface_registry
+                .get_struct_fields_with_wado_names_by_source(source, &n.name)
+                .expect("matched above");
+            let value_type_id = value.type_id;
+            let val_local = alloc_local(next_local, locals, value_type_id);
+            let val_name = format!("{prefix}_rec");
+            stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
+            flatten_cm_record_fields(
+                fields,
+                val_local,
+                &val_name,
+                value_type_id,
+                prefix,
+                next_local,
+                stmts,
+                locals,
+                flat_args,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+        }
+        // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => flat_args.push(value),
+        // Stream / Future / Own / Borrow are i32 handles (single flat arg).
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            flat_args.push(value);
+        }
+        other => panic!("unsupported type for CM value flattening: {other:?}"),
+    }
+}
+
+/// Flatten a tuple value (GC ref) into its elements' flat CM ABI args, in order.
+#[allow(clippy::too_many_arguments)]
+fn synthesize_flatten_tuple_to_flat_args(
+    elems: &[Type],
+    value: TirExpr,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    flat_args: &mut Vec<TirExpr>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let tuple_type_id = value.type_id;
+    let val_local = alloc_local(next_local, locals, tuple_type_id);
+    let val_name = format!("{prefix}_tup");
+    stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
+    let elem_type_ids: Vec<TypeId> = type_table
+        .borrow()
+        .as_tuple(tuple_type_id)
+        .unwrap_or_default();
+    for (i, elem_ty) in elems.iter().enumerate() {
+        let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
+            let mut tt = type_table.borrow_mut();
+            cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+        });
+        let elem_expr = field_access(
+            local_ref(val_local, &val_name, tuple_type_id),
+            &i.to_string(),
+            i as u32,
+            elem_type_id,
+        );
+        synthesize_flatten_value_to_flat_args(
+            elem_ty,
+            elem_expr,
+            &format!("{prefix}_e{i}"),
+            next_local,
+            stmts,
+            locals,
+            flat_args,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        );
     }
 }
 
@@ -1320,15 +1419,16 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         return;
     }
 
-    // Allocate mutable locals for inner flats, initialized to 0
+    // Zero-init by slot type: an `f32`/`f64` slot needs a float zero, not an i32 zero.
     let mut inner_locals: Vec<(u32, TypeId)> = Vec::new();
     for (i, &ft) in inner_flat_types.iter().enumerate() {
         let local = alloc_local(next_local, locals, ft);
-        let zero = match ft {
-            TypeTable::I64 => i64_const(0),
-            _ => i32_const(0),
-        };
-        stmts.push(let_mut_stmt(&format!("{prefix}_inner{i}"), local, ft, zero));
+        stmts.push(let_mut_stmt(
+            &format!("{prefix}_inner{i}"),
+            local,
+            ft,
+            flat_slot_zero(ft),
+        ));
         inner_locals.push((local, ft));
     }
 
@@ -1575,12 +1675,14 @@ fn flatten_result_case_arm(
     for (i, flat_val) in case_flat.into_iter().enumerate() {
         if i < payload_locals.len() {
             let (pl, pt) = payload_locals[i];
-            // Cast a narrower case flat into the (possibly wider) joined slot.
-            let v = if flat_val.type_id == pt {
-                flat_val
-            } else {
-                cast(flat_val, pt)
-            };
+            // Bit-reinterpret into the joined slot; a numeric cast would corrupt
+            // a value sharing a different-class slot (f32 1.5 -> i32 1).
+            let flat_val_ty = flat_val.type_id;
+            let v = coerce_flat_lower(
+                flat_val,
+                cm_val_type_from_type_id(flat_val_ty),
+                cm_val_type_from_type_id(pt),
+            );
             case_stmts.push(expr_stmt(assign(
                 local_ref(pl, &format!("{prefix}_p{i}"), pt),
                 v,

@@ -567,24 +567,6 @@ fn emit_cm_val_type(
             *local_type_idx += 1;
             ComponentValType::Type(idx)
         }
-        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => {
-            let tuple_types = build_cm_tuple_types(
-                &g.args,
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen.as_deref_mut(),
-                project,
-                ctx,
-            );
-            instance_type.ty().defined_type().tuple(tuple_types);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
-        }
         Type::Tuple(elems) if !elems.is_empty() => {
             let tuple_types = build_cm_tuple_types(
                 elems,
@@ -1983,6 +1965,13 @@ fn generate_cm_imports(
             continue;
         }
 
+        // Component imports emit their full value-type surface via
+        // `ast_type_to_cm`; WASI host interfaces use the legacy emitter whose
+        // `result` always resolves to the shared `error-code`.
+        let is_component_import = import_plan
+            .iter()
+            .any(|e| e.fq == interface_info.path && e.kind == ImportKind::Component);
+
         // Which functions of this interface to expose in its instance type.
         let supported_functions: Vec<_> = interface_info
             .functions
@@ -2325,13 +2314,14 @@ fn generate_cm_imports(
                     .iter()
                     .map(|(_, cm_name, ty)| {
                         let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                        let val_type = if let Type::Named(named) = &resolved_ty
-                            && named.source_interface.as_deref().is_some_and(|s| {
-                                project
-                                    .cm_interface_registry
-                                    .get_struct_fields_by_source(s, &named.name)
-                                    .is_some()
-                            }) {
+                        let is_struct = matches!(&resolved_ty, Type::Named(named)
+                        if named.source_interface.as_deref().is_some_and(|s| {
+                            project
+                                .cm_interface_registry
+                                .get_struct_fields_by_source(s, &named.name)
+                                .is_some()
+                        }));
+                        let val_type = if is_component_import || is_struct {
                             let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                                 .iter()
                                 .map(|(k, &v)| (k.as_str(), v))
@@ -2366,18 +2356,18 @@ fn generate_cm_imports(
                     .map(|(name, val_type)| (name.as_str(), *val_type))
                     .collect();
 
-                // Return type: use emit_cm_val_type for unified recursive type definition,
-                // with shared_type_gen for struct (record) return types.
+                // Component imports and record returns route through
+                // `ast_type_to_cm`; other WASI returns use `emit_cm_val_type`.
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                    if let Type::Named(named) = &resolved_ty
-                        && named.source_interface.as_deref().is_some_and(|s| {
-                            project
-                                .cm_interface_registry
-                                .get_struct_fields_by_source(s, &named.name)
-                                .is_some()
-                        })
-                    {
+                    let is_struct = matches!(&resolved_ty, Type::Named(named)
+                    if named.source_interface.as_deref().is_some_and(|s| {
+                        project
+                            .cm_interface_registry
+                            .get_struct_fields_by_source(s, &named.name)
+                            .is_some()
+                    }));
+                    if is_component_import || is_struct {
                         let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
                             .iter()
                             .map(|(k, &v)| (k.as_str(), v))
@@ -3819,11 +3809,10 @@ fn lower_wasi_functions(
             // `MAX_FLAT_RESULTS` core values, e.g. a tuple or composite return).
             let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
                 let resolved = project.cm_interface_registry.resolve_type(ty);
-                crate::component_model::return_type_requires_outptr(&resolved)
-                    || crate::component_model::cm_named_type_return_needs_outptr(
-                        &resolved,
-                        &project.cm_interface_registry,
-                    )
+                crate::component_model::cm_return_needs_outptr(
+                    &resolved,
+                    &project.cm_interface_registry,
+                )
             });
             let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
                 || returns_via_outptr;

@@ -748,7 +748,7 @@ impl<'a> Emitter<'a> {
             } => match name.as_str() {
                 "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
                 "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
-                "Tuple" => CmShape::Tuple(type_args.clone()),
+                n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
                 "Result" if type_args.len() == 2 => CmShape::Result {
                     ok: self.non_unit(type_args[0]),
                     err: self.non_unit(type_args[1]),
@@ -884,7 +884,6 @@ fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
         AstType::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => CmShape::Option(g.args[0].clone()),
             "List" if g.args.len() == 1 => CmShape::List(g.args[0].clone()),
-            "Tuple" => CmShape::Tuple(g.args.clone()),
             "Result" if g.args.len() == 2 => CmShape::Result {
                 ok: non_unit_ast(&g.args[0]),
                 err: non_unit_ast(&g.args[1]),
