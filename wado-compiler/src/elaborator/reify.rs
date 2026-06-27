@@ -4973,18 +4973,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         if chain.comparisons.len() == 1 {
             let cmp = &chain.comparisons[0];
-            let (left, right) = if super::Elaborator::<H>::is_coercible_compound_literal(
-                &chain.first,
-            ) && !super::Elaborator::<H>::is_coercible_compound_literal(&cmp.right)
-            {
-                let right = self.reify_expr(&cmp.right, ctx, None);
-                let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
-                (left, right)
-            } else {
-                let left = self.reify_expr(&chain.first, ctx, None);
-                let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
-                (left, right)
-            };
+            let (left, right) =
+                if super::Elaborator::<H>::is_coercible_compound_literal(&chain.first)
+                    && !super::Elaborator::<H>::is_coercible_compound_literal(&cmp.right)
+                {
+                    let right = self.reify_expr(&cmp.right, ctx, None);
+                    let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
+                    (left, right)
+                } else {
+                    let left = self.reify_expr(&chain.first, ctx, None);
+                    let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
+                    (left, right)
+                };
 
             // Non-primitive comparison dispatches through `Eq::eq` /
             // `Ord::cmp`; the recording fires on `chain.id` at

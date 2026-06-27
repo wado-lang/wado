@@ -288,9 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Check newtypes, struct definitions, and variants
             _ => {
-                if enforce_arity
-                    && let Some(expected) = self.bare_generic_type_arity(name)
-                {
+                if enforce_arity && let Some(expected) = self.bare_generic_type_arity(name) {
                     let _ = self.logger.error(TypeError::MissingTypeArguments {
                         name: name.to_string(),
                         expected,
