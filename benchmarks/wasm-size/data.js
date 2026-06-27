@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782582283391,
+  "lastUpdate": 1782586735291,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36005,6 +36005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cd11409e83a52620524057926bd56791da7bf38d"
         },
         "date": 1782582282964,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df8a94b8e2cb1a594861375abf1e0cd8e024dcae",
+          "message": "Merge pull request #1459 from wado-lang/claude/package-cm-catalog-async-6hs1c8\n\nfeat(cm-catalog): async future/stream coverage + float future codegen",
+          "timestamp": "2026-06-28T03:49:02+09:00",
+          "tree_id": "bb35003c8e9f646e5f532cc76fb41df68e7cc479",
+          "url": "https://github.com/wado-lang/wado/commit/df8a94b8e2cb1a594861375abf1e0cd8e024dcae"
+        },
+        "date": 1782586734659,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
