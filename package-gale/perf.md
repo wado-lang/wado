@@ -20,7 +20,7 @@ Dev-host Gale numbers (`cargo run` `wado`; see the measurement note):
 
 | benchmark                          |    per-iter | throughput |
 | ---------------------------------- | ----------: | ---------: |
-| `syntax_highlight` (build + walk)  | ~30 ms/iter |  ~450 KB/s |
+| `syntax_highlight` (build + walk)  | ~28 ms/iter |  ~470 KB/s |
 | `sqlite_parse` (build only)        |  ~5 ms/iter |  ~2.5 MB/s |
 
 The release headline + comparison baselines (Gale vs `tree-sitter` for
@@ -49,33 +49,37 @@ wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_hi
 upload to profiler.firefox.com. The table below merges **5 dev-host runs @1 ms
 = 3104 samples** to damp per-run sampling noise.)
 
-## Live profile (syntax_highlight, guest sampler, 3 runs merged, 1879 samples @1 ms)
+## Live profile (syntax_highlight, guest sampler, 3 runs merged, 2125 samples @1 ms)
 
-Post-`to_chars` shape (~29–30 ms/iter). Build-and-walk dominates: walking the
-CST then building it is over half of self-time. The `List<char>::grow` frame is
-gone (the §2 fix), and `HighlightVisitor::classify` — 10.9% in an earlier
-snapshot — has since collapsed to ~1%, dropping off the lever list entirely.
+Post-`matches`-lexer shape (~28 ms/iter). Build-and-walk dominates: walking the
+CST then building it is over half of self-time. `List<char>::grow` is gone (the
+§2 fix); `HighlightVisitor::classify` — 10.9% in an earlier snapshot — collapsed
+to ~1%. The lexer now emits `chars[pos] matches { 'a'..='z' | … }` (br_table for
+dense classes) instead of `||`/`<=` disjunctions: profile-neutral (kind-set held
+at ~3%, lexer-compute ~9%), a modest wall-clock move (~29.7 → ~28 ms) and a
+code-size/readability win — confirming br_table ≈ cascade for membership (§3).
 
 |   Pct | Symbol                            | role                                                |
 | ----: | --------------------------------- | --------------------------------------------------- |
-| 29.2% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
-| 11.0% | `List<CstChild>::push`            | per-node child-list build                           |
-|  8.5% | `TokenStream::new`                | SoA token-array alloc (WasmGC zero-fill; not a lever)|
+| 29.9% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
+| 12.1% | `List<CstChild>::push`            | per-node child-list build                           |
+|  8.4% | `TokenStream::new`                | SoA token-array alloc (WasmGC zero-fill; not a lever)|
 |  8.1% | `tree_build_node`                 | CST materialization (event log → tree)              |
-|  3.3% | `String::push`                    | HTML output build                                   |
-|  2.9% | `push_class`                      | HTML class emit                                     |
-|  2.7% | `List<i32>::push`                 | `rule_stack` / trivia push                          |
-|  2.4% | `_kind_set_8`                     | membership over the big keyword set                 |
-|  2.3% | `List<BuildEvent>::push`          | CST event-log build                                 |
-|  2.3% | `scan_any_name`                   | scan (prediction)                                   |
+|  3.8% | `String::push`                    | HTML output build                                   |
+|  2.4% | `List<i32>::push`                 | `rule_stack` / trivia push                          |
+|  2.4% | `List<BuildEvent>::push`          | CST event-log build                                 |
+|  2.3% | `push_class`                      | HTML class emit                                     |
+|  2.2% | `scan_any_name`                   | scan (prediction)                                   |
+|  2.0% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
+|  2.0% | `_kind_set_8`                     | membership over the big keyword set                 |
 
 (Frames under 2% self-time omitted.)
 
 Rough buckets (self-time): **CST walk** (`highlight_walk` + `hl_visit_token`) ≈
-**31%**; **CST build** (`CstChild::push` + `tree_build_node` + `BuildEvent`
-push/grow + `List<i32>::push`) ≈ **26%**; **token-array alloc**
+**32%**; **CST build** (`CstChild::push` + `tree_build_node` + `BuildEvent`
+push/grow + `List<i32>::push`) ≈ **25%**; **token-array alloc**
 (`TokenStream::new`) ≈ **8%**; **HTML render** (`String::push` + `push_class` +
-`highlight_html`) ≈ **8%**; `scan_*` ≈ **5%**; kind-set (`_kind_set_*`) ≈ **4%**.
+`highlight_html`) ≈ **7%**; `scan_*` ≈ **5%**; kind-set (`_kind_set_*`) ≈ **3%**.
 
 So the CST — walk it, build it — is the overwhelming majority at **~57%**, with
 `highlight_walk` alone the single largest frame at ~29%. After the §2 lexer fix
@@ -122,14 +126,17 @@ or iterator dispatch. `Lexer::new` now calls `input.to_chars()`. Re-profiled:
 the bound on the build-and-walk path; the `grow` self-time was dev-host GC
 inflation. Kept as the better-reading, no-slower primitive (also reused by Gale).
 
-### 3. Kind-set membership — `_kind_set_*` (~4%)
+### 3. Kind-set membership — `_kind_set_*` (~3%) — not a lever
 
-`_kind_set_8` alone is 2.4%: a `k matches { TK_… | TK_… | … }` membership test
+`_kind_set_8` alone is ~2%: a `k matches { TK_… | TK_… | … }` membership test
 over the large SQLite keyword set (~125 kinds), called from scan dispatch and
-lookahead gates. Generated today as a branch/compare cascade (71 such helpers
-in the SQLite parser). A compile-time **perfect hash** or a **bitset indexed by
-token kind** (`(kind >> 5)` word + `1 << (kind & 31)`) makes it O(1) with no
-cascade. A pure-compute frame the dev host does _not_ inflate, so its release
+lookahead gates. These now lower to a Wasm `br_table` (the const-global→literal
+fix unblocked `match_to_switch`), yet the self-time is unchanged from the old
+compare-cascade — converting the densest, most-converted helper to a pure
+`br_table` (zero comparisons) did not move it. So kind-set is **call-frequency-
+bound, not dispatch-bound**: a perfect-hash / bitset would not help either
+(Cranelift already lowers the cascade competitively). Left as a measured
+non-lever. A pure-compute frame the dev host does _not_ inflate, so its release
 share is a touch higher.
 
 ### 4. HTML render output (~8%, syntax-highlight only)
