@@ -80,6 +80,23 @@ pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
     }
 }
 
+/// Apply [`shadow_one_function`] to functions appended since `start` (i.e. the
+/// `__call` bodies `closure::plan` lifts out after [`shadow_params`] has already
+/// run on the original functions). A closure-scope `&mut`-borrowed local is
+/// address-taken in its own scope, so its declared type must be retagged to the
+/// box type — otherwise the body fold boxes the *value* while the local stays
+/// the unboxed scalar, tripping a WIR `expected i32, found ref` validation ICE.
+/// Processing only the new range keeps the non-idempotent param-shadow step from
+/// running twice on the original functions.
+pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
+    let type_table = flat.type_table.clone();
+    let type_table = type_table.borrow();
+    for func_rc in &flat.functions[start..] {
+        let mut func = func_rc.borrow_mut();
+        shadow_one_function(&mut func, plan, &type_table);
+    }
+}
+
 fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
     let address_taken = func.address_taken_locals.clone();
     let param_count = u32::try_from(func.params.len()).unwrap();

@@ -1,0 +1,34 @@
+// Regression: a closure that takes a `&mut` reference to one of its own local
+// variables (whose type is boxed under the reference representation — here a
+// primitive `i32`) and passes it to a `&mut` function ICEs codegen with
+// "WIR pipeline generated invalid core Wasm module / type mismatch: expected
+// i32, found (ref (exact $type))".
+//
+// Root cause: `&mut`-borrowed locals are boxed into `Box<T>`. The boxing pass
+// (`lower/plan/boxing::shadow_params`) retags such locals' declared types to
+// the box type, but it runs *before* `closure::plan` lifts closures into their
+// own `__call` functions — so a closure-scope `&mut` local has its value boxed
+// (by the body fold) yet its declared local type left as the unboxed scalar.
+//
+// Reduced from a Gale CST builder driven through a benchmark closure; each
+// ingredient is load-bearing (drop the closure or the `&mut` and it compiles).
+
+use { Stdout, println } from "core:cli";
+
+fn incr(x: &mut i32) {
+    *x += 1;
+}
+
+export fn run() with Stdout {
+    let f = || {
+        let mut c = 0;
+        incr(&mut c);
+        return c;
+    };
+    println(`{f()}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}
