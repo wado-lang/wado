@@ -85,16 +85,22 @@ from decoded WIT rather than parsed from `lib/wasi/**`.
 Working end-to-end: `use { Iface } from "./c.wasm" with { type: "wasm" }` →
 `Iface::method(x)` resolves, composes, and round-trips at runtime. E2E fixture
 `tests/fixtures/cm_component_import_catalog.wado` round-trips the full
-value-type surface (primitives, `string`, `enum`, `flags`, newtype, `List`,
-`Option`, `Result`, records, variants, tuples, and nested combinations) against
-the composed `cm-catalog.wasm` at O0/O2.
+**synchronous** value-type surface (primitives, `string`, `enum`, `flags`,
+newtype, `List`, `Option`, `Result`, records, variants, tuples, and nested
+combinations) against the composed `cm-catalog.wasm` at O0/O2, asserting
+whole-value `==` (auto-derived `Eq`) on every aggregate.
+
+The **async** value types — `stream<T>` and `future<T>` — are not yet handled;
+that is Phase 8 below.
 
 - [x] Phase 1 — fixture committed.
 - [x] Phase 2 — shared type-mapping core (`CmShape`) + WIT→ast::Type (`wit_consume`).
 - [x] Phase 3 — loader detect/decode/build-AST; the import resolves.
 - [x] Phase 4 — registry provenance + `ImportKind::Component`; binding synthesis reused.
 - [x] Phase 6 — codegen composes via `wasm-compose` (see below).
-- [x] Phase 7 — e2e round-trip (full value-type surface).
+- [x] Phase 7 — e2e round-trip (synchronous value-type surface).
+- [ ] Phase 8 — async value types (`stream<T>` / `future<T>`); see below.
+- [ ] Phase 9 — world-level function exports (case A, no named types); see below.
 
 ### Codegen: fused composition via `wasm-compose`
 
@@ -158,13 +164,14 @@ variants (incl. payload-bearing and tuple payloads), tuples, and nested
 combinations (`list<record>`, `option<record>`, `tuple<record, _>`,
 `option<list>`, `result<list<record>, _>`, `list<tuple<record, _>>`, …).
 
-- [x] Phase 5/6/7 — full value-type surface for params and returns.
-
-### Known gaps (follow-ups)
-
-- **World-level function exports** (case A, no named types) are rejected by
-  `wit_consume` — only interface exports are handled. World-level free-function
-  imports also need an import-plan path that isn't interface-keyed.
+- [x] Phase 5/6/7 — full synchronous value-type surface for params and returns.
+- [ ] Phase 8 — async value types (`stream<T>` / `future<T>`). An imported
+      component function whose signature carries a `stream`/`future` is neither
+      tested nor wired through the import binding yet. This is the async-import
+      surface (subtask / `AsyncCall`, WEP-2026-04-22).
+- [ ] Phase 9 — world-level function exports (case A, no named types). Currently
+      rejected by `wit_consume`, which handles only interface exports; world-level
+      free-function imports also need an import-plan path that isn't interface-keyed.
 
 ## Notes
 
