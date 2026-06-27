@@ -54,8 +54,7 @@ upload to profiler.firefox.com. The table below merges **5 dev-host runs @1 ms
 Post-`to_chars` shape (~29–30 ms/iter). Build-and-walk dominates: walking the
 CST then building it is over half of self-time. The `List<char>::grow` frame is
 gone (the §2 fix), and `HighlightVisitor::classify` — 10.9% in an earlier
-snapshot — has since collapsed to ~1%, so the highlight classify loop is no
-longer a lever (see §3).
+snapshot — has since collapsed to ~1%, dropping off the lever list entirely.
 
 |   Pct | Symbol                            | role                                                |
 | ----: | --------------------------------- | --------------------------------------------------- |
@@ -69,16 +68,14 @@ longer a lever (see §3).
 |  2.4% | `_kind_set_8`                     | membership over the big keyword set                 |
 |  2.3% | `List<BuildEvent>::push`          | CST event-log build                                 |
 |  2.3% | `scan_any_name`                   | scan (prediction)                                   |
-|  1.8% | `scan_expr`                       | scan (prediction)                                   |
-|  1.6% | `HighlightVisitor::hl_visit_token`| per-token trivia + classify driver                  |
-|  1.4% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
+
+(Frames under 2% self-time omitted.)
 
 Rough buckets (self-time): **CST walk** (`highlight_walk` + `hl_visit_token`) ≈
 **31%**; **CST build** (`CstChild::push` + `tree_build_node` + `BuildEvent`
 push/grow + `List<i32>::push`) ≈ **26%**; **token-array alloc**
 (`TokenStream::new`) ≈ **8%**; **HTML render** (`String::push` + `push_class` +
-`highlight_html` + `escape_html_char`) ≈ **8%**; `scan_*` ≈ **5%**; kind-set
-(`_kind_set_*`) ≈ **4%**; lexer char-level (`to_ascii_lowercase` + `try_*`) ≈ **3%**.
+`highlight_html`) ≈ **8%**; `scan_*` ≈ **5%**; kind-set (`_kind_set_*`) ≈ **4%**.
 
 So the CST — walk it, build it — is the overwhelming majority at **~57%**, with
 `highlight_walk` alone the single largest frame at ~29%. After the §2 lexer fix
@@ -125,16 +122,7 @@ or iterator dispatch. `Lexer::new` now calls `input.to_chars()`. Re-profiled:
 the bound on the build-and-walk path; the `grow` self-time was dev-host GC
 inflation. Kept as the better-reading, no-slower primitive (also reused by Gale).
 
-### 3. Per-token highlight classify — `HighlightVisitor::classify` — no longer hot
-
-An earlier snapshot had `classify` at ~11%; the current merged profile measures
-it at **~1%** (`classify` 1.1% + `classify_keyword` 0.9% + `highlight_mapping`
-0.1%). The per-token classify loop is no longer a lever — the cost has moved
-entirely to the CST walk/build (§1). Left here only to record the drop; the
-former levers (fast-path empty overrides, index overrides by kind, hoist the
-`highlight_mapping` rebuild) are unnecessary at the current share.
-
-### 4. Kind-set membership — `_kind_set_*` (~7%)
+### 3. Kind-set membership — `_kind_set_*` (~4%)
 
 `_kind_set_8` alone is 2.4%: a `k matches { TK_… | TK_… | … }` membership test
 over the large SQLite keyword set (~125 kinds), called from scan dispatch and
@@ -144,27 +132,13 @@ token kind** (`(kind >> 5)` word + `1 << (kind & 31)`) makes it O(1) with no
 cascade. A pure-compute frame the dev host does _not_ inflate, so its release
 share is a touch higher.
 
-### 5. HTML render output (~9%, syntax-highlight only)
+### 4. HTML render output (~8%, syntax-highlight only)
 
-`String::push`/`grow` building the HTML output, plus `push_class` (per-capture
-class string, splitting `.` → space char-by-char) and `escape_html_char` (per
-source char). Levers: emit class names without the per-char `push_class` loop,
-and append larger runs of unescaped source instead of char-at-a-time. Lives in
-`highlight_html` / `push_class` (`highlight.wado`).
-
-### 6. Lexer char-level compute (independent secondary lever)
-
-With §2 landed (buffer-growth share gone), the remaining lexer cost is compute:
-`to_ascii_lowercase` (case-insensitive matching), `StrCharIter`, and
-`classify_keyword`. Candidates:
-
-- **Table-driven DFA** for the whole lexer (NFA → DFA → transition table).
-  Replaces per-character dispatch and `classify_keyword`; `mode` blocks become a
-  DFA per mode. Semantic predicates are the only DFA-blocker.
-- **Trie / nested-switch on bytes** or a **compile-time perfect hash**
-  (`gperf`-style) for `classify_keyword` only — smaller code-size impact.
-- **SIMD pre-scan** (Wasm `v128`) for token boundaries / character-class
-  membership, if per-byte work is tiny but the byte loop is the bound.
+`String::push` building the HTML output, plus `push_class` (per-capture class
+string, splitting `.` → space char-by-char). Levers: emit class names without
+the per-char `push_class` loop, and append larger runs of unescaped source
+instead of char-at-a-time. Lives in `highlight_html` / `push_class`
+(`highlight.wado`).
 
 ## What does not work
 
