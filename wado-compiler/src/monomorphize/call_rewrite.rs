@@ -362,13 +362,7 @@ impl Monomorphizer {
         // (`Boxed<i32>`) and would retarget the inherited/blanket base impl,
         // shadowing the newtype's own.
         if let Some(info) = method_func.method_info.as_ref()
-            && let Some(trait_name) = info.trait_name.as_deref()
-            && let Some(own) = self.newtype_own_struct_name_with_impl(
-                receiver.type_id,
-                type_table,
-                Some(trait_name),
-            )
-            && own == info.struct_name
+            && self.receiver_keeps_newtype_own_impl(receiver.type_id, type_table, info)
         {
             return;
         }
