@@ -99,7 +99,8 @@ fn walk_call_args_for_uses(
 
 /// Classify aggregate-returning functions and set `return_abi` on those whose
 /// every return statement and call site permit the multi-value ABI.
-pub fn classify_multi_value_returns(project: &mut NirPackage) {
+/// Returns whether any function's `return_abi` was set to the multi-value ABI.
+pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let structs = &project.structs;
 
@@ -112,7 +113,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) {
         }
     }
     if candidates.is_empty() {
-        return;
+        return false;
     }
 
     // Phase 2: call-site validation across every function body.
@@ -135,6 +136,7 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) {
 
     // Phase 3: apply. Drop disqualified candidates, set ReturnAbi on the rest.
     drop(type_table);
+    let mut changed = false;
     for (idx, info) in candidates {
         if invalid.contains(&idx) {
             continue;
@@ -144,7 +146,9 @@ pub fn classify_multi_value_returns(project: &mut NirPackage) {
             result_types: info.result_types,
             field_names: info.field_names,
         };
+        changed = true;
     }
+    changed
 }
 
 /// Body-only candidate check.

@@ -25,7 +25,7 @@ use std::cell::RefCell;
 
 use cranelift_entity::EntityRef;
 
-use super::gate::{FunctionGate, FunctionId, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::hashmap::IndexSet;
@@ -55,8 +55,7 @@ pub fn fold_constants_all(project: &mut NirPackage) -> bool {
     fold_constants_impl(project, None)
 }
 
-fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionGate>) -> bool {
-    let mut changed = false;
+fn fold_constants_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate>) -> bool {
     let type_table = project.type_table.borrow();
     // Build the CalleeMap once per pass with Rc handles aliased with
     // `project.functions`. The interpreter reads callee bodies via
@@ -80,38 +79,45 @@ fn fold_constants_impl(project: &mut NirPackage, mut gate: Option<&mut FunctionG
     visitor.interpreter.with_globals(&globals);
     visitor.interpreter.with_global_fields(&global_fields);
     let mut buffers = EngineBuffers::default();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let fid = FunctionId::new(i);
-        if let Some(g) = gate.as_deref_mut()
-            && !g.needs(GatedPass::ConstFold, fid)
-        {
-            continue;
+    if let Some(gate) = gate {
+        // Gated (fixed-point loop): the canonical per-function idiom — process
+        // only functions dirty since this pass last ran, reporting per-function
+        // changes back to the gate.
+        let len = project.functions.len();
+        gate.run_gated(GatedPass::ConstFold, len, |fid| {
+            fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
+        })
+    } else {
+        // Ungated: fold every function. Used by the post-globalization cleanup,
+        // which runs to its own fixed point outside the gated loop.
+        let mut changed = false;
+        for func_rc in &project.functions {
+            changed |= fold_function(func_rc, &mut visitor, &mut buffers);
         }
-        let mut func = func_rc.borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        let func_changed = if let Some(body) = body.as_mut() {
-            // Local indices are unique per function, not project-wide,
-            // so reset the interpreter's env at every function boundary.
-            visitor.interpreter.enter_function();
-            // Drive the flow-sensitive walk over an engine session so every
-            // rewrite commits coherently (the engine is the commit mechanism;
-            // the visitor still drives the bottom-up program-order walk).
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            let root = engine.body.root;
-            visitor.visit_block(&mut engine, root)
-        } else {
-            false
-        };
-        drop(func);
-        if let Some(g) = gate.as_deref_mut() {
-            g.seen(GatedPass::ConstFold, fid);
-            if func_changed {
-                g.mark_changed(fid);
-            }
-        }
-        changed |= func_changed;
+        changed
     }
-    changed
+}
+
+/// Fold one function's body in place, returning whether anything changed.
+fn fold_function(
+    func_rc: &RefCell<NirFunction>,
+    visitor: &mut ConstFoldVisitor<'_>,
+    buffers: &mut EngineBuffers,
+) -> bool {
+    let mut func = func_rc.borrow_mut();
+    let NirFunction { body, locals, .. } = &mut *func;
+    let Some(body) = body.as_mut() else {
+        return false;
+    };
+    // Local indices are unique per function, not project-wide, so reset the
+    // interpreter's env at every function boundary.
+    visitor.interpreter.enter_function();
+    // Drive the flow-sensitive walk over an engine session so every rewrite
+    // commits coherently (the engine is the commit mechanism; the visitor still
+    // drives the bottom-up program-order walk).
+    let mut engine = Engine::new(body, buffers, locals);
+    let root = engine.body.root;
+    visitor.visit_block(&mut engine, root)
 }
 
 /// Engine rule: environment-free constant folding.
