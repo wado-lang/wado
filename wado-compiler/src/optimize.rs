@@ -712,7 +712,12 @@ fn run_optimization_passes(
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
-    run_pass("nir/field_scalarize", project, profiler, scalarize_hot_fields);
+    run_pass(
+        "nir/field_scalarize",
+        project,
+        profiler,
+        scalarize_hot_fields,
+    );
     // Forward the scalarization shadow inits (`__hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
