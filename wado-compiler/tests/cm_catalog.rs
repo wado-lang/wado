@@ -23,7 +23,9 @@ use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
-use wasmtime::component::{Component, Val};
+use wasmtime::component::{
+    Component, ComponentExportIndex, FutureAny, FutureReader, Instance, StreamAny, StreamReader, Val,
+};
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
@@ -169,6 +171,160 @@ fn cases() -> Vec<Case> {
     ]
 }
 
+/// Resolve a kebab-named export to its dynamic [`wasmtime::component::Func`].
+fn lookup_func(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &str,
+) -> Result<wasmtime::component::Func, String> {
+    iface
+        .and_then(|i| instance.get_export(&mut *store, Some(i), export))
+        .map(|(_, idx)| idx)
+        .and_then(|idx| instance.get_func(&mut *store, idx))
+        .ok_or_else(|| format!("export `{export}` not found"))
+}
+
+/// Round-trip a `future<T>` identity export. The oracle is functional, not
+/// `Val` equality: a future handle is single-use, so equality of the returned
+/// handle with the input is meaningless. Instead we lower a host-created future
+/// into the export and assert the lifted result re-types to `future<T>` and is a
+/// live handle — proving lift (param) and lower (result) of the handle slot.
+async fn future_round_trip<T>(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    payload: T,
+) -> Result<(), String>
+where
+    T: wasmtime::component::Lower + wasmtime::component::Lift + Send + Sync + 'static,
+{
+    let func = lookup_func(store, instance, iface, export)?;
+    let f = FutureReader::new(&mut *store, async move { wasmtime::error::Ok(payload) })
+        .map_err(|e| format!("`{export}`: host future create failed: {e:#}"))?;
+    let any = f
+        .try_into_future_any(&mut *store)
+        .map_err(|e| format!("`{export}`: future -> any failed: {e:#}"))?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[Val::Future(any)], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let out = match results.into_iter().next() {
+        Some(Val::Future(a)) => a,
+        other => return Err(format!("`{export}`: expected a future result, got {other:?}")),
+    };
+    let mut reader = out.try_into_future_reader::<T>().map_err(|e| {
+        format!(
+            "`{export}`: result is not future<{}>: {e:#}",
+            std::any::type_name::<T>()
+        )
+    })?;
+    reader
+        .close(&mut *store)
+        .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
+}
+
+/// Round-trip a `stream<T>` identity export, the streaming analogue of
+/// [`future_round_trip`].
+async fn stream_round_trip<T>(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    payload: Vec<T>,
+) -> Result<(), String>
+where
+    T: wasmtime::component::Lower + wasmtime::component::Lift + Send + Sync + Unpin + 'static,
+{
+    let func = lookup_func(store, instance, iface, export)?;
+    let s = StreamReader::new(&mut *store, payload)
+        .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
+    let any = s
+        .try_into_stream_any(&mut *store)
+        .map_err(|e| format!("`{export}`: stream -> any failed: {e:#}"))?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[Val::Stream(any)], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let out = match results.into_iter().next() {
+        Some(Val::Stream(a)) => a,
+        other => return Err(format!("`{export}`: expected a stream result, got {other:?}")),
+    };
+    let mut reader = out.try_into_stream_reader::<T>().map_err(|e| {
+        format!(
+            "`{export}`: result is not stream<{}>: {e:#}",
+            std::any::type_name::<T>()
+        )
+    })?;
+    reader
+        .close(&mut *store)
+        .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
+}
+
+/// Round-trip a `future<u32>` embedded inside an aggregate (`option`, `result`,
+/// `list`, `tuple`, `record`). `wrap` builds the input `Val` around the future;
+/// `unwrap` extracts the inner `FutureAny` from the lifted result. This is where
+/// lift/lower of a handle at a computed aggregate offset is exercised.
+async fn embedded_future_round_trip(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    wrap: impl FnOnce(Val) -> Val,
+    unwrap: impl FnOnce(Val) -> Option<FutureAny>,
+) -> Result<(), String> {
+    let f = FutureReader::new(&mut *store, async { wasmtime::error::Ok(0xFEED_u32) })
+        .map_err(|e| format!("`{export}`: host future create failed: {e:#}"))?;
+    let any = f
+        .try_into_future_any(&mut *store)
+        .map_err(|e| format!("`{export}`: future -> any failed: {e:#}"))?;
+    let func = lookup_func(store, instance, iface, export)?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[wrap(Val::Future(any))], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let result = results.into_iter().next().unwrap_or(Val::Bool(false));
+    let any = unwrap(result)
+        .ok_or_else(|| format!("`{export}`: result did not carry the inner future"))?;
+    let mut reader = any
+        .try_into_future_reader::<u32>()
+        .map_err(|e| format!("`{export}`: inner handle is not future<u32>: {e:#}"))?;
+    reader
+        .close(&mut *store)
+        .map_err(|e| format!("`{export}`: inner handle close failed: {e:#}"))
+}
+
+/// `embedded_future_round_trip` for a `stream<u8>` carried inside an aggregate.
+async fn embedded_stream_round_trip(
+    store: &mut Store<common::WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    export: &'static str,
+    wrap: impl FnOnce(Val) -> Val,
+    unwrap: impl FnOnce(Val) -> Option<StreamAny>,
+) -> Result<(), String> {
+    let s = StreamReader::new(&mut *store, vec![1u8, 2, 3])
+        .map_err(|e| format!("`{export}`: host stream create failed: {e:#}"))?;
+    let any = s
+        .try_into_stream_any(&mut *store)
+        .map_err(|e| format!("`{export}`: stream -> any failed: {e:#}"))?;
+    let func = lookup_func(store, instance, iface, export)?;
+    let mut results = vec![Val::Bool(false); 1];
+    func.call_async(&mut *store, &[wrap(Val::Stream(any))], &mut results)
+        .await
+        .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
+    let result = results.into_iter().next().unwrap_or(Val::Bool(false));
+    let any = unwrap(result)
+        .ok_or_else(|| format!("`{export}`: result did not carry the inner stream"))?;
+    let mut reader = any
+        .try_into_stream_reader::<u8>()
+        .map_err(|e| format!("`{export}`: inner handle is not stream<u8>: {e:#}"))?;
+    reader
+        .close(&mut *store)
+        .map_err(|e| format!("`{export}`: inner handle close failed: {e:#}"))
+}
+
 /// Compile the catalog fixture as a library world at `opt_level`.
 fn compile_catalog(opt_level: OptLevel) -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).expect("read cm_catalog fixture");
@@ -246,6 +402,104 @@ fn run_round_trips(opt_level: OptLevel) {
                 Err(e) => failures.push(format!("[{opt}] `{export}`: call trapped: {e:#}")),
             }
         }
+
+        // Async handle types use a functional oracle (see `future_round_trip`),
+        // not `Val` equality — the handle is single-use.
+        macro_rules! check {
+            ($call:expr) => {
+                if let Err(e) = $call.await {
+                    failures.push(format!("[{opt}] {e}"));
+                }
+            };
+        }
+        let i = iface.as_ref();
+
+        // Bare `future<T>` (consume/produce in the guest) over the payloads the
+        // async read/write codegen supports: integer / float / bool / char.
+        check!(future_round_trip(&mut store, &instance, i, "id-future-bool", true));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-u8", 0xABu8));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-u16", 0xBEEFu16));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-u32", 0xDEAD_BEEFu32));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-u64", 0x0123_4567_89AB_CDEFu64));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-s8", -12i8));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-s16", -1234i16));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-s32", -123_456i32));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-s64", -1_234_567_890_123i64));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-f32", 3.5f32));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-f64", -7.25f64));
+        check!(future_round_trip(&mut store, &instance, i, "id-future-char", 'λ'));
+
+        // Bare `stream<u8>` (pass-through identity).
+        check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
+
+        // Handles embedded in each aggregate kind.
+        check!(embedded_future_round_trip(
+            &mut store, &instance, i, "id-option-future",
+            |v| Val::Option(Some(Box::new(v))),
+            |r| match r {
+                Val::Option(Some(b)) => match *b {
+                    Val::Future(a) => Some(a),
+                    _ => None,
+                },
+                _ => None,
+            },
+        ));
+        check!(embedded_future_round_trip(
+            &mut store, &instance, i, "id-result-future",
+            |v| Val::Result(Ok(Some(Box::new(v)))),
+            |r| match r {
+                Val::Result(Ok(Some(b))) => match *b {
+                    Val::Future(a) => Some(a),
+                    _ => None,
+                },
+                _ => None,
+            },
+        ));
+        check!(embedded_future_round_trip(
+            &mut store, &instance, i, "id-list-future",
+            |v| Val::List(vec![v]),
+            |r| match r {
+                Val::List(items) => items.into_iter().find_map(|x| match x {
+                    Val::Future(a) => Some(a),
+                    _ => None,
+                }),
+                _ => None,
+            },
+        ));
+        check!(embedded_future_round_trip(
+            &mut store, &instance, i, "id-tuple-future",
+            |v| Val::Tuple(vec![v, Val::U32(7)]),
+            |r| match r {
+                Val::Tuple(items) => items.into_iter().find_map(|x| match x {
+                    Val::Future(a) => Some(a),
+                    _ => None,
+                }),
+                _ => None,
+            },
+        ));
+        check!(embedded_future_round_trip(
+            &mut store, &instance, i, "id-record-future",
+            |v| Val::Record(vec![("value".to_string(), v)]),
+            |r| match r {
+                Val::Record(fields) => fields.into_iter().find_map(|(name, x)| match x {
+                    Val::Future(a) if name == "value" => Some(a),
+                    _ => None,
+                }),
+                _ => None,
+            },
+        ));
+        check!(embedded_stream_round_trip(
+            &mut store, &instance, i, "id-list-stream",
+            |v| Val::List(vec![v]),
+            |r| match r {
+                Val::List(items) => items.into_iter().find_map(|x| match x {
+                    Val::Stream(a) => Some(a),
+                    _ => None,
+                }),
+                _ => None,
+            },
+        ));
+
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
     });
 }

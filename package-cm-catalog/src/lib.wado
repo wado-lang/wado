@@ -5,10 +5,14 @@
 //! function name encodes the type so the generated WIT is a self-describing
 //! enumeration of the value-type ABI surface.
 //!
-//! Scope: value types only. Async (`future`/`stream`) and handles
-//! (`own`/`borrow` of resources) are intentionally omitted — identity is not
-//! meaningful for a single-use future or a non-duplicable handle, and they get
-//! their own catalog once their boundary semantics are settled.
+//! Scope: value types plus the async handle types `future` and `stream`. A
+//! future/stream identity moves the readable end across the boundary unchanged,
+//! so it still exercises lowering (the parameter) and lifting (the result) for
+//! that exact handle — `cm_catalog.rs` round-trips it functionally rather than
+//! by handle equality, since the handle is single-use.
+//!
+//! Still omitted: handles (`own`/`borrow` of resources) — a non-duplicable
+//! resource handle needs different boundary semantics and gets its own catalog.
 
 // --- Named types referenced by the identity exports below ---
 
@@ -43,6 +47,12 @@ pub type Meters = f64;
 pub variant Mixed {
     AsInt(u32),
     AsFloat(f32),
+}
+
+// A record whose single field is a `future` handle: exercises lift/lower of a
+// handle slot at a named-record offset (see `id_record_future`).
+pub struct FutureCell {
+    value: Future<u32>,
 }
 
 // --- Primitives ---
@@ -187,5 +197,160 @@ export fn id_tuple_list(v: [List<String>, u32]) -> [List<String>, u32] {
     return v;
 }
 export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
+    return v;
+}
+
+// --- Async handle types (CM `future` / `stream`) ---
+//
+// `future`/`stream` are CM value types carried as a single i32 handle. Two
+// shapes appear here:
+//
+//  * Bare `future<T>` identities CONSUME the argument (read its payload) and
+//    PRODUCE the result (write the payload into a fresh future), so the
+//    payload's lift/lower is genuinely exercised — a bare handle pass-through
+//    would only move the i32 and test nothing about `T`. Covers the payloads
+//    the async read/write codegen supports today: integer / float / bool /
+//    char. Aggregate payloads, plus the streaming consume/produce path, are
+//    pending compiler support (see README "Async coverage").
+//
+//  * Embedded handles (`option<future>`, `list<stream>`, …) and `stream<u8>`
+//    are identity pass-throughs: the handle rides through a param/result slot,
+//    exercising lift/lower of a handle at an aggregate offset.
+
+// Bare `future<T>`: consume the payload, produce a fresh future.
+export fn id_future_bool(v: Future<bool>) -> Future<bool> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<bool>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_u8(v: Future<u8>) -> Future<u8> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<u8>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_u16(v: Future<u16>) -> Future<u16> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<u16>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_u32(v: Future<u32>) -> Future<u32> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<u32>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_u64(v: Future<u64>) -> Future<u64> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<u64>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_s8(v: Future<i8>) -> Future<i8> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<i8>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_s16(v: Future<i16>) -> Future<i16> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<i16>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_s32(v: Future<i32>) -> Future<i32> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<i32>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_s64(v: Future<i64>) -> Future<i64> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<i64>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_f32(v: Future<f32>) -> Future<f32> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<f32>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_f64(v: Future<f64>) -> Future<f64> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<f64>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+export fn id_future_char(v: Future<char>) -> Future<char> {
+    let value = v.read();
+    v.drop();
+    let [rx, tx] = Future::<char>::new();
+    if let Some(x) = value {
+        tx.write(x);
+    }
+    return rx;
+}
+
+// `stream<u8>` identity pass-through. (The streaming consume/produce path needs
+// concurrent host driving plus element-type codegen; tracked as follow-up.)
+export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
+    return v;
+}
+
+// Handles embedded in aggregates: the handle sits at a computed slot/offset
+// inside the composite, so these exercise lift/lower offset arithmetic that the
+// bare cases above do not. One per aggregate kind.
+export fn id_option_future(v: Option<Future<u32>>) -> Option<Future<u32>> {
+    return v;
+}
+export fn id_result_future(v: Result<Future<u32>, String>) -> Result<Future<u32>, String> {
+    return v;
+}
+export fn id_list_future(v: List<Future<u32>>) -> List<Future<u32>> {
+    return v;
+}
+export fn id_list_stream(v: List<Stream<u8>>) -> List<Stream<u8>> {
+    return v;
+}
+export fn id_tuple_future(v: [Future<u32>, u32]) -> [Future<u32>, u32] {
+    return v;
+}
+export fn id_record_future(v: FutureCell) -> FutureCell {
     return v;
 }

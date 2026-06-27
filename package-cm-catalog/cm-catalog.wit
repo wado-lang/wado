@@ -6,6 +6,9 @@ interface cm-catalog {
     green,
     blue,
   }
+  record future-cell {
+    value: future<u32>,
+  }
   type meters = f64;
   variant mixed {
     as-int(u32),
@@ -66,6 +69,25 @@ interface cm-catalog {
   id-tuple-option: func(v: tuple<option<u32>, u8>) -> tuple<option<u32>, u8>;
   id-tuple-list: func(v: tuple<list<string>, u32>) -> tuple<list<string>, u32>;
   id-list-tuple-record: func(v: list<tuple<point, u32>>) -> list<tuple<point, u32>>;
+  id-future-bool: func(v: future<bool>) -> future<bool>;
+  id-future-u8: func(v: future<u8>) -> future<u8>;
+  id-future-u16: func(v: future<u16>) -> future<u16>;
+  id-future-u32: func(v: future<u32>) -> future<u32>;
+  id-future-u64: func(v: future<u64>) -> future<u64>;
+  id-future-s8: func(v: future<s8>) -> future<s8>;
+  id-future-s16: func(v: future<s16>) -> future<s16>;
+  id-future-s32: func(v: future<s32>) -> future<s32>;
+  id-future-s64: func(v: future<s64>) -> future<s64>;
+  id-future-f32: func(v: future<f32>) -> future<f32>;
+  id-future-f64: func(v: future<f64>) -> future<f64>;
+  id-future-char: func(v: future<char>) -> future<char>;
+  id-stream-u8: func(v: stream<u8>) -> stream<u8>;
+  id-option-future: func(v: option<future<u32>>) -> option<future<u32>>;
+  id-result-future: func(v: result<future<u32>, string>) -> result<future<u32>, string>;
+  id-list-future: func(v: list<future<u32>>) -> list<future<u32>>;
+  id-list-stream: func(v: list<stream<u8>>) -> list<stream<u8>>;
+  id-tuple-future: func(v: tuple<future<u32>, u32>) -> tuple<future<u32>, u32>;
+  id-record-future: func(v: future-cell) -> future-cell;
 }
 
 world command {

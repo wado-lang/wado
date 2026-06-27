@@ -21,12 +21,32 @@ Covered (value types):
 - Nested compositions: `list<option<_>>`, `option<list<_>>`, `list<record>`,
   `result<list<_>, _>`, and so on.
 
+Covered (async handle types):
+
+- Bare `future<T>` identities that **consume** the argument (read the payload)
+  and **produce** the result (write the payload into a fresh future), so the
+  payload's lift/lower is genuinely exercised — not just the handle move.
+- `stream<u8>` and handles embedded in each aggregate kind
+  (`option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
+  `tuple<future, _>`, a record with a `future` field) as identity
+  pass-throughs, exercising lift/lower of a handle at an aggregate offset.
+
 Deferred:
 
-- Async types (`future`, `stream`) — identity is not meaningful for a
-  single-use value; they get their own catalog.
 - Handles (`own`/`borrow` of resources) — a handle is not duplicable, so
   identity needs different boundary semantics.
+
+### Async coverage
+
+A bare `future<T>`/`stream<T>` identity moves a single i32 handle, so a
+pass-through tests nothing about `T`. The faithful test is consume/produce:
+read the payload from the argument, write it into a fresh handle. That exercises
+`future.read`/`future.write` for `T`, which the compiler currently lowers only
+for **scalar** payloads (integer / float / `bool` / `char`). So bare `future<T>`
+covers those; aggregate payloads (`string`, `record`, `option`, `result`,
+`list`, `tuple`) and the streaming consume/produce path are pending compiler
+support and appear here only as embedded pass-throughs. `stream<char>` is also
+absent — the Component Model rejects it for now.
 
 ## Regenerating the WIT
 

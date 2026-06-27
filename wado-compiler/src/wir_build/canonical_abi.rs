@@ -326,6 +326,8 @@ impl FunctionTranslator<'_, '_> {
             | PrimitiveType::U16
             | PrimitiveType::U32
             | PrimitiveType::U64
+            | PrimitiveType::F32
+            | PrimitiveType::F64
             | PrimitiveType::Bool
             | PrimitiveType::Char,
         ) = self.type_table.get(value_type_id)
@@ -378,8 +380,10 @@ impl FunctionTranslator<'_, '_> {
         let (buf_size, buf_align): (i32, i32) = match prim {
             PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool => (1, 1),
             PrimitiveType::I16 | PrimitiveType::U16 => (2, 2),
-            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char => (4, 4),
-            PrimitiveType::I64 | PrimitiveType::U64 => (8, 8),
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char | PrimitiveType::F32 => {
+                (4, 4)
+            }
+            PrimitiveType::I64 | PrimitiveType::U64 | PrimitiveType::F64 => (8, 8),
             other => panic!("[WIR] emit_future_write_scalar: unsupported primitive {other:?}"),
         };
 
@@ -436,6 +440,21 @@ impl FunctionTranslator<'_, '_> {
                 align: 3,
                 addr: Box::new(ptr()),
                 value: Box::new(value),
+            },
+            // Floats have no dedicated WIR store; reinterpret to the same-width
+            // integer and reuse the integer store (byte-identical to `fN.store`),
+            // matching `builtin::fN_store` in `wir_build/calls.rs`.
+            PrimitiveType::F32 => WirInstr::I32Store {
+                offset: 0,
+                align: 2,
+                addr: Box::new(ptr()),
+                value: Box::new(WirInstr::I32ReinterpretF32(Box::new(value))),
+            },
+            PrimitiveType::F64 => WirInstr::I64Store {
+                offset: 0,
+                align: 3,
+                addr: Box::new(ptr()),
+                value: Box::new(WirInstr::I64ReinterpretF64(Box::new(value))),
             },
             other => {
                 panic!("[WIR] emit_future_write_scalar: unsupported store primitive {other:?}")
