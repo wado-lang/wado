@@ -1,8 +1,8 @@
 //! A filesystem-backed [`DependencyProvider`] for `wado update`.
 //!
 //! Path dependencies are read from disk relative to the project root. The
-//! registry (warg) and git backends are not wired yet — they return a clear
-//! "pending" error until the minimal warg read-client and git fetch land. This
+//! registry (OCI) and git backends are not wired yet — they return a clear
+//! "pending" error until the minimal OCI read-client and git fetch land. This
 //! keeps the resolution pipeline runnable end-to-end for path graphs today.
 
 use std::future::{Future, ready};
@@ -53,7 +53,7 @@ impl FilesystemProvider {
 fn backend_pending(source: String) -> ProviderError {
     ProviderError::NotFound {
         source,
-        message: "registry/git backend not wired yet (minimal warg client pending)".to_string(),
+        message: "registry/git backend not wired yet (minimal OCI client pending)".to_string(),
     }
 }
 
