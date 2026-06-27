@@ -2021,6 +2021,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ast::Stmt::Let(let_stmt) => {
                 if let Some(ty) = &let_stmt.ty {
                     if let Some(span) = Self::first_infer_span(ty) {
+                        Self::validate_ast_type_names_inner(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                            true,
+                        )?;
                         logger.error(TypeError::InferInLetAnnotation { span })?;
                     } else {
                         Self::validate_ast_type_names(
@@ -2729,6 +2737,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[&str],
         logger: &Logger<'_, H>,
     ) -> Result<(), Bail> {
+        Self::validate_ast_type_names_inner(
+            ty,
+            known_type_names,
+            resource_type_names,
+            type_params,
+            logger,
+            false,
+        )
+    }
+
+    fn validate_ast_type_names_inner(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &Logger<'_, H>,
+        allow_infer: bool,
+    ) -> Result<(), Bail> {
         match ty {
             Type::Named(named) => {
                 if named.name == "()" || named.name == "!" || named.name == "Self" {
@@ -2751,71 +2777,77 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             Type::Generic(generic) => {
                 for arg in &generic.args {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
             Type::NamespacedGeneric(ng) => {
                 for arg in &ng.args {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         arg,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
-            Type::Reference(inner) | Type::MutReference(inner) => Self::validate_ast_type_names(
-                inner,
-                known_type_names,
-                resource_type_names,
-                type_params,
-                logger,
-            ),
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Self::validate_ast_type_names_inner(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
             Type::Tuple(elems) => {
                 for elem in elems {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         elem,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
                 Ok(())
             }
             Type::Function(ft) => {
                 for param in &ft.params {
-                    Self::validate_ast_type_names(
+                    Self::validate_ast_type_names_inner(
                         param,
                         known_type_names,
                         resource_type_names,
                         type_params,
                         logger,
+                        allow_infer,
                     )?;
                 }
-                Self::validate_ast_type_names(
+                Self::validate_ast_type_names_inner(
                     &ft.return_type,
                     known_type_names,
                     resource_type_names,
                     type_params,
                     logger,
+                    allow_infer,
                 )
             }
-            // `_` is only meaningful as a top-level turbofish type argument
-            // (handled by `validate_turbofish_type_arg`); in an annotation or
-            // nested position it cannot be inferred, so reject it here rather
-            // than let an unresolved `unknown` reach codegen.
             Type::Infer(span) => {
-                logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                if !allow_infer {
+                    logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                }
                 Ok(())
             }
             Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),

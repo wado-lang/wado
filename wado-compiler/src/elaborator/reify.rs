@@ -4002,6 +4002,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let left = self.reify_expr(&binary.left, ctx, hint);
             let right = self.reify_expr(&binary.right, ctx, hint);
             (left, right)
+        } else if matches!(
+            binary.op,
+            ast::BinaryOp::Eq
+                | ast::BinaryOp::NotEq
+                | ast::BinaryOp::Lt
+                | ast::BinaryOp::LtEq
+                | ast::BinaryOp::Gt
+                | ast::BinaryOp::GtEq
+        ) && super::Elaborator::<H>::is_coercible_compound_literal(&binary.left)
+            && !super::Elaborator::<H>::is_coercible_compound_literal(&binary.right)
+        {
+            let right = self.reify_expr(&binary.right, ctx, None);
+            let left = self.reify_expr(&binary.left, ctx, None);
+            (left, right)
         } else {
             let left = self.reify_expr(&binary.left, ctx, None);
             let right = self.reify_expr(&binary.right, ctx, None);
@@ -4959,8 +4973,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         if chain.comparisons.len() == 1 {
             let cmp = &chain.comparisons[0];
-            let left = self.reify_expr(&chain.first, ctx, None);
-            let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
+            let (left, right) = if super::Elaborator::<H>::is_coercible_compound_literal(
+                &chain.first,
+            ) && !super::Elaborator::<H>::is_coercible_compound_literal(&cmp.right)
+            {
+                let right = self.reify_expr(&cmp.right, ctx, None);
+                let left = self.reify_expr(&chain.first, ctx, Some(right.type_id));
+                (left, right)
+            } else {
+                let left = self.reify_expr(&chain.first, ctx, None);
+                let right = self.reify_expr(&cmp.right, ctx, Some(left.type_id));
+                (left, right)
+            };
 
             // Non-primitive comparison dispatches through `Eq::eq` /
             // `Ord::cmp`; the recording fires on `chain.id` at

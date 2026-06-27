@@ -180,10 +180,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
+            let resolved = self.resolve_type(annotated_type);
             let target_type = if Self::first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
-                self.resolve_type(annotated_type)
+                resolved
             };
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.

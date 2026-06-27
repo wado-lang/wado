@@ -194,7 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
+    pub(super) fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
             ast::Expr::Call(call) => {

@@ -2193,7 +2193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Resolve `Self` to the concrete type at the call site.
                 // `resolve_named_type` maps primitives to their canonical
                 // TypeTable id rather than a struct wrapper.
-                let self_type_id = scope.resolve_named_type(struct_name, Span::default());
+                let self_type_id = scope.resolve_named_type(struct_name, Span::default(), false);
                 let old_self = scope.annotate_ctx.trait_ctx.self_type;
                 scope.annotate_ctx.trait_ctx.self_type = Some(self_type_id);
                 let result = default_method
