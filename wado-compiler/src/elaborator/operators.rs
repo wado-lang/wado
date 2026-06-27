@@ -155,9 +155,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(right, right_ast.span()),
             )
         } else {
-            // Both non-literals - propagate expected type for coercion
+            // Both non-literals. For comparisons the operands share a type, so
+            // resolve the left operand first and feed its resolved type to the
+            // right. This lets an untyped compound/generic literal on the right
+            // (`o == Option::Some(1)`, `xs == [1, 2, 3]`) coerce to the left's
+            // type instead of falling to its default (`Option<i32>` / tuple) —
+            // matching how a scalar literal already coerces to the other operand
+            // (issue #1453). Other operators keep plain expected-type
+            // propagation: their rhs type may legitimately differ from the lhs
+            // (e.g. `Shl`'s `u32` shift amount).
+            let is_comparison = matches!(
+                op,
+                BinaryOp::Eq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::LtEq
+                    | BinaryOp::Gt
+                    | BinaryOp::GtEq
+            );
             let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let right = self.resolve_expr(right_ast, ctx, expected_type);
+            let right_expected = if is_comparison && left != TypeTable::ERROR {
+                Some(left)
+            } else {
+                expected_type
+            };
+            let right = self.resolve_expr(right_ast, ctx, right_expected);
             (
                 placeholder(left, left_ast.span()),
                 placeholder(right, right_ast.span()),

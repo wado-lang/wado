@@ -1,0 +1,38 @@
+// The right operand of a comparison adopts the left operand's resolved type,
+// so an untyped compound/generic literal on the right (`[...]`,
+// `Option::Some(...)`, `Result::Ok(...)`) coerces to the left's type instead
+// of defaulting to a tuple / `i32`. Scalar literals already coerced; this is
+// the regression for the compound/generic case (issue #1453).
+
+test "rhs bracket literal coerces to lhs List type" {
+    let xs: List<u8> = [1, 2, 3];
+    assert xs == [1, 2, 3];
+    let empty: List<u8> = [];
+    assert empty == [];
+}
+
+test "rhs Option literal coerces to lhs Option type" {
+    let o: Option<u32> = Option::Some(5);
+    assert o == Option::Some(5);
+}
+
+test "rhs Result literal coerces to lhs Result type" {
+    let r: Result<u32, String> = Result::Ok(7);
+    assert r == Result::Ok(7);
+}
+
+test "call result type flows into the rhs literal" {
+    assert id_list([10, 20]) == [10, 20];
+    assert id_opt(Option::Some(3)) == Option::Some(3);
+}
+
+fn id_list(v: List<u16>) -> List<u16> {
+    return v;
+}
+
+fn id_opt(v: Option<u64>) -> Option<u64> {
+    return v;
+}
+
+__DATA__
+{"test": {}}
