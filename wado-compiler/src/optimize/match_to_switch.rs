@@ -246,21 +246,31 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         return None;
     }
 
-    let range = max_value - min_value + 1;
-    if range > SWITCH_MAX_RANGE {
+    // Span in i128: `max - min` can exceed i64 (e.g. arms near i64::MIN and
+    // i64::MAX), which would overflow before the range gate could reject it.
+    let range = i128::from(max_value) - i128::from(min_value) + 1;
+    if range > i128::from(SWITCH_MAX_RANGE) {
+        return None;
+    }
+
+    // A br_table replaces a comparison cascade; with a single switchable arm
+    // it would degenerate into a one-target table (a range/equality test is
+    // strictly cheaper), so require at least two.
+    if specs.len() < 2 {
         return None;
     }
 
     // Count covered values (a range covers its whole span) for the
-    // case-count and density gates.
-    let covered: i64 = specs
+    // case-count and density gates. Bounded by `range <= SWITCH_MAX_RANGE`
+    // and non-overlapping arms (the front-end rejects overlapping match arms).
+    let covered: i128 = specs
         .iter()
         .map(|(spec, _)| match spec {
             CaseSpec::Value(_) => 1,
-            CaseSpec::Range { lo, hi } => hi - lo + 1,
+            CaseSpec::Range { lo, hi } => i128::from(*hi) - i128::from(*lo) + 1,
         })
         .sum();
-    if covered < SWITCH_MIN_CASES as i64 {
+    if covered < SWITCH_MIN_CASES as i128 {
         return None;
     }
     if (covered as f64) / (range as f64) < SWITCH_DENSITY_THRESHOLD {

@@ -1,0 +1,33 @@
+// Regression: a `match` on an i64 whose arms straddle a span wider than i64
+// must not overflow the switch-range analysis. `max - min + 1` was computed
+// in i64 before the range gate, panicking (debug) on a full-width span. The
+// span is now computed in i128 and the gate bails, falling back to the normal
+// match cascade.
+
+use { println, Stdout } from "core:cli";
+
+fn classify(n: i64) -> i32 {
+    return match n {
+        -5000000000000000000 => 1,
+        5000000000000000000 => 2,
+        0 => 3,
+        1 => 4,
+        2 => 5,
+        3 => 6,
+        4 => 7,
+        5 => 8,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`{classify(-5000000000000000000)}`);
+    println(`{classify(5000000000000000000)}`);
+    println(`{classify(3)}`);
+    println(`{classify(99)}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n2\n6\n0\n"
+}
