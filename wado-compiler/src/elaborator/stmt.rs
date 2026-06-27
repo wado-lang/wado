@@ -323,10 +323,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
         if let_stmt.ty.is_some()
             && value_type != type_id
-            && value_type != TypeTable::UNKNOWN
-            && value_type != TypeTable::NEVER
+            && !matches!(
+                value_type,
+                TypeTable::UNKNOWN | TypeTable::NEVER | TypeTable::ERROR
+            )
             && type_id != TypeTable::ERROR
-            && value_type != TypeTable::ERROR
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
