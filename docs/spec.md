@@ -897,6 +897,14 @@ This separation allows Wado to use optimal internal representations (e.g., Wasm 
 | `Stream<T>`               | CM stream (P3)               | `stream<T>`                          | Component Model async stream                     |
 | `Future<T>`               | CM future (P3)               | `future<T>`                          | Component Model async future                     |
 
+The "CM Type at Boundary" column is the WIT type, so this table doubles as the **WIT↔Wado correspondence** and is read in both directions: Wado→WIT when generating a component's exported interface, and WIT→Wado when importing an external component or WIT (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). WIT resource handles `own<T>` / `borrow<T>` both map to `resource`; `result<ok>` and bare `result` are the payload-elided forms of `result<T, E>`.
+
+Coverage caveats (rows listed but not yet wired everywhere):
+
+- `f16` — unimplemented in both directions (awaits the Wasm half-precision proposal).
+- `stream<T>` / `future<T>` — work for Wado-authored exports, but importing a component whose function signature carries an async value type is not yet wired (WEP: Wasm CM Component Import, Phase 8).
+- World-level free-function exports (a component exporting bare functions, no interface) are not yet importable (same WEP, Phase 9).
+
 ### The Prelude
 
 The **prelude** (`core:prelude`) is automatically imported into every module, providing access to fundamental types without requiring explicit imports:
@@ -3458,6 +3466,32 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 The compiler extracts the `Options` shape from the generator's IR and type-checks every call site against it. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or ambient filesystem); transitive schema files are picked up via a host-provided `read-file` import that the compiler logs as part of the cache key. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. Subsequent compiles skip the generator when its content-addressed cache key matches `wado.lock`.
 
 In hosts that cannot execute generators (today's wasm32-bundled LSP / browser playground), Kiln falls back to **consume-only mode**: the compiler reads cached generated `.wado` files from disk and emits a stale-cache warning if hashes do not match. Projects that want a full LSP experience in such hosts commit `build/kiln/` and `wado.lock` to their repository.
+
+### Wasm Module and Component Imports
+
+A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler inspects the binary header and dispatches on whether the file is a **core module** or a **Component Model component** — both `.wasm` shapes use `type: "wasm"`; the distinction is detected, not declared.
+
+| Imported file             | Exposes as                                     | Call style                                |
+| ------------------------- | ---------------------------------------------- | ----------------------------------------- |
+| Core wasm module / `.wat` | One free `pub fn` per export                   | `helper(x)` — plain function              |
+| CM component (`.wasm`)    | One Wado `interface` per exported CM interface | `Iface::method(x)` — effectful, like WASI |
+
+```wado
+// Core wasm / wat — exports become free functions.
+use { sin, cos } from "./libm.wat" with { type: "wat" };
+use { helper }   from "./mod.wasm" with { type: "wasm" };
+
+// CM component — each exported interface becomes a Wado `interface`,
+// and its functions are called like WASI methods (effectful).
+use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
+
+export fn run() with Compress, Decompress {
+    let packed = Compress::compress(bytes);
+    let back = Decompress::decompress(packed);  // Result<List<u8>, String>
+}
+```
+
+Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries). The dependency component is statically composed into the output (via `wasm-compose`), so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path, including the support matrix (synchronous value types are complete; `stream<T>` / `future<T>` and world-level free-function exports are pending).
 
 ### Namespace Import
 
