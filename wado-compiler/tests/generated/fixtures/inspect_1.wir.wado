@@ -263,9 +263,9 @@ type "functype//core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref 
 
 type "functype//core:prelude/format.wado/String^Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(105)
 
-type "functype//core:prelude/tuple.wado/Tuple<f64,f64>^Inspect::inspect" = fn(ref "tuple//[f64, f64]", ref "core:prelude/format.wado//Formatter");  // TypeId(106)
+type "functype//core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect" = fn(ref "tuple//[f64, f64]", ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Inspect::inspect" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
+type "functype//core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect" = fn(ref "tuple//[i32, core:prelude/string.wado/String, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(107)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(108)
 
@@ -547,7 +547,7 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/__test_3_tuple"() {
     let __local_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     t = struct.new "tuple//[i32, core:prelude/string.wado/String, bool]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, 2: 1 };
-    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Inspect::inspect"(t, __local_3); __local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[1, \"hello\", true]"), used: 18 });
+    __cond = "core:prelude/string.wado/String^Eq::eq"(__local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 }; "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect"(t, __local_3); __local_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("[1, \"hello\", true]"), used: 18 });
     if @unlikely(__cond == 0) {
         cold_path;
         "core:internal/panic"(__local_4 = "core:prelude/string.wado/String::with_capacity"(119); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("__test_3_tuple"), used: 14 }); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push"(__local_4, 97); "core:prelude/string.wado/String::push"(__local_4, 116); "core:prelude/string.wado/String::push"(__local_4, 32); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wado-compiler/tests/fixtures/inspect_1.wado"), used: 43 }); "core:prelude/string.wado/String::push"(__local_4, 58); __local_5 = "core:prelude/format.wado/Formatter::new"(__local_4); "core:prelude/primitive.wado/i32^Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 42 }, __local_5); "core:prelude/string.wado/String::push_str"(__local_4, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
@@ -2543,7 +2543,7 @@ fn "wado-compiler/tests/fixtures/inspect_1.wado/InspShape^Inspect::inspect"(self
         __inspect_Rectangle_3 = ref.cast "wado-compiler/tests/fixtures/inspect_1.wado//InspShape::Rectangle"(__match_4).payload_0;
         s_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("InspShape::Rectangle("), used: 21 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_12);
-        "core:prelude/tuple.wado/Tuple<f64,f64>^Inspect::inspect"(__inspect_Rectangle_3, f);
+        "core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect"(__inspect_Rectangle_3, f);
         s_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(41), used: 1 };
         "core:prelude/string.wado/String::push_str"(f.buf, s_14);
     } else {
@@ -2904,7 +2904,7 @@ fn "core:prelude/format.wado/String^Inspect::inspect"(self, f) {
     }
 }
 
-fn "core:prelude/tuple.wado/Tuple<f64,f64>^Inspect::inspect"(self, f) {
+fn "core:prelude/tuple.wado/[]<f64,f64>^Inspect::inspect"(self, f) {
     let v_5: f64;
     let v_6: f64;
     let s_8: ref "core:prelude/string.wado//String";
@@ -2922,7 +2922,7 @@ fn "core:prelude/tuple.wado/Tuple<f64,f64>^Inspect::inspect"(self, f) {
     "core:prelude/string.wado/String::push_str"(f.buf, s_18);
 }
 
-fn "core:prelude/tuple.wado/Tuple<i32,core:prelude/string.wado/String,bool>^Inspect::inspect"(self, f) {
+fn "core:prelude/tuple.wado/[]<i32,core:prelude/string.wado/String,bool>^Inspect::inspect"(self, f) {
     let v_5: i32;
     let v_6: ref "core:prelude/string.wado//String";
     let v_7: bool;

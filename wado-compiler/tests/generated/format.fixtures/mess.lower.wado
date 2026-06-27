@@ -425,7 +425,7 @@ pub struct "Box<Fn<2,String>>" {
     value: fn mut(String, String) -> String,
 }
 
-pub struct "Box<Fn<2,Tuple<i32,char>>>" {
+pub struct "Box<Fn<2,[i32,char]>>" {
     value: fn mut([i32, char], [i32, char]) -> [i32, char],
 }
 
@@ -437,11 +437,11 @@ pub struct "Box<Fn<2,I::Item>>" {
     value: fn mut(I::Item, I::Item) -> I::Item,
 }
 
-pub struct "Box<Fn<2,Tuple<i32,I::Item>>>" {
+pub struct "Box<Fn<2,[i32,I::Item]>>" {
     value: fn mut([i32, I::Item], [i32, I::Item]) -> [i32, I::Item],
 }
 
-pub struct "Box<Fn<2,Tuple<I::Item,J::Item>>>" {
+pub struct "Box<Fn<2,[I::Item,J::Item]>>" {
     value: fn mut([I::Item, J::Item], [I::Item, J::Item]) -> [I::Item, J::Item],
 }
 
@@ -774,15 +774,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -814,15 +814,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -872,8 +872,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -884,12 +884,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -940,8 +940,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -952,12 +952,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn task_return(result: i32);
@@ -1656,15 +1656,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -1696,15 +1696,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -1754,8 +1754,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -1766,12 +1766,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -1822,8 +1822,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -1834,12 +1834,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn write_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
@@ -1906,11 +1906,11 @@ pub fn env(name: String) -> Option<String> with Environment {
     let vars: List<[String, String]> = __cm_binding__Environment_get_environment();
     let mut i: i32 = 0;
     loop {
-        if !(i < vars."List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::len"()) {
+        if !(i < vars."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::len"()) {
             break;
         }
         __for_0_body: {
-            let pair: [String, String] = vars."List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(i);
+            let pair: [String, String] = vars."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexValue<i32>::index_value"(i);
             if pair.0."String^Eq::eq"(&name) {
                 return Option<String>::Some(pair.1);
             }
@@ -1970,15 +1970,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2010,15 +2010,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2068,8 +2068,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2080,12 +2080,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -2136,8 +2136,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2148,12 +2148,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn i32_min(a: i32, b: i32) -> i32 {
@@ -2495,15 +2495,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2535,15 +2535,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2593,8 +2593,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2605,12 +2605,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -2661,8 +2661,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2673,12 +2673,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn libm_acos(arg0: f64) -> f64;
@@ -2807,15 +2807,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2847,15 +2847,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -2905,8 +2905,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2917,12 +2917,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -2973,8 +2973,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -2985,12 +2985,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -3023,15 +3023,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -3063,15 +3063,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -3121,8 +3121,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3133,12 +3133,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -3189,8 +3189,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3201,12 +3201,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -3239,15 +3239,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -3279,15 +3279,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -3337,8 +3337,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3349,12 +3349,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -3405,8 +3405,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3417,12 +3417,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn "ByteSlice^AsByteSlice::as_byte_slice"(self: &ArraySlice<u8>) -> ArraySlice<u8> with stores[self] {
@@ -3490,15 +3490,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "ByteArray^InspectAlt::inspect_alt"(self: &Array<u8>, f: &mut Formatter) {
     self."Array<u8>^Inspect::inspect"(f);
@@ -3542,15 +3542,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "ByteArray^Display::fmt"(self: &Array<u8>, f: &mut Formatter) {
     self."Array<u8>^Inspect::inspect"(f);
@@ -3612,8 +3612,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3624,12 +3624,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "ByteArray^DisplayAlt::fmt_alt"(self: &Array<u8>, f: &mut Formatter) {
@@ -3692,8 +3692,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -3704,12 +3704,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn pow10(n: i32) -> u64 {
@@ -4760,15 +4760,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "SpecialKind^InspectAlt::inspect_alt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
@@ -4843,15 +4843,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "SpecialKind^Display::fmt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
     self."SpecialKind^Inspect::inspect"(f);
@@ -4917,8 +4917,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -4929,12 +4929,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "SpecialKind^DisplayAlt::fmt_alt"(self: Box<core:prelude/fpfmt.wado/SpecialKind>, f: &mut Formatter) {
@@ -5001,8 +5001,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -5013,12 +5013,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn u128::from_u64(value: u64) -> u128 {
@@ -6055,15 +6055,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -6095,15 +6095,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -6153,8 +6153,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -6165,12 +6165,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "u128^DisplayAlt::fmt_alt"(self: &u128, f: &mut Formatter) {
@@ -6229,8 +6229,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -6241,12 +6241,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn lenient_int_preprocess(s: &String) -> Result<[String, u32], LenientParseError> {
@@ -6705,15 +6705,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "IntErrorKind^InspectAlt::inspect_alt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
@@ -6771,15 +6771,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "IntErrorKind^Display::fmt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
     self."IntErrorKind^Inspect::inspect"(f);
@@ -6845,8 +6845,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -6857,12 +6857,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "IntErrorKind^DisplayAlt::fmt_alt"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
@@ -6929,8 +6929,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -6941,12 +6941,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "List<u8>::get_byte_unchecked"(self: &List<u8>, index: i32) -> u8 {
@@ -7004,15 +7004,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -7044,15 +7044,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -7102,8 +7102,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -7114,12 +7114,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -7170,8 +7170,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -7182,12 +7182,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
@@ -9766,15 +9766,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -9806,15 +9806,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -9864,8 +9864,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -9876,12 +9876,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -9932,8 +9932,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -9944,12 +9944,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn "i8^Step::next_step"(self: Box<i8>) -> Option<i8> {
@@ -10043,15 +10043,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -10083,15 +10083,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -10141,8 +10141,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -10153,12 +10153,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -10209,8 +10209,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -10221,12 +10221,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -10259,15 +10259,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -10299,15 +10299,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -10357,8 +10357,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -10369,12 +10369,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -10425,8 +10425,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -10437,12 +10437,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn byte_to_ascii_lowercase(b: u8) -> u8 {
@@ -13115,14 +13115,14 @@ pub fn "StrCharIndicesIter^Iterator::next"(self: &mut StrCharIndicesIter) -> Opt
 
 pub fn "StrCharIndicesIter^Iterator::collect"(self: &mut StrCharIndicesIter) -> List<[i32, char]> {
     let mut result: List<[i32, char]> = __seq_lit: {
-        let mut __b: List<[i32, char]> = "core::prelude/list.wado::List<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."List<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::build"();
+        let mut __b: List<[i32, char]> = "core::prelude/list.wado::List<[i32,char]>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."List<[i32,char]>^SequenceLiteralBuilder::build"();
     };
     loop {
         let __match_4: Option<[i32, char]> = self."StrCharIndicesIter^Iterator::next"();
         match __match_4 {
             Some(item) => {
-                result."List<core:prelude/types.wado/Tuple<i32,char>>::push"(item);
+                result."List<[i32,char]>::push"(item);
             },
             _ => {
                 break;
@@ -13676,15 +13676,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Utf8Scalar^InspectAlt::inspect_alt"(self: &Utf8Scalar, f: &mut Formatter) {
     f.Formatter::open_brace(String { repr: packed"Utf8Scalar {", used: 12 });
@@ -13884,15 +13884,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Utf8Scalar^Display::fmt"(self: &Utf8Scalar, f: &mut Formatter) {
     self."Utf8Scalar^Inspect::inspect"(f);
@@ -13974,8 +13974,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -13986,12 +13986,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "Utf8Scalar^DisplayAlt::fmt_alt"(self: &Utf8Scalar, f: &mut Formatter) {
@@ -14074,8 +14074,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14086,12 +14086,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -14124,15 +14124,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14164,15 +14164,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14222,8 +14222,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14234,12 +14234,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -14290,8 +14290,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14302,12 +14302,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "WaitEvent^Eq::eq"(self: &WaitEvent, other: &WaitEvent) -> bool {
@@ -14378,15 +14378,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "WaitEvent^InspectAlt::inspect_alt"(self: &WaitEvent, f: &mut Formatter) {
     f.Formatter::open_brace(String { repr: packed"WaitEvent {", used: 11 });
@@ -14439,15 +14439,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "WaitEvent^Display::fmt"(self: &WaitEvent, f: &mut Formatter) {
     self."WaitEvent^Inspect::inspect"(f);
@@ -14505,8 +14505,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14517,12 +14517,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "WaitEvent^DisplayAlt::fmt_alt"(self: &WaitEvent, f: &mut Formatter) {
@@ -14581,8 +14581,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14593,12 +14593,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -14631,15 +14631,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14671,15 +14671,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14729,8 +14729,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14741,12 +14741,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -14797,8 +14797,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14809,12 +14809,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -14847,15 +14847,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14887,15 +14887,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -14945,8 +14945,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -14957,12 +14957,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15013,8 +15013,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15025,12 +15025,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15063,15 +15063,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15103,15 +15103,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15161,8 +15161,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15173,12 +15173,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15229,8 +15229,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15241,12 +15241,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15279,15 +15279,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15319,15 +15319,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15377,8 +15377,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15389,12 +15389,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15445,8 +15445,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15457,12 +15457,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15495,15 +15495,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15535,15 +15535,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15593,8 +15593,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15605,12 +15605,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15661,8 +15661,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15673,12 +15673,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15711,15 +15711,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15751,15 +15751,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15809,8 +15809,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15821,12 +15821,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15877,8 +15877,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -15889,12 +15889,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -15927,15 +15927,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -15967,15 +15967,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16025,8 +16025,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16037,12 +16037,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16093,8 +16093,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16105,12 +16105,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16143,15 +16143,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16183,15 +16183,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16241,8 +16241,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16253,12 +16253,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16309,8 +16309,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16321,12 +16321,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16359,15 +16359,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16399,15 +16399,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16457,8 +16457,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16469,12 +16469,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16525,8 +16525,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16537,12 +16537,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16575,15 +16575,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16615,15 +16615,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16673,8 +16673,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16685,12 +16685,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16741,8 +16741,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16753,12 +16753,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16791,15 +16791,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16831,15 +16831,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -16889,8 +16889,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16901,12 +16901,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -16957,8 +16957,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -16969,12 +16969,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "StreamWritable<u8>^Inspect::inspect"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -17007,15 +17007,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^InspectAlt::inspect_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -17047,15 +17047,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "StreamWritable<u8>^Display::fmt"(self: &StreamWritable<u8>, f: &mut Formatter) {
     self."StreamWritable<u8>^Inspect::inspect"(f);
@@ -17105,8 +17105,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -17117,12 +17117,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "StreamWritable<u8>^DisplayAlt::fmt_alt"(self: &StreamWritable<u8>, f: &mut Formatter) {
@@ -17173,8 +17173,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -17185,12 +17185,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "ErrorCode^Eq::eq"(self: Box<wasi:cli/types.wado/ErrorCode>, other: Box<wasi:cli/types.wado/ErrorCode>) -> bool {
@@ -17253,15 +17253,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "ErrorCode^InspectAlt::inspect_alt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
@@ -17297,15 +17297,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "ErrorCode^Display::fmt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
     self."ErrorCode^Inspect::inspect"(f);
@@ -17359,8 +17359,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -17371,12 +17371,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "ErrorCode^DisplayAlt::fmt_alt"(self: Box<wasi:cli/types.wado/ErrorCode>, f: &mut Formatter) {
@@ -17431,8 +17431,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -17443,12 +17443,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn Counter::new() -> Counter {
@@ -17578,7 +17578,7 @@ pub fn "Shape^Eq::eq"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.w
         },
         Rect(__eq_self_Rect_4) => match other.value {
             Rect(__eq_other_Rect_5) => {
-                return __eq_self_Rect_4."Tuple<f64,f64>^Eq::eq"(&__eq_other_Rect_5);
+                return __eq_self_Rect_4."[]<f64,f64>^Eq::eq"(&__eq_other_Rect_5);
             },
             _ => {
                 return false;
@@ -17657,7 +17657,7 @@ pub fn "Shape^Inspect::inspect"(self: Box<wado-compiler/tests/format.fixtures/me
         },
         Rect(__inspect_Rect_3) => {
             f.Formatter::write_str(&String { repr: packed"Shape::Rect(", used: 12 });
-            __inspect_Rect_3."Tuple<f64,f64>^Inspect::inspect"(f);
+            __inspect_Rect_3."[]<f64,f64>^Inspect::inspect"(f);
             f.Formatter::write_str(&String { repr: packed")", used: 1 });
         },
         Dot => {
@@ -17717,15 +17717,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Color^InspectAlt::inspect_alt"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.wado/Color>, f: &mut Formatter) {
     self."Color^Inspect::inspect"(f);
@@ -17788,7 +17788,7 @@ pub fn "Shape^InspectAlt::inspect_alt"(self: Box<wado-compiler/tests/format.fixt
         Rect(__inspect_alt_Rect_3) => {
             f.Formatter::open_brace(String { repr: packed"Shape::Rect(", used: 12 });
             f.Formatter::write_newline_indent();
-            __inspect_alt_Rect_3."Tuple<f64,f64>^InspectAlt::inspect_alt"(f);
+            __inspect_alt_Rect_3."[]<f64,f64>^InspectAlt::inspect_alt"(f);
             f.Formatter::write_str(&String { repr: packed",", used: 1 });
             f.Formatter::close_brace(String { repr: packed")", used: 1 });
         },
@@ -17832,15 +17832,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Color^Display::fmt"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.wado/Color>, f: &mut Formatter) {
     self."Color^Inspect::inspect"(f);
@@ -17918,8 +17918,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -17930,12 +17930,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "Color^DisplayAlt::fmt_alt"(self: Box<wado-compiler/tests/format.fixtures/mess-dirty.wado/Color>, f: &mut Formatter) {
@@ -18014,8 +18014,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -18026,12 +18026,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn __cm_binding__Stdout_write_via_stream(data: i32) -> i32 with Stdout {
@@ -18047,7 +18047,7 @@ fn __cm_binding__Environment_get_environment() -> List<[String, String]> with En
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: List<[String, String]> = "core::prelude/list.wado::List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::with_capacity"(__count);
+    let mut __result: List<[String, String]> = "core::prelude/list.wado::List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::with_capacity"(__count);
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
@@ -18056,7 +18056,7 @@ fn __cm_binding__Environment_get_environment() -> List<[String, String]> with En
         let __elem_addr: i32 = (__base + (__i * 16));
         let __lifted_result_6: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)));
         let __lifted_result_7: String = core::internal::memory_to_gc_string(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)));
-        __result."List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"([__lifted_result_6, __lifted_result_7]);
+        __result."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push"([__lifted_result_6, __lifted_result_7]);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
         core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
         __i = (__i + 1);
@@ -18557,15 +18557,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Alignment^InspectAlt::inspect_alt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
@@ -18601,15 +18601,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Alignment^Display::fmt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
     self."Alignment^Inspect::inspect"(f);
@@ -18663,8 +18663,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -18675,12 +18675,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "Alignment^DisplayAlt::fmt_alt"(self: Box<core:prelude/format.wado/Alignment>, f: &mut Formatter) {
@@ -18735,8 +18735,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -18747,12 +18747,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn ConvertError::new(message: String) -> ConvertError {
@@ -18865,15 +18865,15 @@ pub fn "Fn<1,char>^Inspect::inspect"(self: Box<Fn<1,char>>, f: &mut Formatter);
 
 pub fn "Fn<2,String>^Inspect::inspect"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^Inspect::inspect"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^Inspect::inspect"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^Inspect::inspect"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^Inspect::inspect"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^Inspect::inspect"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Ordering^InspectAlt::inspect_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
@@ -18927,15 +18927,15 @@ pub fn "Fn<1,char>^InspectAlt::inspect_alt"(self: Box<Fn<1,char>>, f: &mut Forma
 
 pub fn "Fn<2,String>^InspectAlt::inspect_alt"(self: Box<Fn<2,String>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,char]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter);
 
 pub fn "Fn<1,i32>^InspectAlt::inspect_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter);
 
 pub fn "Fn<2,I::Item>^InspectAlt::inspect_alt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter);
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter);
+pub fn "Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter);
 
 pub fn "Ordering^Display::fmt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
     self."Ordering^Inspect::inspect"(f);
@@ -18997,8 +18997,8 @@ pub fn "Fn<2,String>^Display::fmt"(self: Box<Fn<2,String>>, f: &mut Formatter) {
     self."Fn<2,String>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,char]>^Display::fmt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^Inspect::inspect"(f);
 }
 
 pub fn "Fn<1,i32>^Display::fmt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -19009,12 +19009,12 @@ pub fn "Fn<2,I::Item>^Display::fmt"(self: Box<Fn<2,I::Item>>, f: &mut Formatter)
     self."Fn<2,I::Item>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[i32,I::Item]>^Display::fmt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^Inspect::inspect"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^Display::fmt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^Inspect::inspect"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^Display::fmt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^Inspect::inspect"(f);
 }
 
 pub fn "Ordering^DisplayAlt::fmt_alt"(self: Box<core:prelude/traits.wado/Ordering>, f: &mut Formatter) {
@@ -19077,8 +19077,8 @@ pub fn "Fn<2,String>^DisplayAlt::fmt_alt"(self: Box<Fn<2,String>>, f: &mut Forma
     self."Fn<2,String>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,char>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,char>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,char>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,char]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,char]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,char]>^InspectAlt::inspect_alt"(f);
 }
 
 pub fn "Fn<1,i32>^DisplayAlt::fmt_alt"(self: Box<Fn<1,i32>>, f: &mut Formatter) {
@@ -19089,12 +19089,12 @@ pub fn "Fn<2,I::Item>^DisplayAlt::fmt_alt"(self: Box<Fn<2,I::Item>>, f: &mut For
     self."Fn<2,I::Item>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<i32,I::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<i32,I::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<i32,I::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[i32,I::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[i32,I::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[i32,I::Item]>^InspectAlt::inspect_alt"(f);
 }
 
-pub fn "Fn<2,Tuple<I::Item,J::Item>>^DisplayAlt::fmt_alt"(self: Box<Fn<2,Tuple<I::Item,J::Item>>>, f: &mut Formatter) {
-    self."Fn<2,Tuple<I::Item,J::Item>>^InspectAlt::inspect_alt"(f);
+pub fn "Fn<2,[I::Item,J::Item]>^DisplayAlt::fmt_alt"(self: Box<Fn<2,[I::Item,J::Item]>>, f: &mut Formatter) {
+    self."Fn<2,[I::Item,J::Item]>^InspectAlt::inspect_alt"(f);
 }
 
 fn "List<u64>^SequenceLiteralBuilder::build"(self: &List<u64>) -> List<u64> {
@@ -19117,21 +19117,21 @@ pub fn "List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> 
     return List<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::push"(self: &mut List<[String, String]>, value: [String, String]) with stores[value] {
+pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push"(self: &mut List<[String, String]>, value: [String, String]) with stores[value] {
     let used: i32 = self.used;
     if (used >= core::builtin::array_len(&self.repr)) {
         core::builtin::cold_path();
-        self."List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"();
+        self."List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"();
     }
     core::builtin::array_set::<[String, String]>(&mut self.repr, used, value);
     self.used = (used + 1);
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::with_capacity"(capacity: i32) -> List<[String, String]> {
-    return List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>> { repr: core::builtin::array_new::<[String, String]>(capacity), used: 0 };
+pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::with_capacity"(capacity: i32) -> List<[String, String]> {
+    return List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> { repr: core::builtin::array_new::<[String, String]>(capacity), used: 0 };
 }
 
-fn "Tuple<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter) {
+fn "[]<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::open_brace(String { repr: packed"[", used: 1 });
     __tuple_for_of_2: {
         let __tuple_2: [f64, f64] = "$value_copy$T26"(*self);
@@ -19151,7 +19151,7 @@ fn "Tuple<f64,f64>^InspectAlt::inspect_alt"(self: &[f64, f64], f: &mut Formatter
     f.Formatter::close_brace(String { repr: packed"]", used: 1 });
 }
 
-fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
+fn "[]<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"[", used: 1 });
     let mut first: bool = true;
     __tuple_for_of_3: {
@@ -19176,7 +19176,7 @@ fn "Tuple<f64,f64>^Inspect::inspect"(self: &[f64, f64], f: &mut Formatter) {
     f.Formatter::write_str(&String { repr: packed"]", used: 1 });
 }
 
-fn "Tuple<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
+fn "[]<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
     __tuple_for_of_2: {
         let __tuple_2: [[f64, f64], [f64, f64]] = [[[*self, *other].0.0, [*self, *other].1.0], [[*self, *other].0.1, [*self, *other].1.1]];
         __tuple_iter_2_0: {
@@ -19199,22 +19199,22 @@ fn "Tuple<f64,f64>^Eq::eq"(self: &[f64, f64], other: &[f64, f64]) -> bool {
     return true;
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
+pub fn "List<[i32,char]>::push"(self: &mut List<[i32, char]>, value: [i32, char]) with stores[value] {
     let used: i32 = self.used;
     if (used >= core::builtin::array_len(&self.repr)) {
         core::builtin::cold_path();
-        self."List<core:prelude/types.wado/Tuple<i32,char>>::grow"();
+        self."List<[i32,char]>::grow"();
     }
     core::builtin::array_set::<[i32, char]>(&mut self.repr, used, value);
     self.used = (used + 1);
 }
 
-fn "List<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::build"(self: &List<[i32, char]>) -> List<[i32, char]> {
+fn "List<[i32,char]>^SequenceLiteralBuilder::build"(self: &List<[i32, char]>) -> List<[i32, char]> {
     return *self;
 }
 
-fn "List<core:prelude/types.wado/Tuple<i32,char>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<[i32, char]> {
-    return "core::prelude/list.wado::List<core:prelude/types.wado/Tuple<i32,char>>::with_capacity"(capacity);
+fn "List<[i32,char]>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> List<[i32, char]> {
+    return "core::prelude/list.wado::List<[i32,char]>::with_capacity"(capacity);
 }
 
 pub fn "List<core:prelude/string.wado/String>::push"(self: &mut List<String>, value: String) with stores[value] {
@@ -19465,7 +19465,7 @@ pub fn "List<u8>::internal_raw_data"(self: &List<u8>) -> Array<u8> {
 
 fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
-fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>^IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
+fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
     __assert_0: {
         let __v0: i32 = index;
         let __v1: i32 = self.used;
@@ -19499,7 +19499,7 @@ fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prel
     return core::builtin::array_get::<[String, String]>(&self.repr, index);
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::len"(self: &List<[String, String]>) -> i32 {
+pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::len"(self: &List<[String, String]>) -> i32 {
     return self.used;
 }
 
@@ -19626,11 +19626,11 @@ pub fn "List<core:prelude/string.wado/String>::grow"(self: &mut List<String>) {
     self.repr = new_repr;
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::with_capacity"(capacity: i32) -> List<[i32, char]> {
-    return List<core:prelude/types.wado/Tuple<i32,char>> { repr: core::builtin::array_new::<[i32, char]>(capacity), used: 0 };
+pub fn "List<[i32,char]>::with_capacity"(capacity: i32) -> List<[i32, char]> {
+    return List<[i32,char]> { repr: core::builtin::array_new::<[i32, char]>(capacity), used: 0 };
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::grow"(self: &mut List<[i32, char]>) {
+pub fn "List<[i32,char]>::grow"(self: &mut List<[i32, char]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
     let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[i32, char]> = core::builtin::array_new::<[i32, char]>(new_capacity);
@@ -19638,7 +19638,7 @@ pub fn "List<core:prelude/types.wado/Tuple<i32,char>>::grow"(self: &mut List<[i3
     self.repr = new_repr;
 }
 
-pub fn "List<core:prelude/types.wado/Tuple<core:prelude/string.wado/String,core:prelude/string.wado/String>>::grow"(self: &mut List<[String, String]>) {
+pub fn "List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self: &mut List<[String, String]>) {
     let capacity: i32 = core::builtin::array_len(&self.repr);
     let new_capacity: i32 = core::internal::i32_max((capacity * 2), 4);
     let mut new_repr: Array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
@@ -19733,11 +19733,11 @@ fn __initialize_modules() {
 }
 
 fn "$value_copy$T26"(v: [f64, f64]) -> [f64, f64] {
-    return Tuple<f64,f64> { 0: v.0, 1: v.1 };
+    return [f64,f64] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$T336"(v: [i32, char]) -> [i32, char] {
-    return Tuple<i32,char> { 0: v.0, 1: v.1 };
+    return [i32,char] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$T28"(v: String) -> String {
@@ -19745,11 +19745,11 @@ fn "$value_copy$T28"(v: String) -> String {
 }
 
 fn "$value_copy$T187"(v: [bool, i32]) -> [bool, i32] {
-    return Tuple<bool,i32> { 0: v.0, 1: v.1 };
+    return [bool,i32] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$T185"(v: [String, u32]) -> [String, u32] {
-    return Tuple<core:prelude/string.wado/String,u32> { 0: "$value_copy$T28"(v.0), 1: v.1 };
+    return [core:prelude/string.wado/String,u32] { 0: "$value_copy$T28"(v.0), 1: v.1 };
 }
 
 fn "$value_copy$T106"(v: u128) -> u128 {
