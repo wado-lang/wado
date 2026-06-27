@@ -22,20 +22,22 @@ use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
-pub fn select_lowering(project: &mut NirPackage) {
+pub fn select_lowering(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let rule = SelectLoweringRule {
         type_table: &type_table,
     };
     let mut buffers = EngineBuffers::default();
+    let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         if let Some(body) = body.as_mut() {
             let mut engine = Engine::new(body, &mut buffers, locals);
-            engine.run(&[&rule]);
+            changed |= engine.run(&[&rule]);
         }
     }
+    changed
 }
 
 struct SelectLoweringRule<'t> {
