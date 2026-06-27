@@ -49,6 +49,7 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
         if candidate.is_file() {
             let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
             let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
+            emit_manifest_warnings(&manifest, &candidate);
             return Ok(Some(ProjectManifest {
                 manifest,
                 root: dir,
@@ -174,10 +175,19 @@ fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
     let candidate = dir.join(MANIFEST_FILENAME);
     let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
     let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
+    emit_manifest_warnings(&manifest, &candidate);
     Ok(ProjectManifest {
         manifest,
         root: dir.to_path_buf(),
     })
+}
+
+/// Print non-fatal manifest warnings to stderr at the point the project
+/// manifest is loaded.
+fn emit_manifest_warnings(manifest: &Manifest, path: &Path) {
+    for w in manifest.warnings() {
+        eprintln!("warning: {}: {w}", path.display());
+    }
 }
 
 /// Resolve an entry point from a project manifest, returning a `CliExit` error

@@ -6,8 +6,8 @@ mod version;
 
 pub use lockfile::{LockFile, LockFileError, LockedPackage};
 pub use manifest::{
-    Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, Package,
-    TestSettings, Workspace,
+    Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
+    Package, TestSettings, Workspace,
 };
 pub use provider::{
     DependencyProvider, GitTagInfo, InMemoryDependencyProvider, ProviderError, RegistryPackageInfo,

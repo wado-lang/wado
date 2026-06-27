@@ -32,6 +32,41 @@ impl Manifest {
     pub fn world_entry(&self, world_fq: &str) -> Option<&str> {
         self.world.get(world_fq).map(String::as_str)
     }
+
+    /// Non-fatal warnings for this manifest. Computed on demand; the consumer
+    /// decides how to surface them.
+    #[must_use]
+    pub fn warnings(&self) -> Vec<ManifestWarning> {
+        let keys = self
+            .dependencies
+            .keys()
+            .chain(self.dev_dependencies.keys())
+            .chain(self.build_dependencies.keys());
+        keys.filter(|k| !k.contains(':'))
+            .map(|k| ManifestWarning::BareDependencyKey { key: k.clone() })
+            .collect()
+    }
+}
+
+/// A non-fatal manifest issue surfaced to the user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManifestWarning {
+    /// A dependency key is a bare name (no `:`). Deprecated by WEP: Package and
+    /// Module Specifier Syntax — a key must be an open coordinate `ns:pkg` or a
+    /// `lib:nick` indirection. Accepted for now; will become an error.
+    BareDependencyKey { key: String },
+}
+
+impl std::fmt::Display for ManifestWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ManifestWarning::BareDependencyKey { key } => write!(
+                f,
+                "dependency key {key:?} is a bare name (deprecated); use a coordinate \
+                 like \"ns:{key}\" or a \"lib:{key}\" indirection",
+            ),
+        }
+    }
 }
 
 /// The `[format]` section of `wado.toml`.
@@ -569,6 +604,32 @@ default = "https://wa.dev"
                 package,
                 version,
             } if package == "mizchi:brotli" && version == "^0.2.0"
+        ));
+    }
+
+    #[test]
+    fn bare_dependency_key_warns_but_parses() {
+        // Bare keys are deprecated (WEP), accepted for now with a warning.
+        // Coordinate / `lib:` keys produce no warning.
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+router = { git = "https://github.com/user/router.git", ref = "main" }
+"mizchi:brotli" = { version = "^0.2.0" }
+"lib:shared" = { path = "../shared" }
+
+[registries]
+default = "https://wa.dev"
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let warnings = m.warnings();
+        assert_eq!(warnings.len(), 1, "got {warnings:?}");
+        assert!(matches!(
+            &warnings[0],
+            ManifestWarning::BareDependencyKey { key } if key == "router"
         ));
     }
 
