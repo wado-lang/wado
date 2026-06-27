@@ -24,6 +24,7 @@ pub mod lsp;
 pub mod manifest;
 pub mod query;
 pub mod query_adapter;
+pub mod registry;
 pub mod run;
 pub mod runtime;
 pub mod serve;
@@ -31,6 +32,7 @@ pub mod syntax;
 pub mod test;
 pub mod timezone_host;
 pub mod tls_trust;
+pub mod update;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;
