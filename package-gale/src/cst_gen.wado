@@ -134,8 +134,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.end();
     w.blank();
 
-    w.begin(&`pub fn {rule.snake_name}_alt(node: &CstNode) -> Option<{enum_name}>`);
-    w.line(&"return match node.alt {");
+    w.begin(&`pub fn {rule.snake_name}_alt(node: &Cst) -> Option<{enum_name}>`);
+    w.line(&"return match node.alt() {");
     w.indent();
     for let mut i = 0; i < rule.alternatives.len(); i += 1 {
         if let Some(label) = &rule.alternatives[i].label {
@@ -159,7 +159,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.begin(&`for let mut k = 0; k < {n}; k += 1`);
     w.line(&"token_names.push(token_kind_name(k));");
     w.end();
-    w.line(&"return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);");
+    w.line(&"return result.root().to_string_tree(&result.tokens, &RULE_NAMES, &token_names);");
     w.end();
     w.blank();
 
@@ -178,7 +178,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.line(&"break;");
     w.end();
     w.end();
-    w.begin(&"if let Some(sub) = result.root.find_child(_kind as NodeKind)");
+    w.begin(&"if let Some(sub) = result.root().find_child(_kind as NodeKind)");
     w.line(&"return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);");
     w.end();
     w.line(&"return String::new();");

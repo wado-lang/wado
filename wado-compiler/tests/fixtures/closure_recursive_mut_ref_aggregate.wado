@@ -1,0 +1,44 @@
+// Regression: a closure that calls a recursive function which (a) takes a
+// `&mut` parameter and (b) returns a struct containing a `List` of a
+// *recursive* variant ICEs codegen with "WIR pipeline generated invalid core
+// Wasm module / type mismatch: expected i32, found (ref (exact $type))".
+//
+// Reduced from a Gale CST builder (`tree_build_node`) driven through a
+// benchmark closure. Each ingredient is load-bearing: dropping the closure, the
+// `&mut` parameter, or the recursive-variant payload makes it compile cleanly.
+//
+// Currently RED (the compiler crashes); kept as the failing fixture for the fix.
+
+use { Stdout, println } from "core:cli";
+
+variant Child {
+    Leaf(i32),
+    Sub(Node),
+}
+
+struct Node {
+    children: List<Child>,
+}
+
+fn build(depth: i32, counter: &mut i32) -> Node {
+    let mut children: List<Child> = [];
+    *counter += 1;
+    if depth > 0 {
+        children.push(Child::Sub(build(depth - 1, counter)));
+    }
+    return Node { children };
+}
+
+export fn run() with Stdout {
+    let f = || {
+        let mut c = 0;
+        let root = build(3, &mut c);
+        return root.children.len();
+    };
+    println(`{f()}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n"
+}

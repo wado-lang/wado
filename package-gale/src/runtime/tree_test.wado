@@ -2,7 +2,7 @@
 //! token-stream recovery flags (`lex.wado`), and `Diagnostic` (`diag.wado`).
 
 use { Span, TokenStream, TOK_SYNTHETIC, TOK_SKIPPED } from "./lex.wado";
-use { NodeKind, K_ERROR, NODE_ERROR, NODE_INCOMPLETE, CstNode, CstChild, TreeBuilder, ParseResult } from "./tree.wado";
+use { NodeKind, K_ERROR, NODE_ERROR, NODE_INCOMPLETE, Cst, CstChild, TreeBuilder, ParseResult } from "./tree.wado";
 use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
@@ -71,11 +71,12 @@ test "builder builds a flat node and renders an S-expression" {
     b.token(1);
     b.token(2);
     b.finish_node(5);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
-    assert tree.kind == 0 as NodeKind;
-    assert tree.span == Span::new(0, 5);
-    assert tree.children.len() == 3;
+    assert tree.kind() == 0 as NodeKind;
+    assert tree.span() == Span::new(0, 5);
+    assert tree.child_count() == 3;
     assert !tree.is_error();
     assert tree.to_string_tree(&ts, &names(["expr"]), &names(["ID", "PLUS"])) == "(expr a + b)";
 }
@@ -96,12 +97,13 @@ test "builder nests child nodes and computes spans" {
     b.token(2);
     b.finish_node(5);
     b.finish_node(5);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
-    assert tree.children.len() == 3;
-    if let Node(first) = tree.children[0] {
-        assert first.kind == 1 as NodeKind;
-        assert first.span == Span::new(0, 1);
+    assert tree.child_count() == 3;
+    if let Node(first) = tree.child(0) {
+        assert first.kind() == 1 as NodeKind;
+        assert first.span() == Span::new(0, 1);
     } else {
         panic("expected first child to be a Node");
     }
@@ -125,12 +127,13 @@ test "missing terminal becomes a Missing child and marks the node incomplete" {
     b.token(1);
     b.missing(syn);
     b.finish_node(3);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
     assert tree.is_error();
     assert tree.is_incomplete();
-    assert tree.flags & NODE_INCOMPLETE != 0;
-    if let Missing(i) = tree.children[2] {
+    assert tree.flags() & NODE_INCOMPLETE != 0;
+    if let Missing(i) = tree.child(2) {
         assert i == syn;
         assert ts.is_synthetic(i);
     } else {
@@ -152,7 +155,8 @@ test "skipped terminal becomes a Skipped child and marks the node erroneous" {
     b.skip(1);
     b.token(2);
     b.finish_node(5);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
     assert tree.is_error();
     assert !tree.is_incomplete();
@@ -174,11 +178,12 @@ test "error region is a K_ERROR node and bubbles error up to the parent" {
     b.finish_node(3);
     b.token(2);
     b.finish_node(5);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
     assert tree.is_error();  // bubbled from the error region
-    if let Node(region) = tree.children[1] {
-        assert region.kind == K_ERROR;
+    if let Node(region) = tree.child(1) {
+        assert region.kind() == K_ERROR;
         assert region.is_error();
     } else {
         panic("expected an error region Node");
@@ -216,9 +221,10 @@ test "start_node_at wraps left-associatively across iterations" {
     b.token(4);
     b.finish_node(5);
     b.finish_node(5);
-    let tree = b.finish();
+    let arena = b.finish();
+    let tree = arena.root();
 
-    assert tree.span == Span::new(0, 5);
+    assert tree.span() == Span::new(0, 5);
     assert tree.to_string_tree(&ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr (expr (expr 1) + (expr 2)) + (expr 3))";
 }
 
@@ -232,7 +238,7 @@ test "ParseResult ok when there are no diagnostics" {
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     b.finish_node(1);
-    let result = ParseResult { root: b.finish(), tokens: ts, diagnostics: [] };
+    let result = ParseResult { arena: b.finish(), tokens: ts, diagnostics: [] };
     assert result.ok();
     assert !result.has_errors();
 }
@@ -246,10 +252,10 @@ test "ParseResult has_errors when an error diagnostic is present" {
     b.token(0);
     b.finish_node(1);
     let diags: List<Diagnostic> = [Diagnostic::error(DiagnosticCode::UnexpectedToken, "boom", Span::new(0, 1), 1, 0)];
-    let result = ParseResult { root: b.finish(), tokens: ts, diagnostics: diags };
+    let result = ParseResult { arena: b.finish(), tokens: ts, diagnostics: diags };
     assert result.has_errors();
     assert !result.ok();
-    assert result.root.kind == 0 as NodeKind;
+    assert result.root().kind() == 0 as NodeKind;
 }
 
 // === Diagnostic ===
