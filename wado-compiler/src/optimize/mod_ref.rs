@@ -220,8 +220,6 @@ impl ModRef {
         false
     }
 
-    /// [`accumulate_expr`] for an operand. A pooled `Operand::Value` is a
-    /// scalar / null / unit constant — a pure leaf that mods / refs nothing.
     fn accumulate_operand(&mut self, body: &Body, op: Operand, scope: &mut AccumScope) {
         match op {
             Operand::Expr(e) => self.accumulate_expr(body, e, scope),
@@ -275,7 +273,6 @@ impl ModRef {
                 self.accumulate_operand(body, index, scope);
             }
 
-            // === Aggregate constructors — recurse into element operands ===
             ExprKind::StructLiteral { fields, .. } => {
                 for f in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
                     self.accumulate_operand(body, f, scope);
@@ -447,8 +444,6 @@ impl ModRef {
                 }
             }
 
-            // Constant packed array (string / bytes literal backing): a pure
-            // value-producing leaf — no reads, writes, or calls.
             ExprKind::PackedArray(_) => {}
 
             // Tombstone: no parent, no children, mods / refs nothing.

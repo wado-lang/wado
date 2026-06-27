@@ -80,16 +80,12 @@ fn fold_constants_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate>
     visitor.interpreter.with_global_fields(&global_fields);
     let mut buffers = EngineBuffers::default();
     if let Some(gate) = gate {
-        // Gated (fixed-point loop): the canonical per-function idiom — process
-        // only functions dirty since this pass last ran, reporting per-function
-        // changes back to the gate.
         let len = project.functions.len();
         gate.run_gated(GatedPass::ConstFold, len, |fid| {
             fold_function(&project.functions[fid.index()], &mut visitor, &mut buffers)
         })
     } else {
-        // Ungated: fold every function. Used by the post-globalization cleanup,
-        // which runs to its own fixed point outside the gated loop.
+        // Ungated: post-globalization cleanup folds every function.
         let mut changed = false;
         for func_rc in &project.functions {
             changed |= fold_function(func_rc, &mut visitor, &mut buffers);
@@ -98,7 +94,6 @@ fn fold_constants_impl(project: &mut NirPackage, gate: Option<&mut FunctionGate>
     }
 }
 
-/// Fold one function's body in place, returning whether anything changed.
 fn fold_function(
     func_rc: &RefCell<NirFunction>,
     visitor: &mut ConstFoldVisitor<'_>,
@@ -109,12 +104,8 @@ fn fold_function(
     let Some(body) = body.as_mut() else {
         return false;
     };
-    // Local indices are unique per function, not project-wide, so reset the
-    // interpreter's env at every function boundary.
+    // Local indices are per-function; reset the interpreter env at each boundary.
     visitor.interpreter.enter_function();
-    // Drive the flow-sensitive walk over an engine session so every rewrite
-    // commits coherently (the engine is the commit mechanism; the visitor still
-    // drives the bottom-up program-order walk).
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)

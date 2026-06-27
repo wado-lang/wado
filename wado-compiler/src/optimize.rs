@@ -558,10 +558,8 @@ fn run_optimization_passes(
                 }
             }};
         }
-        // A gate-aware pass that reports its per-function changes to the gate
-        // (so the gated passes re-examine the bodies it touched) but *not* to the
-        // convergence `changed` flag — it must never keep the fixed-point loop
-        // alive on its own.
+        // Reports changes to the gate but not the convergence flag — must never
+        // keep the loop alive on its own.
         macro_rules! gate_only {
             ($name:expr, $pass:expr) => {{
                 run_pass($name, project, profiler, |p| $pass(p, &mut gate));
@@ -614,10 +612,7 @@ fn run_optimization_passes(
         // fully-elidable `$value_copy$T(arg)` into a shallow `array_clone` shape
         // that elide's `is_value_copy_call` no longer recognises, leaving the
         // copy un-elided. Still before `nir/inline`, where the
-        // `$value_copy$T(arg)` shape both passes match disappears. `gate_only!`:
-        // reports change to the gate (so the gated passes re-examine the bodies
-        // it rewrote) but not to the convergence flag — it never keeps the loop
-        // alive on its own.
+        // `$value_copy$T(arg)` shape both passes match disappears.
         gate_only!("nir/value_copy_demote", demote_value_copies);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical

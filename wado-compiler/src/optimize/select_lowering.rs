@@ -22,7 +22,6 @@ use crate::nir_package::NirPackage;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
-/// Returns whether any function changed.
 pub fn select_lowering(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let rule = SelectLoweringRule {

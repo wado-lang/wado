@@ -99,7 +99,6 @@ fn walk_call_args_for_uses(
 
 /// Classify aggregate-returning functions and set `return_abi` on those whose
 /// every return statement and call site permit the multi-value ABI.
-/// Returns whether any function's `return_abi` was set to the multi-value ABI.
 pub fn classify_multi_value_returns(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
     let structs = &project.structs;
