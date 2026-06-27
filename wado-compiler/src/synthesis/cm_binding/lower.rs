@@ -32,7 +32,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, field_access,
-    flatten_param_type, is_unit_type, kebab_to_pascal, tuple_elems, variant_tag, variant_test,
+    flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types via the single Canonical ABI join
@@ -1224,73 +1224,128 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
         }
         // Tuple → each element's flat args, in order (mirrors `cm_flatten`'s
-        // tuple expansion so the lowered values match the flat signature; a
-        // tuple is `Type::Tuple` or `Generic("Tuple", …)`). CM record → its
-        // fields' flat args via `flatten_cm_record_fields`. Anything else —
-        // primitive, handle, or a plain Wado GC struct (no `source_interface`),
-        // including the empty tuple — passes through. Recursion handles nested
-        // records (e.g. `SourceSpan` inside `Option<SourceSpan>`).
-        _ => {
-            if let Some(elems) = tuple_elems(&resolved).filter(|e| !e.is_empty()) {
-                let tuple_type_id = value.type_id;
-                let val_local = alloc_local(next_local, locals, tuple_type_id);
-                let val_name = format!("{prefix}_tup");
-                stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
-                let elem_type_ids: Vec<TypeId> = type_table
-                    .borrow()
-                    .as_tuple(tuple_type_id)
-                    .unwrap_or_default();
-                for (i, elem_ty) in elems.iter().enumerate() {
-                    let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
-                        let mut tt = type_table.borrow_mut();
-                        cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
-                    });
-                    let elem_expr = field_access(
-                        local_ref(val_local, &val_name, tuple_type_id),
-                        &i.to_string(),
-                        i as u32,
-                        elem_type_id,
-                    );
-                    synthesize_flatten_value_to_flat_args(
-                        elem_ty,
-                        elem_expr,
-                        &format!("{prefix}_e{i}"),
-                        next_local,
-                        stmts,
-                        locals,
-                        flat_args,
-                        cm_interface_registry,
-                        wasi_package,
-                        type_table,
-                    );
-                }
-            } else if let Type::Named(n) = &resolved
-                && let Some(fields) = n.source_interface.as_deref().and_then(|s| {
-                    cm_interface_registry.get_struct_fields_with_wado_names_by_source(s, &n.name)
-                })
-            {
-                let value_type_id = value.type_id;
-                let val_local = alloc_local(next_local, locals, value_type_id);
-                let val_name = format!("{prefix}_rec");
-                stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
-                flatten_cm_record_fields(
-                    fields,
-                    val_local,
-                    &val_name,
-                    value_type_id,
-                    prefix,
-                    next_local,
-                    stmts,
-                    locals,
-                    flat_args,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
-            } else {
-                flat_args.push(value);
-            }
+        // tuple expansion so the lowered values match the flat signature). A
+        // tuple is spelled `Type::Tuple` or `Generic("Tuple", …)`.
+        Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
+            elems,
+            value,
+            prefix,
+            next_local,
+            stmts,
+            locals,
+            flat_args,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        ),
+        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => {
+            synthesize_flatten_tuple_to_flat_args(
+                &g.args,
+                value,
+                prefix,
+                next_local,
+                stmts,
+                locals,
+                flat_args,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
         }
+        // CM record → its fields' flat args (recursion handles nested records,
+        // e.g. `SourceSpan` inside `Option<SourceSpan>`).
+        Type::Named(n)
+            if n.source_interface.as_deref().is_some_and(|s| {
+                cm_interface_registry
+                    .get_struct_fields_with_wado_names_by_source(s, &n.name)
+                    .is_some()
+            }) =>
+        {
+            let source = n.source_interface.as_deref().expect("matched above");
+            let fields = cm_interface_registry
+                .get_struct_fields_with_wado_names_by_source(source, &n.name)
+                .expect("matched above");
+            let value_type_id = value.type_id;
+            let val_local = alloc_local(next_local, locals, value_type_id);
+            let val_name = format!("{prefix}_rec");
+            stmts.push(let_stmt(&val_name, val_local, value_type_id, value));
+            flatten_cm_record_fields(
+                fields,
+                val_local,
+                &val_name,
+                value_type_id,
+                prefix,
+                next_local,
+                stmts,
+                locals,
+                flat_args,
+                cm_interface_registry,
+                wasi_package,
+                type_table,
+            );
+        }
+        // Primitive, flags, resource, or borrow handle: the value is itself the
+        // single flat arg (enums and variants are handled by the arms above).
+        Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => flat_args.push(value),
+        // Stream / Future / Own / Borrow are i32 handles (single flat arg),
+        // matching `cm_flatten`'s treatment of the same generics.
+        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+            flat_args.push(value);
+        }
+        // `Function` / `Infer` / an unknown generic / an empty tuple are not
+        // CM value-flatten inputs; reaching here is a compiler bug, so fail
+        // loudly rather than emitting a wrong flat arg.
+        other => panic!("unsupported type for CM value flattening: {other:?}"),
+    }
+}
+
+/// Flatten a tuple value (GC ref) into its elements' flat CM ABI args, in
+/// declared order. Each element recurses through
+/// [`synthesize_flatten_value_to_flat_args`].
+#[allow(clippy::too_many_arguments)]
+fn synthesize_flatten_tuple_to_flat_args(
+    elems: &[Type],
+    value: TirExpr,
+    prefix: &str,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    flat_args: &mut Vec<TirExpr>,
+    cm_interface_registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+    type_table: &RefCell<TypeTable>,
+) {
+    let tuple_type_id = value.type_id;
+    let val_local = alloc_local(next_local, locals, tuple_type_id);
+    let val_name = format!("{prefix}_tup");
+    stmts.push(let_stmt(&val_name, val_local, tuple_type_id, value));
+    let elem_type_ids: Vec<TypeId> = type_table
+        .borrow()
+        .as_tuple(tuple_type_id)
+        .unwrap_or_default();
+    for (i, elem_ty) in elems.iter().enumerate() {
+        let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
+            let mut tt = type_table.borrow_mut();
+            cm_type_to_type_id(elem_ty, &mut tt, cm_interface_registry, wasi_package)
+        });
+        let elem_expr = field_access(
+            local_ref(val_local, &val_name, tuple_type_id),
+            &i.to_string(),
+            i as u32,
+            elem_type_id,
+        );
+        synthesize_flatten_value_to_flat_args(
+            elem_ty,
+            elem_expr,
+            &format!("{prefix}_e{i}"),
+            next_local,
+            stmts,
+            locals,
+            flat_args,
+            cm_interface_registry,
+            wasi_package,
+            type_table,
+        );
     }
 }
 

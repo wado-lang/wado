@@ -2362,7 +2362,9 @@ impl CmInterfaceRegistry {
                         self.cm_flatten_into(elem, out);
                     }
                 }
-                _ => out.push(CmValType::I32),
+                // Fail loudly rather than silently mis-flattening an unhandled
+                // CM generic to an i32 handle (matches `ast_type_to_cm`).
+                other => panic!("unsupported generic type for CM flattening: {other}"),
             },
             Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
             Type::Tuple(elems) => {
@@ -2370,7 +2372,10 @@ impl CmInterfaceRegistry {
                     self.cm_flatten_into(elem, out);
                 }
             }
-            _ => {}
+            // `Function` / `NamespacedGeneric` / `Infer` / … are not CM value
+            // types; a resolved CM signature never carries them, so reaching
+            // here is a compiler bug — panic instead of emitting zero slots.
+            other => panic!("unsupported type for CM flattening: {other:?}"),
         }
     }
 
