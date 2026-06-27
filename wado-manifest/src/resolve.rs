@@ -1,9 +1,10 @@
 //! Dependency resolution: walk a manifest's dependency graph through a
 //! [`DependencyProvider`] and produce locked packages for `wado.lock`.
 //!
-//! Scope: registry dependencies (the wa.dev path). Git, path, and workspace
-//! sources are recognized and reported as not-yet-resolved so they slot into
-//! the same worklist later, without changing the shape of the result.
+//! Scope: registry dependencies (the wa.dev path) are resolved and locked.
+//! Path deps are traversed for their transitive deps but never locked (WEP).
+//! Git and workspace sources are recognized and reported as not-yet-resolved,
+//! so they slot into the same worklist later without changing the result shape.
 //!
 //! Version selection is highest-compatible per requirement, first-wins on a
 //! repeated id. Full conflict-driven resolution (`PubGrub`: multi-version
