@@ -1,9 +1,3 @@
-// The right operand of a comparison adopts the left operand's resolved type,
-// so an untyped compound/generic literal on the right (`[...]`,
-// `Option::Some(...)`, `Result::Ok(...)`) coerces to the left's type instead
-// of defaulting to a tuple / `i32`. Scalar literals already coerced; this is
-// the regression for the compound/generic case (issue #1453).
-
 test "rhs bracket literal coerces to lhs List type" {
     let xs: List<u8> = [1, 2, 3];
     assert xs == [1, 2, 3];

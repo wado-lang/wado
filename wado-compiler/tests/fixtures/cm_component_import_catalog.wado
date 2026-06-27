@@ -1,12 +1,3 @@
-// Import an interface from an external `.wasm` component and round-trip values
-// across the boundary. The compiler composes `sub/cm-catalog.wasm` in, so the
-// test runs `lift(lower(x)) == x` against the real component across the full
-// value-type surface. Every aggregate is checked by whole-value `==` (the
-// auto-derived `Eq`), not just by shape, so a lossy lift/lower fails the assert.
-//
-// The expected value on the right of `==` is a bare literal: `==` flows the
-// call's result type back into it, so a `[a, b]` / integer literal coerces to
-// the call's type instead of defaulting to a tuple / `i32` (issue #1453).
 use { CmCatalog, Color, Point, Shape, Perms, Mixed } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
@@ -26,8 +17,6 @@ test "primitives round-trip" {
 
 test "string round-trip" {
     assert CmCatalog::id_string("hello") == "hello";
-    // Empty, multibyte (2/3-byte UTF-8), and emoji (4-byte) strings must
-    // round-trip byte-exact through the (ptr, len) lowering.
     assert CmCatalog::id_string("") == "";
     assert CmCatalog::id_string("café — naïve") == "café — naïve";
     assert CmCatalog::id_string("日本語のテスト") == "日本語のテスト";
@@ -67,7 +56,6 @@ test "result round-trip" {
     assert CmCatalog::id_result_both(ok) == Result::Ok(9);
     let err: Result<u32, String> = Result::Err("nope");
     assert CmCatalog::id_result_both(err) == Result::Err("nope");
-    // Ok/Err of different core classes (f32 vs u32) share one joined slot.
     let okf: Result<f32, u32> = Result::Ok(1.5);
     assert CmCatalog::id_result_fu(okf) == Result::Ok(1.5);
     let erru: Result<f32, u32> = Result::Err(42);
