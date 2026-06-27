@@ -21,7 +21,7 @@ pub fn gen_highlight(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<Li
         // parse leaves a partial tree that need not cover every token, so fall
         // back to a flat token pass (default classes only).
         w.begin(&"if result.diagnostics.is_empty()");
-        w.line(&"highlight_walk(&mut visitor, &result.tokens, result.root());");
+        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.root);");
         w.else_begin(&"else");
         w.begin(&"for let mut _i = 0; _i < result.tokens.len(); _i += 1");
         w.line(&"visitor.hl_visit_token(&result.tokens, _i);");

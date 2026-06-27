@@ -251,6 +251,22 @@ incorrectly). Candidates:
 
 ## Failed approaches (do not repeat)
 
+### Flat green-tree + cursor CST — NO-GO (2026-06)
+
+Replaced the per-node `CstNode` value tree with a flat SoA `CstArena` + `Cst`
+cursor (rowan-style), built in one pass over the `BuildEvent` log. In isolation
+the SoA build is ~2× faster, but `sqlite-parse` (which builds then discards the
+tree) regressed: 4.9 ms (old) vs 18 ms cursor. A loose `List::with_capacity(n)`
+zero-fills via `array.new_default`, so nine over-sized arrays dominated
+(131 ms); exact-sizing the arrays cut it to 18 ms but no further. The residual
+~3.7× is intrinsic to the array-heavy build on WasmGC — raising the inline
+threshold only worsens it (sharp 14→15 cliff: 18 → 55 ms). Not `value_copy`
+(generated NIR is clean). The benchmark never walks the tree, so the cursor's
+real win (O(1) navigation, no per-node alloc) is unmeasured. Reverted on this
+branch; the spike is preserved at commits `9b92e249` / `e48cef13` for a retry.
+A separate closure-`&mut` boxing ICE this surfaced was fixed independently
+(`closure_mut_ref_local`).
+
 ### Data-driven (bytecode VM) scan — NO-GO (2026-06)
 
 **Goal.** Replace the per-rule compiled `scan_*` functions with a single

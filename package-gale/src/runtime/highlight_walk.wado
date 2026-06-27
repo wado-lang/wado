@@ -1,24 +1,24 @@
 //! Highlight walk. Replaces the typed `walk_<rule>` visitor
-//! with one generic recursive walk over the untyped CST: enter the
+//! with one generic recursive walk over the untyped `CstNode` tree: enter the
 //! rule, classify each terminal child (`hl_visit_token`), recurse into child
 //! nodes, exit. Because the tree is uniform there is one walk regardless of
 //! grammar, and it works on a *partial* tree too (broken input still
 //! highlights). A `K_ERROR` recovery region contributes no rule context.
 
 use { TokenStream } from "./lex.wado";
-use { Cst, CstChild, K_ERROR } from "./tree.wado";
+use { CstNode, CstChild, K_ERROR } from "./tree.wado";
 use { HighlightVisitor } from "./highlight.wado";
 
-pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, node: Cst) {
-    let is_rule = node.kind() != K_ERROR;
+pub fn highlight_walk(visitor: &mut HighlightVisitor, toks: &TokenStream, node: &CstNode) {
+    let is_rule = node.kind != K_ERROR;
     if is_rule {
-        visitor.hl_enter(node.kind() as i32);
+        visitor.hl_enter(node.kind as i32);
     }
-    for let child of node.children() {
+    for let child of &node.children {
         match child {
-            Token(i) => visitor.hl_visit_token(toks, i),
-            Missing(i) => visitor.hl_visit_token(toks, i),
-            Skipped(i) => visitor.hl_visit_token(toks, i),
+            Token(i) => visitor.hl_visit_token(toks, *i),
+            Missing(i) => visitor.hl_visit_token(toks, *i),
+            Skipped(i) => visitor.hl_visit_token(toks, *i),
             Node(n) => highlight_walk(visitor, toks, n),
         }
     }
