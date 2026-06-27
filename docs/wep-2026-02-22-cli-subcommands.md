@@ -173,7 +173,7 @@ Dependencies are stored in a structured directory tree under `~/wado/`, mirrorin
 
 ```
 ~/wado/
-├── wa.dev/                          # registry host
+├── ghcr.io/                          # registry host
 │   ├── docs/regex/
 │   │   └── 0.1.2/
 │   │       ├── wado.toml
@@ -194,7 +194,7 @@ Dependencies are stored in a structured directory tree under `~/wado/`, mirrorin
 
 | Source   | Path pattern                                       | Example                                  |
 | -------- | -------------------------------------------------- | ---------------------------------------- |
-| Registry | `{registry-host}/{namespace}/{name}/{version}/`    | `wa.dev/docs/regex/0.1.2/`               |
+| Registry | `{registry-host}/{namespace}/{name}/{version}/`    | `ghcr.io/docs/regex/0.1.2/`              |
 | Git      | `{git-host}/{owner}/{repo}/{version}-{short-ref}/` | `github.com/user/router/1.0.2-abc1234d/` |
 
 Git dependencies include a short commit prefix (8 hex chars) in the directory name to distinguish different commits that resolve to the same version tag. Registry dependencies use the exact resolved version.
@@ -221,8 +221,8 @@ wado list --path                     # show full filesystem paths
 
 ```
 $ wado list
-docs/regex                0.1.2       wa.dev
-std/json                  1.2.0       wa.dev
+docs/regex                0.1.2       ghcr.io
+std/json                  1.2.0       ghcr.io
 user/router               1.0.2       github.com
 user/bench                0.1.0       gitlab.com
 ```
@@ -233,8 +233,8 @@ Columns: package identity, version, source host. Sorted by source host then pack
 
 ```
 $ wado list --path
-/home/user/wado/wa.dev/docs/regex/0.1.2
-/home/user/wado/wa.dev/std/json/1.2.0
+/home/user/wado/ghcr.io/docs/regex/0.1.2
+/home/user/wado/ghcr.io/std/json/1.2.0
 /home/user/wado/github.com/user/router/1.0.2-abc1234d
 /home/user/wado/gitlab.com/user/bench/0.1.0-def56789
 ```

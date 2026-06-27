@@ -3361,7 +3361,7 @@ Use `with { ... }` to specify import metadata:
 // Same vocabulary as a [dependencies] value, with an exact version.
 use {Regexp} from "docs:regex@1.0.0";  // exact pin via the specifier
 use {Router} from "lib:router" with { git = "https://github.com/user/router.git", ref = "v1.0" };
-use {Parse}  from "lib:rx"     with { registry = "https://wa.dev", package = "docs:regex", version = "1.0.0" };
+use {Parse}  from "lib:rx"     with { registry = "oci://ghcr.io/acme", package = "docs:regex", version = "1.0.0" };
 
 // Type attribute (REQUIRED for non-.wado imports)
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
