@@ -24,7 +24,8 @@ use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
 use wasmtime::component::{
-    Component, ComponentExportIndex, FutureAny, FutureReader, Instance, StreamAny, StreamReader, Val,
+    Component, ComponentExportIndex, FutureAny, FutureReader, Instance, StreamAny, StreamReader,
+    Val,
 };
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
@@ -209,7 +210,11 @@ where
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let out = match results.into_iter().next() {
         Some(Val::Future(a)) => a,
-        other => return Err(format!("`{export}`: expected a future result, got {other:?}")),
+        other => {
+            return Err(format!(
+                "`{export}`: expected a future result, got {other:?}"
+            ));
+        }
     };
     let mut reader = out.try_into_future_reader::<T>().map_err(|e| {
         format!(
@@ -244,7 +249,11 @@ where
         .map_err(|e| format!("`{export}`: call trapped: {e:#}"))?;
     let out = match results.into_iter().next() {
         Some(Val::Stream(a)) => a,
-        other => return Err(format!("`{export}`: expected a stream result, got {other:?}")),
+        other => {
+            return Err(format!(
+                "`{export}`: expected a stream result, got {other:?}"
+            ));
+        }
     };
     let mut reader = out.try_into_stream_reader::<T>().map_err(|e| {
         format!(
