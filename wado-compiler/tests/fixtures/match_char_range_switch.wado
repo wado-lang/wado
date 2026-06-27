@@ -1,0 +1,32 @@
+// `match` / `matches` over `char` literals and `char`/integer ranges should
+// lower to a dense `br_table`, just like integer literals. `char` is an i32
+// codepoint at WIR, and range patterns expand to their covered codepoints
+// (bounded by the switch range gate).
+
+use { println, Stdout } from "core:cli";
+
+fn classify(c: char) -> i32 {
+    return match c {
+        '0'..='9' => 1,
+        'A'..='Z' => 2,
+        'a'..='z' => 3,
+        '_' => 4,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    let s = "Ab_9!";
+    let mut sum = 0;
+    for let c of s.chars() {
+        sum += classify(c);
+    }
+    // A=2, b=3, _=4, 9=1, !=0 => 10
+    println(`{sum}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_expect:O2": ["br_table"]
+}
