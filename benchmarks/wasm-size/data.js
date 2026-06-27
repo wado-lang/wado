@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782563226941,
+  "lastUpdate": 1782582283391,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35961,6 +35961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8e2c2f137e03cdd8893cf63544f67022702025bc"
         },
         "date": 1782563226392,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd11409e83a52620524057926bd56791da7bf38d",
+          "message": "Merge pull request #1458 from wado-lang/claude/wado-compiler-nir-optimize-t14wxq\n\nrefactor(optimize): consolidate NIR optimizer passes &amp; tree-walks; fix HFS destructure miscompile",
+          "timestamp": "2026-06-28T02:34:42+09:00",
+          "tree_id": "afad3038ee10e4ec90894777d7a089f685b78189",
+          "url": "https://github.com/wado-lang/wado/commit/cd11409e83a52620524057926bd56791da7bf38d"
+        },
+        "date": 1782582282964,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
