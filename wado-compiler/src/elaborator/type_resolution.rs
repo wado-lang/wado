@@ -283,11 +283,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // Check newtypes, struct definitions, and variants
             _ => {
-                // A generic type named without its `<...>` arguments. Reject it
-                // (Rust-style `missing generics`) rather than build an
-                // argument-less degenerate type that cannot unify with a real
-                // `T<...>` — which produced confusing `expected 'Option', found
-                // 'Option<i32>'` cascades downstream (issue #1453).
                 if let Some(expected) = self.bare_generic_type_arity(name) {
                     let _ = self.logger.error(TypeError::MissingTypeArguments {
                         name: name.to_string(),
@@ -325,11 +320,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// If `name` denotes a generic type that requires type arguments — a
-    /// generic struct (`List<T>`), variant (`Option<T>`, `Result<T, E>`), or
-    /// newtype — return its declared arity. A non-generic type (or an unknown
-    /// name) returns `None`. Used by [`Self::resolve_named_type`] to reject a
-    /// bare generic name used without `<...>`.
     fn bare_generic_type_arity(&self, name: &str) -> Option<usize> {
         if self.sem.decls.generic_struct_names.contains(name)
             && let Some(info) = self.lookup_struct_fields(name)

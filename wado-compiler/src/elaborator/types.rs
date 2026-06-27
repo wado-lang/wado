@@ -147,9 +147,6 @@ pub enum TypeError {
     /// `_` inference placeholder used outside a turbofish type argument.
     InferPlaceholderNotAllowed { span: Span },
 
-    /// A generic type (`Option`, `List`, a user generic struct/variant) was
-    /// named in a type position without its `<...>` type arguments. `expected`
-    /// is the declared type-parameter count.
     MissingTypeArguments {
         name: String,
         expected: usize,

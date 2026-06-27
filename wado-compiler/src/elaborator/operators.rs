@@ -155,17 +155,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(right, right_ast.span()),
             )
         } else {
-            // Both operands are non-scalar-literal and non-null. For a
-            // comparison the two operands share a type, so resolve the operand
-            // that already carries a definite type first and feed it to the
-            // other side. This lets an untyped compound/generic literal
-            // (`[...]`, `Variant::Case(...)`) on EITHER side coerce to its
-            // sibling instead of defaulting to a tuple / `i32` (issue #1453).
-            // Scalar and `null` literals are handled symmetrically by the
-            // branches above; this extends the same symmetry to compound
-            // literals. Non-comparison operators keep plain expected-type
-            // propagation, since their rhs type may legitimately differ from the
-            // lhs (e.g. `Shl`'s `u32` shift amount).
             let is_comparison = matches!(
                 op,
                 BinaryOp::Eq
@@ -178,8 +167,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left_lit = is_comparison && Self::is_coercible_compound_literal(left_ast);
             let right_lit = is_comparison && Self::is_coercible_compound_literal(right_ast);
             if left_lit && !right_lit {
-                // Compound literal on the left, definite type on the right:
-                // resolve the right first and coerce the left to it.
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
                     expected_type
@@ -192,8 +179,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     placeholder(right, right_ast.span()),
                 )
             } else {
-                // Definite type on the left (or both/neither side a literal):
-                // resolve the left first and coerce the right to it.
                 let left = self.resolve_expr(left_ast, ctx, expected_type);
                 let right_expected = if is_comparison && left != TypeTable::ERROR {
                     Some(left)
@@ -209,19 +194,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether a comparison operand is a compound/generic literal whose type
-    /// depends on the expected-type context: a bracket literal (`[a, b]`, which
-    /// otherwise defaults to a tuple) or a `Variant::Case(...)` constructor
-    /// (whose untyped payload literals otherwise default to `i32`). Used by
-    /// [`Self::resolve_binary_operands_with_coercion`] to pick which operand to
-    /// resolve first so the literal coerces to its sibling on either side.
-    ///
-    /// `Variant::Case(...)` parses as a call on a qualified-path ident
-    /// (`Option::Some`, `Result::Ok`) — or, with explicit type args, as a
-    /// `StaticMethodCall`. Plain `foo(x)` calls (unqualified callee) are
-    /// excluded. A qualified call that is actually a concrete associated/static
-    /// function still matches, but feeding it an expected type is harmless — it
-    /// ignores the hint.
     fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
         match expr {
             ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,

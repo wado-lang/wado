@@ -325,8 +325,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && value_type != type_id
             && value_type != TypeTable::UNKNOWN
             && value_type != TypeTable::NEVER
-            // A poison annotation (e.g. a bare generic already diagnosed by
-            // `resolve_named_type`) must not cascade into a second mismatch.
             && type_id != TypeTable::ERROR
             && value_type != TypeTable::ERROR
         {

@@ -32,39 +32,27 @@ test "newtype round-trip" {
 }
 
 test "list round-trip" {
-    let xs: List<u8> = [1, 2, 3];
-    assert CmCatalog::id_list_u8(xs) == [1, 2, 3];
-    let ss: List<String> = ["a", "bb"];
-    assert CmCatalog::id_list_string(ss) == ["a", "bb"];
-    let empty: List<u8> = [];
-    assert CmCatalog::id_list_u8(empty) == [];
+    assert CmCatalog::id_list_u8([1, 2, 3]) == [1, 2, 3];
+    assert CmCatalog::id_list_string(["a", "bb"]) == ["a", "bb"];
+    assert CmCatalog::id_list_u8([]) == [];
 }
 
 test "option round-trip" {
-    let o5: Option<u32> = Option::Some(5);
-    assert CmCatalog::id_option_u32(o5) == Option::Some(5);
-    let on: Option<u32> = null;
-    assert CmCatalog::id_option_u32(on) == null;
-    let os: Option<String> = Option::Some("x");
-    assert CmCatalog::id_option_string(os) == Option::Some("x");
-    let osn: Option<String> = null;
-    assert CmCatalog::id_option_string(osn) == null;
+    assert CmCatalog::id_option_u32(Option::Some(5)) == Option::Some(5);
+    assert CmCatalog::id_option_u32(null) == null;
+    assert CmCatalog::id_option_string(Option::Some("x")) == Option::Some("x");
+    assert CmCatalog::id_option_string(null) == null;
 }
 
 test "result round-trip" {
-    let ok: Result<u32, String> = Result::Ok(9);
-    assert CmCatalog::id_result_both(ok) == Result::Ok(9);
-    let err: Result<u32, String> = Result::Err("nope");
-    assert CmCatalog::id_result_both(err) == Result::Err("nope");
-    let okf: Result<f32, u32> = Result::Ok(1.5);
-    assert CmCatalog::id_result_fu(okf) == Result::Ok(1.5);
-    let erru: Result<f32, u32> = Result::Err(42);
-    assert CmCatalog::id_result_fu(erru) == Result::Err(42);
+    assert CmCatalog::id_result_both(Result::Ok(9)) == Result::Ok(9);
+    assert CmCatalog::id_result_both(Result::Err("nope")) == Result::Err("nope");
+    assert CmCatalog::id_result_fu(Result::Ok(1.5)) == Result::Ok(1.5);
+    assert CmCatalog::id_result_fu(Result::Err(42)) == Result::Err(42);
 }
 
 test "record round-trip" {
-    let p = Point { x: 1.5, y: 2.5 };
-    assert CmCatalog::id_record(p) == Point { x: 1.5, y: 2.5 };
+    assert CmCatalog::id_record(Point { x: 1.5, y: 2.5 }) == Point { x: 1.5, y: 2.5 };
 }
 
 test "variant round-trip" {
@@ -76,38 +64,25 @@ test "variant round-trip" {
 }
 
 test "flags round-trip" {
-    let p = Perms::Read | Perms::Write;
-    assert CmCatalog::id_flags(p) == Perms::Read | Perms::Write;
+    assert CmCatalog::id_flags(Perms::Read | Perms::Write) == Perms::Read | Perms::Write;
 }
 
 test "tuple round-trip" {
-    let pair: [u32, String] = [7, "x"];
-    assert CmCatalog::id_tuple_pair(pair) == [7, "x"];
-    let triple: [u8, bool, char] = [5, true, 'Z'];
-    assert CmCatalog::id_tuple_triple(triple) == [5, true, 'Z'];
+    assert CmCatalog::id_tuple_pair([7, "x"]) == [7, "x"];
+    assert CmCatalog::id_tuple_triple([5, true, 'Z']) == [5, true, 'Z'];
 }
 
 test "nested containers round-trip" {
-    let lr: List<Point> = [Point { x: 1.0, y: 2.0 }];
-    assert CmCatalog::id_list_record(lr) == [Point { x: 1.0, y: 2.0 }];
-    let orr: Option<Point> = Option::Some(Point { x: 1.0, y: 2.0 });
-    assert CmCatalog::id_option_record(orr) == Option::Some(Point { x: 1.0, y: 2.0 });
-    let tr: [Point, u32] = [Point { x: 1.0, y: 2.0 }, 9];
-    assert CmCatalog::id_tuple_record(tr) == [Point { x: 1.0, y: 2.0 }, 9];
-    let ol: Option<List<u8>> = Option::Some([1, 2]);
-    assert CmCatalog::id_option_list(ol) == Option::Some([1, 2]);
-    let rl: Result<List<Point>, String> = Result::Ok([Point { x: 1.0, y: 2.0 }]);
-    assert CmCatalog::id_result_list(rl) == Result::Ok([Point { x: 1.0, y: 2.0 }]);
-    let lt: List<[u32, String]> = [[1, "a"]];
-    assert CmCatalog::id_list_tuple(lt) == [[1, "a"]];
-    let assoc: List<[String, u32]> = [["k", 1]];
-    assert CmCatalog::id_assoc_array(assoc) == [["k", 1]];
-    let lo: List<Option<u32>> = [Option::Some(1)];
-    assert CmCatalog::id_list_option(lo) == [Option::Some(1)];
-    let to: [Option<u32>, u8] = [Option::Some(3), 4];
-    assert CmCatalog::id_tuple_option(to) == [Option::Some(3), 4];
-    let ltr: List<[Point, u32]> = [[Point { x: 1.0, y: 2.0 }, 9]];
-    assert CmCatalog::id_list_tuple_record(ltr) == [[Point { x: 1.0, y: 2.0 }, 9]];
+    assert CmCatalog::id_list_record([Point { x: 1.0, y: 2.0 }]) == [Point { x: 1.0, y: 2.0 }];
+    assert CmCatalog::id_option_record(Option::Some(Point { x: 1.0, y: 2.0 })) == Option::Some(Point { x: 1.0, y: 2.0 });
+    assert CmCatalog::id_tuple_record([Point { x: 1.0, y: 2.0 }, 9]) == [Point { x: 1.0, y: 2.0 }, 9];
+    assert CmCatalog::id_option_list(Option::Some([1, 2])) == Option::Some([1, 2]);
+    assert CmCatalog::id_result_list(Result::Ok([Point { x: 1.0, y: 2.0 }])) == Result::Ok([Point { x: 1.0, y: 2.0 }]);
+    assert CmCatalog::id_list_tuple([[1, "a"]]) == [[1, "a"]];
+    assert CmCatalog::id_assoc_array([["k", 1]]) == [["k", 1]];
+    assert CmCatalog::id_list_option([Option::Some(1)]) == [Option::Some(1)];
+    assert CmCatalog::id_tuple_option([Option::Some(3), 4]) == [Option::Some(3), 4];
+    assert CmCatalog::id_list_tuple_record([[Point { x: 1.0, y: 2.0 }, 9]]) == [[Point { x: 1.0, y: 2.0 }, 9]];
 }
 
 __DATA__
