@@ -65,7 +65,7 @@ use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 let out = Compress::compress(bytes);              // requires `with Compress`
 ```
 
-WIT↔Wado type correspondence at the boundary is in [the spec](./spec.md#type-mapping-at-component-boundaries).
+Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-mapping-at-component-boundaries).
 
 ## Value Semantics
 

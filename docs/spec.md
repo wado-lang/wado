@@ -864,46 +864,30 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 
 ### Type Mapping at Component Boundaries
 
-Wado types are represented using WebAssembly core types (including GC types) internally within components, and are converted to Component Model types only when crossing component boundaries (import/export interfaces).
+Wado types are stored internally as WebAssembly core and GC types, and lift/lower to Component Model types when crossing component boundaries (the Canonical ABI). The compiler performs this conversion automatically, letting Wado use optimal internal representations (e.g. Wasm GC structs) while interoperating through standard CM types at the boundary.
 
-**Internal vs Boundary Representation:**
+The table below is the Wado↔CM correspondence, read in both directions: Wado→CM when generating a component's exported interface, and CM→Wado when importing an external component (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). CM types are written in their WIT spelling.
 
-- **Internal**: Wado uses Wasm core types and GC types for efficient in-component representation
-- **Boundary**: Component Model types are used at import/export interfaces (Canonical ABI)
-- **Conversion**: The compiler automatically handles translation at component boundaries
-
-This separation allows Wado to use optimal internal representations (e.g., Wasm GC structs) while maintaining interoperability through standardized Component Model types at boundaries.
-
-| Wado Type                 | Internal Representation      | CM Type at Boundary                  | Notes                                            |
-| ------------------------- | ---------------------------- | ------------------------------------ | ------------------------------------------------ |
-| `bool`                    | `i32`                        | `bool`                               | Boolean value                                    |
-| `char`                    | `i32`                        | `char`                               | Unicode scalar value                             |
-| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64`   | `s8`, `s16`, `s32`, `s64`            | Signed integers                                  |
-| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64`   | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                |
-| `i128`, `u128`            | `i64` pair (Wide Arithmetic) | `tuple<s64, s64>`, `tuple<u64, u64>` | 128-bit integers                                 |
-| `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                   |
-| `f16`                     | -                            | -                                    | TODO: Wasm half-precision proposal (Phase 1)     |
-| `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally              |
-| `List<T>`                 | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally             |
-| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                      |
-| `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                   |
-| `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type                                      |
-| `Result<(), ()>`          | GC variant                   | `result`                             | Unit result (no payload)                         |
-| `struct { ... }`          | GC `struct`                  | `record { ... }`                     | Wasm GC struct internally, record at CM boundary |
-| `enum { ... }`            | `i32`                        | `enum { ... }`                       | Enumeration without payloads                     |
-| `variant { ... }`         | GC variant                   | `variant { ... }`                    | Variant/sum type with payloads                   |
-| `flags { ... }`           | `i32`/`i64`                  | `flags { ... }`                      | Bit flags                                        |
-| `resource`                | `i32` (handle)               | `resource`                           | Resource handle                                  |
-| `Stream<T>`               | CM stream (P3)               | `stream<T>`                          | Component Model async stream                     |
-| `Future<T>`               | CM future (P3)               | `future<T>`                          | Component Model async future                     |
-
-The "CM Type at Boundary" column is the WIT type, so this table doubles as the **WIT↔Wado correspondence** and is read in both directions: Wado→WIT when generating a component's exported interface, and WIT→Wado when importing an external component or WIT (`use { Iface } from "./c.wasm" with { type: "wasm" }`, see [Wasm Module and Component Imports](#wasm-module-and-component-imports)). WIT resource handles `own<T>` / `borrow<T>` both map to `resource`; `result<ok>` and bare `result` are the payload-elided forms of `result<T, E>`.
-
-Coverage caveats (rows listed but not yet wired everywhere):
-
-- `f16` — unimplemented in both directions (awaits the Wasm half-precision proposal).
-- `stream<T>` / `future<T>` — work for Wado-authored exports, but importing a component whose function signature carries an async value type is not yet wired (WEP: Wasm CM Component Import, Phase 8).
-- World-level free-function exports (a component exporting bare functions, no interface) are not yet importable (same WEP, Phase 9).
+| Wado Type                 | Internal Representation      | CM Type at Boundary                  | Notes                                                                    |
+| ------------------------- | ---------------------------- | ------------------------------------ | ------------------------------------------------------------------------ |
+| `bool`                    | `i32`                        | `bool`                               | Boolean value                                                            |
+| `char`                    | `i32`                        | `char`                               | Unicode scalar value                                                     |
+| `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64`   | `s8`, `s16`, `s32`, `s64`            | Signed integers                                                          |
+| `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64`   | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                                        |
+| `i128`, `u128`            | `i64` pair (Wide Arithmetic) | `tuple<s64, s64>`, `tuple<u64, u64>` | 128-bit integers                                                         |
+| `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                                           |
+| `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally                                      |
+| `List<T>`                 | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally                                     |
+| `[T1, T2, ...]`           | GC `struct {T1, T2, ...}`    | `tuple<T1, T2, ...>`                 | Tuple types                                                              |
+| `Option<T>`               | GC variant                   | `option<T>`                          | Optional value                                                           |
+| `Result<T, E>`            | GC variant                   | `result<T, E>`                       | Result type; `result<ok>` and bare `result` are the payload-elided forms |
+| `struct { ... }`          | GC `struct`                  | `record { ... }`                     | Wasm GC struct internally, record at CM boundary                         |
+| `enum { ... }`            | `i32`                        | `enum { ... }`                       | Enumeration without payloads                                             |
+| `variant { ... }`         | GC variant                   | `variant { ... }`                    | Variant/sum type with payloads                                           |
+| `flags { ... }`           | `i32`/`i64`                  | `flags { ... }`                      | Bit flags                                                                |
+| `resource`                | `i32` (handle)               | `resource`                           | Resource handle; owned and borrowed handles both map here                |
+| `Stream<T>`               | CM stream (P3)               | `stream<T>`                          | Component Model async stream                                             |
+| `Future<T>`               | CM future (P3)               | `future<T>`                          | Component Model async future                                             |
 
 ### The Prelude
 
@@ -3491,7 +3475,7 @@ export fn run() with Compress, Decompress {
 }
 ```
 
-Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries). The dependency component is statically composed into the output (via `wasm-compose`), so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path, including the support matrix (synchronous value types are complete; `stream<T>` / `future<T>` and world-level free-function exports are pending).
+Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries). The dependency component is statically composed into the output (via `wasm-compose`), so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path.
 
 ### Namespace Import
 
