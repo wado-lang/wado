@@ -20,8 +20,8 @@ Dev-host Gale numbers (`cargo run` `wado`; see the measurement note):
 
 | benchmark                          |    per-iter | throughput |
 | ---------------------------------- | ----------: | ---------: |
-| `syntax_highlight` (build + walk)  | ~40 ms/iter |  ~330 KB/s |
-| `sqlite_parse` (build only)        | ~10 ms/iter |  ~1.3 MB/s |
+| `syntax_highlight` (build + walk)  | ~31 ms/iter |  ~430 KB/s |
+| `sqlite_parse` (build only)        |  ~5 ms/iter |  ~2.5 MB/s |
 
 The release headline + comparison baselines (Gale vs `tree-sitter` for
 highlight, vs `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
@@ -47,47 +47,42 @@ wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_hi
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the
 `profiling-wado` skill's script — count **leaf** frames for self-time — or
 upload to profiler.firefox.com. The table below merges **5 dev-host runs @1 ms
-= 1773 samples** to damp per-run sampling noise.)
+= 3104 samples** to damp per-run sampling noise.)
 
-## Live profile (syntax_highlight, guest sampler, 5 runs merged, 1773 samples @1 ms)
+## Live profile (syntax_highlight, guest sampler, 5 runs merged, 3104 samples @1 ms)
 
-Build-and-walk shape. The CST — building it, then walking it — dominates. The
-per-call rule-name `String` allocation that led the old parse-only profile is
-**gone**: the rule wrapper records the name (`push_rule_stack`) only on the cold
-error path now, so it no longer allocates on the hot success path.
-
-This table is the **pre-fix baseline** (`~40 ms/iter`). The §1 child-list
-pre-sizing has since landed, removing the `List<CstChild>::grow` frame and the
-per-node empty-list churn (now ~30 ms/iter); the relative shape below still
-holds.
+Post-child-list-pre-size shape (~31 ms/iter). Build-and-walk: the CST —
+building it, then walking it — still leads (~38% combined), but the gap to the
+rest has narrowed. The `List<CstChild>::grow` frame is gone (the §1 fix), and
+the per-call rule-name `String` allocation that led the old parse-only profile
+is also gone (the rule wrapper records the name on the cold error path only).
 
 |   Pct | Symbol                            | role                                                |
 | ----: | --------------------------------- | --------------------------------------------------- |
-| 23.7% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
-| 11.7% | `List<CstChild>::push`            | per-node child-list build                           |
-|  7.3% | `tree_build_node`                 | CST materialization (event log → tree)              |
-|  4.9% | `HighlightVisitor::hl_visit_token`| per-token capture classify                          |
-|  3.7% | `List<CstChild>::grow`            | child-list growth                                   |
-|  3.3% | `String::push`                    | HTML output build                                   |
-|  3.2% | `String::grow`                    | HTML output growth                                  |
-|  2.5% | `scan_any_name`                   | scan (prediction)                                   |
-|  2.5% | `List<i32>::to_array`             | per-call highlight-mapping rebuild                  |
-|  2.4% | `_kind_set_8`                     | membership over the big keyword set                 |
-|  1.9% | `StrCharIter::next`               | source char walk (HTML render)                      |
-|  1.8% | `push_class`                      | HTML class emit                                     |
-|  1.7% | `BuildEvent::push`                | event-log build                                     |
-|  1.7% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
+| 18.7% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
+| 10.9% | `HighlightVisitor::classify`      | per-token capture classify (overrides × rule-stack) |
+| 10.6% | `List<CstChild>::push`            | per-node child-list build                           |
+|  8.1% | `tree_build_node`                 | CST materialization (event log → tree)              |
+|  8.0% | `List<char>::grow`                | lexer source-char buffer growth                     |
+|  3.2% | `push_class`                      | HTML class emit                                     |
+|  2.9% | `_kind_set_8`                     | membership over the big keyword set                 |
+|  2.8% | `String::push`                    | HTML output build                                   |
+|  2.6% | `List<i32>::push`                 | `rule_stack` / token push                           |
+|  2.5% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
+|  2.1% | `scan_any_name`                   | scan (prediction)                                   |
+|  1.9% | `HighlightVisitor::hl_visit_token`| per-token trivia + classify driver                  |
 
-Rough buckets (self-time): **CST walk** (`highlight_walk`) ≈ **24%**; **CST
-build** (`CstChild` push/grow + `tree_build_node`) ≈ **23%**; **HTML render**
-(`String` push/grow + `push_class` + `escape_html_char` + `highlight_html`) ≈
-**11%**; lexer char-level (`to_ascii_lowercase` + `try_*` + `List<char>` +
-`StrCharIter`) ≈ **9%**; highlight classify (`hl_visit_token` + `classify` +
-`highlight_mapping`) ≈ **8%**; kind-set (`_kind_set_*`) ≈ **6%**; `scan_*` ≈
-**6%**; event-log build ≈ **3%**.
+Rough buckets (self-time): **CST build** (`CstChild::push` + `tree_build_node`)
+≈ **19%**; **CST walk** (`highlight_walk`) ≈ **19%**; lexer char-level
+(`List<char>::grow` + `to_ascii_lowercase` + `try_*` + `StrCharIter`) ≈ **16%**;
+highlight classify (`classify` + `hl_visit_token` + `highlight_mapping`) ≈
+**14%**; **HTML render** (`String` push/grow + `push_class` + `escape_html_char`
++ `highlight_html`) ≈ **9%**; kind-set (`_kind_set_*`) ≈ **7%**; `scan_*` ≈
+**5%**; event-log build ≈ **2%**.
 
-So **the CST — build it then walk it — is ~47% of self-time**, the clear
-dominant cost on the build+walk path.
+So the CST — build it then walk it — is still the largest at **~38%**, but with
+the `grow` churn removed the lexer source-char buffer (§2) and the per-token
+`classify` loop (§3) are now comparably hot.
 
 ## What would move the needle
 
@@ -116,15 +111,29 @@ is scalar child accessors that walk allocation-free. Until a representation
 cheap to *both* build and walk lands, the per-node-list build + traversal is the
 standing open problem and the largest remaining prize.
 
-### 2. Per-call highlight-mapping rebuild (~4%, syntax-highlight only)
+### 2. Lexer source-char buffer — `List<char>::grow` (~8%)
 
-The generated `highlight()` calls `highlight_mapping()` **every** call, which
-rebuilds the `defaults` / `rule_names` / `overrides` lists from scratch
-(`List<i32>::to_array` 2.5% + `highlight_mapping` 1.6%). It is invariant — hoist
-it to a module-level `global` built once. Self-contained, in
-`gen_highlight` / `gen_highlight_mapping` (`highlight_gen.wado`).
+The lexer collects the input into a `List<char>` (`Lexer::new` →
+`input.chars().collect()`) that the `TokenStream` then borrows. `collect` grows
+that buffer from empty, reallocating `log2(n)` times over the whole source —
+8% here, the same `[]`-then-grow pattern §1 just fixed for child lists.
+Pre-size it to the input's byte length (a safe upper bound on char count): one
+`with_capacity` at the collect / `Lexer::new` site (`lexer_gen.wado` /
+`StrCharIter::collect`). Cheap, expected near-free win.
 
-### 3. Kind-set membership — `_kind_set_*` (~6%)
+### 3. Per-token highlight classify — `HighlightVisitor::classify` (~11%, syntax-highlight only)
+
+For every token, `classify` scans **all** overrides and, for each matching token
+kind, walks the whole `rule_stack`. With no `@override` rules (the common case)
+the override list is empty, but the per-token call overhead and the default
+`defaults[kind]` lookup still dominate at this token count. Levers: fast-path
+the empty-overrides case, and index overrides by token kind instead of a linear
+scan. In `HighlightVisitor::classify` (`highlight.wado`). (The mapping itself is
+also rebuilt **per `highlight()` call** — `highlight_mapping()` reconstructs the
+`defaults` / `rule_names` lists every time; hoist it to a `global` built once,
+in `gen_highlight` / `highlight_gen.wado`.)
+
+### 4. Kind-set membership — `_kind_set_*` (~7%)
 
 `_kind_set_8` alone is 2.4%: a `k matches { TK_… | TK_… | … }` membership test
 over the large SQLite keyword set (~125 kinds), called from scan dispatch and
@@ -134,18 +143,19 @@ token kind** (`(kind >> 5)` word + `1 << (kind & 31)`) makes it O(1) with no
 cascade. A pure-compute frame the dev host does _not_ inflate, so its release
 share is a touch higher.
 
-### 4. HTML render output (~11%, syntax-highlight only)
+### 5. HTML render output (~9%, syntax-highlight only)
 
-`String::push`/`grow` building the HTML output is ~6%, plus `push_class`
-(per-capture class string, splitting `.` → space char-by-char) and
-`escape_html_char` (per source char). Levers: emit class names without the
-per-char `push_class` loop, and append larger runs of unescaped source instead
-of char-at-a-time. Lives in `highlight_html` / `push_class` (`highlight.wado`).
+`String::push`/`grow` building the HTML output, plus `push_class` (per-capture
+class string, splitting `.` → space char-by-char) and `escape_html_char` (per
+source char). Levers: emit class names without the per-char `push_class` loop,
+and append larger runs of unescaped source instead of char-at-a-time. Lives in
+`highlight_html` / `push_class` (`highlight.wado`).
 
-### 5. Lexer char-level work (~9%, independent secondary lever)
+### 6. Lexer char-level compute (independent secondary lever)
 
-Splits across `to_ascii_lowercase` (case-insensitive matching), `List<char>`
-buffer building, `StrCharIter`, and `classify_keyword`. Candidates:
+After §2 removes the buffer-growth share, the remaining lexer cost is compute:
+`to_ascii_lowercase` (case-insensitive matching), `StrCharIter`, and
+`classify_keyword`. Candidates:
 
 - **Table-driven DFA** for the whole lexer (NFA → DFA → transition table).
   Replaces per-character dispatch and `classify_keyword`; `mode` blocks become a
