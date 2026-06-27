@@ -1,18 +1,8 @@
-//! Dependency resolution: walk a manifest's dependency graph through a
-//! [`DependencyProvider`] and produce locked packages for `wado.lock`.
-//!
-//! Scope: registry dependencies (the wa.dev path) are resolved and locked.
-//! Path deps are traversed for their transitive deps but never locked (WEP).
-//! Git and workspace sources are recognized and reported as not-yet-resolved,
-//! so they slot into the same worklist later without changing the result shape.
-//!
-//! Version selection is highest-compatible per requirement. A repeated package
-//! id reuses the first choice but verifies it satisfies the later requirement —
-//! an incompatibility is a `VersionConflict` error, not a silently-wrong lock —
-//! and a non-dev requirement downgrades a dev-only mark. Full conflict-driven
-//! resolution (`PubGrub`: backtracking to a lower version that satisfies every
-//! requirement, multi-version coexistence) is a later refinement behind this
-//! same seam.
+//! Resolve a manifest's dependency graph through a [`DependencyProvider`] into
+//! locked packages. Registry deps are locked; path deps are traversed but not
+//! locked (WEP); git/workspace are not resolved yet. Version selection is
+//! highest-compatible per requirement; a conflicting second requirement is an
+//! error, not a silently-wrong lock (no backtracking yet — `PubGrub` later).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
@@ -24,35 +14,30 @@ use crate::manifest::{Dependency, DependencySource, Manifest};
 use crate::provider::{DependencyProvider, ProviderError};
 use crate::version::{Version, VersionSpecifier};
 
-/// Errors from dependency resolution.
 #[derive(Debug, Clone)]
 pub enum ResolveError {
-    /// A provider I/O operation failed.
     Provider(ProviderError),
-    /// No available version satisfies the requirement.
     NoMatchingVersion {
         package: String,
         requirement: String,
     },
-    /// Two requirements on the same package cannot both be satisfied by the
-    /// already-chosen version. (No backtracking yet — a conflict is an error,
-    /// not a silently-wrong lock.)
     VersionConflict {
         package: String,
         requirement: String,
         resolved: String,
     },
-    /// A registry dependency names an unknown alias, or omits `registry` with
-    /// no `default` registry in scope.
-    NoRegistry { dep: String },
-    /// The version requirement could not be parsed.
+    NoRegistry {
+        dep: String,
+    },
     InvalidRequirement {
         dep: String,
         requirement: String,
         reason: String,
     },
-    /// The source kind is not resolved yet (git/path/workspace).
-    UnsupportedSource { dep: String, kind: &'static str },
+    UnsupportedSource {
+        dep: String,
+        kind: &'static str,
+    },
 }
 
 impl fmt::Display for ResolveError {
@@ -97,34 +82,22 @@ impl fmt::Display for ResolveError {
 
 impl std::error::Error for ResolveError {}
 
-/// One pending dependency, carrying the registries table of the manifest that
-/// declared it (a transitive dep resolves aliases against its own manifest) and
-/// the directory that manifest lives in (so a nested path dep resolves relative
-/// to its declarer, not the project root).
 struct Frame {
     key: String,
     source: DependencySource,
+    // The declaring manifest's registries and directory (relative to the project
+    // root); `base` rebases nested path deps onto their declarer.
     registries: IndexMap<String, String>,
-    /// Directory of the declaring manifest, relative to the project root (empty
-    /// for the root manifest). Used only to rebase path dependencies.
     base: String,
     dev: bool,
 }
 
-/// Resolve a manifest's dependency graph into locked packages, sorted by
-/// `(id, version)` for a deterministic `wado.lock`.
-///
-/// # Errors
-///
-/// Returns [`ResolveError`] on provider failure, an unsatisfiable requirement,
-/// a missing registry, or a not-yet-supported source kind.
 pub async fn resolve(
     manifest: &Manifest,
     provider: &impl DependencyProvider,
 ) -> Result<Vec<LockedPackage>, ResolveError> {
     let mut resolved: BTreeMap<String, LockedPackage> = BTreeMap::new();
-    // Direct child ids per resolved id, filled while resolving, joined with the
-    // children's chosen versions once everything is known.
+    // Child ids per id; joined with the children's chosen versions in a second pass.
     let mut children: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     let mut queue: VecDeque<Frame> = VecDeque::new();
@@ -132,18 +105,14 @@ pub async fn resolve(
     enqueue(&mut queue, &manifest.dev_dependencies, manifest, "", true);
 
     while let Some(frame) = queue.pop_front() {
-        // Path deps are resolved fresh and never locked (WEP); traverse them so
-        // any registry deps underneath still get locked. Git/workspace are not
-        // resolved here yet.
         let (registry, package, version) = match &frame.source {
             DependencySource::Registry {
                 registry,
                 package,
                 version,
             } => (registry, package, version),
+            // Path deps are traversed for transitive deps but never locked (WEP).
             DependencySource::Path { path, .. } => {
-                // A nested path dep's `path` is relative to the manifest that
-                // declared it; rebase onto that manifest's directory.
                 let dep_path = join_base(&frame.base, path);
                 let dep_manifest = provider
                     .load_path_manifest(&dep_path)
@@ -171,8 +140,7 @@ pub async fn resolve(
                 dep: frame.key.clone(),
             }
         })?;
-        // Lock id `registry+<url>/<package>`. The package is `ns:pkg` (no `/`),
-        // so the boundary is the last `/` even when the url contains `/`.
+        // package is `ns:pkg` (no `/`), so the last `/` splits url from package.
         let id = format!("registry+{url}/{package}");
         let req =
             VersionSpecifier::parse(version).map_err(|e| ResolveError::InvalidRequirement {
@@ -180,10 +148,8 @@ pub async fn resolve(
                 requirement: version.clone(),
                 reason: e.to_string(),
             })?;
+        // Already resolved: a conflicting requirement errors; a non-dev use clears dev.
         if let Some(existing) = resolved.get_mut(&id) {
-            // Already resolved. Verify the chosen version satisfies this
-            // requirement too — a real conflict is an error, not a silent
-            // wrong lock. A non-dev requirement downgrades a dev-only mark.
             let existing_ver =
                 Version::parse(&existing.version).expect("locked version came from Version");
             if !req.matches(&existing_ver) {
@@ -216,7 +182,6 @@ pub async fn resolve(
             .await
             .map_err(ResolveError::Provider)?;
 
-        // Enqueue transitive deps against the fetched manifest's own registries.
         let mut child_ids = Vec::new();
         for (ckey, cdep) in &info.manifest.dependencies {
             if let DependencySource::Registry {
@@ -280,8 +245,7 @@ pub async fn resolve(
     Ok(out)
 }
 
-/// Compare two locked version strings by semver, not lexically (so `1.9.0`
-/// orders before `1.10.0`). Both strings were produced by `Version::to_string`.
+// Order versions by semver, not lexically (so `1.9.0` precedes `1.10.0`).
 fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
     match (Version::parse(a), Version::parse(b)) {
         (Ok(av), Ok(bv)) => av.cmp(&bv),
@@ -289,8 +253,7 @@ fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
     }
 }
 
-/// Join a path-dependency `path` onto its declarer's directory. `..` is left
-/// for the filesystem to normalize when the manifest is read.
+// Join a path dep onto its declarer's dir; `..` is normalized by the filesystem.
 fn join_base(base: &str, path: &str) -> String {
     if base.is_empty() {
         path.to_string()
@@ -419,7 +382,6 @@ default = "https://wa.dev"
         block_on(async {
             let manifest = root(r#""ns:a" = { version = "^1.0.0" }"#);
             let mut provider = InMemoryDependencyProvider::new();
-            // a@1.0.0 depends on b ^1.0
             let a_manifest: Manifest = r#"
 [package]
 name = "a"
@@ -462,7 +424,6 @@ default = "https://wa.dev"
     #[test]
     fn incompatible_requirements_conflict() {
         block_on(async {
-            // root → a (^1.0) and b (^1.0); a wants ns:c ^1.0, b wants ns:c =2.0.
             let manifest = root(
                 r#""ns:a" = { version = "^1.0.0" }
 "ns:b" = { version = "^1.0.0" }"#,
@@ -512,7 +473,6 @@ default = "https://wa.dev"
     #[test]
     fn non_dev_requirement_downgrades_dev_mark() {
         block_on(async {
-            // ns:x is both a dev-dependency and a normal dependency → not dev.
             let manifest: Manifest = r#"
 [package]
 name = "app"
@@ -545,7 +505,6 @@ default = "https://wa.dev"
     #[test]
     fn nested_path_dep_rebases_onto_declarer() {
         block_on(async {
-            // root → path `a`; a → path `../b` (relative to a/), b → registry dep.
             let manifest: Manifest = r#"
 [package]
 name = "app"
@@ -617,8 +576,6 @@ default = "https://wa.dev"
     #[test]
     fn path_dep_is_traversed_but_not_locked() {
         block_on(async {
-            // Root → path dep (../shared), which itself depends on a registry
-            // package. The registry dep is locked; the path dep is not.
             let manifest: Manifest = r#"
 [package]
 name = "app"

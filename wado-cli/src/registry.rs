@@ -1,9 +1,5 @@
-//! A filesystem-backed [`DependencyProvider`] for `wado update`.
-//!
-//! Path dependencies are read from disk relative to the project root. The
-//! registry (OCI) and git backends are not wired yet — they return a clear
-//! "pending" error until the minimal OCI read-client and git fetch land. This
-//! keeps the resolution pipeline runnable end-to-end for path graphs today.
+//! A [`DependencyProvider`] for `wado update` that resolves path deps from
+//! disk; the registry (OCI) and git backends are not wired yet.
 
 use std::future::{Future, ready};
 use std::path::PathBuf;
@@ -12,8 +8,6 @@ use wado_manifest::{
     DependencyProvider, GitTagInfo, Manifest, ProviderError, RegistryPackageInfo, Version,
 };
 
-/// Resolves path dependencies from the local filesystem; registry and git are
-/// not implemented yet.
 pub struct FilesystemProvider {
     root: PathBuf,
 }
@@ -31,8 +25,7 @@ impl FilesystemProvider {
         } else {
             full
         };
-        // A path dep pointing at a single `.wado` file (or a directory without
-        // a wado.toml) carries no transitive dependencies of its own.
+        // A single-file path dep (or a dir without a wado.toml) has no transitive deps.
         if toml_path.file_name().and_then(|n| n.to_str()) != Some("wado.toml")
             || !toml_path.is_file()
         {

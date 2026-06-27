@@ -181,11 +181,8 @@ fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
     })
 }
 
-/// Print non-fatal manifest warnings to stderr.
-///
-/// Called at command boundaries that resolve the project (build and dependency
-/// commands), not inside `discover`/`load_from_dir` — so commands that walk many
-/// directories (`wado test`, `wado format`) don't re-emit them per directory.
+// Call at a command boundary, not inside `discover`/`load_from_dir`, so commands
+// that walk many directories (`wado test`, `wado format`) don't re-emit per dir.
 pub fn emit_manifest_warnings(project: &ProjectManifest) {
     let path = project.root.join(MANIFEST_FILENAME);
     for w in project.manifest.warnings() {

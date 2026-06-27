@@ -33,11 +33,8 @@ impl Manifest {
         self.world.get(world_fq).map(String::as_str)
     }
 
-    /// Deterministic `sha256:` hash of the `[dependencies]` + `[dev-dependencies]`
-    /// sections, for lock-file staleness detection. Keys are sorted and each
-    /// source is rendered to a normalized fingerprint so that semantically
-    /// equal manifests hash equally (an omitted `registry` matches the default
-    /// registry; a path dependency's publish source is included).
+    /// Deterministic `sha256:` hash of `[dependencies]` + `[dev-dependencies]`
+    /// for lock staleness. Sources are normalized so equal manifests hash equally.
     #[must_use]
     pub fn deps_hash(&self) -> String {
         use sha2::{Digest, Sha256};
@@ -67,8 +64,6 @@ impl Manifest {
         out
     }
 
-    /// Non-fatal warnings for this manifest. Computed on demand; the consumer
-    /// decides how to surface them.
     #[must_use]
     pub fn warnings(&self) -> Vec<ManifestWarning> {
         let keys = self
@@ -82,12 +77,9 @@ impl Manifest {
     }
 }
 
-/// A non-fatal manifest issue surfaced to the user.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ManifestWarning {
-    /// A dependency key is a bare name (no `:`). Deprecated by WEP: Package and
-    /// Module Specifier Syntax — a key must be an open coordinate `ns:pkg` or a
-    /// `lib:nick` indirection. Accepted for now; will become an error.
+    /// Bare key (no `:`); deprecated in favor of `ns:pkg` / `lib:nick` (WEP).
     BareDependencyKey { key: String },
 }
 
@@ -478,19 +470,14 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
         });
     }
 
-    // Open coordinate: the key is itself the registry identity
-    // (`"ns:pkg" = { version = "..." }`), `package` omitted, default registry
-    // unless `registry` names one. `build_registry_source` reports a missing
-    // `version` as MissingField. See WEP: Package Manifest.
+    // Open coordinate: the key is its own registry identity, `package` omitted.
     if is_open_coordinate(name) {
         return Ok(Dependency {
             source: build_registry_source(name, name.to_string(), &raw)?,
         });
     }
 
-    // A registry-shaped dep whose key is not a coordinate and has no `package`:
-    // the registry identity is unknown. Point at the real fix rather than the
-    // generic "specify a source" message.
+    // Registry-shaped but the identity is unknown (non-coordinate key, no `package`).
     if raw.registry.is_some() || raw.version.is_some() {
         return Err(ManifestError::ConflictingSource {
             dep_name: name.to_string(),
@@ -506,9 +493,7 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
     })
 }
 
-/// Stable, normalized rendering of a dependency source for [`Manifest::deps_hash`].
-/// An omitted registry renders as `default` so it matches an explicit
-/// `registry = "default"`; a path dependency's publish source is included.
+// Normalized rendering for `deps_hash`: an omitted registry renders as `default`.
 fn source_fingerprint(source: &DependencySource) -> String {
     match source {
         DependencySource::Registry {
@@ -537,9 +522,8 @@ fn source_fingerprint(source: &DependencySource) -> String {
     }
 }
 
-/// A dependency key is an open coordinate `ns:pkg` (exactly two non-empty
-/// segments) whose namespace is not a reserved/indirection prefix. Such a key
-/// is its own registry identity, so `package` may be omitted.
+// An open coordinate `ns:pkg` (two non-empty, non-reserved segments) is its own
+// registry identity, so `package` may be omitted.
 fn is_open_coordinate(key: &str) -> bool {
     match key.split_once(':') {
         Some((ns, pkg)) => {
@@ -579,8 +563,8 @@ fn build_git_source(name: &str, raw: &RawDependency) -> Result<DependencySource,
     Ok(DependencySource::Git { url, pin })
 }
 
-/// `package` is the resolved registry identity: the explicit `package` field
-/// for a `lib:` nickname, or the dependency key itself for an open coordinate.
+// `package` is the resolved identity: the `package` field, or the key itself
+// for an open coordinate.
 fn build_registry_source(
     name: &str,
     package: String,
@@ -656,8 +640,6 @@ router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
 
     #[test]
     fn parse_open_coordinate_registry_dep() {
-        // WEP form: the key is itself the package identity, `package` omitted,
-        // default registry. See wep-2026-02-14-package-manifest.md.
         let toml = r#"
 [package]
 name = "app"
@@ -686,8 +668,6 @@ default = "https://wa.dev"
 
     #[test]
     fn bare_dependency_key_warns_but_parses() {
-        // Bare keys are deprecated (WEP), accepted for now with a warning.
-        // Coordinate / `lib:` keys produce no warning.
         let toml = r#"
 [package]
 name = "app"
@@ -712,8 +692,6 @@ default = "https://wa.dev"
 
     #[test]
     fn deps_hash_normalizes_default_registry() {
-        // An omitted `registry` and an explicit `registry = "default"` resolve
-        // to the same package, so they must hash equally (no false staleness).
         let implicit = r#"
 [package]
 name = "app"
@@ -758,9 +736,6 @@ default = "oci://ghcr.io/acme"
 
     #[test]
     fn parse_lib_nickname_path_dep() {
-        // A `lib:` nickname is the WEP home for indirection — local/path/git
-        // refs that have no public coordinate. It must keep working: the key
-        // carries a `:` but resolves by its `path` source, not as a coordinate.
         let toml = r#"
 [package]
 name = "app"
