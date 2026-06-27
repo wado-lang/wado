@@ -1,0 +1,34 @@
+// Regression: a GC struct local introduced by a destructuring binding inside a
+// loop (`for let (a, n) of pairs`) must not be Hot-Field-Scalarized. HFS hoists
+// `let __hfs = a.sum;` to the loop pre-header, where `a` — bound per-iteration
+// by the destructure — is still unbound, so the hoisted read null-derefs (trap).
+//
+// Root cause: `collect_locals_introduced` listed loop-introduced locals (to
+// exclude them from scalarization) but skipped pattern bindings other than match
+// arms, so the destructure-bound `a` was missing from the exclusion set and HFS
+// scalarized it. The fix collects every pattern binding. Reads + writes of
+// `a.sum` here clear MIN_ACCESS_COUNT so HFS would fire without the guard.
+
+use { println, Stdout } from "core:cli";
+
+struct Acc { sum: i32 }
+
+export fn run() with Stdout {
+    let mut pairs: List<[Acc, i32]> = [];
+    pairs.push([Acc { sum: 0 }, 1]);
+    pairs.push([Acc { sum: 0 }, 10]);
+
+    let mut total = 0;
+    for let (a, n) of pairs {
+        a.sum = a.sum + n;
+        total = total + a.sum;
+        a.sum = a.sum + n;
+        total = total + a.sum;
+    }
+    println(`{total}`);
+}
+
+__DATA__
+{
+    "stdout": "33\n"
+}

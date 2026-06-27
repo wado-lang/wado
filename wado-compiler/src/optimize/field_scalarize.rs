@@ -82,7 +82,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -779,9 +779,13 @@ fn count_field_accesses_in_block(
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
     type_table: &TypeTable,
 ) {
-    for sid in body.blocks[block].stmts.clone() {
-        count_field_accesses_in_stmt(body, sid, counts, type_table);
-    }
+    count_field_accesses_node(
+        body,
+        NodeRef::Block(block),
+        counts,
+        FaCtx::default(),
+        type_table,
+    );
 }
 
 /// Walk the function body once and collect every GC-heap-typed local that
@@ -1064,22 +1068,23 @@ fn collect_locals_introduced_node(body: &Body, node: NodeRef, out: &mut IndexSet
             StmtKind::Loop { .. } => return,
             _ => {}
         },
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            // Closure bodies live in a separate local-index namespace from the
-            // enclosing function; recursing in would mistake closure-local
-            // indices for outer-function locals.
-            ExprKind::ClosureToCanonical { .. } => return,
-            // Match-arm pattern bindings introduce locals. Other patterns
-            // (e.g. `LetDestructure`) are intentionally not collected, matching
-            // the previous visitor.
-            ExprKind::Match { arms, .. } => {
-                for pid in arms.iter().map(|a| a.pattern).collect::<Vec<_>>() {
-                    collect_pattern_bindings(body, pid, out);
-                }
+        // Closure bodies live in a separate local-index namespace from the
+        // enclosing function; recursing in would mistake closure-local indices
+        // for outer-function locals.
+        NodeRef::Expr(e) if matches!(&body.exprs[e].kind, ExprKind::ClosureToCanonical { .. }) => {
+            return;
+        }
+        // Every pattern binding (match arm, `let`-destructure, `if let`, …)
+        // introduces a loop-local local that is unbound at the pre-header, so it
+        // must be excluded from scalarization exactly like a `Let`. Missing one
+        // lets HFS hoist `let __hfs = local.field` over an unbound local — a
+        // null-deref trap.
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                out.insert(*local_index);
             }
-            _ => {}
-        },
-        NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        NodeRef::Expr(_) | NodeRef::Block(_) => {}
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
@@ -1088,368 +1093,267 @@ fn collect_locals_introduced_node(body: &Body, node: NodeRef, out: &mut IndexSet
     }
 }
 
-fn collect_pattern_bindings(body: &Body, pid: PatId, out: &mut IndexSet<u32>) {
-    match &body.pats[pid].kind {
-        PatKind::Binding { local_index, .. } => {
-            out.insert(*local_index);
-        }
-        PatKind::Tuple(ps, _) | PatKind::Or(ps) => {
-            for p in ps.clone() {
-                collect_pattern_bindings(body, p, out);
-            }
-        }
-        PatKind::Variant { bindings, .. } => {
-            for p in bindings.clone() {
-                collect_pattern_bindings(body, p, out);
-            }
-        }
-        PatKind::Struct { fields, .. } => {
-            for p in fields.iter().map(|f| f.pattern).collect::<Vec<_>>() {
-                collect_pattern_bindings(body, p, out);
-            }
-        }
-        PatKind::Wildcard
-        | PatKind::Literal(_)
-        | PatKind::Enum { .. }
-        | PatKind::ConstantValue { .. }
-        | PatKind::Range { .. } => {}
-    }
+/// Positional context for the field-access tally. Both flags propagate exactly
+/// one level (`Assign` → target; a call → its args/receiver); every other node
+/// resets them, which is why neutral arms can delegate descent to `for_each_child`.
+#[derive(Clone, Copy, Default)]
+struct FaCtx {
+    is_assign_target: bool,
+    in_call_arg: bool,
 }
 
-fn count_field_accesses_in_stmt(
-    body: &Body,
-    stmt: StmtId,
-    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-    type_table: &TypeTable,
-) {
-    match &body.stmts[stmt].kind {
-        StmtKind::Let { value, .. } => {
-            // A Let inside a loop defines a new local variable. Unlike Assign,
-            // it doesn't reassign an existing local. We don't need to mark
-            // anything as fully assigned here — only process the value expression.
-            //
-            // However, if the value is a Local reference (e.g. `__local_47 = pos`),
-            // this creates an alias. Any field modifications through the alias
-            // won't be tracked by the scalarization, so mark the original as aliased.
-            let value = *value;
-            if let Some(ve) = value.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
-                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
-            {
-                mark_local_aliased(*index, counts);
-            }
-            count_field_accesses_in_operand(body, value, counts, false, false, type_table);
-        }
-        StmtKind::Expr(expr) => {
-            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
-        }
-        StmtKind::Return { value } => {
-            if let Some(v) = *value {
-                count_field_accesses_in_operand(body, v, counts, false, false, type_table);
-            }
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            let (condition, then_block, else_block) = (*condition, *then_block, *else_block);
-            count_field_accesses_in_operand(body, condition, counts, false, false, type_table);
-            count_field_accesses_in_block(body, then_block, counts, type_table);
-            if let Some(eb) = else_block {
-                count_field_accesses_in_block(body, eb, counts, type_table);
-            }
-        }
-        StmtKind::Loop { body: _ } => {
-            // Do NOT recurse into nested loops. Each loop level is processed
-            // independently by its own scalarize_loop call in scalarize_block.
-            // Recursing here would cause outer-level HFS to hoist fields that
-            // are only accessed inside an inner loop, potentially before the
-            // struct containing them is even initialized.
-        }
-        StmtKind::LabeledBlock { block, .. } => {
-            count_field_accesses_in_block(body, *block, counts, type_table);
-        }
-        StmtKind::Break { value, .. } => {
-            if let Some(v) = *value {
-                count_field_accesses_in_operand(body, v, counts, false, false, type_table);
-            }
-        }
-        StmtKind::Continue => {}
-        StmtKind::LetDestructure { value, .. } => {
-            count_field_accesses_in_operand(body, *value, counts, false, false, type_table);
-        }
-    }
-}
-
-fn count_field_accesses_in_operand(
+fn count_field_accesses_operand(
     body: &Body,
     op: Operand,
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-    is_assign_target: bool,
-    in_call_arg: bool,
+    ctx: FaCtx,
     type_table: &TypeTable,
 ) {
-    if let Some(e) = op.as_expr() {
-        count_field_accesses_in_expr(body, e, counts, is_assign_target, in_call_arg, type_table);
+    if let Operand::Expr(e) = op {
+        count_field_accesses_node(body, NodeRef::Expr(e), counts, ctx, type_table);
     }
 }
 
-/// `in_call_arg` is `true` only when this expression is the direct value
-/// of a `Call` / `MethodCall` / `CmRawCall` / `IndirectCall` argument (or
-/// the receiver of a method call). The call's write-back/re-read
-/// mechanism synchronises HFS scalars around the call, so `&[mut] local`
-/// in this position does NOT escape and need not mark the local aliased.
-/// Anywhere else (`Let`, struct/array literal field, `Assign` rhs,
-/// `Return` / `Break` value, …) the reference escapes and the local
-/// must be marked aliased.
-fn count_field_accesses_in_expr(
+/// Tally read/write field accesses and alias-creating uses of GC-heap locals.
+/// Only the arms whose semantics depend on position (`is_assign_target` /
+/// `in_call_arg`) or that prune (`Loop`, patterns) are spelled out; neutral arms
+/// fall through to a `for_each_child` descent with the context reset.
+fn count_field_accesses_node(
     body: &Body,
-    e: ExprId,
+    node: NodeRef,
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-    is_assign_target: bool,
-    in_call_arg: bool,
+    ctx: FaCtx,
     type_table: &TypeTable,
 ) {
-    match &body.exprs[e].kind {
-        ExprKind::Assign { target, value } => {
-            let (target, value) = (*target, *value);
-            count_field_accesses_in_expr(body, target, counts, true, false, type_table);
-            count_field_accesses_in_operand(body, value, counts, false, false, type_table);
-            // If target is a direct local assignment, mark it fully assigned
-            if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
-                mark_local_fully_assigned(*index, counts);
-            }
-            // If value is a local reference (e.g., `other = pos`), the source is aliased
-            if let Some(ve) = value.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
-                && is_gc_heap_type(body.exprs[ve].type_id, type_table)
-            {
-                mark_local_aliased(*index, counts);
-            }
-        }
-        ExprKind::FieldAccess {
-            expr: inner,
-            field_index,
-            field_name,
-        } => {
-            // Match both `local.field` and `(&mut local).field` patterns.
-            // The latter occurs for `&mut local.field` which NIR represents as
-            // FieldAccess { expr: Unary { MutRef, Local { ... } }, field }.
-            let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
-            // A promoted `Operand::Value` receiver names no scalarizable local.
-            let local_info = match inner.as_expr() {
-                Some(inner_e) => match &body.exprs[inner_e].kind {
-                    ExprKind::Local { index, name } => {
-                        Some((*index, name.clone(), body.exprs[inner_e].type_id))
-                    }
-                    ExprKind::Unary {
-                        op: NirUnaryOp::MutRef,
-                        expr: ref_inner,
-                    } => {
-                        let ref_inner = *ref_inner;
-                        if let Some(re) = ref_inner.as_expr()
-                            && let ExprKind::Local { index, name } = &body.exprs[re].kind
-                        {
-                            Some((*index, name.clone(), body.exprs[re].type_id))
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                },
-                None => None,
-            };
-            if let Some((index, name, local_type_id)) = local_info {
-                let key = (index, field_index);
-                let field_type_id = body.exprs[e].type_id;
-                let info = counts.entry(key).or_insert_with(|| FieldAccessInfo {
-                    local_name: name,
-                    field_name,
-                    local_type_id,
-                    field_type_id,
-                    read_count: 0,
-                    write_count: 0,
-                    local_fully_assigned: false,
-                    aliased: false,
-                });
-                if is_assign_target {
-                    info.write_count += 1;
-                } else {
-                    info.read_count += 1;
-                }
-            } else {
-                count_field_accesses_in_operand(body, inner, counts, false, false, type_table);
+    match node {
+        // A `ConstantValue` pattern's expr can carry `local.field` reads or an
+        // alias-creating `&local`; descend so they are tallied — a missed alias
+        // would let HFS wrongly scalarize an aliased field (stale-scalar miscompile).
+        NodeRef::Pat(_) => count_field_accesses_children(body, node, counts, type_table),
+        NodeRef::Block(block) => {
+            for sid in body.blocks[block].stmts.clone() {
+                count_field_accesses_node(
+                    body,
+                    NodeRef::Stmt(sid),
+                    counts,
+                    FaCtx::default(),
+                    type_table,
+                );
             }
         }
-        ExprKind::Binary { left, right, .. } => {
-            let (left, right) = (*left, *right);
-            count_field_accesses_in_operand(body, left, counts, false, false, type_table);
-            count_field_accesses_in_operand(body, right, counts, false, false, type_table);
-        }
-        ExprKind::Unary { op, expr } => {
-            // `&local` / `&mut local` taken outside a direct call-argument
-            // position escapes: the reference can be stored in a struct
-            // field (e.g. `Formatter { buf: &mut __tmpl_buf }`), a local,
-            // or returned, and writes through that alias do not go via
-            // any HFS scalar. Mark the local aliased so HFS skips it.
-            //
-            // Direct call arguments are exempt because the call's write-
-            // back/re-read mechanism synchronises the scalar around the
-            // call, bounding the alias's lifetime to that single call.
-            //
-            // For `&[mut] local` we also stop the recursion: the inner
-            // `Local` is the place we take the address of, not a
-            // value-position read, so it must not trigger the Local arm
-            // below (which would over-mark the local as aliased even
-            // when the address is consumed by a call's write-back/
-            // re-read mechanism).
-            let (op, inner) = (*op, *expr);
-            if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                && let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-            {
-                if !in_call_arg && is_gc_heap_type(body.exprs[ie].type_id, type_table) {
+        NodeRef::Stmt(s) => match &body.stmts[s].kind {
+            StmtKind::Let { value, .. } => {
+                // A bare GC-`Local` value aliases its source (the struct is a
+                // reference, so the copy shares the heap object); mutations
+                // through the new binding bypass the source's HFS scalar.
+                let value = *value;
+                if let Some(ve) = value.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                    && is_gc_heap_type(body.exprs[ve].type_id, type_table)
+                {
                     mark_local_aliased(*index, counts);
                 }
-                return;
+                count_field_accesses_operand(body, value, counts, FaCtx::default(), type_table);
             }
-            count_field_accesses_in_operand(body, inner, counts, false, false, type_table);
-        }
-        ExprKind::Cast { expr, .. } => {
-            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
-        }
-        ExprKind::Call { args, .. } => {
-            for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
-            }
-        }
-        ExprKind::MethodCall { receiver, args, .. } => {
-            let receiver = *receiver;
-            let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-            count_field_accesses_in_operand(body, receiver, counts, false, true, type_table);
-            for aid in arg_ids {
-                count_field_accesses_in_expr(body, aid, counts, false, true, type_table);
-            }
-        }
-        ExprKind::CmRawCall { args, .. } => {
-            for aid in args.clone() {
-                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
-            }
-        }
-        ExprKind::Index { expr, index } => {
-            let (expr, index) = (*expr, *index);
-            count_field_accesses_in_operand(body, expr, counts, false, false, type_table);
-            count_field_accesses_in_operand(body, index, counts, false, false, type_table);
-        }
-        ExprKind::Block(block) => {
-            count_field_accesses_in_block(body, *block, counts, type_table);
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
-            count_field_accesses_in_operand(body, condition, counts, false, false, type_table);
-            count_field_accesses_in_block(body, then_branch, counts, type_table);
-            if let Some(eb) = else_branch {
-                count_field_accesses_in_block(body, eb, counts, type_table);
-            }
-        }
-        ExprKind::StructLiteral { fields, .. } => {
-            for fid in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                count_field_accesses_in_operand(body, fid, counts, false, false, type_table);
-            }
-        }
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-            for eid in elements.clone() {
-                count_field_accesses_in_operand(body, eid, counts, false, false, type_table);
-            }
-        }
-        ExprKind::IndirectCall { callee, args, .. } => {
-            let callee = *callee;
-            let arg_ids = args.clone();
-            count_field_accesses_in_operand(body, callee, counts, false, false, type_table);
-            for aid in arg_ids {
-                count_field_accesses_in_operand(body, aid, counts, false, true, type_table);
-            }
-        }
-        ExprKind::ClosureToCanonical { functor, .. } => {
-            count_field_accesses_in_operand(body, *functor, counts, false, false, type_table);
-        }
-        ExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = *payload {
-                count_field_accesses_in_operand(body, p, counts, false, false, type_table);
-            }
-        }
-        ExprKind::LabeledBlock { block, .. } => {
-            count_field_accesses_in_block(body, *block, counts, type_table);
-        }
-        ExprKind::GlobalVarSet { value, .. } => {
-            count_field_accesses_in_operand(body, *value, counts, false, false, type_table);
-        }
-        ExprKind::VariantTag { expr } | ExprKind::VariantTest { expr, .. } => {
-            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
-        }
-        ExprKind::VariantPayload { expr, .. } => {
-            count_field_accesses_in_operand(body, *expr, counts, false, false, type_table);
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            let scrutinee = *scrutinee;
-            let default = *default;
-            let arms = arms.clone();
-            count_field_accesses_in_operand(body, scrutinee, counts, false, false, type_table);
-            for arm in arms {
-                count_field_accesses_in_block(body, arm, counts, type_table);
-            }
-            count_field_accesses_in_block(body, default, counts, type_table);
-        }
-        ExprKind::PackedArray(_)
-        | ExprKind::Dead
-        | ExprKind::GlobalVarGet { .. }
-        | ExprKind::EnumConstruct { .. } => {}
-        ExprKind::Local { index, .. } => {
-            // Whole-local read of a GC-heap-typed local outside a direct
-            // call-argument position escapes — the value flows into a
-            // struct/tuple literal field, a break/return, a binary op, …
-            // from where the surrounding code can read or write the
-            // struct's fields without going through any HFS scalar.
-            //
-            // Concrete failure mode: `break __tmpl: __tmpl_buf` reads
-            // `__tmpl_buf.used`/`.repr` directly, but if the inlined
-            // `push_str` body that just ran wrote the new length only
-            // to the scalar, the break sees a stale `.used` and the
-            // produced `String` is truncated.
-            //
-            // Direct call arguments are exempt: the call's write-back/
-            // re-read mechanism synchronises HFS scalars around the call.
-            // Direct assignment targets are also exempt — writing TO
-            // the local is handled separately by
-            // `mark_local_fully_assigned`.
-            if !in_call_arg
-                && !is_assign_target
-                && is_gc_heap_type(body.exprs[e].type_id, type_table)
-            {
-                mark_local_aliased(*index, counts);
-            }
-        }
-        ExprKind::Match { expr, arms } => {
-            let expr = *expr;
-            let arms = arms.clone();
-            count_field_accesses_in_operand(body, expr, counts, false, false, type_table);
-            for arm in &arms {
-                if let Some(guard) = arm.guard {
-                    count_field_accesses_in_operand(body, guard, counts, false, false, type_table);
+            // Each loop level is tallied independently by its own scalarize_loop;
+            // recursing would let outer HFS hoist inner-only fields before init.
+            StmtKind::Loop { .. } => {}
+            _ => count_field_accesses_children(body, node, counts, type_table),
+        },
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Assign { target, value } => {
+                let (target, value) = (*target, *value);
+                count_field_accesses_node(
+                    body,
+                    NodeRef::Expr(target),
+                    counts,
+                    FaCtx {
+                        is_assign_target: true,
+                        in_call_arg: false,
+                    },
+                    type_table,
+                );
+                count_field_accesses_operand(body, value, counts, FaCtx::default(), type_table);
+                if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
+                    mark_local_fully_assigned(*index, counts);
                 }
-                count_field_accesses_in_operand(body, arm.body, counts, false, false, type_table);
+                if let Some(ve) = value.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                    && is_gc_heap_type(body.exprs[ve].type_id, type_table)
+                {
+                    mark_local_aliased(*index, counts);
+                }
             }
-        }
+            ExprKind::FieldAccess {
+                expr: inner,
+                field_index,
+                field_name,
+            } => {
+                // Match both `local.field` and `(&mut local).field`
+                // (`&mut local.field` lowers to FieldAccess over Unary{MutRef}).
+                let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
+                let local_info = match inner.as_expr() {
+                    Some(inner_e) => match &body.exprs[inner_e].kind {
+                        ExprKind::Local { index, name } => {
+                            Some((*index, name.clone(), body.exprs[inner_e].type_id))
+                        }
+                        ExprKind::Unary {
+                            op: NirUnaryOp::MutRef,
+                            expr: ref_inner,
+                        } => {
+                            let ref_inner = *ref_inner;
+                            if let Some(re) = ref_inner.as_expr()
+                                && let ExprKind::Local { index, name } = &body.exprs[re].kind
+                            {
+                                Some((*index, name.clone(), body.exprs[re].type_id))
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    },
+                    None => None,
+                };
+                if let Some((index, name, local_type_id)) = local_info {
+                    let key = (index, field_index);
+                    let field_type_id = body.exprs[e].type_id;
+                    let info = counts.entry(key).or_insert_with(|| FieldAccessInfo {
+                        local_name: name,
+                        field_name,
+                        local_type_id,
+                        field_type_id,
+                        read_count: 0,
+                        write_count: 0,
+                        local_fully_assigned: false,
+                        aliased: false,
+                    });
+                    if ctx.is_assign_target {
+                        info.write_count += 1;
+                    } else {
+                        info.read_count += 1;
+                    }
+                } else {
+                    count_field_accesses_operand(body, inner, counts, FaCtx::default(), type_table);
+                }
+            }
+            ExprKind::Unary { op, expr } => {
+                // `&local` / `&mut local` taken outside a direct call argument
+                // escapes (the reference can be stored / returned and writes
+                // through it bypass the HFS scalar); a call arg is exempt
+                // because the call's write-back/re-read synchronises the scalar.
+                // Either way the inner `Local` is an address, not a value read,
+                // so stop — do not let the `Local` arm over-mark it aliased.
+                let (op, inner) = (*op, *expr);
+                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                    && let Some(ie) = inner.as_expr()
+                    && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+                {
+                    if !ctx.in_call_arg && is_gc_heap_type(body.exprs[ie].type_id, type_table) {
+                        mark_local_aliased(*index, counts);
+                    }
+                } else {
+                    count_field_accesses_operand(body, inner, counts, FaCtx::default(), type_table);
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                    count_field_accesses_operand(
+                        body,
+                        aid,
+                        counts,
+                        FaCtx {
+                            is_assign_target: false,
+                            in_call_arg: true,
+                        },
+                        type_table,
+                    );
+                }
+            }
+            ExprKind::CmRawCall { args, .. } => {
+                for aid in args.clone() {
+                    count_field_accesses_operand(
+                        body,
+                        aid,
+                        counts,
+                        FaCtx {
+                            is_assign_target: false,
+                            in_call_arg: true,
+                        },
+                        type_table,
+                    );
+                }
+            }
+            ExprKind::MethodCall { receiver, args, .. } => {
+                let receiver = *receiver;
+                let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
+                count_field_accesses_operand(
+                    body,
+                    receiver,
+                    counts,
+                    FaCtx {
+                        is_assign_target: false,
+                        in_call_arg: true,
+                    },
+                    type_table,
+                );
+                for aid in arg_ids {
+                    count_field_accesses_node(
+                        body,
+                        NodeRef::Expr(aid),
+                        counts,
+                        FaCtx {
+                            is_assign_target: false,
+                            in_call_arg: true,
+                        },
+                        type_table,
+                    );
+                }
+            }
+            ExprKind::IndirectCall { callee, args, .. } => {
+                let callee = *callee;
+                let arg_ids = args.clone();
+                count_field_accesses_operand(body, callee, counts, FaCtx::default(), type_table);
+                for aid in arg_ids {
+                    count_field_accesses_operand(
+                        body,
+                        aid,
+                        counts,
+                        FaCtx {
+                            is_assign_target: false,
+                            in_call_arg: true,
+                        },
+                        type_table,
+                    );
+                }
+            }
+            ExprKind::Local { index, .. } => {
+                // A whole-value read of a GC-heap local outside a call arg or
+                // assign target escapes: the surrounding code can read/write the
+                // struct's fields without going through any HFS scalar.
+                if !ctx.in_call_arg
+                    && !ctx.is_assign_target
+                    && is_gc_heap_type(body.exprs[e].type_id, type_table)
+                {
+                    mark_local_aliased(*index, counts);
+                }
+            }
+            _ => count_field_accesses_children(body, node, counts, type_table),
+        },
+    }
+}
+
+/// Neutral descent: recurse into every child with the context reset. Pattern
+/// children are visited but tally nothing (the `Pat` arm above).
+fn count_field_accesses_children(
+    body: &Body,
+    node: NodeRef,
+    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
+    type_table: &TypeTable,
+) {
+    let mut kids = Vec::new();
+    body.for_each_child(node, |c| kids.push(c));
+    for c in kids {
+        count_field_accesses_node(body, c, counts, FaCtx::default(), type_table);
     }
 }
 
