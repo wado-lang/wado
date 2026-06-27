@@ -8,245 +8,144 @@ failed approaches) and [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
 **Performance-related TODO items live here, not in `TODO.md`.**
 
-## Benchmark state (measured 2026-06)
+## Benchmark state (measured 2026-06, dev host)
 
-`benchmark/sqlite_parse`, 13366-byte realistic SQL fixture, guest run at
-`-O2` under wasmtime:
+The basis here is **`benchmark/syntax_highlight`**: it builds the full CST
+*and* walks it (highlighting), so it exercises the realistic consumer path —
+build + traverse — not just build. `benchmark/sqlite_parse` (parse only: build
+the CST, then `result.ok()`) is kept as a build-isolation companion. Both run
+the same 13366-byte SQLite fixture, guest at `-O2`.
 
-| Parser                        |          per-iter | throughput |
-| ----------------------------- | ----------------: | ---------: |
-| **Gale (generated)**          | **~2.29 ms/iter** | ~5.83 MB/s |
-| Rust `sqlparser-rs` (release) |     ~1.62 ms/iter |  8.25 MB/s |
+Dev-host Gale numbers (`cargo run` `wado`; see the measurement note):
 
-Current gap ≈ **1.42×** vs `sqlparser-rs` release (gap is the
-hardware-robust metric: this run measured `sqlparser-rs` at 1.62 ms; an
-earlier run on another host put it at 1.90 ms — compare ratios, not
-absolutes across runs). Tokens are stored struct-of-arrays
-(`TokenStream`: parallel `i32` `kinds`/`starts`/`ends` + flat trivia
-arrays); a token is a bare `i32` index — no per-token / per-terminal
-aggregate is allocated, and every scan/dispatch read is a single
-`array.get i32`. The fixture now parses **~60× faster** than the
-137 ms/iter recorded when this section first lived in `TODO.md`.
+| benchmark                          |    per-iter | throughput |
+| ---------------------------------- | ----------: | ---------: |
+| `syntax_highlight` (build + walk)  | ~40 ms/iter |  ~330 KB/s |
+| `sqlite_parse` (build only)        | ~10 ms/iter |  ~1.3 MB/s |
 
-> **Measurement note (read before trusting the percentages).** The
-> headline table is from the release benchmark (`mise run sqlite-parse`).
-> The **profile below was captured with the dev-profile `wado`** (`cargo
-> run`, per the inner-dev-loop guidance in the root `CLAUDE.md` — no
-> release rebuild). `Cargo.toml` raises `opt-level` on `cranelift-codegen`,
-> so the JIT-compiled **guest code is near-release quality**, but the
-> wasmtime runtime, GC, and allocator run at dev speed — making the dev
-> host ~4–5× slower per iter (~10.8 ms vs ~2.29 ms release), with the
-> slack concentrated in **allocation/GC**. So the profile inflates
-> allocation-bound frames relative to pure-compute ones (`scan_*`,
-> `follow_yields`, kind-set). Read the percentages as relative, and the
-> alloc-vs-compute split as approximate.
+The release headline + comparison baselines (Gale vs `tree-sitter` for
+highlight, vs `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
+`mise run sqlite-parse` on a release host; not reproduced here (dev-only).
+
+> **Measurement note (read before trusting the percentages).** Profiles are
+> captured with the **dev-profile `wado`** (`cargo run`, per the inner-dev-loop
+> guidance in the root `CLAUDE.md`). `Cargo.toml` raises `opt-level` on
+> `cranelift-codegen`, so JIT-compiled **guest code is near-release quality**,
+> but the wasmtime runtime, GC, and allocator run at dev speed — ~4–5× slower
+> per iter, with the slack in **allocation/GC**. So the profile inflates
+> allocation-bound frames (CST build, `String`/`List` growth) relative to
+> pure-compute ones (`scan_*`, kind-set). Read the percentages as relative.
 
 Reproduce:
 
 ```sh
 cd benchmark
-# both baselines (release host — slow rebuild):
-mise run sqlite-parse
 # Gale alone, dev host, with a guest profile (self-time sampling):
-wado run --no-cache --profile guest,/tmp/p.json,1 -O2 sqlite_parse/sqlite_parse.wado
+wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_highlight.wado
 ```
 
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the
-`profiling-wado` skill's script — count **leaf** frames for self-time —
-or upload to profiler.firefox.com. The table below merges **5 dev-host
-runs @1 ms = 4177 samples** to damp per-run sampling noise.)
+`profiling-wado` skill's script — count **leaf** frames for self-time — or
+upload to profiler.firefox.com. The table below merges **5 dev-host runs @1 ms
+= 1773 samples** to damp per-run sampling noise.)
 
-## Live profile (guest sampler, 5 runs merged, 4177 samples @1 ms)
+## Live profile (syntax_highlight, guest sampler, 5 runs merged, 1773 samples @1 ms)
 
-Post-SoA shape. The old per-token `struct.new Token` frame
-(`List<Token>::push`, was 24%) is gone; the per-call rule-name `String`
-allocation now leads outright.
+Build-and-walk shape. The CST — building it, then walking it — dominates. The
+per-call rule-name `String` allocation that led the old parse-only profile is
+**gone**: the rule wrapper records the name (`push_rule_stack`) only on the cold
+error path now, so it no longer allocates on the hot success path.
 
-|   Pct | Symbol                     | role                                                            |
-| ----: | -------------------------- | --------------------------------------------------------------- |
-| 24.3% | `_gale_rule<AnyNameNode>`  | per-call rule-name `String` alloc at the wrapper                |
-|  7.6% | `Parser::last_end`         | `tokens.ends[pos-1]` — one `array.get i32`, huge call count     |
-|  6.7% | `List<i32>::grow`          | `TokenStream` array growth (the `/4` pre-size under-shoots SQL) |
-|  6.4% | `_kind_set_8`              | membership test over the big keyword set                        |
-|  4.5% | `scan_any_name`            | scan (prediction)                                               |
-|  4.4% | `follow_yields`            | runtime FOLLOW gate (LL repair), parse + scan                   |
-|  3.6% | `char::to_ascii_lowercase` | case-insensitive keyword matching                               |
-|  3.4% | `scan_expr`                | scan (LR precedence climb)                                      |
-|  2.9% | `List<i32>::push`          | `TokenStream` token push (`push_token`)                         |
-|  2.4% | `Parser::expect`           | token read                                                      |
-|  2.3% | `try_IDENTIFIER`           | lexer identifier matcher                                        |
-|  1.4% | `_parse_expr__inner`       | LR expr body                                                    |
-|  1.1% | `classify_keyword`         | keyword vs identifier disambiguation                            |
-|  1.1% | `StrCharIter::collect`     | one `input.chars().collect()` (lexer)                           |
-|  0.8% | `tokenize`                 | lexer driver                                                    |
-|  0.7% | `TokenStream::push_token`  | SoA token writer                                                |
+|   Pct | Symbol                            | role                                                |
+| ----: | --------------------------------- | --------------------------------------------------- |
+| 23.7% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
+| 11.7% | `List<CstChild>::push`            | per-node child-list build                           |
+|  7.3% | `tree_build_node`                 | CST materialization (event log → tree)              |
+|  4.9% | `HighlightVisitor::hl_visit_token`| per-token capture classify                          |
+|  3.7% | `List<CstChild>::grow`            | child-list growth                                   |
+|  3.3% | `String::push`                    | HTML output build                                   |
+|  3.2% | `String::grow`                    | HTML output growth                                  |
+|  2.5% | `scan_any_name`                   | scan (prediction)                                   |
+|  2.5% | `List<i32>::to_array`             | per-call highlight-mapping rebuild                  |
+|  2.4% | `_kind_set_8`                     | membership over the big keyword set                 |
+|  1.9% | `StrCharIter::next`               | source char walk (HTML render)                      |
+|  1.8% | `push_class`                      | HTML class emit                                     |
+|  1.7% | `BuildEvent::push`                | event-log build                                     |
+|  1.7% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
 
-Rough buckets (self-time): the per-call rule-name `String` allocation at
-the `_gale_rule` boundary (all `_gale_rule<*>` variants summed) ≈ **~27%**
-— now the dominant single cost (§1); `scan_*` ≈ **~13%**; kind-set
-membership (`_kind_set_*`) ≈ **~11%**; token-stream construction (now
-flat `i32`-array building: `List<i32>::grow`+`push`+`push_token`) ≈
-**~10%** — down from ~25% pre-SoA, and dominated by `grow` because the
-`chars.len()/4` pre-size under-shoots SQL token density (§4); `Parser`
-token reads (`last_end`+`expect`) ≈ **~10%**; lexer char-level work
-(`to_ascii_lowercase` + `classify_keyword` + `try_*` + `List<char>` +
-`collect`) ≈ **~10%**; the FOLLOW gate ≈ **~4%**.
+Rough buckets (self-time): **CST walk** (`highlight_walk`) ≈ **24%**; **CST
+build** (`CstChild` push/grow + `tree_build_node`) ≈ **23%**; **HTML render**
+(`String` push/grow + `push_class` + `escape_html_char` + `highlight_html`) ≈
+**11%**; lexer char-level (`to_ascii_lowercase` + `try_*` + `List<char>` +
+`StrCharIter`) ≈ **9%**; highlight classify (`hl_visit_token` + `classify` +
+`highlight_mapping`) ≈ **8%**; kind-set (`_kind_set_*`) ≈ **6%**; `scan_*` ≈
+**6%**; event-log build ≈ **3%**.
 
-`Parser::last_end` is still ~7.6% **by call frequency**, not per-call cost:
-the SoA already collapsed it to a single `array.get i32` (the old 4-step
-`Parser→Token→Span→end` chain is gone), and inlining/precomputation
-measured zero wall-time change — see "What does not work".
+So **the CST — build it then walk it — is ~47% of self-time**, the clear
+dominant cost on the build+walk path.
 
 ## What would move the needle
 
-Ordered by profile self-time. None are mutually exclusive; several
-multiply rather than add. (The token-stream SoA decomposition that led
-this list pre-2026-06 is done — tokens are now flat `i32` arrays; see the
-benchmark state and `git log`.)
+Ordered by profile self-time. None are mutually exclusive.
 
-### 1. Per-call rule-name `String` allocation — the `_gale_rule` boundary (~27% self-time)
+### 1. CST build + walk (~47%) — dominant, but the obvious rewrite failed
 
-**The single largest reducible cost, and now the top profile frame** (the
-SoA rework removed the per-token `struct.new` that used to sit above it).
-Every parser rule is emitted as
-`_parse_X(p, follow) = _gale_rule(_parse_X__inner(p, follow), "X")`.
-`_gale_rule<T>` records the rule name on the `ParseError.rule_stack` on
-the **error** path only:
+`highlight_walk` (~24%) traverses the materialized `CstNode` tree; building it
+(`CstChild` push/grow + `tree_build_node`, ~23%) allocates a `List<CstChild>`
+per node. The natural lever — a flat SoA arena + cursor, no per-node list — was
+implemented and **lost on both benchmarks** (build-only *and* this walk-heavy
+one): see "Failed approaches". The walk loss is specifically `children()`
+re-boxing per visited node; the retry lever recorded there is scalar child
+accessors that walk allocation-free. Until a representation that is cheap to
+*both* build and walk lands, this is the standing open problem and the largest
+prize.
 
-```wado
-fn _gale_rule<T>(r: Result<T, ParseError>, rule: String) -> Result<T, ParseError> {
-    if let Err(mut e) = r { e.rule_stack.push(rule); return Result::Err(e); }
-    return r;
-}
-```
+### 2. Per-call highlight-mapping rebuild (~4%, syntax-highlight only)
 
-The profile puts ~24% self-time on `_gale_rule<AnyNameNode>` (the
-most-entered rule — identifiers are everywhere in SQL), but it is **not a
-copy**. The WIR shows the success path is copy-free — `Result<…>` is a
-boxed `ref`, so `return r` returns a reference, and the only
-`$value_copy$` is on the cold `Err` branch:
+The generated `highlight()` calls `highlight_mapping()` **every** call, which
+rebuilds the `defaults` / `rule_names` / `overrides` lists from scratch
+(`List<i32>::to_array` 2.5% + `highlight_mapping` 1.6%). It is invariant — hoist
+it to a module-level `global` built once. Self-contained, in
+`gen_highlight` / `gen_highlight_mapping` (`highlight_gen.wado`).
 
-```text
-fn _gale_rule<AnyNameNode>(r, rule) {
-    if ref.test …::Err(r) { … $value_copy … }   // cold: only on parse failure
-    return r;                                     // returns a ref — no copy
-}
-```
+### 3. Kind-set membership — `_kind_set_*` (~6%)
 
-The real cost lives at the **call site**, in the wrapper `_parse_X`: the
-rule-name `"X"` is rebuilt on **every** rule entry as
-`struct.new String { repr: array.new_data("any_name"), used: 8 }` —
-a fresh GC allocation on the hot success path, consumed only on the cold
-error path. Thousands of these per parse dominate the allocation traffic.
+`_kind_set_8` alone is 2.4%: a `k matches { TK_… | TK_… | … }` membership test
+over the large SQLite keyword set (~125 kinds), called from scan dispatch and
+lookahead gates. Generated today as a branch/compare cascade (71 such helpers
+in the SQLite parser). A compile-time **perfect hash** or a **bitset indexed by
+token kind** (`(kind >> 5)` word + `1 << (kind & 31)`) makes it O(1) with no
+cascade. A pure-compute frame the dev host does _not_ inflate, so its release
+share is a touch higher.
 
-**Measured (dev host, same host throughout — the comparison is valid even
-though absolute times are dev-inflated; spike copies the generated parser
-and drives `queries.sql`):**
+### 4. HTML render output (~11%, syntax-highlight only)
 
-| variant                                     | per-iter | throughput |  vs base |
-| ------------------------------------------- | -------: | ---------: | -------: |
-| base (as generated)                         | ~39.1 ms |  ~342 KB/s |        — |
-| rule-name hoisted to a single shared global | ~22.9 ms |  ~582 KB/s | **−41%** |
-| `_gale_rule` bypassed entirely              | ~21.9 ms |  ~610 KB/s | **−44%** |
+`String::push`/`grow` building the HTML output is ~6%, plus `push_class`
+(per-capture class string, splitting `.` → space char-by-char) and
+`escape_html_char` (per source char). Levers: emit class names without the
+per-char `push_class` loop, and append larger runs of unescaped source instead
+of char-at-a-time. Lives in `highlight_html` / `push_class` (`highlight.wado`).
 
-The middle row is the finding: keeping the wrapper call **and** its
-`ref.test`, changing only the per-call `String` literal into one pre-built
-global, recovers ~93% of the full removal. So:
+### 5. Lexer char-level work (~9%, independent secondary lever)
 
-- **Reducing the call count is not the lever.** Removing the wrapper call
-  and `ref.test` on top of the hoist buys only ~3% more (22.9 → 21.9 ms);
-  the wrapper itself is nearly free. (This contradicts the intuition that
-  the per-rule call overhead matters — it does not.)
-- **Reducing the per-call allocation is the whole win.** Build each
-  distinct rule name once, not on every rule entry.
+Splits across `to_ascii_lowercase` (case-insensitive matching), `List<char>`
+buffer building, `StrCharIter`, and `classify_keyword`. Candidates:
 
-**Future direction.** Wado already has a const-aggregate → global hoist
-(`const_object_globalization`, see `docs/optimizer.md`), but it does not
-fire here for two reasons, both fixable: (a) its gate `is_globalizable_const`
-does not list `ExprKind::StringLiteral`, and (b) a string only takes the
-inline `array.new_fixed` const repr (vs the opaque `array.new_data` data
-segment) when its byte length is `<= string_inline_max_bytes`, which is
-**4** at `-O2` (`optimize::string_inline_max_bytes`) — far below the
-13–25-byte rule names. Even raising that threshold alone is not enough:
-the strings are inline call arguments, not `let` bindings, and the pass
-only hoists `let`-bound aggregates, so the `struct.new String` stays at
-the call site. Either path closes the gap:
-
-- **Wado-side:** teach the const-aggregate hoist to also globalize a
-  constant `String` (or any constant aggregate) appearing as an inline
-  argument, not just a `let` binding — and let the eager-const-string
-  threshold cover typical identifier-length literals. Fixes this for every
-  generated parser and any Wado program that passes string literals on a
-  hot path, with no Gale change.
-- **Gale-side:** emit each rule name as a module-level
-  `global RULE_<id>: String = "…"` once and pass that to `_gale_rule`
-  (`gen_rule_entry_wrapper` in `parser_gen.wado`), instead of inlining the
-  literal at every call. Lower-leverage but self-contained; the stronger
-  variant passes an `i32` rule-id and turns `rule_stack` into
-  `List<i32>`, eliminating hot-path string work entirely.
-
-(Release allocates faster so the share is smaller than dev-host, but the
-per-parse allocation-count drop is real and host-independent.)
-
-### 2. Kind-set membership — `_kind_set_*` (~11%)
-
-`_kind_set_8` alone is 6.4%: a `k matches { TK_… | TK_… | … }`
-membership test over the large SQLite keyword set (~125 kinds), called
-from scan dispatch and the parser's lookahead gates. Generated today as a
-branch/compare cascade (71 such helpers in the SQLite parser). A
-compile-time **perfect hash** or a **bitset indexed by token kind**
-(`(kind >> 5)` word + `1 << (kind & 31)`) turns it into O(1) with no
-branch cascade — worth it because a handful of large sets dominate. This
-is a pure-compute frame the dev host does _not_ inflate, so its release
-share is likely a touch higher than 11%.
-
-### 3. Token-array pre-size — `List<i32>::grow` 6.7%
-
-The SoA `tokenize` pre-sizes each `TokenStream` array to
-`chars.len()/4 + 1`, but SQL is token-dense (short keywords/punctuation),
-so the arrays still `grow`. Pre-sizing closer to the real token count —
-a denser divisor, or a cheap first-pass token-count estimate — would
-reclaim most of this `grow` self-time. Cheap, self-contained, in
-`gen_tokenize_fn` (`lexer_gen.wado`).
-
-### 4. Lexer char-level work (~10%, independent secondary lever)
-
-Inside lexing, work splits across `to_ascii_lowercase` (case-insensitive
-matching, 3.6%), `List<char>` buffer building, and `classify_keyword`
-(1.1%). (The `Parser`'s separate `input.chars().collect()` is **gone**:
-the SoA rework had the `TokenStream` borrow the lexer's chars, so the
-program now collects
-the source once, not twice.) Pick by what
-profiling on the predicate-correct lexer says is hottest (after Stage C
-makes predicates real — a fast tokenizer is meaningless if it tokenizes
-incorrectly). Candidates:
-
-- **Table-driven DFA** for the whole lexer (NFA → DFA → transition
-  table). Replaces both per-character dispatch and `classify_keyword`;
-  `mode` blocks become a DFA per mode plus mode-switch on accept; lexer
-  commands attach as accept-state attributes. Semantic predicates are the
-  only DFA-blocker (need a hybrid prefix + predicate gate).
-- **Trie / nested-switch on bytes** for `classify_keyword` only. Shared
-  prefixes (`IN` → `INSERT` / `INSTEAD` / `INTERSECT` / `INTO`). Smaller
-  code-size impact than a full DFA.
-- **Compile-time perfect hash** (`gperf`-style) for `classify_keyword`.
+- **Table-driven DFA** for the whole lexer (NFA → DFA → transition table).
+  Replaces per-character dispatch and `classify_keyword`; `mode` blocks become a
+  DFA per mode. Semantic predicates are the only DFA-blocker.
+- **Trie / nested-switch on bytes** or a **compile-time perfect hash**
+  (`gperf`-style) for `classify_keyword` only — smaller code-size impact.
 - **SIMD pre-scan** (Wasm `v128`) for token boundaries / character-class
-  membership in bulk, if per-byte work is tiny but the byte loop is the
-  bound.
+  membership, if per-byte work is tiny but the byte loop is the bound.
 
 ## What does not work
 
-- **Inlining hot `Parser` methods / any per-method micro-opt.**
-  `Parser::last_end` is high (~7.6%) only because of its huge call count,
-  not per-call expense — the SoA rework already made it a single
-  `tokens.ends[pos-1]` (`array.get i32`). Precomputing it (caching the
-  value in a field) or forcing inlining removes the named function from
-  the profile but measured **no wall-time change** — there is no call
-  overhead or redundant work to remove; the cost is performing that many
-  bounds-checked `array.get`s. wasmtime + Cranelift handle small Wasm
-  calls cheaply enough that inlinability is not the lever. What is left
-  here is pure call frequency, which only a caller-side restructuring (not
-  a micro-opt) could reduce.
+- **Inlining hot methods / any per-method micro-opt.** Measured **no wall-time
+  change** from forcing inlining of small hot functions — wasmtime + Cranelift
+  handle small Wasm calls cheaply, so inlinability is not the lever. Confirmed
+  again by the cursor spike, where raising the inline threshold *worsened*
+  runtime (it bloats hot loops); see "Failed approaches".
 - **Data-driven / bytecode-VM scan** (see below).
 
 ## Failed approaches (do not repeat)
