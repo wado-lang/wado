@@ -44,7 +44,7 @@ Preferred path: released `@bytecodealliance/jco` as a library + post-process.
 | `postprocess.mjs`        | Inject the future-end classes + the stream-write hook into the transpiled JS                       |
 | `harvest-intrinsics.mjs` | Extract the future-end classes from released jco's own output (version-matched)                    |
 | `missing-intrinsics.js`  | The harvested classes (generated; regenerate after a jco bump)                                     |
-| `future-trigger.wado`    | One-line `Future::<i32>::new()` that makes released jco emit those classes                         |
+| `future_trigger.wado`    | One-line `Future::<i32>::new()` that makes released jco emit those classes                         |
 
 mise tasks:
 

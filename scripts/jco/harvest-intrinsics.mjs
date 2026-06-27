@@ -1,5 +1,5 @@
 // Extract the FutureEnd / FutureWritableEnd / FutureReadableEnd classes from a
-// future-using component (future-trigger.wado) transpiled by released jco, so
+// future-using component (future_trigger.wado) transpiled by released jco, so
 // they stay version-matched. Re-run after a jco bump to refresh.
 //
 // Usage: node harvest-intrinsics.mjs <component.wasm> [out.js]
@@ -37,7 +37,7 @@ const blocks = CLASSES.map((c) => {
   const body = extractClass(src, c);
   if (!body) {
     console.error(`error: ${c} not found in transpiled output.`);
-    console.error("The trigger component must exercise future.new (e.g. future-trigger.wado).");
+    console.error("The trigger component must exercise future.new (e.g. future_trigger.wado).");
     process.exit(1);
   }
   console.error(`  ${c}: ${body.split("\n").length} lines`);
