@@ -85,6 +85,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 const MIN_ACCESS_COUNT: usize = 4;
@@ -1050,47 +1051,40 @@ fn visit_expr_for_alias(
 /// locals whose owning storage is unbound at the loop's pre-header — those
 /// locals must not be scalarized at this loop level, otherwise the hoisted
 /// `let __hfs_field = local.field;` null-derefs at runtime.
-fn collect_locals_introduced_in_block(body: &Body, block: BlockId) -> IndexSet<u32> {
-    let mut out = IndexSet::default();
-    collect_locals_introduced_node(body, NodeRef::Block(block), &mut out);
-    out
+struct IntroducedLocals<'a> {
+    out: &'a mut IndexSet<u32>,
 }
 
-fn collect_locals_introduced_node(body: &Body, node: NodeRef, out: &mut IndexSet<u32>) {
-    match node {
-        NodeRef::Stmt(s) => match &body.stmts[s].kind {
-            StmtKind::Let { local_index, .. } => {
-                out.insert(*local_index);
+impl NirRefVisitor for IntroducedLocals<'_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        match node {
+            NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                StmtKind::Let { local_index, .. } => {
+                    self.out.insert(*local_index);
+                }
+                StmtKind::Loop { .. } => return,
+                _ => {}
+            },
+            NodeRef::Expr(e)
+                if matches!(&body.exprs[e].kind, ExprKind::ClosureToCanonical { .. }) =>
+            {
+                return;
             }
-            // Skip nested loops: their locals are processed by their own
-            // scalarize_loop pass and are not visible at *this* loop's
-            // pre-header anyway.
-            StmtKind::Loop { .. } => return,
-            _ => {}
-        },
-        // Closure bodies live in a separate local-index namespace from the
-        // enclosing function; recursing in would mistake closure-local indices
-        // for outer-function locals.
-        NodeRef::Expr(e) if matches!(&body.exprs[e].kind, ExprKind::ClosureToCanonical { .. }) => {
-            return;
-        }
-        // Every pattern binding (match arm, `let`-destructure, `if let`, …)
-        // introduces a loop-local local that is unbound at the pre-header, so it
-        // must be excluded from scalarization exactly like a `Let`. Missing one
-        // lets HFS hoist `let __hfs = local.field` over an unbound local — a
-        // null-deref trap.
-        NodeRef::Pat(p) => {
-            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
-                out.insert(*local_index);
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                    self.out.insert(*local_index);
+                }
             }
+            NodeRef::Expr(_) | NodeRef::Block(_) => {}
         }
-        NodeRef::Expr(_) | NodeRef::Block(_) => {}
+        self.walk_node(body, node);
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_locals_introduced_node(body, c, out);
-    }
+}
+
+fn collect_locals_introduced_in_block(body: &Body, block: BlockId) -> IndexSet<u32> {
+    let mut out = IndexSet::default();
+    IntroducedLocals { out: &mut out }.visit_node(body, NodeRef::Block(block));
+    out
 }
 
 /// Positional context for the field-access tally. Both flags propagate exactly
@@ -1100,6 +1094,22 @@ fn collect_locals_introduced_node(body: &Body, node: NodeRef, out: &mut IndexSet
 struct FaCtx {
     is_assign_target: bool,
     in_call_arg: bool,
+}
+
+impl FaCtx {
+    fn call_arg() -> Self {
+        Self {
+            is_assign_target: false,
+            in_call_arg: true,
+        }
+    }
+
+    fn assign_target() -> Self {
+        Self {
+            is_assign_target: true,
+            in_call_arg: false,
+        }
+    }
 }
 
 fn count_field_accesses_operand(
@@ -1167,10 +1177,7 @@ fn count_field_accesses_node(
                     body,
                     NodeRef::Expr(target),
                     counts,
-                    FaCtx {
-                        is_assign_target: true,
-                        in_call_arg: false,
-                    },
+                    FaCtx::assign_target(),
                     type_table,
                 );
                 count_field_accesses_operand(body, value, counts, FaCtx::default(), type_table);
@@ -1257,54 +1264,24 @@ fn count_field_accesses_node(
             }
             ExprKind::Call { args, .. } => {
                 for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    count_field_accesses_operand(
-                        body,
-                        aid,
-                        counts,
-                        FaCtx {
-                            is_assign_target: false,
-                            in_call_arg: true,
-                        },
-                        type_table,
-                    );
+                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
                 }
             }
             ExprKind::CmRawCall { args, .. } => {
                 for aid in args.clone() {
-                    count_field_accesses_operand(
-                        body,
-                        aid,
-                        counts,
-                        FaCtx {
-                            is_assign_target: false,
-                            in_call_arg: true,
-                        },
-                        type_table,
-                    );
+                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
                 }
             }
             ExprKind::MethodCall { receiver, args, .. } => {
                 let receiver = *receiver;
                 let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
-                count_field_accesses_operand(
-                    body,
-                    receiver,
-                    counts,
-                    FaCtx {
-                        is_assign_target: false,
-                        in_call_arg: true,
-                    },
-                    type_table,
-                );
+                count_field_accesses_operand(body, receiver, counts, FaCtx::call_arg(), type_table);
                 for aid in arg_ids {
                     count_field_accesses_node(
                         body,
                         NodeRef::Expr(aid),
                         counts,
-                        FaCtx {
-                            is_assign_target: false,
-                            in_call_arg: true,
-                        },
+                        FaCtx::call_arg(),
                         type_table,
                     );
                 }
@@ -1314,16 +1291,7 @@ fn count_field_accesses_node(
                 let arg_ids = args.clone();
                 count_field_accesses_operand(body, callee, counts, FaCtx::default(), type_table);
                 for aid in arg_ids {
-                    count_field_accesses_operand(
-                        body,
-                        aid,
-                        counts,
-                        FaCtx {
-                            is_assign_target: false,
-                            in_call_arg: true,
-                        },
-                        type_table,
-                    );
+                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
                 }
             }
             ExprKind::Local { index, .. } => {
