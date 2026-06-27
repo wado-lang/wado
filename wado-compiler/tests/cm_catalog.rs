@@ -171,7 +171,6 @@ fn cases() -> Vec<Case> {
     ]
 }
 
-/// Resolve a kebab-named export to its dynamic [`wasmtime::component::Func`].
 fn lookup_func(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -185,11 +184,9 @@ fn lookup_func(
         .ok_or_else(|| format!("export `{export}` not found"))
 }
 
-/// Round-trip a `future<T>` identity export. The oracle is functional, not
-/// `Val` equality: a future handle is single-use, so equality of the returned
-/// handle with the input is meaningless. Instead we lower a host-created future
-/// into the export and assert the lifted result re-types to `future<T>` and is a
-/// live handle — proving lift (param) and lower (result) of the handle slot.
+/// A future handle is single-use, so the oracle is functional, not `Val`
+/// equality: lower a host-created future in, assert the result re-types to
+/// `future<T>` and closes cleanly.
 async fn future_round_trip<T>(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -225,8 +222,6 @@ where
         .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
 }
 
-/// Round-trip a `stream<T>` identity export, the streaming analogue of
-/// [`future_round_trip`].
 async fn stream_round_trip<T>(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -262,10 +257,8 @@ where
         .map_err(|e| format!("`{export}`: result handle close failed: {e:#}"))
 }
 
-/// Round-trip a `future<u32>` embedded inside an aggregate (`option`, `result`,
-/// `list`, `tuple`, `record`). `wrap` builds the input `Val` around the future;
-/// `unwrap` extracts the inner `FutureAny` from the lifted result. This is where
-/// lift/lower of a handle at a computed aggregate offset is exercised.
+/// `wrap` builds the input `Val` around a `future<u32>`; `unwrap` extracts the
+/// inner `FutureAny` from the lifted result.
 async fn embedded_future_round_trip(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -295,7 +288,6 @@ async fn embedded_future_round_trip(
         .map_err(|e| format!("`{export}`: inner handle close failed: {e:#}"))
 }
 
-/// `embedded_future_round_trip` for a `stream<u8>` carried inside an aggregate.
 async fn embedded_stream_round_trip(
     store: &mut Store<common::WasiState>,
     instance: &Instance,
@@ -403,8 +395,6 @@ fn run_round_trips(opt_level: OptLevel) {
             }
         }
 
-        // Async handle types use a functional oracle (see `future_round_trip`),
-        // not `Val` equality — the handle is single-use.
         macro_rules! check {
             ($call:expr) => {
                 if let Err(e) = $call.await {
@@ -414,8 +404,6 @@ fn run_round_trips(opt_level: OptLevel) {
         }
         let i = iface.as_ref();
 
-        // Bare `future<T>` (consume/produce in the guest) over the payloads the
-        // async read/write codegen supports: integer / float / bool / char.
         check!(future_round_trip(&mut store, &instance, i, "id-future-bool", true));
         check!(future_round_trip(&mut store, &instance, i, "id-future-u8", 0xABu8));
         check!(future_round_trip(&mut store, &instance, i, "id-future-u16", 0xBEEFu16));
@@ -429,10 +417,8 @@ fn run_round_trips(opt_level: OptLevel) {
         check!(future_round_trip(&mut store, &instance, i, "id-future-f64", -7.25f64));
         check!(future_round_trip(&mut store, &instance, i, "id-future-char", 'λ'));
 
-        // Bare `stream<u8>` (pass-through identity).
         check!(stream_round_trip(&mut store, &instance, i, "id-stream-u8", vec![1u8, 2, 3, 4]));
 
-        // Handles embedded in each aggregate kind.
         check!(embedded_future_round_trip(
             &mut store, &instance, i, "id-option-future",
             |v| Val::Option(Some(Box::new(v))),

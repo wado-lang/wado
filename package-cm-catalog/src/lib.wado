@@ -49,8 +49,6 @@ pub variant Mixed {
     AsFloat(f32),
 }
 
-// A record whose single field is a `future` handle: exercises lift/lower of a
-// handle slot at a named-record offset (see `id_record_future`).
 pub struct FutureCell {
     value: Future<u32>,
 }
@@ -201,23 +199,6 @@ export fn id_list_tuple_record(v: List<[Point, u32]>) -> List<[Point, u32]> {
 }
 
 // --- Async handle types (CM `future` / `stream`) ---
-//
-// `future`/`stream` are CM value types carried as a single i32 handle. Two
-// shapes appear here:
-//
-//  * Bare `future<T>` identities CONSUME the argument (read its payload) and
-//    PRODUCE the result (write the payload into a fresh future), so the
-//    payload's lift/lower is genuinely exercised — a bare handle pass-through
-//    would only move the i32 and test nothing about `T`. Covers the payloads
-//    the async read/write codegen supports today: integer / float / bool /
-//    char. Aggregate payloads, plus the streaming consume/produce path, are
-//    pending compiler support (see README "Async coverage").
-//
-//  * Embedded handles (`option<future>`, `list<stream>`, …) and `stream<u8>`
-//    are identity pass-throughs: the handle rides through a param/result slot,
-//    exercising lift/lower of a handle at an aggregate offset.
-
-// Bare `future<T>`: consume the payload, produce a fresh future.
 export fn id_future_bool(v: Future<bool>) -> Future<bool> {
     let value = v.read();
     v.drop();
@@ -327,15 +308,12 @@ export fn id_future_char(v: Future<char>) -> Future<char> {
     return rx;
 }
 
-// `stream<u8>` identity pass-through. (The streaming consume/produce path needs
-// concurrent host driving plus element-type codegen; tracked as follow-up.)
+// `stream<u8>` pass-through; consume/produce streaming is a follow-up.
 export fn id_stream_u8(v: Stream<u8>) -> Stream<u8> {
     return v;
 }
 
-// Handles embedded in aggregates: the handle sits at a computed slot/offset
-// inside the composite, so these exercise lift/lower offset arithmetic that the
-// bare cases above do not. One per aggregate kind.
+// Handles embedded in aggregates: lift/lower of a handle at a composite offset.
 export fn id_option_future(v: Option<Future<u32>>) -> Option<Future<u32>> {
     return v;
 }
