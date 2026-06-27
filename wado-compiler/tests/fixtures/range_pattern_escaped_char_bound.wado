@@ -1,0 +1,22 @@
+// A `\u`-escaped char literal as a range-pattern bound must be decoded to its
+// codepoint, not read as its first raw character (the backslash). Before the
+// fix, `'A'..='\u{7e}'` decoded the upper bound as `\` (92) instead of 126.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // 'a' (97) is within ['A'(65), '\u{7e}'(126)].
+    assert 'a' matches { 'A'..='\u{7e}' };
+    // The full ASCII range; 'a' and '{' are ASCII.
+    assert 'a' matches { '\u{0}'..='\u{7f}' };
+    assert '{' matches { '\u{0}'..='\u{7f}' };
+    // Escaped single-char pattern.
+    assert '\u{7f}' matches { '\u{7f}' };
+    // Negative: 'a' (97) is past the upper bound '\u{4a}' (74).
+    assert !('a' matches { 'A'..='\u{4a}' });
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}
