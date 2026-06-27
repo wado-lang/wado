@@ -20,7 +20,7 @@ Dev-host Gale numbers (`cargo run` `wado`; see the measurement note):
 
 | benchmark                          |    per-iter | throughput |
 | ---------------------------------- | ----------: | ---------: |
-| `syntax_highlight` (build + walk)  | ~31 ms/iter |  ~430 KB/s |
+| `syntax_highlight` (build + walk)  | ~30 ms/iter |  ~450 KB/s |
 | `sqlite_parse` (build only)        |  ~5 ms/iter |  ~2.5 MB/s |
 
 The release headline + comparison baselines (Gale vs `tree-sitter` for
@@ -49,50 +49,50 @@ wado run --no-cache --profile guest,/tmp/p.json,1 -O2 syntax_highlight/syntax_hi
 upload to profiler.firefox.com. The table below merges **5 dev-host runs @1 ms
 = 3104 samples** to damp per-run sampling noise.)
 
-## Live profile (syntax_highlight, guest sampler, 5 runs merged, 3104 samples @1 ms)
+## Live profile (syntax_highlight, guest sampler, 3 runs merged, 1879 samples @1 ms)
 
-Post-child-list-pre-size shape (~31 ms/iter). Build-and-walk: the CST —
-building it, then walking it — still leads (~38% combined), but the gap to the
-rest has narrowed. The `List<CstChild>::grow` frame is gone (the §1 fix), and
-the per-call rule-name `String` allocation that led the old parse-only profile
-is also gone (the rule wrapper records the name on the cold error path only).
+Post-`to_chars` shape (~29–30 ms/iter). Build-and-walk dominates: walking the
+CST then building it is over half of self-time. The `List<char>::grow` frame is
+gone (the §2 fix), and `HighlightVisitor::classify` — 10.9% in an earlier
+snapshot — has since collapsed to ~1%, so the highlight classify loop is no
+longer a lever (see §3).
 
 |   Pct | Symbol                            | role                                                |
 | ----: | --------------------------------- | --------------------------------------------------- |
-| 18.7% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
-| 10.9% | `HighlightVisitor::classify`      | per-token capture classify (overrides × rule-stack) |
-| 10.6% | `List<CstChild>::push`            | per-node child-list build                           |
+| 29.2% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
+| 11.0% | `List<CstChild>::push`            | per-node child-list build                           |
+|  8.5% | `TokenStream::new`                | SoA token-array alloc (WasmGC zero-fill; not a lever)|
 |  8.1% | `tree_build_node`                 | CST materialization (event log → tree)              |
-|  8.0% | `List<char>::grow`                | lexer source-char buffer growth                     |
-|  3.2% | `push_class`                      | HTML class emit                                     |
-|  2.9% | `_kind_set_8`                     | membership over the big keyword set                 |
-|  2.8% | `String::push`                    | HTML output build                                   |
-|  2.6% | `List<i32>::push`                 | `rule_stack` / token push                           |
-|  2.5% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
-|  2.1% | `scan_any_name`                   | scan (prediction)                                   |
-|  1.9% | `HighlightVisitor::hl_visit_token`| per-token trivia + classify driver                  |
+|  3.3% | `String::push`                    | HTML output build                                   |
+|  2.9% | `push_class`                      | HTML class emit                                     |
+|  2.7% | `List<i32>::push`                 | `rule_stack` / trivia push                          |
+|  2.4% | `_kind_set_8`                     | membership over the big keyword set                 |
+|  2.3% | `List<BuildEvent>::push`          | CST event-log build                                 |
+|  2.3% | `scan_any_name`                   | scan (prediction)                                   |
+|  1.8% | `scan_expr`                       | scan (prediction)                                   |
+|  1.6% | `HighlightVisitor::hl_visit_token`| per-token trivia + classify driver                  |
+|  1.4% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
 
-Rough buckets (self-time): **CST build** (`CstChild::push` + `tree_build_node`)
-≈ **19%**; **CST walk** (`highlight_walk`) ≈ **19%**; lexer char-level
-(`List<char>::grow` + `to_ascii_lowercase` + `try_*` + `StrCharIter`) ≈ **16%**;
-highlight classify (`classify` + `hl_visit_token` + `highlight_mapping`) ≈
-**14%**; **HTML render** (`String` push/grow + `push_class` + `escape_html_char`
-+ `highlight_html`) ≈ **9%**; kind-set (`_kind_set_*`) ≈ **7%**; `scan_*` ≈
-**5%**; event-log build ≈ **2%**.
+Rough buckets (self-time): **CST walk** (`highlight_walk` + `hl_visit_token`) ≈
+**31%**; **CST build** (`CstChild::push` + `tree_build_node` + `BuildEvent`
+push/grow + `List<i32>::push`) ≈ **26%**; **token-array alloc**
+(`TokenStream::new`) ≈ **8%**; **HTML render** (`String::push` + `push_class` +
+`highlight_html` + `escape_html_char`) ≈ **8%**; `scan_*` ≈ **5%**; kind-set
+(`_kind_set_*`) ≈ **4%**; lexer char-level (`to_ascii_lowercase` + `try_*`) ≈ **3%**.
 
-So the CST — build it then walk it — is still the largest at **~38%**, but with
-the `grow` churn removed the lexer source-char buffer (§2) and the per-token
-`classify` loop (§3) are now comparably hot.
+So the CST — walk it, build it — is the overwhelming majority at **~57%**, with
+`highlight_walk` alone the single largest frame at ~29%. After the §2 lexer fix
+and the classify collapse, the standing prize is squarely the CST representation.
 
 ## What would move the needle
 
 Ordered by profile self-time. None are mutually exclusive.
 
-### 1. CST build + walk (~47%) — dominant, but the obvious rewrite failed
+### 1. CST build + walk (~57%) — dominant, but the obvious rewrite failed
 
-`highlight_walk` (~24%) traverses the materialized `CstNode` tree; building it
-(`CstChild` push/grow + `tree_build_node`, ~23%) allocates a `List<CstChild>`
-per node.
+`highlight_walk` (~29%, the single largest frame) traverses the materialized
+`CstNode` tree; building it (`CstChild` push + `tree_build_node` + event-log,
+~26%) allocates a `List<CstChild>` per node.
 
 **Landed (cheap, −24%):** `tree_build_node` initialised each node's child list
 as `[]`, which allocates a cap-0 list and then `grow`s on the first `push`
@@ -111,27 +111,28 @@ is scalar child accessors that walk allocation-free. Until a representation
 cheap to *both* build and walk lands, the per-node-list build + traversal is the
 standing open problem and the largest remaining prize.
 
-### 2. Lexer source-char buffer — `List<char>::grow` (~8%)
+### 2. Lexer source-char buffer — `List<char>::grow` — LANDED
 
-The lexer collects the input into a `List<char>` (`Lexer::new` →
-`input.chars().collect()`) that the `TokenStream` then borrows. `collect` grows
-that buffer from empty, reallocating `log2(n)` times over the whole source —
-8% here, the same `[]`-then-grow pattern §1 just fixed for child lists.
-Pre-size it to the input's byte length (a safe upper bound on char count): one
-`with_capacity` at the collect / `Lexer::new` site (`lexer_gen.wado` /
-`StrCharIter::collect`). Cheap, expected near-free win.
+The lexer collects the input into a `List<char>` (`Lexer::new`) that the
+`TokenStream` then borrows. The old `input.chars().collect()` grew that buffer
+from empty, reallocating `log2(n)` times over the whole source (~8% here, the
+same `[]`-then-grow pattern §1 fixed for child lists). Replaced with
+`String::to_chars` (`string.wado`): one `with_capacity(self.len())` pre-size
+then a straight loop over the shared `decode_utf8_scalar`, no per-char `Option`
+or iterator dispatch. `Lexer::new` now calls `input.to_chars()`. Re-profiled:
+`List<char>::grow` is gone from the hot list (`List<char>::push` 0.8% +
+`to_chars` 0.9%). Wall-clock is within noise of baseline — the buffer was never
+the bound on the build-and-walk path; the `grow` self-time was dev-host GC
+inflation. Kept as the better-reading, no-slower primitive (also reused by Gale).
 
-### 3. Per-token highlight classify — `HighlightVisitor::classify` (~11%, syntax-highlight only)
+### 3. Per-token highlight classify — `HighlightVisitor::classify` — no longer hot
 
-For every token, `classify` scans **all** overrides and, for each matching token
-kind, walks the whole `rule_stack`. With no `@override` rules (the common case)
-the override list is empty, but the per-token call overhead and the default
-`defaults[kind]` lookup still dominate at this token count. Levers: fast-path
-the empty-overrides case, and index overrides by token kind instead of a linear
-scan. In `HighlightVisitor::classify` (`highlight.wado`). (The mapping itself is
-also rebuilt **per `highlight()` call** — `highlight_mapping()` reconstructs the
-`defaults` / `rule_names` lists every time; hoist it to a `global` built once,
-in `gen_highlight` / `highlight_gen.wado`.)
+An earlier snapshot had `classify` at ~11%; the current merged profile measures
+it at **~1%** (`classify` 1.1% + `classify_keyword` 0.9% + `highlight_mapping`
+0.1%). The per-token classify loop is no longer a lever — the cost has moved
+entirely to the CST walk/build (§1). Left here only to record the drop; the
+former levers (fast-path empty overrides, index overrides by kind, hoist the
+`highlight_mapping` rebuild) are unnecessary at the current share.
 
 ### 4. Kind-set membership — `_kind_set_*` (~7%)
 
@@ -153,7 +154,7 @@ and append larger runs of unescaped source instead of char-at-a-time. Lives in
 
 ### 6. Lexer char-level compute (independent secondary lever)
 
-After §2 removes the buffer-growth share, the remaining lexer cost is compute:
+With §2 landed (buffer-growth share gone), the remaining lexer cost is compute:
 `to_ascii_lowercase` (case-insensitive matching), `StrCharIter`, and
 `classify_keyword`. Candidates:
 
@@ -172,6 +173,16 @@ After §2 removes the buffer-growth share, the remaining lexer cost is compute:
   handle small Wasm calls cheaply, so inlinability is not the lever. Confirmed
   again by the cursor spike, where raising the inline threshold *worsened*
   runtime (it bloats hot loops); see "Failed approaches".
+- **Re-sizing `TokenStream::new`'s arrays** (profiles at ~8.5% self-time). The
+  cost is inherent WasmGC `array.new_default` zero-fill across its 10 parallel
+  `List<i32>` arrays, each pre-sized to `chars/4`. Measured the actual fill for
+  the benchmark input (13366 chars): 2892 tokens, 2431 trivia vs a 3342 cap —
+  only ~19% over-allocation. The current `chars/4` pre-size is already correct:
+  it zero-fills ~3342/array vs ~8191/array for grow-from-`[]` doubling (~2.4×
+  better), so `[]` would be worse, not better. An A/B sizing every array to its
+  *exact* used count (the unreachable ceiling of any cap-tuning) gained only ~2%,
+  two-thirds of it within run jitter — sub-1% on release after dev-host alloc
+  inflation. Not a lever; leave the `chars/4` pre-size.
 - **Data-driven / bytecode-VM scan** (see below).
 
 ## Failed approaches (do not repeat)
