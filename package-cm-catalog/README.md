@@ -1,32 +1,69 @@
 # cm-catalog
 
-An enumeration of the Component Model value-type ABI surface as Wado `export`
-functions. Every export is an `identity` — it returns its argument unchanged —
-named after the type it carries, so the export exercises both lowering (the
-parameter) and lifting (the result) for exactly one type.
+An enumeration of the Component Model ABI surface as Wado `export` functions.
+Each export is an identity — it returns its argument unchanged — named after the
+type it carries, so it exercises lowering (the parameter) and lifting (the
+result) for exactly one shape.
 
-The generated [`cm-catalog.wit`](./cm-catalog.wit) is the artifact: a
-self-describing WIT document listing every covered shape. It is meant to be
-published to a registry and reused by other toolchains as a fixed lift/lower
-test corpus.
+[`cm-catalog.wit`](./cm-catalog.wit) is the artifact: a self-describing WIT
+document listing every covered shape. It is meant to be published to a registry
+and reused by other toolchains as a fixed lift/lower test corpus.
 
-## Scope
+## Covered
 
-Covered (value types):
+[`cm-catalog.wit`](./cm-catalog.wit) is the authoritative, complete list. In
+short: the whole value-type surface (primitives, containers, named types, and
+their nested compositions), plus the async handle types `future` and `stream`.
 
-- Primitives: `bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`.
-- Containers: `list`, `tuple`, `option`, and all four `result` forms
-  (`result<o, e>`, `result<o>`, `result<_, e>`, `result`).
-- Named types: `record`, `variant`, `enum`, `flags`, type alias (newtype).
-- Nested compositions: `list<option<_>>`, `option<list<_>>`, `list<record>`,
-  `result<list<_>, _>`, and so on.
+For `future`/`stream` two flavours appear:
 
-Deferred:
+- **Consume/produce** — a bare `future<T>` reads the payload from its argument
+  and writes it into a fresh future, so the payload itself round-trips (not just
+  the handle).
+- **Pass-through** — a handle returned unchanged, exercising lift/lower of the
+  handle slot itself (`stream<u8>` and the aggregate-embedded handles).
 
-- Async types (`future`, `stream`) — identity is not meaningful for a
-  single-use value; they get their own catalog.
-- Handles (`own`/`borrow` of resources) — a handle is not duplicable, so
-  identity needs different boundary semantics.
+## TODO
+
+Full intended scope; checked items are implemented.
+
+**Value types**
+
+- [x] Primitives (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`, `string`)
+- [x] Containers (`list`, `tuple`, `option`, all four `result` forms)
+- [x] Named types (`record`, `variant`, `enum`, `flags`, newtype)
+- [x] Nested compositions
+
+**`future<T>` (consume/produce)**
+
+- [x] Scalar payloads (`bool`, `u8`–`u64`, `s8`–`s64`, `f32`, `f64`, `char`)
+- [ ] `string`
+- [ ] `record`
+- [ ] `option<_>`
+- [ ] `result<_, _>`
+- [ ] `list<_>`
+- [ ] `tuple<…>`
+
+**`stream<T>`**
+
+- [x] `stream<u8>` (pass-through)
+- [ ] `stream<T>` consume/produce — scalar element payloads
+- [ ] `stream<T>` consume/produce — aggregate element payloads
+- `stream<char>` is intentionally out of scope (rejected by the Component Model)
+
+**Embedded handles (pass-through)**
+
+- [x] `option<future>`, `result<future, _>`, `list<future>`, `list<stream>`,
+      `tuple<future, _>`, a record with a `future` field
+
+**Test oracle**
+
+- [ ] Async value read-back — assert the payload survives the round-trip, not
+      only the handle
+
+**Handles**
+
+- [ ] `own<resource>` / `borrow<resource>` identity
 
 ## Regenerating the WIT
 
@@ -34,17 +71,5 @@ Deferred:
 wado wit package-cm-catalog/src/lib.wado > package-cm-catalog/cm-catalog.wit
 ```
 
-`wado-compiler/tests/wit.rs` re-emits this from the source and asserts it
-matches the committed `cm-catalog.wit`, so the artifact cannot drift from the
-emitter.
-
-## Note on compilation
-
-`wado wit` enumerates every `export fn`, so the WIT artifact is complete today.
-
-`wado compile --lib package-cm-catalog` synthesizes and emits the lift/lower
-adapters for each export under a library world named after the package. The
-whole value-type surface above compiles and round-trips: `lift(lower(x)) == x`
-holds for every export, verified by `wado-compiler/tests/cm_catalog.rs` at both
-`-O0` and `-O2`. See WEP `wep-2026-05-02-wit-interoperability.md`
-("World-less libraries").
+`wado-compiler/tests/wit.rs` re-emits this and asserts it matches the committed
+file, so the artifact cannot drift from the source.

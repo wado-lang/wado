@@ -310,9 +310,9 @@ pub fn optimize(
     }
 
     // Post-optimization rewrites: select lowering for branchless Wasm
-    profiler.span_start("nir/select_lowering");
-    select_lowering::select_lowering(&mut project);
-    profiler.span_end("nir/select_lowering");
+    run_pass("nir/select_lowering", &mut project, profiler, |p| {
+        select_lowering::select_lowering(p)
+    });
 
     // Multi-value return ABI classification: marks tuple- or
     // user-struct-returning functions whose every return site is a fresh
@@ -325,9 +325,9 @@ pub fn optimize(
     // `FieldAccess` reads going to the split locals directly. Runs after
     // every other transformation so the analysis sees the final NIR
     // shape.
-    profiler.span_start("nir/multi_value_return");
-    multi_value_return::classify_multi_value_returns(&mut project);
-    profiler.span_end("nir/multi_value_return");
+    run_pass("nir/multi_value_return", &mut project, profiler, |p| {
+        multi_value_return::classify_multi_value_returns(p)
+    });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by
     // Binary/Unary/Cast) into operand values, materialised by the WIR
@@ -558,6 +558,13 @@ fn run_optimization_passes(
                 }
             }};
         }
+        // Reports changes to the gate but not the convergence flag — must never
+        // keep the loop alive on its own.
+        macro_rules! gate_only {
+            ($name:expr, $pass:expr) => {{
+                run_pass($name, project, profiler, |p| $pass(p, &mut gate));
+            }};
+        }
         // Dense-int / dense-enum `Match` → `Switch` is a codegen-friendly late
         // lowering (see WEP 2026-05-11). It runs as `MatchToSwitchRule` inside
         // the unified peephole session below: the pre-inline `peephole` run
@@ -605,13 +612,8 @@ fn run_optimization_passes(
         // fully-elidable `$value_copy$T(arg)` into a shallow `array_clone` shape
         // that elide's `is_value_copy_call` no longer recognises, leaving the
         // copy un-elided. Still before `nir/inline`, where the
-        // `$value_copy$T(arg)` shape both passes match disappears. Reports change
-        // only to the gate (so the gated passes re-examine the bodies it
-        // rewrote), not to the convergence `changed` flag — it never keeps the
-        // loop alive on its own.
-        run_pass("nir/value_copy_demote", project, profiler, |p| {
-            demote_value_copies(p, &mut gate)
-        });
+        // `$value_copy$T(arg)` shape both passes match disappears.
+        gate_only!("nir/value_copy_demote", demote_value_copies);
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
@@ -705,10 +707,12 @@ fn run_optimization_passes(
     // Running inside the loop would cause the write-back/re-read stmts it
     // inserts to be counted as new field accesses on the next iteration,
     // triggering spurious re-scalarization of the same fields.
-    run_pass("nir/field_scalarize", project, profiler, |p| {
-        scalarize_hot_fields(p);
-        true // always runs once, mark as changed for profiling visibility
-    });
+    run_pass(
+        "nir/field_scalarize",
+        project,
+        profiler,
+        scalarize_hot_fields,
+    );
     // Forward the scalarization shadow inits (`__hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an

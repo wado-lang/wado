@@ -63,10 +63,11 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
+use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-use super::arena_query::{has_break_to, is_local};
+use super::arena_query::{has_break_to, is_local, is_local_operand};
 
 /// `expr_has_break_to` arena adapter.
 fn expr_has_break_to(body: &Body, label: &str, e: ExprId) -> bool {
@@ -737,144 +738,63 @@ fn check_lb_breaks_in_expr(
     }
 }
 
-/// Count all occurrences of `Local { index: local_idx }` in a block.
-fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usize {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .map(|s| count_local_uses_in_stmt(body, *s, local_idx))
-        .sum()
+struct LocalUseCounter {
+    local_idx: u32,
+    count: usize,
 }
 
-fn count_local_uses_in_stmt(body: &Body, s: StmtId, local_idx: u32) -> usize {
-    match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            count_local_uses_in_operand(body, *value, local_idx)
+impl NirRefVisitor for LocalUseCounter {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node
+            && is_local(body, e, self.local_idx)
+        {
+            self.count += 1;
         }
-        StmtKind::Expr(expr) => count_local_uses_in_operand(body, *expr, local_idx),
-        StmtKind::Return { value } => {
-            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
-        }
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            count_local_uses_in_operand(body, *condition, local_idx)
-                + count_local_uses_in_block(body, *then_block, local_idx)
-                + else_block.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            count_local_uses_in_block(body, *b, local_idx)
-        }
-        StmtKind::Break { value, .. } => {
-            value.map_or(0, |v| count_local_uses_in_operand(body, v, local_idx))
-        }
-        StmtKind::Continue => 0,
+        self.walk_node(body, node);
     }
 }
 
-fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usize {
-    op.as_expr()
-        .map_or(0, |e| count_local_uses_in_expr(body, e, local_idx))
+/// Count all occurrences of `Local { index: local_idx }` in a block.
+fn count_local_uses_in_block(body: &Body, block: BlockId, local_idx: u32) -> usize {
+    let mut v = LocalUseCounter {
+        local_idx,
+        count: 0,
+    };
+    v.visit_node(body, NodeRef::Block(block));
+    v.count
 }
 
-fn count_local_uses_in_expr(body: &Body, e: ExprId, local_idx: u32) -> usize {
-    match &body.exprs[e].kind {
-        ExprKind::Local { .. } => usize::from(is_local(body, e, local_idx)),
-        ExprKind::Binary { left, right, .. } => {
-            count_local_uses_in_operand(body, *left, local_idx)
-                + count_local_uses_in_operand(body, *right, local_idx)
+fn count_local_uses_in_operand(body: &Body, op: Operand, local_idx: u32) -> usize {
+    let mut v = LocalUseCounter {
+        local_idx,
+        count: 0,
+    };
+    if let Operand::Expr(e) = op {
+        v.visit_node(body, NodeRef::Expr(e));
+    }
+    v.count
+}
+
+struct VariantPayloadUseCounter {
+    local_idx: u32,
+    case_index: u32,
+    count: usize,
+}
+
+impl NirRefVisitor for VariantPayloadUseCounter {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::VariantPayload {
+                expr: inner,
+                case_index: ci,
+                ..
+            } = &body.exprs[e].kind
+            && *ci == self.case_index
+            && is_local_operand(body, *inner, self.local_idx)
+        {
+            self.count += 1;
         }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. } => {
-            count_local_uses_in_operand(body, *inner, local_idx)
-        }
-        ExprKind::Assign { target, value } => {
-            count_local_uses_in_expr(body, *target, local_idx)
-                + count_local_uses_in_operand(body, *value, local_idx)
-        }
-        ExprKind::Index { expr: inner, index } => {
-            count_local_uses_in_operand(body, *inner, local_idx)
-                + count_local_uses_in_operand(body, *index, local_idx)
-        }
-        ExprKind::Call { args, .. } => args
-            .iter()
-            .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
-            .sum(),
-        ExprKind::CmRawCall { args, .. } => args
-            .iter()
-            .map(|a| count_local_uses_in_operand(body, *a, local_idx))
-            .sum(),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            count_local_uses_in_operand(body, *receiver, local_idx)
-                + args
-                    .iter()
-                    .map(|a| count_local_uses_in_operand(body, a.expr, local_idx))
-                    .sum::<usize>()
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            count_local_uses_in_operand(body, *callee, local_idx)
-                + args
-                    .iter()
-                    .map(|a| count_local_uses_in_operand(body, *a, local_idx))
-                    .sum::<usize>()
-        }
-        ExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .map(|f| count_local_uses_in_operand(body, f.value, local_idx))
-            .sum(),
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-            .iter()
-            .map(|e| count_local_uses_in_operand(body, *e, local_idx))
-            .sum(),
-        ExprKind::VariantConstruct { payload, .. } => {
-            payload.map_or(0, |p| count_local_uses_in_operand(body, p, local_idx))
-        }
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            count_local_uses_in_block(body, *block, local_idx)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            count_local_uses_in_operand(body, *condition, local_idx)
-                + count_local_uses_in_block(body, *then_branch, local_idx)
-                + else_branch.map_or(0, |eb| count_local_uses_in_block(body, eb, local_idx))
-        }
-        ExprKind::Match { expr, arms } => {
-            count_local_uses_in_operand(body, *expr, local_idx)
-                + arms
-                    .iter()
-                    .map(|arm| {
-                        count_local_uses_in_operand(body, arm.body, local_idx)
-                            + arm
-                                .guard
-                                .map_or(0, |g| count_local_uses_in_operand(body, g, local_idx))
-                    })
-                    .sum::<usize>()
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            count_local_uses_in_operand(body, *scrutinee, local_idx)
-                + arms
-                    .iter()
-                    .map(|arm| count_local_uses_in_block(body, *arm, local_idx))
-                    .sum::<usize>()
-                + count_local_uses_in_block(body, *default, local_idx)
-        }
-        _ => 0,
+        self.walk_node(body, node);
     }
 }
 
@@ -885,60 +805,15 @@ fn count_variant_payload_uses_in_block(
     local_idx: u32,
     case_index: u32,
 ) -> usize {
-    body.blocks[block]
-        .stmts
-        .iter()
-        .map(|s| count_variant_payload_uses_in_stmt(body, *s, local_idx, case_index))
-        .sum()
+    let mut v = VariantPayloadUseCounter {
+        local_idx,
+        case_index,
+        count: 0,
+    };
+    v.visit_node(body, NodeRef::Block(block));
+    v.count
 }
 
-fn count_variant_payload_uses_in_stmt(
-    body: &Body,
-    s: StmtId,
-    local_idx: u32,
-    case_index: u32,
-) -> usize {
-    match &body.stmts[s].kind {
-        StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            count_variant_payload_uses_in_operand(body, *value, local_idx, case_index)
-        }
-        StmtKind::Expr(expr) => {
-            count_variant_payload_uses_in_operand(body, *expr, local_idx, case_index)
-        }
-        StmtKind::Return { value } => value.map_or(0, |v| {
-            count_variant_payload_uses_in_operand(body, v, local_idx, case_index)
-        }),
-        StmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            count_variant_payload_uses_in_operand(body, *condition, local_idx, case_index)
-                + count_variant_payload_uses_in_block(body, *then_block, local_idx, case_index)
-                + else_block.map_or(0, |eb| {
-                    count_variant_payload_uses_in_block(body, eb, local_idx, case_index)
-                })
-        }
-        StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            count_variant_payload_uses_in_block(body, *b, local_idx, case_index)
-        }
-        StmtKind::Break { value, .. } => value.map_or(0, |v| {
-            count_variant_payload_uses_in_operand(body, v, local_idx, case_index)
-        }),
-        StmtKind::Continue => 0,
-    }
-}
-
-fn count_variant_payload_uses_in_operand(
-    body: &Body,
-    op: Operand,
-    local_idx: u32,
-    case_index: u32,
-) -> usize {
-    op.as_expr().map_or(0, |e| {
-        count_variant_payload_uses_in_expr(body, e, local_idx, case_index)
-    })
-}
 fn expr_has_free_unlabeled_loop_exit_operand(body: &Body, op: Operand, loop_depth: u32) -> bool {
     op.as_expr()
         .is_some_and(|e| expr_has_free_unlabeled_loop_exit(body, e, loop_depth))
@@ -949,132 +824,6 @@ fn expr_has_break_to_operand(body: &Body, label: &str, op: Operand) -> bool {
 }
 fn expr_contains_loop_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_some_and(|e| expr_contains_loop(body, e))
-}
-
-fn count_variant_payload_uses_in_expr(
-    body: &Body,
-    e: ExprId,
-    local_idx: u32,
-    case_index: u32,
-) -> usize {
-    match &body.exprs[e].kind {
-        ExprKind::VariantPayload {
-            expr: inner,
-            case_index: ci,
-            ..
-        } if *ci == case_index => {
-            let inner = *inner;
-            if inner
-                .as_expr()
-                .is_some_and(|e| is_local(body, e, local_idx))
-            {
-                return 1;
-            }
-            count_variant_payload_uses_in_operand(body, inner, local_idx, case_index)
-        }
-        ExprKind::Local { .. } => 0,
-        ExprKind::Binary { left, right, .. } => {
-            count_variant_payload_uses_in_operand(body, *left, local_idx, case_index)
-                + count_variant_payload_uses_in_operand(body, *right, local_idx, case_index)
-        }
-        ExprKind::Unary { expr: inner, .. }
-        | ExprKind::Cast { expr: inner, .. }
-        | ExprKind::FieldAccess { expr: inner, .. }
-        | ExprKind::VariantTag { expr: inner }
-        | ExprKind::VariantTest { expr: inner, .. }
-        | ExprKind::VariantPayload { expr: inner, .. }
-        | ExprKind::ClosureToCanonical { functor: inner, .. }
-        | ExprKind::GlobalVarSet { value: inner, .. } => {
-            count_variant_payload_uses_in_operand(body, *inner, local_idx, case_index)
-        }
-        ExprKind::Assign { target, value } => {
-            count_variant_payload_uses_in_expr(body, *target, local_idx, case_index)
-                + count_variant_payload_uses_in_operand(body, *value, local_idx, case_index)
-        }
-        ExprKind::Index { expr: inner, index } => {
-            count_variant_payload_uses_in_operand(body, *inner, local_idx, case_index)
-                + count_variant_payload_uses_in_operand(body, *index, local_idx, case_index)
-        }
-        ExprKind::Call { args, .. } => args
-            .iter()
-            .map(|a| count_variant_payload_uses_in_operand(body, a.expr, local_idx, case_index))
-            .sum(),
-        ExprKind::CmRawCall { args, .. } => args
-            .iter()
-            .map(|a| count_variant_payload_uses_in_operand(body, *a, local_idx, case_index))
-            .sum(),
-        ExprKind::MethodCall { receiver, args, .. } => {
-            count_variant_payload_uses_in_operand(body, *receiver, local_idx, case_index)
-                + args
-                    .iter()
-                    .map(|a| {
-                        count_variant_payload_uses_in_operand(body, a.expr, local_idx, case_index)
-                    })
-                    .sum::<usize>()
-        }
-        ExprKind::IndirectCall { callee, args } => {
-            count_variant_payload_uses_in_operand(body, *callee, local_idx, case_index)
-                + args
-                    .iter()
-                    .map(|a| count_variant_payload_uses_in_operand(body, *a, local_idx, case_index))
-                    .sum::<usize>()
-        }
-        ExprKind::StructLiteral { fields, .. } => fields
-            .iter()
-            .map(|f| count_variant_payload_uses_in_operand(body, f.value, local_idx, case_index))
-            .sum(),
-        ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-            .iter()
-            .map(|e| count_variant_payload_uses_in_operand(body, *e, local_idx, case_index))
-            .sum(),
-        ExprKind::VariantConstruct { payload, .. } => payload.map_or(0, |p| {
-            count_variant_payload_uses_in_operand(body, p, local_idx, case_index)
-        }),
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            count_variant_payload_uses_in_block(body, *block, local_idx, case_index)
-        }
-        ExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            count_variant_payload_uses_in_operand(body, *condition, local_idx, case_index)
-                + count_variant_payload_uses_in_block(body, *then_branch, local_idx, case_index)
-                + else_branch.map_or(0, |eb| {
-                    count_variant_payload_uses_in_block(body, eb, local_idx, case_index)
-                })
-        }
-        ExprKind::Match { expr, arms } => {
-            count_variant_payload_uses_in_operand(body, *expr, local_idx, case_index)
-                + arms
-                    .iter()
-                    .map(|arm| {
-                        count_variant_payload_uses_in_operand(body, arm.body, local_idx, case_index)
-                            + arm.guard.map_or(0, |g| {
-                                count_variant_payload_uses_in_operand(
-                                    body, g, local_idx, case_index,
-                                )
-                            })
-                    })
-                    .sum::<usize>()
-        }
-        ExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            count_variant_payload_uses_in_operand(body, *scrutinee, local_idx, case_index)
-                + arms
-                    .iter()
-                    .map(|arm| {
-                        count_variant_payload_uses_in_block(body, *arm, local_idx, case_index)
-                    })
-                    .sum::<usize>()
-                + count_variant_payload_uses_in_block(body, *default, local_idx, case_index)
-        }
-        _ => 0,
-    }
 }
 
 // ---------------------------------------------------------------------------
