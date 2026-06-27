@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782586735291,
+  "lastUpdate": 1782604259428,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36049,6 +36049,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/df8a94b8e2cb1a594861375abf1e0cd8e024dcae"
         },
         "date": 1782586734659,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaffb986df92618ca3be980ccfc875c20bb85c11",
+          "message": "Merge pull request #1460 from wado-lang/claude/type-inference-coerce-bug-yn9ukw\n\nfix(type-checker): coerce compound/generic literal comparison operands",
+          "timestamp": "2026-06-28T08:40:53+09:00",
+          "tree_id": "8d53749d3aa5c67c188ae629e2d6730e2707455b",
+          "url": "https://github.com/wado-lang/wado/commit/aaffb986df92618ca3be980ccfc875c20bb85c11"
+        },
+        "date": 1782604258786,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
