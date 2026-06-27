@@ -1,5 +1,111 @@
 # Changelog
 
+## [v0.0.8](https://github.com/wado-lang/wado/compare/v0.0.7...v0.0.8) - 2026-06-27
+
+- feat(unused-diagnostics): suppress dead-code lint via #[allow(dead_code)] by @gfx in https://github.com/wado-lang/wado/pull/1336
+- perf(optimize): start the NIR combine migration — pool engine buffers, fold 4 passes, drop local_count by @gfx in https://github.com/wado-lang/wado/pull/1339
+- refactor(package-gale): clean up unused code and split the inlined runtime by @gfx in https://github.com/wado-lang/wado/pull/1338
+- perf(optimize): ValueGraph foundation + Stage 3/5 rule migrations by @gfx in https://github.com/wado-lang/wado/pull/1341
+- feat(package-gale): ATN-class LR loop-entry adaptive prediction (P4) by @gfx in https://github.com/wado-lang/wado/pull/1340
+- Port native-profile analyzer to TypeScript and fix stale optimizer-debug skill by @gfx in https://github.com/wado-lang/wado/pull/1343
+- fix: support casts from i128/u128 and two's-complement negative int formatting by @gfx in https://github.com/wado-lang/wado/pull/1344
+- fix(wir): guard representation-crossing casts; perf: IEEE bit assembly for wide-int float conversions by @gfx in https://github.com/wado-lang/wado/pull/1345
+- fix(#1342): make AstId globally unique and retire SymbolKey — kill the cross-module fact-collision class by @gfx in https://github.com/wado-lang/wado/pull/1346
+- perf(optimizer): branch-hint-aware WIR optimization and cold-call-site inlining suppression by @gfx in https://github.com/wado-lang/wado/pull/1347
+- package-gale: code-health audit + 30 bug fixes by @gfx in https://github.com/wado-lang/wado/pull/1350
+- fix(core): harden JSON/CBOR stdlib and fix compiler bugs they exposed by @gfx in https://github.com/wado-lang/wado/pull/1351
+- fix(compiler): dispatch concrete-generic trait impls to the correct module by @gfx in https://github.com/wado-lang/wado/pull/1352
+- feat(formatter): enforce Wado formatting in CI and stop dropping comments by @gfx in https://github.com/wado-lang/wado/pull/1353
+- perf(optimizer): migrate condition_implication and licm onto the ValueGraph by @gfx in https://github.com/wado-lang/wado/pull/1354
+- feat(wit): WIT interoperability — `wado wit` emitter and plan-driven CM imports/exports by @gfx in https://github.com/wado-lang/wado/pull/1355
+- perf(optimizer): flow-sensitive const-folding and field forwarding via the ValueGraph by @gfx in https://github.com/wado-lang/wado/pull/1356
+- chore: update rustc & deps by @gfx in https://github.com/wado-lang/wado/pull/1358
+- fix: inlay hint params by @gfx in https://github.com/wado-lang/wado/pull/1357
+- docs(wep): reference representation and mutation write-back by @gfx in https://github.com/wado-lang/wado/pull/1359
+- fix(vscode): show core:/wasi: scheme in stdlib editor tab labels by @gfx in https://github.com/wado-lang/wado/pull/1360
+- docs: Jade (JSON Schema) and Reflect-derivation WEPs (+ CI docs-only fast-pass) by @gfx in https://github.com/wado-lang/wado/pull/1361
+- Research: splitting large libraries (ICU) into Wasm components + compile-time data providers WEP by @gfx in https://github.com/wado-lang/wado/pull/1362
+- chore(claude): SKILL-driven PR-conventions hook; deny AskUserQuestion by @gfx in https://github.com/wado-lang/wado/pull/1365
+- refactor(compiler)!: drive CM world imports/exports from data, remove HTTP special-casing by @gfx in https://github.com/wado-lang/wado/pull/1363
+- refactor(elaborator): decompose the God Object — TypeSystem ops, TraitEnv digests, AnnotateCtx by @gfx in https://github.com/wado-lang/wado/pull/1364
+- refactor(gale): code-health pass over package-gale by @gfx in https://github.com/wado-lang/wado/pull/1366
+- refactor(optimizer): retire niri's per-local field_env for the ValueGraph by @gfx in https://github.com/wado-lang/wado/pull/1367
+- fix(compiler): resolve turbofish on Array<T> static methods by @gfx in https://github.com/wado-lang/wado/pull/1368
+- feat(deps): bare-name dependency resolution and Kiln build-dependency generators by @gfx in https://github.com/wado-lang/wado/pull/1369
+- fix(cm): make all wasi:cli/exit functions work by @gfx in https://github.com/wado-lang/wado/pull/1370
+- perf(optimize): interprocedural worklist (Stage 9) + per-function ValueGraph sharing by @gfx in https://github.com/wado-lang/wado/pull/1372
+- docs: tighten comment and documentation guidelines by @gfx in https://github.com/wado-lang/wado/pull/1373
+- refactor(elaborator): unify effect-op call resolution with the normal call path by @gfx in https://github.com/wado-lang/wado/pull/1375
+- feat(kiln): resolve a directory generator module to its package entry by @gfx in https://github.com/wado-lang/wado/pull/1374
+- refactor(gale): de-duplicate logic across package-gale by @gfx in https://github.com/wado-lang/wado/pull/1376
+- refactor(codegen): make wasi:http/types and wasi:http/client generic CM imports by @gfx in https://github.com/wado-lang/wado/pull/1378
+- fix(kiln): don't double-stamp the generated header by @gfx in https://github.com/wado-lang/wado/pull/1379
+- feat(query): symbol notation for `wado query` (definition / references / hover / document-highlight) by @gfx in https://github.com/wado-lang/wado/pull/1380
+- feat(query): run kiln generators so wado query resolves generated symbols by @gfx in https://github.com/wado-lang/wado/pull/1382
+- docs(wep): record the incremental ValueGraph investigation and verdict by @gfx in https://github.com/wado-lang/wado/pull/1383
+- feat(wit): wado wit producer hardening, package-cm-catalog, and wado compile --lib (M1–M2) by @gfx in https://github.com/wado-lang/wado/pull/1384
+- feat(stdlib): Array<T> format traits and assert-based List bounds checks by @gfx in https://github.com/wado-lang/wado/pull/1381
+- refactor(gale): dedupe generated parser/lexer boilerplate and fix lexer dispatch by @gfx in https://github.com/wado-lang/wado/pull/1385
+- chore(deps-dev): bump tmp from 0.2.6 to 0.2.7 in /wado-vscode in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1386
+- chore(deps): bump the npm_and_yarn group across 1 directory with 3 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1387
+- feat(cli): default `wado test` to -O0 by @gfx in https://github.com/wado-lang/wado/pull/1388
+- feat(cli): support --world on check, document the option by @gfx in https://github.com/wado-lang/wado/pull/1389
+- feat(elaborator): turbofish omission via deferred type inference by @gfx in https://github.com/wado-lang/wado/pull/1390
+- perf(elaborator): index-driven method &amp; trait lookup by @gfx in https://github.com/wado-lang/wado/pull/1391
+- docs: redesign module specifier syntax (lib: scheme + CM coordinates) by @gfx in https://github.com/wado-lang/wado/pull/1392
+- refactor(gale): unify g4 delimiter scanners and make visitor_gen GIR-driven by @gfx in https://github.com/wado-lang/wado/pull/1393
+- docs(gale): rewrite perf.md from a fresh profile by @gfx in https://github.com/wado-lang/wado/pull/1394
+- perf(gale): token-stream SoA decomposition (~36% faster SQLite parse) by @gfx in https://github.com/wado-lang/wado/pull/1395
+- feat(gale)!: error-resilient generated parsers by @gfx in https://github.com/wado-lang/wado/pull/1396
+- perf(gale): stop emitting unused per-alt scan helpers on token-led dispatch by @gfx in https://github.com/wado-lang/wado/pull/1399
+- fix(parser): keep a colon inside parens/brackets/char literals out of a template format specifier by @gfx in https://github.com/wado-lang/wado/pull/1400
+- docs(example): add hello_cm.wado using raw wasi:cli by @gfx in https://github.com/wado-lang/wado/pull/1401
+- chore: raise testFloats timeout to 10s to fix CI flakiness by @gfx in https://github.com/wado-lang/wado/pull/1402
+- refactor(wir-optimize): reclassify nullable_ref as mandatory lowering by @gfx in https://github.com/wado-lang/wado/pull/1404
+- feat: accept `_` inference placeholder in turbofish type arguments by @gfx in https://github.com/wado-lang/wado/pull/1403
+- refactor(gale): share one parse-entry helper and drop the redundant gale/GALE prefix by @gfx in https://github.com/wado-lang/wado/pull/1405
+- refactor(monomorphize): tidy the monomorphization phase by @gfx in https://github.com/wado-lang/wado/pull/1407
+- refactor(elaborator): close out the annotate→reify boundary smells (Stage 7) by @gfx in https://github.com/wado-lang/wado/pull/1406
+- refactor(cbor): match-based decoder dispatch and turbofish cleanup by @gfx in https://github.com/wado-lang/wado/pull/1408
+- feat(jco): run and benchmark Wado on Node.js via jco by @gfx in https://github.com/wado-lang/wado/pull/1409
+- chore(deps-dev): Bump undici from 7.25.0 to 7.28.0 in /wado-vscode in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1410
+- fix(compiler): drop inferable turbofish in core:json/serde and close the inference gaps it exposed by @gfx in https://github.com/wado-lang/wado/pull/1411
+- refactor(gale): dedupe prediction tree/dispatch builders and antlr4 extractor emitters by @gfx in https://github.com/wado-lang/wado/pull/1412
+- refactor(synthesis): replace name-format heuristics with metadata, and dedup serde deserialize by @gfx in https://github.com/wado-lang/wado/pull/1413
+- feat(gale): runtime lexer ATN simulator for recursive non-greedy rules by @gfx in https://github.com/wado-lang/wado/pull/1414
+- feat(gale): consumer-facing parser API, cross-module Kiln, worked examples, and a user-manual README by @gfx in https://github.com/wado-lang/wado/pull/1419
+- fix(elaborator): resolve cross-module struct returns and namespace-qualified decl types canonically by @gfx in https://github.com/wado-lang/wado/pull/1421
+- fix(cli): share Kiln generator AOT cache across a `wado test` run by @gfx in https://github.com/wado-lang/wado/pull/1422
+- fix: normalize module paths as filesystem strings, not URIs (#1417) by @gfx in https://github.com/wado-lang/wado/pull/1424
+- fix(cm): fix Future<Result<(), ErrorCode>> read ICE and unify future-read on the shared CM lift by @gfx in https://github.com/wado-lang/wado/pull/1425
+- docs(skills): clarify skill descriptions for better triggering by @gfx in https://github.com/wado-lang/wado/pull/1426
+- fix(compiler): resolve type and case names through imports, not a global scan (#1416) by @gfx in https://github.com/wado-lang/wado/pull/1427
+- refactor(gale): own Wado literal escaping in wadopoet by @gfx in https://github.com/wado-lang/wado/pull/1428
+- feat(prelude): add LenientFromStr lenient string parsing trait by @gfx in https://github.com/wado-lang/wado/pull/1429
+- feat!: design core:args; replace #[serde(default)] with field defaults by @gfx in https://github.com/wado-lang/wado/pull/1430
+- feat(gale): error-resilient (infallible) generated parsers by @gfx in https://github.com/wado-lang/wado/pull/1431
+- refactor(optimizer): live ValueGraph — build-once pure-value IR with operand promotion by @gfx in https://github.com/wado-lang/wado/pull/1420
+- refactor(gale): drop ATN blob magic/version header by @gfx in https://github.com/wado-lang/wado/pull/1432
+- feat(gale): complete ATN-class LR loop-entry handling, incl. `.`/`~X` suffixes by @gfx in https://github.com/wado-lang/wado/pull/1433
+- feat: compile-time parameters (#[param] globals) by @gfx in https://github.com/wado-lang/wado/pull/1434
+- fix: keep cross-module fn-param closure specializations distinct by @gfx in https://github.com/wado-lang/wado/pull/1435
+- fix(kiln): resolve inline-clause paths relative to the declaring file by @gfx in https://github.com/wado-lang/wado/pull/1436
+- feat: serde positional + case rename, and core:args CLI parser by @gfx in https://github.com/wado-lang/wado/pull/1438
+- refactor(optimizer): make the live value graph the single source of truth for pure values by @gfx in https://github.com/wado-lang/wado/pull/1437
+- perf(optimize): cut per-node allocation churn in alias analysis by @gfx in https://github.com/wado-lang/wado/pull/1439
+- feat(compiler): evaluate location literals at the call site in default arguments by @gfx in https://github.com/wado-lang/wado/pull/1441
+- feat(core:log): structured logging/tracing design, core:value::to_value, and a match/if literal-coercion fix by @gfx in https://github.com/wado-lang/wado/pull/1443
+- feat(effect-handler): require `..trap` for the handler rest clause by @gfx in https://github.com/wado-lang/wado/pull/1444
+- perf(compiler): lower string/bytes literals to a packed Array<u8> aggregate by @gfx in https://github.com/wado-lang/wado/pull/1442
+- perf(gale): cache per-state ATN continuation FIRST/nullability by @gfx in https://github.com/wado-lang/wado/pull/1445
+- feat: separate the Wado library boundary from the CM boundary by @gfx in https://github.com/wado-lang/wado/pull/1446
+- chore: collapse Tidy into a single job with parallel steps by @gfx in https://github.com/wado-lang/wado/pull/1447
+- fix: canonicalize local module identity so each file loads once by @gfx in https://github.com/wado-lang/wado/pull/1448
+- feat(cm): round-trip the full Component Model value-type surface for library exports by @gfx in https://github.com/wado-lang/wado/pull/1449
+- feat(compiler): embed WIT component-type section in compiled components by @gfx in https://github.com/wado-lang/wado/pull/1450
+- feat(cm): import functions from external Wasm components via `use` by @gfx in https://github.com/wado-lang/wado/pull/1451
+- feat(cm): complete component-import value-type surface; reserved-name tuple representation by @gfx in https://github.com/wado-lang/wado/pull/1452
+
 ## [v0.0.7](https://github.com/wado-lang/wado/compare/v0.0.6...v0.0.7) - 2026-06-08
 
 - chore: align wasm-tools crates with wasmtime's generation by @gfx in https://github.com/wado-lang/wado/pull/1171
