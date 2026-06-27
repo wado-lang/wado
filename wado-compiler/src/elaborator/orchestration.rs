@@ -2020,13 +2020,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         match stmt {
             ast::Stmt::Let(let_stmt) => {
                 if let Some(ty) = &let_stmt.ty {
-                    Self::validate_ast_type_names(
-                        ty,
-                        known_type_names,
-                        resource_type_names,
-                        type_params,
-                        logger,
-                    )?;
+                    if let Some(span) = Self::first_infer_span(ty) {
+                        logger.error(TypeError::InferInLetAnnotation { span })?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
                 }
                 if let Some(value) = &let_stmt.value {
                     Self::validate_expr_type_names(
@@ -2696,6 +2700,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
         }
         Ok(())
+    }
+
+    pub(super) fn first_infer_span(ty: &Type) -> Option<crate::token::Span> {
+        match ty {
+            Type::Infer(span) => Some(*span),
+            Type::Generic(g) => g.args.iter().find_map(Self::first_infer_span),
+            Type::NamespacedGeneric(ng) => ng.args.iter().find_map(Self::first_infer_span),
+            Type::Reference(inner) | Type::MutReference(inner) => Self::first_infer_span(inner),
+            Type::Tuple(elems) => elems.iter().find_map(Self::first_infer_span),
+            Type::Function(ft) => ft
+                .params
+                .iter()
+                .find_map(Self::first_infer_span)
+                .or_else(|| Self::first_infer_span(&ft.return_type)),
+            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Error(_) => None,
+        }
     }
 
     /// Walk an AST type expression and emit errors for unknown Named types.

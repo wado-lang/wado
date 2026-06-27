@@ -147,6 +147,8 @@ pub enum TypeError {
     /// `_` inference placeholder used outside a turbofish type argument.
     InferPlaceholderNotAllowed { span: Span },
 
+    InferInLetAnnotation { span: Span },
+
     MissingTypeArguments {
         name: String,
         expected: usize,
@@ -483,6 +485,13 @@ impl TypeError {
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
                 "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
+                *span,
+            ),
+            TypeError::InferInLetAnnotation { span } => (
+                Code::UnknownType,
+                "type inference placeholder `_` in a `let` annotation is not yet supported; \
+                 write the type explicitly (e.g. `Option<u32>`) or omit the annotation"
+                    .to_string(),
                 *span,
             ),
             TypeError::MissingTypeArguments {
