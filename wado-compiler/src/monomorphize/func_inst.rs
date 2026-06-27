@@ -1029,16 +1029,8 @@ impl Monomorphizer {
                     self.try_queue_function(key, mangled);
                 }
 
-                // Tuple variadic impl: receiver is a built-in tuple type, method
-                // is on `[]` (e.g., `[]^Eq::eq` from the variadic
-                // `impl<..T: Eq> Eq for [..T]`). The elaborator already creates
-                // monomorph_info with the generic name and impl_type_args (the
-                // concrete tuple element types).
-                //
-                // Guard on the *receiver's* type as well as the method's struct
-                // name. The reserved base name `[]` is unique to built-in tuples
-                // — no user `struct` can be named `[]` — so the two checks
-                // together cannot be fooled by an unrelated user type.
+                // Tuple variadic impl (e.g. `[]^Eq::eq` from `impl<..T: Eq> Eq for [..T]`):
+                // the reserved base name `[]` is unique to built-in tuples.
                 let receiver_is_builtin_tuple = {
                     let inner = type_table.peel_refs(receiver.type_id);
                     match type_table.get(inner) {

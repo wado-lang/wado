@@ -426,14 +426,9 @@ pub struct CmInterfaceRegistry {
     /// Wado fields: Vec<(`wado_field_name`, `cm_field_name`, `field_type`)>
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
 
-    /// CM interface FQ -> the `ModuleSource` whose decls were registered under
-    /// it, for interfaces whose FQ namespace is not a stdlib reserved one:
-    /// `--lib` locals (the entry module's source) and component imports (the
-    /// dependency's `ModuleSource::Wasm`). Consumers resolve such a CM interface
-    /// to its Wado `ModuleSource` via [`Self::cm_interface_module_source_of`]
-    /// instead of sniffing prefixes off the FQ. WASI/core interfaces are absent
-    /// here; their `ModuleSource` is derived from the FQ by the canonical naming
-    /// convention (`module_source_for_cm_interface`).
+    /// CM interface FQ -> `ModuleSource` for non-stdlib namespaces (`--lib`
+    /// locals and component imports). WASI/core interfaces are absent; their
+    /// source is derived from the FQ by `module_source_for_cm_interface`.
     cm_interface_module_sources: IndexMap<String, ModuleSource>,
 
     /// FQs of interfaces imported from a CM component dependency. The plan
@@ -1317,12 +1312,6 @@ impl CmInterfaceRegistry {
     /// Register a component dependency's binding module via the stdlib's
     /// [`Self::register_module_decls`] path, recording each interface FQ as a
     /// component import for [`crate::wir::ImportKind::Component`] classification.
-    ///
-    /// `module_source` is the dependency's `ModuleSource::Wasm`; recording the
-    /// FQ -> source provenance (as `--lib` does) lets consumers resolve the
-    /// component's types to a concrete Wado module instead of falling back to
-    /// the empty `module_source_for_cm_interface` default for the arbitrary
-    /// component package namespace.
     pub fn register_component_decls(
         &mut self,
         module: &crate::ast::Module,
@@ -2265,30 +2254,17 @@ impl CmInterfaceRegistry {
         })
     }
 
-    /// Whether `source` names an interface whose values follow the Component
-    /// Model canonical ABI (records flatten to fields, options/variants to a
-    /// discriminant plus payload, …) rather than being opaque Wado GC structs.
-    ///
-    /// Two kinds qualify: the stdlib CM interfaces in their reserved namespaces
-    /// (`wasi:`, `core:kiln/`), and interfaces imported from a CM component
-    /// dependency (tracked explicitly in `component_interfaces`, since their
-    /// package namespace — e.g. `wado:cm-catalog/...` — is arbitrary). Used
-    /// only to decide whether a type's `source_interface` may be trusted as a
-    /// registry key; the per-type `get_*_by_source` lookups are the real gate
-    /// for flattening, so callers that already do a lookup need not pre-check.
+    /// Whether `source` names an interface whose values follow the CM canonical
+    /// ABI: a stdlib CM namespace (`wasi:`, `core:kiln/`) or a component import
+    /// (whose package namespace is arbitrary, so tracked explicitly).
     pub fn is_cm_source(&self, source: &str) -> bool {
         source.starts_with("wasi:")
             || source.starts_with("core:kiln/")
             || self.component_interfaces.contains(source)
     }
 
-    /// Flatten a CM type into its canonical-ABI core value sequence — the
-    /// single source of truth for how a value-type maps to flat core
-    /// params/results. Records expand to their fields; variants and results to
-    /// a discriminant plus the per-slot join of the case/arm payloads; options
-    /// to a discriminant plus the payload; tuples to their elements;
-    /// `string`/`list` to `(ptr, len)`. Enums, flags, and resource handles are
-    /// a single `i32`. Newtypes are resolved transparently.
+    /// Flatten a CM type into its canonical-ABI core value sequence. Single
+    /// source of truth for how a value-type maps to flat core params/results.
     pub fn cm_flatten(&self, ty: &Type) -> Vec<crate::cm_abi::CmValType> {
         let mut out = Vec::new();
         self.cm_flatten_into(ty, &mut out);
@@ -2307,15 +2283,11 @@ impl CmInterfaceRegistry {
                 "f32" => out.push(CmValType::F32),
                 "f64" => out.push(CmValType::F64),
                 "String" => {
-                    out.push(CmValType::I32); // ptr
-                    out.push(CmValType::I32); // len
+                    out.push(CmValType::I32);
+                    out.push(CmValType::I32);
                 }
                 "()" => {}
                 name => {
-                    // The registry lookup is the gate: a non-CM source simply
-                    // misses both maps and falls through to the i32 handle. A
-                    // record expands to its fields; a variant to a discriminant
-                    // plus the joined case payloads.
                     if let Some(source) = self.resolve_cm_source_for(named, None) {
                         if let Some(fields) = self
                             .get_struct_fields_by_source(source, name)
@@ -2330,35 +2302,31 @@ impl CmInterfaceRegistry {
                             .get_variant_cases_by_source(source, name)
                             .map(<[CmVariantCase]>::to_vec)
                         {
-                            out.push(CmValType::I32); // discriminant
+                            out.push(CmValType::I32);
                             self.push_joined_payloads(cases.iter().map(|c| c.payload.clone()), out);
                             return;
                         }
                     }
-                    // enum, flags, resource handle, or unresolved → single i32
                     out.push(CmValType::I32);
                 }
             },
             Type::Generic(g) => match g.name.as_str() {
                 "List" => {
-                    out.push(CmValType::I32); // ptr
-                    out.push(CmValType::I32); // len
+                    out.push(CmValType::I32);
+                    out.push(CmValType::I32);
                 }
                 "Stream" | "Future" | "Own" | "Borrow" => out.push(CmValType::I32),
                 "Option" if g.args.len() == 1 => {
-                    out.push(CmValType::I32); // discriminant
+                    out.push(CmValType::I32);
                     self.cm_flatten_into(&g.args[0], out);
                 }
                 "Result" if g.args.len() == 2 => {
-                    out.push(CmValType::I32); // discriminant
+                    out.push(CmValType::I32);
                     self.push_joined_payloads(
                         [Some(g.args[0].clone()), Some(g.args[1].clone())].into_iter(),
                         out,
                     );
                 }
-                // Fail loudly rather than silently mis-flattening an unhandled
-                // CM generic to an i32 handle (matches `ast_type_to_cm`). A
-                // tuple is `Type::Tuple`, handled below — never `Generic`.
                 other => panic!("unsupported generic type for CM flattening: {other}"),
             },
             Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
@@ -2367,16 +2335,12 @@ impl CmInterfaceRegistry {
                     self.cm_flatten_into(elem, out);
                 }
             }
-            // `Function` / `NamespacedGeneric` / `Infer` / … are not CM value
-            // types; a resolved CM signature never carries them, so reaching
-            // here is a compiler bug — panic instead of emitting zero slots.
             other => panic!("unsupported type for CM flattening: {other:?}"),
         }
     }
 
-    /// Push the per-slot Canonical ABI `join` of several optional payload types
-    /// (variant cases or a result's ok/err). A `None` payload contributes no
-    /// slots; present payloads are flattened and merged slot-by-slot.
+    /// Push the per-slot Canonical ABI `join` of optional payload types (variant
+    /// cases or a result's ok/err); a `None` payload contributes no slots.
     fn push_joined_payloads(
         &self,
         payloads: impl Iterator<Item = Option<Type>>,
@@ -3260,9 +3224,7 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
 }
 /// Flatten a pre-resolved AST type into CM core-level `ValType`s.
 ///
-/// Thin adapter over [`CmInterfaceRegistry::cm_flatten`], the single source of
-/// truth for canonical-ABI flattening. Kept because callers building core
-/// function signatures want `wasm_encoder::ValType`s.
+/// Adapter over [`CmInterfaceRegistry::cm_flatten`] yielding `wasm_encoder::ValType`s.
 pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInterfaceRegistry) {
     out.extend(
         registry
@@ -3272,7 +3234,6 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
     );
 }
 
-/// Map a canonical-ABI [`crate::cm_abi::CmValType`] to a core `wasm_encoder::ValType`.
 pub fn cm_val_type_to_val_type(v: crate::cm_abi::CmValType) -> ValType {
     match v {
         crate::cm_abi::CmValType::I32 => ValType::I32,
@@ -3362,7 +3323,6 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
-        // Tuple param: each element must itself be supported.
         Type::Tuple(elems) => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
@@ -3429,7 +3389,6 @@ fn is_return_type_supported_with_types(
                 _ => false,
             }
         }
-        // A tuple is spelled `[...]`; each element must be supported.
         Type::Tuple(elements) => {
             // Empty tuple () is the unit type, which is always supported
             if elements.is_empty() {
@@ -3484,22 +3443,16 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
 
-/// Whether a return type must be returned via an outptr (in memory) rather than
-/// as flat core results. The single source of truth shared by the import-binding
-/// synthesizer and the core functype builder, so the two never disagree on a
-/// function's core signature.
-///
-/// True when the type's `cm_flatten` sequence exceeds [`MAX_FLAT_RESULTS`], or
-/// it is a named record/payload-bearing variant (always returned via memory,
-/// matching the canonical lowering used for WASI and component imports alike).
+/// Whether a return type must be returned via an outptr rather than as flat
+/// core results. Single source of truth shared by the import-binding synthesizer
+/// and the core functype builder, so the two never disagree on a signature.
 pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
         || cm_named_type_return_needs_outptr(ty, registry)
 }
 
-/// Check if a named CM type is a record or a payload-bearing variant, which are
-/// returned via an outptr. Resolves the type's source through the registry
-/// ([`CmInterfaceRegistry::resolve_cm_source_for`]) so WASI, `--lib`, and
+/// Whether a named CM type is a record or payload-bearing variant (returned via
+/// an outptr). Resolves the source through the registry so WASI, `--lib`, and
 /// component-imported types are all recognised.
 pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     if let Type::Named(named) = ty
@@ -3508,7 +3461,6 @@ pub fn cm_named_type_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegist
         if let Some(cases) = registry.get_variant_cases_by_source(source, &named.name) {
             return cases.iter().any(|case| case.payload.is_some());
         }
-        // Records always need outptr — they have multiple fields.
         if registry
             .get_struct_fields_by_source(source, &named.name)
             .is_some()

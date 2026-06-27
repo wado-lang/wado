@@ -7548,13 +7548,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source,
                     type_args,
                 } => {
-                    // Tuple projection (`t.0`): a tuple is the reserved-name
-                    // `[]` generic with no struct decl, so the struct-fields
-                    // lookup below would miss and fall to the `(0, …)`
-                    // fallback — collapsing every `t.N` onto field 0, which
-                    // SROA then keys on. Resolve the numeric field name into
-                    // the element index directly, mirroring the elaborator's
-                    // `lookup_field_type` tuple branch (expr.rs:1513).
+                    // Tuple projection (`t.0`): a tuple has no struct decl, so the
+                    // struct-fields lookup below misses and the `(0, …)` fallback would
+                    // collapse every `t.N` onto field 0. Resolve the numeric field name
+                    // into the element index directly.
                     if crate::tir::TypeTable::is_tuple_type(&name)
                         && let Ok(index) = field_name.parse::<usize>()
                         && index < type_args.len()

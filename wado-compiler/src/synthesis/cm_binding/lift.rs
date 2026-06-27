@@ -255,10 +255,8 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> Option<TirExpr> {
-    // Resolve the variant/enum type through the source's `ModuleSource` (the
-    // same registry-provenance path the struct lift uses), so component-imported
-    // and `--lib` types — whose `ModuleSource::Wasm`/entry source the cm-package
-    // prefix scan cannot match — reach the type the elaborator registered.
+    // Resolve via the source's `ModuleSource` provenance, not the cm-package
+    // prefix scan, so component-imported and `--lib` types resolve.
     if let Some(cases) = ctx
         .cm_interface_registry
         .get_variant_cases_by_source(source, &named.name)

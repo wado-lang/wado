@@ -711,12 +711,8 @@ pub(super) fn synthesize_lower_result_to_memory(
 /// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
 /// returning the statements plus the locals holding `(base_ptr, len)`.
 ///
-/// Allocates `len * elem_size` bytes, then loops lowering each element at its
-/// stride via the full recursive [`synthesize_lower_wasi_type_to_memory`], so
-/// ref-bearing elements (strings, tuples, records, options) lower correctly
-/// rather than being stored as opaque `i32` handles. Callers turn the pair into
-/// whatever the CM ABI wants — a `(ptr, len)` store at an address
-/// ([`synthesize_lower_list_to_memory`]) or two flat args.
+/// Lowers each element via the recursive [`synthesize_lower_wasi_type_to_memory`]
+/// so ref-bearing elements lower correctly rather than as opaque `i32` handles.
 pub(super) fn synthesize_lower_list_to_buffer(
     elem_type: &Type,
     value: TirExpr,
@@ -1206,9 +1202,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
-        // List<T> → (ptr, len). Lower the list into an element buffer and push
-        // its base/len locals directly. Reached for a `List` payload of an
-        // Option / Result / tuple (e.g. `option<list<u8>>`).
+        // List<T> → (ptr, len): lower into an element buffer, push base/len.
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             let (list_stmts, base_local, len_local) = synthesize_lower_list_to_buffer(
                 &g.args[0],
@@ -1223,8 +1217,6 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(base_local, "__list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "__list_len", TypeTable::I32));
         }
-        // Tuple → each element's flat args, in order (mirrors `cm_flatten`'s
-        // tuple expansion so the lowered values match the flat signature).
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
             elems,
             value,
@@ -1237,8 +1229,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             wasi_package,
             type_table,
         ),
-        // CM record → its fields' flat args (recursion handles nested records,
-        // e.g. `SourceSpan` inside `Option<SourceSpan>`).
+        // CM record → its fields' flat args (recursion handles nested records).
         Type::Named(n)
             if n.source_interface.as_deref().is_some_and(|s| {
                 cm_interface_registry
@@ -1269,24 +1260,17 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 type_table,
             );
         }
-        // Primitive, flags, resource, or borrow handle: the value is itself the
-        // single flat arg (enums and variants are handled by the arms above).
+        // Primitive, flags, resource, or borrow handle: the value is the single flat arg.
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => flat_args.push(value),
-        // Stream / Future / Own / Borrow are i32 handles (single flat arg),
-        // matching `cm_flatten`'s treatment of the same generics.
+        // Stream / Future / Own / Borrow are i32 handles (single flat arg).
         Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
             flat_args.push(value);
         }
-        // `Function` / `Infer` / an unknown generic / an empty tuple are not
-        // CM value-flatten inputs; reaching here is a compiler bug, so fail
-        // loudly rather than emitting a wrong flat arg.
         other => panic!("unsupported type for CM value flattening: {other:?}"),
     }
 }
 
-/// Flatten a tuple value (GC ref) into its elements' flat CM ABI args, in
-/// declared order. Each element recurses through
-/// [`synthesize_flatten_value_to_flat_args`].
+/// Flatten a tuple value (GC ref) into its elements' flat CM ABI args, in order.
 #[allow(clippy::too_many_arguments)]
 fn synthesize_flatten_tuple_to_flat_args(
     elems: &[Type],
@@ -1435,8 +1419,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         return;
     }
 
-    // Allocate mutable locals for inner flats, zero-initialized by slot type
-    // (an `f32`/`f64` slot needs a float zero, not an i32 zero).
+    // Zero-init by slot type: an `f32`/`f64` slot needs a float zero, not an i32 zero.
     let mut inner_locals: Vec<(u32, TypeId)> = Vec::new();
     for (i, &ft) in inner_flat_types.iter().enumerate() {
         let local = alloc_local(next_local, locals, ft);
@@ -1692,10 +1675,8 @@ fn flatten_result_case_arm(
     for (i, flat_val) in case_flat.into_iter().enumerate() {
         if i < payload_locals.len() {
             let (pl, pt) = payload_locals[i];
-            // Merge this case's flat into the shared joined slot, bit-
-            // reinterpreting when the join widened the slot to a different core
-            // class (e.g. an `f32` ok sharing an `i32`-joined slot with a `u32`
-            // err) — a numeric cast would corrupt the value (1.5 -> 1).
+            // Bit-reinterpret into the joined slot; a numeric cast would corrupt
+            // a value sharing a different-class slot (f32 1.5 -> i32 1).
             let flat_val_ty = flat_val.type_id;
             let v = coerce_flat_lower(
                 flat_val,

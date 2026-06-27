@@ -287,10 +287,8 @@ pub fn cm_type_to_type_id(
                         type_table.find_named_type_by_cm_package(named.name.as_str(), pkg)
                     })
                 })
-                // Component-imported (and `--lib`) types live under a
-                // `ModuleSource::Wasm`/entry source that the cm-package prefix
-                // lookup above cannot match; resolve them through the FQ ->
-                // ModuleSource provenance recorded at registration.
+                // Component-imported (and `--lib`) types the cm-package prefix
+                // lookup can't match: resolve via the FQ -> ModuleSource provenance.
                 .or_else(|| {
                     named
                         .source_interface
@@ -737,12 +735,8 @@ pub(super) fn coerce_flat_lower(
 
 /// Compute the flat ABI parameter types for a CM function parameter.
 ///
-/// Thin adapter over [`crate::component_model::CmInterfaceRegistry::cm_flatten`]
-/// — the single source of truth for canonical-ABI flattening — that maps its
-/// result into `TypeId`s. The `names.string` guard handles a non-`"String"`
-/// prelude String name before delegating; everything else flows through the
-/// shared engine, so records/variants/tuples/results never drift from the
-/// signature the lowering emits.
+/// Adapter mapping [`CmInterfaceRegistry::cm_flatten`] to `TypeId`s; the
+/// `names.string` guard handles a non-`"String"` prelude String name first.
 pub fn flatten_param_type(
     ty: &Type,
     cm_interface_registry: &crate::component_model::CmInterfaceRegistry,

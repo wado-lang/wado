@@ -1235,11 +1235,7 @@ pub fn mangle_generic_name(base_name: &str, type_args: &[String]) -> String {
     }
 }
 
-/// Build a tuple type's mangled identity from its element names.
-///
-/// The built-in tuple's user-facing and mangled spelling is `[T1, T2, …]`
-/// (not `Tuple<…>`), shared by every site that names a tuple so they cannot
-/// drift. Example: `mangle_tuple_type(&["i32", "String"])` → `"[i32,String]"`.
+/// Mangle a tuple as `[T1,T2,…]`, e.g. `["i32","String"]` → `"[i32,String]"`.
 pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))
 }

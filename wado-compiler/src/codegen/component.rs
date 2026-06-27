@@ -1965,10 +1965,8 @@ fn generate_cm_imports(
             continue;
         }
 
-        // A `Component` import declares an arbitrary value-type surface (any
-        // `result<ok, err>`, list/option/tuple, record, variant). Its
-        // signatures are emitted faithfully via the recursive `ast_type_to_cm`
-        // engine, whereas WASI host interfaces keep the legacy emitter whose
+        // Component imports emit their full value-type surface via
+        // `ast_type_to_cm`; WASI host interfaces use the legacy emitter whose
         // `result` always resolves to the shared `error-code`.
         let is_component_import = import_plan
             .iter()
@@ -2358,11 +2356,8 @@ fn generate_cm_imports(
                     .map(|(name, val_type)| (name.as_str(), *val_type))
                     .collect();
 
-                // Return type: a component import emits its full value-type
-                // surface faithfully via `ast_type_to_cm` (notably `result<ok,
-                // err>` with an arbitrary `err`); WASI host interfaces use
-                // `emit_cm_val_type`, whose `result` resolves to `error-code`.
-                // Record returns always route through `ast_type_to_cm`.
+                // Component imports and record returns route through
+                // `ast_type_to_cm`; other WASI returns use `emit_cm_val_type`.
                 let result_type = func.return_type.as_ref().map(|ty| {
                     let resolved_ty = project.cm_interface_registry.resolve_type(ty);
                     let is_struct = matches!(&resolved_ty, Type::Named(named)

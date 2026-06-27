@@ -685,15 +685,10 @@ impl TypeTable {
     pub const UNKNOWN: TypeId = TypeId(17);
     pub const ERROR: TypeId = TypeId(18);
 
-    /// Reserved base name of the built-in tuple type, kept as a
-    /// `GenericInstance` whose element types are its type arguments — the same
-    /// model as `List` / `Option` / `Result`. `[]` is not a writable type
-    /// name, so it can never collide with a user-defined `struct Tuple`; that
-    /// is what lets [`Self::is_tuple_type`] identify a tuple by name alone,
-    /// without the old `module_source.is_core()` qualifier. The user-facing
-    /// and mangled spelling is `[T1, T2, …]` (see `type_name` / the mangle
-    /// helpers); this reserved name surfaces only as the dispatch family key
-    /// for the variadic `impl<..T> … for [..T]` and its concrete call sites.
+    /// Reserved `GenericInstance` base name of the built-in tuple. Not a
+    /// writable type name, so it can never collide with a user-defined
+    /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
+    /// check sound. User-facing spelling is `[T1, T2, …]`.
     pub const TUPLE_TYPE_NAME: &'static str = "[]";
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
@@ -727,9 +722,7 @@ impl TypeTable {
         }
     }
 
-    /// Check if a `GenericInstance` base name identifies the built-in tuple
-    /// type. The reserved name `[]` cannot be user-written, so the name alone
-    /// is a sound, collision-free test — no `module_source` qualifier needed.
+    /// Whether a `GenericInstance` base name is the built-in tuple.
     pub fn is_tuple_type(name: &str) -> bool {
         name == Self::TUPLE_TYPE_NAME
     }
@@ -1263,7 +1256,7 @@ impl TypeTable {
         })
     }
 
-    /// Check if a type is a built-in tuple (the reserved-name `[]` generic).
+    /// Whether a type is a built-in tuple.
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
@@ -1418,11 +1411,9 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
-    /// Find any decl-backed named type (struct, variant, enum, flags, or
-    /// resource) by its exact `(name, module_source)` key. Used to resolve a CM
-    /// type whose owning interface FQ maps to a concrete `ModuleSource` via the
-    /// registry's provenance (component imports and `--lib` locals), where the
-    /// cm-package prefix scan does not apply.
+    /// Find any decl-backed named type by exact `(name, module_source)` key,
+    /// for CM types whose interface FQ maps to a concrete `ModuleSource`
+    /// (component imports, `--lib` locals) rather than a cm-package prefix.
     pub fn find_named_type_by_source(
         &self,
         name: &str,
@@ -2548,10 +2539,8 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
-                // A tuple is structural and module-independent, so it carries
-                // no module prefix; its elements stay qualified so two
-                // same-named structs from distinct modules remain distinct
-                // inside it.
+                // A tuple is module-independent, so it carries no module prefix
+                // (its elements stay qualified).
                 if Self::is_tuple_type(name) {
                     return crate::name::mangle_tuple_type(&args);
                 }
@@ -2676,8 +2665,6 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
-                // The tuple identity is its bracket spelling, matching the
-                // user-facing form and the WIR tuple struct fq.
                 if Self::is_tuple_type(name) {
                     return TypeNameInfo::Tuple(args);
                 }

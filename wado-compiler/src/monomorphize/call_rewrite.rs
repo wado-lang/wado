@@ -634,8 +634,7 @@ impl Monomorphizer {
             }
         }
         // Tuple variadic impl: rewrite `[]^Eq::eq` → `[]<i32,i32,i32>^Eq::eq`.
-        // The reserved tuple base name `[]` is unique to built-in tuples, so a
-        // bare-name check on `struct_name` identifies them without ambiguity.
+        // The reserved tuple base name `[]` is unique to built-in tuples.
         if let Some(ref info) = method_func.method_info
             && TypeTable::is_tuple_type(&info.struct_name)
         {

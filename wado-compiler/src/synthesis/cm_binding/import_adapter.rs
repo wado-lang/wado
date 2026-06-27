@@ -140,9 +140,8 @@ fn synthesize_lift_flat_result(
             )
         } else {
             // Err with a flat payload — the remaining flat values encode the error.
-            // Lift when the error type is a named CM variant/enum; the registry
-            // lookup inside `try_lift_wasi_variant_or_enum` is the gate (it
-            // returns None for anything else), so we fall back to a bare Err.
+            // `try_lift_wasi_variant_or_enum` returns None for non-CM types, so
+            // we fall back to a bare Err.
             let lifted_variant = if let Type::Named(n) = err_ty
                 && let Some(source) = n.source_interface.as_deref()
             {
@@ -374,15 +373,9 @@ pub(super) fn synthesize_adapter(
     let name = binding_func_name(&func_info.interface_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
-    // Derive outptr needs from the return type via the shared Canonical-ABI
-    // decision (`cm_return_needs_outptr`), so the binding and the core functype
-    // builder agree on the import's signature.
-    //
-    // For `async fn foo(...) -> AsyncCall<T>` imports, `func_info.return_type`
-    // already stores the CM-ABI `T` (the registry strips the `AsyncCall<T>`
-    // wrapper at registration time, see `CmInterfaceRegistry::register`). The
-    // wrapping is re-applied below when emitting the Wado-visible adapter
-    // return type.
+    // For `async fn ... -> AsyncCall<T>` imports, `func_info.return_type` already
+    // stores the CM-ABI `T` (the registry strips `AsyncCall<T>` at registration);
+    // the wrapper is re-applied below for the Wado-visible adapter return type.
     let cm_return_type: Option<Type> = func_info.return_type.clone();
     let needs_outptr = cm_return_type.as_ref().is_some_and(|rt| {
         crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
@@ -879,10 +872,8 @@ pub(super) fn synthesize_adapter(
                         synth_span(),
                     ),
                 ));
-                // Lower element to linear memory at __addr through the full
-                // registry-aware memory lowerer, so aggregate elements
-                // (records, variants, options, tuples, nested lists) lay out
-                // their payload correctly instead of being stored as an i32.
+                // Use the full memory lowerer so aggregate elements lay out their
+                // payload correctly instead of being stored as an i32.
                 let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
                 let addr_ref =
                     local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
@@ -1027,7 +1018,6 @@ pub(super) fn synthesize_adapter(
                     type_table,
                 );
             }
-            // Tuple param: flatten each element to its flat args, in order.
             Type::Tuple(elems) if !elems.is_empty() => {
                 assert!(
                     !func_info.is_async,

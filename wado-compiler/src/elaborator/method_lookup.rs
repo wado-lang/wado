@@ -422,7 +422,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup.
-            // Tuples (the reserved-name `[]` generic) have special built-in methods.
             ResolvedType::GenericInstance {
                 name,
                 module_source,
