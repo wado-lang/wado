@@ -6,9 +6,13 @@
 //! Git and workspace sources are recognized and reported as not-yet-resolved,
 //! so they slot into the same worklist later without changing the result shape.
 //!
-//! Version selection is highest-compatible per requirement, first-wins on a
-//! repeated id. Full conflict-driven resolution (`PubGrub`: multi-version
-//! coexistence, backtracking) is a later refinement behind this same seam.
+//! Version selection is highest-compatible per requirement. A repeated package
+//! id reuses the first choice but verifies it satisfies the later requirement —
+//! an incompatibility is a `VersionConflict` error, not a silently-wrong lock —
+//! and a non-dev requirement downgrades a dev-only mark. Full conflict-driven
+//! resolution (`PubGrub`: backtracking to a lower version that satisfies every
+//! requirement, multi-version coexistence) is a later refinement behind this
+//! same seam.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
@@ -18,7 +22,7 @@ use indexmap::IndexMap;
 use crate::lockfile::LockedPackage;
 use crate::manifest::{Dependency, DependencySource, Manifest};
 use crate::provider::{DependencyProvider, ProviderError};
-use crate::version::VersionSpecifier;
+use crate::version::{Version, VersionSpecifier};
 
 /// Errors from dependency resolution.
 #[derive(Debug, Clone)]
@@ -29,6 +33,14 @@ pub enum ResolveError {
     NoMatchingVersion {
         package: String,
         requirement: String,
+    },
+    /// Two requirements on the same package cannot both be satisfied by the
+    /// already-chosen version. (No backtracking yet — a conflict is an error,
+    /// not a silently-wrong lock.)
+    VersionConflict {
+        package: String,
+        requirement: String,
+        resolved: String,
     },
     /// A registry dependency names an unknown alias, or omits `registry` with
     /// no `default` registry in scope.
@@ -51,6 +63,14 @@ impl fmt::Display for ResolveError {
                 package,
                 requirement,
             } => write!(f, "no version of {package:?} matches {requirement:?}"),
+            ResolveError::VersionConflict {
+                package,
+                requirement,
+                resolved,
+            } => write!(
+                f,
+                "{package:?} is required as {requirement:?} but already resolved to {resolved:?}"
+            ),
             ResolveError::NoRegistry { dep } => {
                 write!(
                     f,
@@ -78,11 +98,16 @@ impl fmt::Display for ResolveError {
 impl std::error::Error for ResolveError {}
 
 /// One pending dependency, carrying the registries table of the manifest that
-/// declared it (a transitive dep resolves aliases against its own manifest).
+/// declared it (a transitive dep resolves aliases against its own manifest) and
+/// the directory that manifest lives in (so a nested path dep resolves relative
+/// to its declarer, not the project root).
 struct Frame {
     key: String,
     source: DependencySource,
     registries: IndexMap<String, String>,
+    /// Directory of the declaring manifest, relative to the project root (empty
+    /// for the root manifest). Used only to rebase path dependencies.
+    base: String,
     dev: bool,
 }
 
@@ -103,8 +128,8 @@ pub async fn resolve(
     let mut children: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
     let mut queue: VecDeque<Frame> = VecDeque::new();
-    enqueue(&mut queue, &manifest.dependencies, manifest, false);
-    enqueue(&mut queue, &manifest.dev_dependencies, manifest, true);
+    enqueue(&mut queue, &manifest.dependencies, manifest, "", false);
+    enqueue(&mut queue, &manifest.dev_dependencies, manifest, "", true);
 
     while let Some(frame) = queue.pop_front() {
         // Path deps are resolved fresh and never locked (WEP); traverse them so
@@ -117,14 +142,18 @@ pub async fn resolve(
                 version,
             } => (registry, package, version),
             DependencySource::Path { path, .. } => {
+                // A nested path dep's `path` is relative to the manifest that
+                // declared it; rebase onto that manifest's directory.
+                let dep_path = join_base(&frame.base, path);
                 let dep_manifest = provider
-                    .load_path_manifest(path)
+                    .load_path_manifest(&dep_path)
                     .await
                     .map_err(ResolveError::Provider)?;
                 enqueue(
                     &mut queue,
                     &dep_manifest.dependencies,
                     &dep_manifest,
+                    &dep_path,
                     frame.dev,
                 );
                 continue;
@@ -142,17 +171,34 @@ pub async fn resolve(
                 dep: frame.key.clone(),
             }
         })?;
+        // Lock id `registry+<url>/<package>`. The package is `ns:pkg` (no `/`),
+        // so the boundary is the last `/` even when the url contains `/`.
         let id = format!("registry+{url}/{package}");
-        if resolved.contains_key(&id) {
-            continue;
-        }
-
         let req =
             VersionSpecifier::parse(version).map_err(|e| ResolveError::InvalidRequirement {
                 dep: frame.key.clone(),
                 requirement: version.clone(),
                 reason: e.to_string(),
             })?;
+        if let Some(existing) = resolved.get_mut(&id) {
+            // Already resolved. Verify the chosen version satisfies this
+            // requirement too — a real conflict is an error, not a silent
+            // wrong lock. A non-dev requirement downgrades a dev-only mark.
+            let existing_ver =
+                Version::parse(&existing.version).expect("locked version came from Version");
+            if !req.matches(&existing_ver) {
+                return Err(ResolveError::VersionConflict {
+                    package: package.clone(),
+                    requirement: version.clone(),
+                    resolved: existing.version.clone(),
+                });
+            }
+            if !frame.dev {
+                existing.dev = false;
+            }
+            continue;
+        }
+
         let available = provider
             .list_registry_versions(&url, package)
             .await
@@ -186,6 +232,7 @@ pub async fn resolve(
                 key: ckey.clone(),
                 source: cdep.source.clone(),
                 registries: info.manifest.registries.clone(),
+                base: String::new(),
                 dev: frame.dev,
             });
         }
@@ -226,14 +273,37 @@ pub async fn resolve(
     }
 
     let mut out: Vec<LockedPackage> = resolved.into_values().collect();
-    out.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.version.cmp(&b.version)));
+    out.sort_by(|a, b| {
+        a.id.cmp(&b.id)
+            .then_with(|| version_order(&a.version, &b.version))
+    });
     Ok(out)
+}
+
+/// Compare two locked version strings by semver, not lexically (so `1.9.0`
+/// orders before `1.10.0`). Both strings were produced by `Version::to_string`.
+fn version_order(a: &str, b: &str) -> std::cmp::Ordering {
+    match (Version::parse(a), Version::parse(b)) {
+        (Ok(av), Ok(bv)) => av.cmp(&bv),
+        _ => a.cmp(b),
+    }
+}
+
+/// Join a path-dependency `path` onto its declarer's directory. `..` is left
+/// for the filesystem to normalize when the manifest is read.
+fn join_base(base: &str, path: &str) -> String {
+    if base.is_empty() {
+        path.to_string()
+    } else {
+        format!("{}/{path}", base.trim_end_matches('/'))
+    }
 }
 
 fn enqueue(
     queue: &mut VecDeque<Frame>,
     deps: &IndexMap<String, Dependency>,
     ctx: &Manifest,
+    base: &str,
     dev: bool,
 ) {
     for (key, dep) in deps {
@@ -241,6 +311,7 @@ fn enqueue(
             key: key.clone(),
             source: dep.source.clone(),
             registries: ctx.registries.clone(),
+            base: base.to_string(),
             dev,
         });
     }
@@ -385,6 +456,142 @@ default = "https://wa.dev"
                 .find(|p| p.id.ends_with("ns:a"))
                 .expect("a present");
             assert_eq!(a.deps, vec!["registry+https://wa.dev/ns:b@1.3.0"]);
+        });
+    }
+
+    #[test]
+    fn incompatible_requirements_conflict() {
+        block_on(async {
+            // root → a (^1.0) and b (^1.0); a wants ns:c ^1.0, b wants ns:c =2.0.
+            let manifest = root(
+                r#""ns:a" = { version = "^1.0.0" }
+"ns:b" = { version = "^1.0.0" }"#,
+            );
+            let dep_manifest = |name: &str, dep: &str| -> Manifest {
+                format!(
+                    "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[registries]\ndefault = \"https://wa.dev\"\n\n[dependencies]\n{dep}\n"
+                )
+                .parse()
+                .unwrap()
+            };
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:a",
+                Version::parse("1.0.0").unwrap(),
+                RegistryPackageInfo {
+                    manifest: dep_manifest("a", r#""ns:c" = { version = "^1.0.0" }"#),
+                    integrity: "sha256:a".to_string(),
+                },
+            );
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:b",
+                Version::parse("1.0.0").unwrap(),
+                RegistryPackageInfo {
+                    manifest: dep_manifest("b", r#""ns:c" = { version = "=2.0.0" }"#),
+                    integrity: "sha256:b".to_string(),
+                },
+            );
+            for v in ["1.0.0", "2.0.0"] {
+                provider.add_registry_package(
+                    "https://wa.dev",
+                    "ns:c",
+                    Version::parse(v).unwrap(),
+                    leaf_info("c", v, "sha256:c"),
+                );
+            }
+            let err = resolve(&manifest, &provider).await.unwrap_err();
+            assert!(
+                matches!(err, ResolveError::VersionConflict { .. }),
+                "{err:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn non_dev_requirement_downgrades_dev_mark() {
+        block_on(async {
+            // ns:x is both a dev-dependency and a normal dependency → not dev.
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+default = "https://wa.dev"
+
+[dependencies]
+"ns:x" = { version = "^1.0.0" }
+
+[dev-dependencies]
+"ns:x" = { version = "^1.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:x",
+                Version::parse("1.0.0").unwrap(),
+                leaf_info("x", "1.0.0", "sha256:x"),
+            );
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 1);
+            assert!(!locked[0].dev, "a runtime dep must not be locked dev=true");
+        });
+    }
+
+    #[test]
+    fn nested_path_dep_rebases_onto_declarer() {
+        block_on(async {
+            // root → path `a`; a → path `../b` (relative to a/), b → registry dep.
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"lib:a" = { path = "pkgs/a" }
+"#
+            .parse()
+            .unwrap();
+            let a: Manifest = r#"
+[package]
+name = "a"
+version = "0.1.0"
+
+[dependencies]
+"lib:b" = { path = "../b" }
+"#
+            .parse()
+            .unwrap();
+            let b: Manifest = r#"
+[package]
+name = "b"
+version = "0.1.0"
+
+[registries]
+default = "https://wa.dev"
+
+[dependencies]
+"ns:dep" = { version = "^1.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            // a is at pkgs/a; its `../b` rebases to pkgs/a/../b.
+            provider.add_path_manifest("pkgs/a", a);
+            provider.add_path_manifest("pkgs/a/../b", b);
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:dep",
+                Version::parse("1.0.0").unwrap(),
+                leaf_info("dep", "1.0.0", "sha256:d"),
+            );
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 1, "{locked:?}");
+            assert_eq!(locked[0].id, "registry+https://wa.dev/ns:dep");
         });
     }
 

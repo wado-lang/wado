@@ -33,6 +33,40 @@ impl Manifest {
         self.world.get(world_fq).map(String::as_str)
     }
 
+    /// Deterministic `sha256:` hash of the `[dependencies]` + `[dev-dependencies]`
+    /// sections, for lock-file staleness detection. Keys are sorted and each
+    /// source is rendered to a normalized fingerprint so that semantically
+    /// equal manifests hash equally (an omitted `registry` matches the default
+    /// registry; a path dependency's publish source is included).
+    #[must_use]
+    pub fn deps_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        for (label, deps) in [
+            ("deps", &self.dependencies),
+            ("dev", &self.dev_dependencies),
+        ] {
+            let mut keys: Vec<&String> = deps.keys().collect();
+            keys.sort();
+            for key in keys {
+                hasher.update(label.as_bytes());
+                hasher.update(b"\0");
+                hasher.update(key.as_bytes());
+                hasher.update(b"\0");
+                hasher.update(source_fingerprint(&deps[key].source).as_bytes());
+                hasher.update(b"\n");
+            }
+        }
+        let digest = hasher.finalize();
+        let mut out = String::with_capacity(7 + 64);
+        out.push_str("sha256:");
+        for byte in digest {
+            use std::fmt::Write as _;
+            let _ = write!(out, "{byte:02x}");
+        }
+        out
+    }
+
     /// Non-fatal warnings for this manifest. Computed on demand; the consumer
     /// decides how to surface them.
     #[must_use]
@@ -446,10 +480,22 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
 
     // Open coordinate: the key is itself the registry identity
     // (`"ns:pkg" = { version = "..." }`), `package` omitted, default registry
-    // unless `registry` names one. See WEP: Package Manifest.
-    if raw.version.is_some() && is_open_coordinate(name) {
+    // unless `registry` names one. `build_registry_source` reports a missing
+    // `version` as MissingField. See WEP: Package Manifest.
+    if is_open_coordinate(name) {
         return Ok(Dependency {
             source: build_registry_source(name, name.to_string(), &raw)?,
+        });
+    }
+
+    // A registry-shaped dep whose key is not a coordinate and has no `package`:
+    // the registry identity is unknown. Point at the real fix rather than the
+    // generic "specify a source" message.
+    if raw.registry.is_some() || raw.version.is_some() {
+        return Err(ManifestError::ConflictingSource {
+            dep_name: name.to_string(),
+            message: "registry dependency needs a coordinate key `ns:pkg` or a `package = \"ns:pkg\"` field"
+                .to_string(),
         });
     }
 
@@ -458,6 +504,37 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
         message: "dependency must specify one of: `git`, `package`, `path`, or `workspace = true`"
             .to_string(),
     })
+}
+
+/// Stable, normalized rendering of a dependency source for [`Manifest::deps_hash`].
+/// An omitted registry renders as `default` so it matches an explicit
+/// `registry = "default"`; a path dependency's publish source is included.
+fn source_fingerprint(source: &DependencySource) -> String {
+    match source {
+        DependencySource::Registry {
+            registry,
+            package,
+            version,
+        } => format!(
+            "registry|{}|{package}|{version}",
+            registry.as_deref().unwrap_or("default")
+        ),
+        DependencySource::Git { url, pin } => match pin {
+            GitPin::Version(v) => format!("git|{url}|version|{v}"),
+            GitPin::Ref(r) => format!("git|{url}|ref|{r}"),
+        },
+        DependencySource::Path {
+            path,
+            publish_source,
+        } => {
+            let pubsrc = publish_source
+                .as_deref()
+                .map(source_fingerprint)
+                .unwrap_or_default();
+            format!("path|{path}|{pubsrc}")
+        }
+        DependencySource::Workspace => "workspace".to_string(),
+    }
 }
 
 /// A dependency key is an open coordinate `ns:pkg` (exactly two non-empty
@@ -634,6 +711,52 @@ default = "https://wa.dev"
     }
 
     #[test]
+    fn deps_hash_normalizes_default_registry() {
+        // An omitted `registry` and an explicit `registry = "default"` resolve
+        // to the same package, so they must hash equally (no false staleness).
+        let implicit = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+default = "oci://ghcr.io/acme"
+
+[dependencies]
+"ns:pkg" = { version = "^1.0.0" }
+"#
+        .parse::<Manifest>()
+        .unwrap();
+        let explicit = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+default = "oci://ghcr.io/acme"
+
+[dependencies]
+"ns:pkg" = { registry = "default", package = "ns:pkg", version = "^1.0.0" }
+"#
+        .parse::<Manifest>()
+        .unwrap();
+        assert_eq!(implicit.deps_hash(), explicit.deps_hash());
+        assert!(implicit.deps_hash().starts_with("sha256:"));
+    }
+
+    #[test]
+    fn deps_hash_changes_with_version() {
+        let mk = |ver: &str| -> Manifest {
+            format!(
+                "[package]\nname=\"a\"\nversion=\"0.1.0\"\n\n[registries]\ndefault=\"oci://ghcr.io/acme\"\n\n[dependencies]\n\"ns:pkg\" = {{ version = \"{ver}\" }}\n"
+            )
+            .parse()
+            .unwrap()
+        };
+        assert_ne!(mk("^1.0.0").deps_hash(), mk("^2.0.0").deps_hash());
+    }
+
+    #[test]
     fn parse_lib_nickname_path_dep() {
         // A `lib:` nickname is the WEP home for indirection — local/path/git
         // refs that have no public coordinate. It must keep working: the key
@@ -677,6 +800,46 @@ custom = "https://registry.example.com"
                 version,
             } if reg == "custom" && package == "mizchi:brotli" && version == "^0.2.0"
         ));
+    }
+
+    #[test]
+    fn open_coordinate_missing_version_reports_missing_field() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+default = "oci://ghcr.io/acme"
+
+[dependencies]
+"mizchi:brotli" = { registry = "default" }
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(&err, ManifestError::MissingField { field, .. } if field == "version"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn registry_shaped_bare_key_reports_helpful_error() {
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[registries]
+default = "oci://ghcr.io/acme"
+
+[dependencies]
+foo = { version = "^1.0.0" }
+"#;
+        let err = toml.parse::<Manifest>().unwrap_err();
+        assert!(
+            matches!(&err, ManifestError::ConflictingSource { message, .. } if message.contains("coordinate key")),
+            "{err:?}"
+        );
     }
 
     #[test]

@@ -49,7 +49,6 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
         if candidate.is_file() {
             let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
             let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
-            emit_manifest_warnings(&manifest, &candidate);
             return Ok(Some(ProjectManifest {
                 manifest,
                 root: dir,
@@ -143,6 +142,7 @@ pub fn resolve_lib_input(
             Err(e) => return Err(CliExit::error(e)),
         }
     };
+    emit_manifest_warnings(&project);
 
     let pkg = project
         .manifest
@@ -175,17 +175,20 @@ fn load_from_dir(dir: &Path) -> Result<ProjectManifest, DiscoveryError> {
     let candidate = dir.join(MANIFEST_FILENAME);
     let content = fs::read_to_string(&candidate).map_err(DiscoveryError::Io)?;
     let manifest: Manifest = content.parse().map_err(DiscoveryError::Parse)?;
-    emit_manifest_warnings(&manifest, &candidate);
     Ok(ProjectManifest {
         manifest,
         root: dir.to_path_buf(),
     })
 }
 
-/// Print non-fatal manifest warnings to stderr at the point the project
-/// manifest is loaded.
-fn emit_manifest_warnings(manifest: &Manifest, path: &Path) {
-    for w in manifest.warnings() {
+/// Print non-fatal manifest warnings to stderr.
+///
+/// Called at command boundaries that resolve the project (build and dependency
+/// commands), not inside `discover`/`load_from_dir` — so commands that walk many
+/// directories (`wado test`, `wado format`) don't re-emit them per directory.
+pub fn emit_manifest_warnings(project: &ProjectManifest) {
+    let path = project.root.join(MANIFEST_FILENAME);
+    for w in project.manifest.warnings() {
         eprintln!("warning: {}: {w}", path.display());
     }
 }
@@ -234,6 +237,7 @@ pub fn resolve_input(
             }
             other => CliExit::error(other),
         })?;
+        emit_manifest_warnings(&project);
         let entry = entry_point_or_error(&project, kind)?;
         return Ok(entry.to_string_lossy().into_owned());
     }
@@ -253,6 +257,7 @@ pub fn resolve_input(
             return Err(CliExit::error(e));
         }
     };
+    emit_manifest_warnings(&project);
 
     let path = entry_point_or_error(&project, kind)?;
     Ok(path.to_string_lossy().into_owned())

@@ -3,8 +3,7 @@
 use std::fmt::Write as _;
 use std::fs;
 
-use sha2::{Digest, Sha256};
-use wado_manifest::{DependencySource, GitPin, LockFile, Manifest};
+use wado_manifest::LockFile;
 
 use crate::args::{self, CliExit};
 use crate::manifest::discover;
@@ -45,6 +44,7 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let project = discover(&cwd)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
+    crate::manifest::emit_manifest_warnings(&project);
 
     let provider = FilesystemProvider::new(project.root.clone());
     let packages = wado_manifest::resolve(&project.manifest, &provider)
@@ -54,7 +54,7 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let count = packages.len();
     let lock = LockFile {
         version: 1,
-        deps_hash: deps_hash(&project.manifest),
+        deps_hash: project.manifest.deps_hash(),
         packages,
         build_dependencies: Vec::new(),
     };
@@ -63,90 +63,4 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
         .map_err(|e| CliExit::error(format!("writing wado.lock: {e}")))?;
     eprintln!("Locked {count} package(s) → {}", lock_path.display());
     Ok(())
-}
-
-/// Hash of the `[dependencies]` + `[dev-dependencies]` sections for lock-file
-/// staleness detection. Deterministic: keys sorted, each source rendered to a
-/// stable fingerprint.
-fn deps_hash(manifest: &Manifest) -> String {
-    let mut hasher = Sha256::new();
-    for (label, deps) in [
-        ("deps", &manifest.dependencies),
-        ("dev", &manifest.dev_dependencies),
-    ] {
-        let mut keys: Vec<&String> = deps.keys().collect();
-        keys.sort();
-        for key in keys {
-            hasher.update(label.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(key.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(source_fingerprint(&deps[key].source).as_bytes());
-            hasher.update(b"\n");
-        }
-    }
-    let digest = hasher.finalize();
-    let mut out = String::with_capacity(7 + 64);
-    out.push_str("sha256:");
-    for byte in &digest {
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
-}
-
-fn source_fingerprint(source: &DependencySource) -> String {
-    match source {
-        DependencySource::Registry {
-            registry,
-            package,
-            version,
-        } => format!(
-            "registry|{}|{package}|{version}",
-            registry.as_deref().unwrap_or("")
-        ),
-        DependencySource::Git { url, pin } => match pin {
-            GitPin::Version(v) => format!("git|{url}|version|{v}"),
-            GitPin::Ref(r) => format!("git|{url}|ref|{r}"),
-        },
-        DependencySource::Path { path, .. } => format!("path|{path}"),
-        DependencySource::Workspace => "workspace".to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn manifest(deps: &str) -> Manifest {
-        format!(
-            r#"
-[package]
-name = "app"
-version = "0.1.0"
-
-[registries]
-default = "https://wa.dev"
-
-[dependencies]
-{deps}
-"#
-        )
-        .parse()
-        .unwrap()
-    }
-
-    #[test]
-    fn deps_hash_is_stable() {
-        let a = deps_hash(&manifest(r#""ns:pkg" = { version = "^1.0.0" }"#));
-        let b = deps_hash(&manifest(r#""ns:pkg" = { version = "^1.0.0" }"#));
-        assert_eq!(a, b);
-        assert!(a.starts_with("sha256:"));
-    }
-
-    #[test]
-    fn deps_hash_changes_with_version() {
-        let a = deps_hash(&manifest(r#""ns:pkg" = { version = "^1.0.0" }"#));
-        let b = deps_hash(&manifest(r#""ns:pkg" = { version = "^2.0.0" }"#));
-        assert_ne!(a, b);
-    }
 }
