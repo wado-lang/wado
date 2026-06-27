@@ -106,16 +106,34 @@ pub async fn resolve(
     enqueue(&mut queue, &manifest.dev_dependencies, manifest, true);
 
     while let Some(frame) = queue.pop_front() {
-        let DependencySource::Registry {
-            registry,
-            package,
-            version,
-        } = &frame.source
-        else {
-            return Err(ResolveError::UnsupportedSource {
-                dep: frame.key.clone(),
-                kind: source_kind(&frame.source),
-            });
+        // Path deps are resolved fresh and never locked (WEP); traverse them so
+        // any registry deps underneath still get locked. Git/workspace are not
+        // resolved here yet.
+        let (registry, package, version) = match &frame.source {
+            DependencySource::Registry {
+                registry,
+                package,
+                version,
+            } => (registry, package, version),
+            DependencySource::Path { path, .. } => {
+                let dep_manifest = provider
+                    .load_path_manifest(path)
+                    .await
+                    .map_err(ResolveError::Provider)?;
+                enqueue(
+                    &mut queue,
+                    &dep_manifest.dependencies,
+                    &dep_manifest,
+                    frame.dev,
+                );
+                continue;
+            }
+            DependencySource::Git { .. } | DependencySource::Workspace => {
+                return Err(ResolveError::UnsupportedSource {
+                    dep: frame.key.clone(),
+                    kind: source_kind(&frame.source),
+                });
+            }
         };
 
         let url = registry_url(&frame.registries, registry.as_deref()).ok_or_else(|| {
@@ -386,6 +404,76 @@ default = "https://wa.dev"
                 "{err:?}"
             );
         });
+    }
+
+    #[test]
+    fn path_dep_is_traversed_but_not_locked() {
+        block_on(async {
+            // Root → path dep (../shared), which itself depends on a registry
+            // package. The registry dep is locked; the path dep is not.
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"lib:shared" = { path = "../shared" }
+"#
+            .parse()
+            .unwrap();
+            let shared: Manifest = r#"
+[package]
+name = "shared"
+version = "0.1.0"
+
+[registries]
+default = "https://wa.dev"
+
+[dependencies]
+"ns:dep" = { version = "^1.0.0" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_path_manifest("../shared", shared);
+            provider.add_registry_package(
+                "https://wa.dev",
+                "ns:dep",
+                Version::parse("1.0.0").unwrap(),
+                leaf_info("dep", "1.0.0", "sha256:d"),
+            );
+
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert_eq!(locked.len(), 1, "{locked:?}");
+            assert_eq!(locked[0].id, "registry+https://wa.dev/ns:dep");
+        });
+    }
+
+    #[test]
+    fn leaf_path_dep_locks_nothing() {
+        block_on(async {
+            let manifest: Manifest = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"lib:shared" = { path = "../shared" }
+"#
+            .parse()
+            .unwrap();
+            let mut provider = InMemoryDependencyProvider::new();
+            provider.add_path_manifest("../shared", leaf_manifest("shared", "0.1.0"));
+
+            let locked = resolve(&manifest, &provider).await.unwrap();
+            assert!(locked.is_empty(), "{locked:?}");
+        });
+    }
+
+    fn leaf_manifest(name: &str, version: &str) -> Manifest {
+        format!("[package]\nname = \"{name}\"\nversion = \"{version}\"\n")
+            .parse()
+            .unwrap()
     }
 
     #[test]
