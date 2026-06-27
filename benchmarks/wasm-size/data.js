@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782541224967,
+  "lastUpdate": 1782548884103,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35873,6 +35873,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6be277d48d602eaeddeffb8eea72415976b7df41"
         },
         "date": 1782541224327,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2f85b30dd226bd3631e9847ea097ccad5e15316a",
+          "message": "Merge pull request #1454 from wado-lang/rename-kebab-to-snake-case-wado-18403836817786433506\n\nRename kebab-case .wado files to snake_case",
+          "timestamp": "2026-06-27T17:18:25+09:00",
+          "tree_id": "c8fd4340ead973c01e4da23eba3b6515bc62ecad",
+          "url": "https://github.com/wado-lang/wado/commit/2f85b30dd226bd3631e9847ea097ccad5e15316a"
+        },
+        "date": 1782548883775,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
