@@ -2682,10 +2682,27 @@ impl Parser {
     }
 
     fn parse_pattern(&mut self) -> ParseResult<Pattern> {
+        let first = self.parse_pattern_atom_or_range()?;
+
+        if self.check(&TokenKind::Pipe) {
+            let mut alternatives = vec![first];
+            while self.check(&TokenKind::Pipe) {
+                self.advance();
+                alternatives.push(self.parse_pattern_atom_or_range()?);
+            }
+            Ok(Pattern::Or(alternatives))
+        } else {
+            Ok(first)
+        }
+    }
+
+    /// Parse a single pattern alternative: an atom optionally extended into a
+    /// range (`a..=b` / `a..<b`). Used for both the leading pattern and each
+    /// `|` alternative, so ranges may appear as or-pattern members.
+    fn parse_pattern_atom_or_range(&mut self) -> ParseResult<Pattern> {
         let start_span = self.peek().span;
         let first = self.parse_pattern_atom()?;
 
-        // Check for range pattern: `literal..<literal` or `literal..=literal`
         let range_kind = match self.peek_kind() {
             TokenKind::DotDotLt => Some(RangeKind::Exclusive),
             TokenKind::DotDotEq => Some(RangeKind::Inclusive),
@@ -2704,16 +2721,7 @@ impl Parser {
             });
         }
 
-        if self.check(&TokenKind::Pipe) {
-            let mut alternatives = vec![first];
-            while self.check(&TokenKind::Pipe) {
-                self.advance();
-                alternatives.push(self.parse_pattern_atom()?);
-            }
-            Ok(Pattern::Or(alternatives))
-        } else {
-            Ok(first)
-        }
+        Ok(first)
     }
 
     fn parse_pattern_atom(&mut self) -> ParseResult<Pattern> {
