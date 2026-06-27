@@ -56,6 +56,11 @@ per-call rule-name `String` allocation that led the old parse-only profile is
 **gone**: the rule wrapper records the name (`push_rule_stack`) only on the cold
 error path now, so it no longer allocates on the hot success path.
 
+This table is the **pre-fix baseline** (`~40 ms/iter`). The §1 child-list
+pre-sizing has since landed, removing the `List<CstChild>::grow` frame and the
+per-node empty-list churn (now ~30 ms/iter); the relative shape below still
+holds.
+
 |   Pct | Symbol                            | role                                                |
 | ----: | --------------------------------- | --------------------------------------------------- |
 | 23.7% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
@@ -92,13 +97,24 @@ Ordered by profile self-time. None are mutually exclusive.
 
 `highlight_walk` (~24%) traverses the materialized `CstNode` tree; building it
 (`CstChild` push/grow + `tree_build_node`, ~23%) allocates a `List<CstChild>`
-per node. The natural lever — a flat SoA arena + cursor, no per-node list — was
-implemented and **lost on both benchmarks** (build-only *and* this walk-heavy
-one): see "Failed approaches". The walk loss is specifically `children()`
-re-boxing per visited node; the retry lever recorded there is scalar child
-accessors that walk allocation-free. Until a representation that is cheap to
-*both* build and walk lands, this is the standing open problem and the largest
-prize.
+per node.
+
+**Landed (cheap, −24%):** `tree_build_node` initialised each node's child list
+as `[]`, which allocates a cap-0 list and then `grow`s on the first `push`
+(empty alloc + a grow call + GC churn, per node). Pre-sizing to
+`List::with_capacity(4)` (the grow-minimum, covering the common 3–4-child
+fan-out) does one right-sized allocation — syntax-highlight **39.4 → 30 ms**.
+The sweet spot is small: `with_capacity(8)`/`64` *regress* (over-zero-fill via
+`array.new_default`, the same trap the cursor SoA hit), so this is right-sizing,
+not "reserve big". It only shows up under a live heap (build-and-walk); parse-
+only is ~neutral.
+
+The deeper lever — a flat SoA arena + cursor, no per-node list at all — was
+implemented and **lost on both benchmarks**: see "Failed approaches". The walk
+loss is `children()` re-boxing per visited node; the retry lever recorded there
+is scalar child accessors that walk allocation-free. Until a representation
+cheap to *both* build and walk lands, the per-node-list build + traversal is the
+standing open problem and the largest remaining prize.
 
 ### 2. Per-call highlight-mapping rebuild (~4%, syntax-highlight only)
 
