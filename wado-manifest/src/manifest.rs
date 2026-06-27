@@ -573,6 +573,27 @@ default = "https://wa.dev"
     }
 
     #[test]
+    fn parse_lib_nickname_path_dep() {
+        // A `lib:` nickname is the WEP home for indirection — local/path/git
+        // refs that have no public coordinate. It must keep working: the key
+        // carries a `:` but resolves by its `path` source, not as a coordinate.
+        let toml = r#"
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+"lib:shared" = { path = "../shared" }
+"#;
+        let m = toml.parse::<Manifest>().unwrap();
+        let dep = &m.dependencies["lib:shared"];
+        assert!(matches!(
+            &dep.source,
+            DependencySource::Path { path, publish_source: None } if path == "../shared"
+        ));
+    }
+
+    #[test]
     fn parse_open_coordinate_with_explicit_registry() {
         let toml = r#"
 [package]
