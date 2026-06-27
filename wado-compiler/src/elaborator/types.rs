@@ -147,6 +147,15 @@ pub enum TypeError {
     /// `_` inference placeholder used outside a turbofish type argument.
     InferPlaceholderNotAllowed { span: Span },
 
+    /// A generic type (`Option`, `List`, a user generic struct/variant) was
+    /// named in a type position without its `<...>` type arguments. `expected`
+    /// is the declared type-parameter count.
+    MissingTypeArguments {
+        name: String,
+        expected: usize,
+        span: Span,
+    },
+
     /// Unknown function
     UnknownFunction { name: String, span: Span },
 
@@ -477,6 +486,19 @@ impl TypeError {
             TypeError::InferPlaceholderNotAllowed { span } => (
                 Code::UnknownType,
                 "`_` type placeholder is only allowed as a turbofish type argument".to_string(),
+                *span,
+            ),
+            TypeError::MissingTypeArguments {
+                name,
+                expected,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "missing type arguments for `{name}`: expected {expected} type argument{}; \
+                     supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
+                    if *expected == 1 { "" } else { "s" },
+                ),
                 *span,
             ),
             TypeError::UnknownFunction { name, span } => (

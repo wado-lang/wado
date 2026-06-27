@@ -1,0 +1,10 @@
+// A generic type named without its `<...>` arguments is rejected (Rust-style
+// `missing generics`) instead of silently producing an argument-less type that
+// fails to unify downstream (issue #1453).
+test "bare Option annotation" {
+    let o: Option = Option::Some(42);
+    assert o == Option::Some(42);
+}
+
+__DATA__
+{"compile_error": "missing type arguments for `Option`: expected 1 type argument"}
