@@ -546,15 +546,16 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
 //! generated error-resilient parser, the `TreeBuilder` the parser drives to
 //! construct it, and the `ParseResult` the parser returns.
 //!
-//! Unlike the retired typed-CST-then-convert design, the parser builds *this*
-//! tree directly — there is no second typed representation and no walk/convert
-//! step. Consumers (compiler front ends, LSP, syntax highlight) read this tree
-//! as-is, so the generic view they want is free.
+//! Flat green tree: nodes and child slots live in the struct-of-arrays
+//! `CstArena`; a `Cst` cursor (arena ref + node id) walks it without
+//! materialising per-node objects. Building is a single forward pass that only
+//! appends to the arena's flat arrays.
 //!
-//! `CstNode` is a pure value tree: it holds no reference to the token stream,
-//! so it composes and stores freely and `ParseResult` can own both the tree and
-//! the stream it indexes without a self-referential borrow. Methods that need
-//! terminal text or kinds take a `&TokenStream` argument.
+//! `Cst` is a lightweight handle; because Wado is GC'd with no borrow checker,
+//! a cursor carries its `&CstArena` freely (store it, return it, recurse with
+//! it) with none of the lifetime cost a borrow-checked language would impose.
+//! Methods that need terminal text or kinds take a `&TokenStream` argument; the
+//! arena stores token *indices*, never the stream.
 //!
 //! Error tokens are first-class and lossless: `Missing` (an inserted synthetic
 //! terminal), `Skipped` (a real terminal deleted during recovery), and a
@@ -580,7 +581,7 @@ pub type NodeKind = i32;
 /// a real rule id (those are non-negative).
 pub global K_ERROR: NodeKind = -1;
 
-/// `CstNode.flags` bits.
+/// Node `flags` bits.
 ///
 /// - `NODE_ERROR` — this node, or some descendant, contains a recovery edit
 ///   (a missing/skipped terminal or an error region). Bubbles up so a consumer
@@ -590,38 +591,124 @@ pub global K_ERROR: NodeKind = -1;
 pub global NODE_ERROR: i32 = 1;
 pub global NODE_INCOMPLETE: i32 = 2;
 
-/// A child slot of a `CstNode`. The full error-token vocabulary lives here:
-/// `Missing` is an inserted terminal, `Skipped` a deleted terminal, and an
-/// error region is a `Node` whose kind is `K_ERROR`.
+/// Child-slot tags in `CstArena.slot_tag`.
+global SLOT_NODE: i32 = 0;
+global SLOT_TOKEN: i32 = 1;
+global SLOT_MISSING: i32 = 2;
+global SLOT_SKIPPED: i32 = 3;
+
+/// A child slot of a node, yielded by `Cst::children`. The full error-token
+/// vocabulary lives here: `Missing` is an inserted terminal, `Skipped` a
+/// deleted terminal, and an error region is a `Node` whose kind is `K_ERROR`.
 pub variant CstChild {
     Token(i32),  // a real terminal: an index into the TokenStream
     Missing(i32),  // an inserted synthetic terminal (zero-width; TOK_SYNTHETIC)
     Skipped(i32),  // a real terminal deleted during recovery (TOK_SKIPPED)
-    Node(CstNode),  // a sub-rule (an error region when its kind is K_ERROR)
+    Node(Cst),  // a sub-rule (an error region when its kind is K_ERROR)
 }
 
-/// A node in the tree. A pure value: terminals are `i32` indices
-/// into a `TokenStream` that lives outside the tree (in `ParseResult`), so
-/// rendering methods take that stream as an argument.
-pub struct CstNode {
-    pub kind: NodeKind,
-    pub span: Span,
-    pub children: List<CstChild>,
-    pub flags: i32,
+/// The flat green tree: per-node parallel arrays plus a flat child-slot table.
+/// A node is an index into the per-node arrays; its children form a singly
+/// linked list through `slot_next`, headed by `first_child`. Building only ever
+/// appends, so a node is created exactly once with no per-node allocation.
+pub struct CstArena {
+    kinds: List<NodeKind>,
+    span_lo: List<i32>,
+    span_hi: List<i32>,
+    flags: List<i32>,
+    alts: List<i32>,
+    first_child: List<i32>,  // first child slot, or -1
+    slot_tag: List<i32>,  // SLOT_NODE / SLOT_TOKEN / SLOT_MISSING / SLOT_SKIPPED
+    slot_payload: List<i32>,  // child node id (Node) or token index (terminals)
+    slot_next: List<i32>,  // next sibling slot, or -1
+}
+
+impl CstArena {
+    /// A cursor at the root node (id 0 — the first node opened during the
+    /// parse, i.e. the start rule). Valid once the tree has been built.
+    pub fn root(&self) -> Cst with stores[self] {
+        return Cst { arena: self, id: 0 };
+    }
+}
+
+/// A lightweight handle to one node: an arena reference plus a node id. Cheap
+/// to copy and free to carry (no lifetime cost under GC).
+pub struct Cst {
+    arena: &CstArena,
+    id: i32,
+}
+
+impl Cst {
+    pub fn kind(&self) -> NodeKind {
+        return self.arena.kinds[self.id];
+    }
+
+    pub fn span(&self) -> Span {
+        return Span::new(self.arena.span_lo[self.id], self.arena.span_hi[self.id]);
+    }
+
+    pub fn flags(&self) -> i32 {
+        return self.arena.flags[self.id];
+    }
+
     /// The matched labeled-alternative index for this rule node (0-based, in
     /// grammar declaration order), or -1 when the rule's alternatives are
     /// unlabeled, or for `K_ERROR` / non-rule nodes. The generated parser
     /// turns this into a typed `<Rule>Alt` enum via a `<rule>_alt` accessor.
-    pub alt: i32,
-}
+    pub fn alt(&self) -> i32 {
+        return self.arena.alts[self.id];
+    }
 
-impl CstNode {
     pub fn is_error(&self) -> bool {
-        return self.flags & NODE_ERROR != 0;
+        return self.flags() & NODE_ERROR != 0;
     }
 
     pub fn is_incomplete(&self) -> bool {
-        return self.flags & NODE_INCOMPLETE != 0;
+        return self.flags() & NODE_INCOMPLETE != 0;
+    }
+
+    /// Iterate this node's child slots in order.
+    pub fn children(&self) -> CstChildren with stores[self] {
+        return CstChildren { arena: self.arena, slot: self.arena.first_child[self.id] };
+    }
+
+    /// Number of direct children.
+    pub fn child_count(&self) -> i32 {
+        let mut n = 0;
+        let mut slot = self.arena.first_child[self.id];
+        while slot >= 0 {
+            n += 1;
+            slot = self.arena.slot_next[slot];
+        }
+        return n;
+    }
+
+    /// The `i`-th direct child slot. Panics if out of range.
+    pub fn child(&self, i: i32) -> CstChild with stores[self] {
+        let mut slot = self.arena.first_child[self.id];
+        let mut k = 0;
+        while slot >= 0 {
+            if k == i {
+                return slot_child(self.arena, slot);
+            }
+            k += 1;
+            slot = self.arena.slot_next[slot];
+        }
+        panic("Cst::child: index out of range");
+    }
+
+    /// First direct child node of rule `kind`, or `null`. Used by sub-tree
+    /// rendering (e.g. an ANTLR4 descriptor whose `[output]` is a labelled
+    /// child subtree, not the start rule's full tree).
+    pub fn find_child(&self, kind: NodeKind) -> Option<Cst> with stores[self] {
+        for let child of self.children() {
+            if let Node(n) = child {
+                if n.kind() == kind {
+                    return Option::Some(n);
+                }
+            }
+        }
+        return null;
     }
 
     /// ANTLR4-style S-expression: `(name child ...)`, tokens as their text.
@@ -633,37 +720,58 @@ impl CstNode {
         cst_to_string_tree_impl(&mut out, self, toks, rule_names, token_names);
         return out;
     }
+}
 
-    /// First direct child node of rule `kind`, or `null`. Used by sub-tree
-    /// rendering (e.g. an ANTLR4 descriptor whose `[output]` is a labelled
-    /// child subtree, not the start rule's full tree).
-    pub fn find_child(&self, kind: NodeKind) -> Option<CstNode> {
-        for let child of &self.children {
-            if let Node(n) = *child {
-                if n.kind == kind {
-                    return Option::Some(n);
-                }
-            }
+/// Iterator over a node's child slots (follows the `slot_next` chain).
+pub struct CstChildren {
+    arena: &CstArena,
+    slot: i32,  // current slot, -1 when exhausted
+}
+
+impl Iterator for CstChildren {
+    type Item = CstChild;
+
+    fn next(&mut self) -> Option<CstChild> {
+        if self.slot < 0 {
+            return null;
         }
-        return null;
+        let slot = self.slot;
+        self.slot = self.arena.slot_next[slot];
+        return Option::Some(slot_child(self.arena, slot));
     }
+}
+
+/// Build the `CstChild` for one child slot.
+fn slot_child(arena: &CstArena, slot: i32) -> CstChild with stores[arena] {
+    let tag = arena.slot_tag[slot];
+    let payload = arena.slot_payload[slot];
+    if tag == SLOT_NODE {
+        return CstChild::Node(Cst { arena, id: payload });
+    }
+    if tag == SLOT_TOKEN {
+        return CstChild::Token(payload);
+    }
+    if tag == SLOT_MISSING {
+        return CstChild::Missing(payload);
+    }
+    return CstChild::Skipped(payload);
 }
 
 fn cst_to_string_tree_impl(
     out: &mut String,
-    node: &CstNode,
+    node: &Cst,
     toks: &TokenStream,
     rule_names: &List<String>,
     token_names: &List<String>,
 ) {
     out.push_str(&"(");
-    if node.kind == K_ERROR {
+    if node.kind() == K_ERROR {
         out.push_str(&"<error>");
     } else {
-        out.push_str(&rule_names[node.kind as i32]);
+        out.push_str(&rule_names[node.kind() as i32]);
     }
-    for let child of &node.children {
-        match *child {
+    for let child of node.children() {
+        match child {
             Token(i) => {
                 if !toks.is_empty_text(i) {
                     out.push_str(&" ");
@@ -687,17 +795,21 @@ fn cst_to_string_tree_impl(
     out.push_str(&")");
 }
 
-/// What a parse returns: the root, the token stream its terminal
-/// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
-/// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
-/// the result is a freely movable value.
+/// What a parse returns: the tree arena (root is node 0), the token stream its
+/// terminal indices point into, and any diagnostics. A clean parse leaves
+/// `diagnostics` empty. Owns the arena and the stream outright.
 pub struct ParseResult {
-    pub root: CstNode,
+    pub arena: CstArena,
     pub tokens: TokenStream,
     pub diagnostics: List<Diagnostic>,
 }
 
 impl ParseResult {
+    /// A cursor at the root node.
+    pub fn root(&self) -> Cst with stores[self] {
+        return self.arena.root();
+    }
+
     pub fn has_errors(&self) -> bool {
         for let d of &self.diagnostics {
             if d.is_error() {
@@ -714,7 +826,7 @@ impl ParseResult {
 }
 
 /// A flat event recorded by the parser as it descends. `finish()` replays the
-/// events once to materialise the tree, so each `CstNode` is allocated exactly
+/// events once to materialise the flat arena, so each node is created exactly
 /// once (no per-step deep copy of the in-progress subtree).
 variant BuildEvent {
     Open([NodeKind, i32]),  // [kind, start byte offset]
@@ -805,60 +917,122 @@ impl TreeBuilder {
         self.events.push(BuildEvent::Skip(idx));
     }
 
-    /// Materialise the tree. Valid once the root node has been closed.
-    pub fn finish(&self) -> CstNode {
-        let mut pos = 0;
-        return tree_build_node(&self.events, &mut pos);
+    /// Materialise the flat arena. Valid once the root node has been closed.
+    pub fn finish(&self) -> CstArena {
+        return build_arena(&self.events);
     }
 }
 
-fn tree_build_node(events: &List<BuildEvent>, pos: &mut i32) -> CstNode {
-    if let Open(info) = events[*pos] {
-        let kind = info.0;
-        let start = info.1;
-        *pos += 1;
-        let mut children: List<CstChild> = [];
-        let mut flags = if kind == K_ERROR { NODE_ERROR } else { 0 };
-        let mut alt = -1;
-        let mut end = start;
-        loop {
-            if *pos >= events.len() {
-                break;
-            }
-            let ev = events[*pos];
-            if let Close(e) = ev {
-                end = e;
-                *pos += 1;
-                break;
-            }
-            if let Open(_) = ev {
-                let child = tree_build_node(events, pos);
-                if child.flags & NODE_ERROR != 0 {
-                    flags = flags | NODE_ERROR;
-                }
-                if child.span.end > end {
-                    end = child.span.end;
-                }
-                children.push(CstChild::Node(child));
-            } else if let Tok(i) = ev {
-                children.push(CstChild::Token(i));
-                *pos += 1;
-            } else if let Miss(i) = ev {
-                children.push(CstChild::Missing(i));
-                flags = flags | NODE_INCOMPLETE | NODE_ERROR;
-                *pos += 1;
-            } else if let Skip(i) = ev {
-                children.push(CstChild::Skipped(i));
-                flags = flags | NODE_ERROR;
-                *pos += 1;
-            } else if let SetAlt(a) = ev {
-                alt = a;
-                *pos += 1;
-            }
-        }
-        return CstNode { kind, span: Span::new(start, end), children, flags, alt };
+/// Append a child slot to the node at the top of the build stack, linking it
+/// into that node's sibling chain.
+fn append_slot(
+    a: &mut CstArena,
+    stack_node: &List<i32>,
+    stack_last: &mut List<i32>,
+    tag: i32,
+    payload: i32,
+) {
+    let slot = a.slot_tag.len();
+    a.slot_tag.push(tag);
+    a.slot_payload.push(payload);
+    a.slot_next.push(-1);
+    let top = stack_last.len() - 1;
+    let last = stack_last[top];
+    if last < 0 {
+        a.first_child[stack_node[top]] = slot;
+    } else {
+        a.slot_next[last] = slot;
     }
-    panic("TreeBuilder: expected Open event");
+    stack_last[top] = slot;
+}
+
+/// Replay the flat event stream into a `CstArena` in one forward pass. An
+/// explicit stack tracks (open node id, last appended child slot) per frame, so
+/// every step is a flat array append — no per-node allocation or recursion.
+fn build_arena(events: &List<BuildEvent>) -> CstArena {
+    let n = events.len();
+    let mut node_count = 0;
+    let mut term_count = 0;
+    for let mut pos = 0; pos < n; pos += 1 {
+        match events[pos] {
+            Open(_) => node_count += 1,
+            Tok(_) => term_count += 1,
+            Miss(_) => term_count += 1,
+            Skip(_) => term_count += 1,
+            Close(_) => {},
+            SetAlt(_) => {},
+        }
+    }
+    let node_cap = node_count + 1;
+    let slot_cap = term_count + node_count + 1;
+    let mut a = CstArena {
+        kinds: List::with_capacity(node_cap),
+        span_lo: List::with_capacity(node_cap),
+        span_hi: List::with_capacity(node_cap),
+        flags: List::with_capacity(node_cap),
+        alts: List::with_capacity(node_cap),
+        first_child: List::with_capacity(node_cap),
+        slot_tag: List::with_capacity(slot_cap),
+        slot_payload: List::with_capacity(slot_cap),
+        slot_next: List::with_capacity(slot_cap),
+    };
+    let mut stack_node: List<i32> = [];
+    let mut stack_last: List<i32> = [];
+    for let mut pos = 0; pos < n; pos += 1 {
+        match events[pos] {
+            Open(info) => {
+                let kind = info.0;
+                let start = info.1;
+                let id = a.kinds.len();
+                a.kinds.push(kind);
+                a.span_lo.push(start);
+                a.span_hi.push(start);
+                a.flags.push(if kind == K_ERROR { NODE_ERROR } else { 0 });
+                a.alts.push(-1);
+                a.first_child.push(-1);
+                if stack_node.len() > 0 {
+                    append_slot(&mut a, &stack_node, &mut stack_last, SLOT_NODE, id);
+                }
+                stack_node.push(id);
+                stack_last.push(-1);
+            },
+            Close(e) => {
+                let top = stack_node.len() - 1;
+                let id = stack_node[top];
+                let end = if e > a.span_hi[id] { e } else { a.span_hi[id] };
+                a.span_hi[id] = end;
+                let _ = stack_node.pop();
+                let _ = stack_last.pop();
+                if stack_node.len() > 0 {
+                    let parent = stack_node[stack_node.len() - 1];
+                    if end > a.span_hi[parent] {
+                        a.span_hi[parent] = end;
+                    }
+                    if a.flags[id] & NODE_ERROR != 0 {
+                        a.flags[parent] = a.flags[parent] | NODE_ERROR;
+                    }
+                }
+            },
+            Tok(i) => {
+                append_slot(&mut a, &stack_node, &mut stack_last, SLOT_TOKEN, i);
+            },
+            Miss(i) => {
+                append_slot(&mut a, &stack_node, &mut stack_last, SLOT_MISSING, i);
+                let top = stack_node[stack_node.len() - 1];
+                a.flags[top] = a.flags[top] | NODE_INCOMPLETE | NODE_ERROR;
+            },
+            Skip(i) => {
+                append_slot(&mut a, &stack_node, &mut stack_last, SLOT_SKIPPED, i);
+                let top = stack_node[stack_node.len() - 1];
+                a.flags[top] = a.flags[top] | NODE_ERROR;
+            },
+            SetAlt(alt) => {
+                let top = stack_node[stack_node.len() - 1];
+                a.alts[top] = alt;
+            },
+        }
+    }
+    return a;
 }
 //! Consumer-facing tree / token utilities exposed by every generated
 //! parser: S-expression normalisation (`normalize_tree`) and the
@@ -1855,7 +2029,7 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
             p.diagnostics.push(d);
         }
     }
-    return ParseResult { root: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
+    return ParseResult { arena: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
 pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
@@ -1883,7 +2057,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     for let mut k = 0; k < 10; k += 1 {
         token_names.push(token_kind_name(k));
     }
-    return result.root.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
+    return result.root().to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
 }
 
 pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
@@ -1898,7 +2072,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
             break;
         }
     }
-    if let Some(sub) = result.root.find_child(_kind as NodeKind) {
+    if let Some(sub) = result.root().find_child(_kind as NodeKind) {
         return sub.to_string_tree(&result.tokens, &RULE_NAMES, &token_names);
     }
     return String::new();

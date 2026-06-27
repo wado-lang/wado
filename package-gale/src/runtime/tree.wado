@@ -409,7 +409,20 @@ fn append_slot(
 /// every step is a flat array append — no per-node allocation or recursion.
 fn build_arena(events: &List<BuildEvent>) -> CstArena {
     let n = events.len();
-    let node_cap = n / 2 + 1;
+    let mut node_count = 0;
+    let mut term_count = 0;
+    for let mut pos = 0; pos < n; pos += 1 {
+        match events[pos] {
+            Open(_) => node_count += 1,
+            Tok(_) => term_count += 1,
+            Miss(_) => term_count += 1,
+            Skip(_) => term_count += 1,
+            Close(_) => {},
+            SetAlt(_) => {},
+        }
+    }
+    let node_cap = node_count + 1;
+    let slot_cap = term_count + node_count + 1;
     let mut a = CstArena {
         kinds: List::with_capacity(node_cap),
         span_lo: List::with_capacity(node_cap),
@@ -417,9 +430,9 @@ fn build_arena(events: &List<BuildEvent>) -> CstArena {
         flags: List::with_capacity(node_cap),
         alts: List::with_capacity(node_cap),
         first_child: List::with_capacity(node_cap),
-        slot_tag: List::with_capacity(n),
-        slot_payload: List::with_capacity(n),
-        slot_next: List::with_capacity(n),
+        slot_tag: List::with_capacity(slot_cap),
+        slot_payload: List::with_capacity(slot_cap),
+        slot_next: List::with_capacity(slot_cap),
     };
     let mut stack_node: List<i32> = [];
     let mut stack_last: List<i32> = [];
