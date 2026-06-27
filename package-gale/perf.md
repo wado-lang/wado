@@ -266,8 +266,9 @@ the whole CST) was the obvious place to win, but cursor lost there too — 64.7 
 vs 39.4 ms — because `children()` boxes a `CstChild` + `Cst` per visited node,
 moving allocation from build-time to walk-time instead of removing it. Reverted
 in `37d6597`; the spike is preserved at `9b92e249` / `e48cef13` for a retry.
-A separate closure-`&mut` boxing ICE this surfaced was fixed independently
-(`closure_mut_ref_local`).
+Retry lever: scalar child accessors (`child_kind(i)` / `child_node(i)`, no
+`CstChild` box) so the walk allocates nothing. A separate closure-`&mut` boxing
+ICE this surfaced was fixed independently (`closure_mut_ref_local`).
 
 ### Data-driven (bytecode VM) scan — NO-GO (2026-06)
 
