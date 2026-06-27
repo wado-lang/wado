@@ -155,13 +155,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 placeholder(right, right_ast.span()),
             )
         } else {
-            // Both non-literals - propagate expected type for coercion
-            let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let right = self.resolve_expr(right_ast, ctx, expected_type);
-            (
-                placeholder(left, left_ast.span()),
-                placeholder(right, right_ast.span()),
-            )
+            let is_comparison = matches!(
+                op,
+                BinaryOp::Eq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::LtEq
+                    | BinaryOp::Gt
+                    | BinaryOp::GtEq
+            );
+            let left_lit = is_comparison && Self::is_coercible_compound_literal(left_ast);
+            let right_lit = is_comparison && Self::is_coercible_compound_literal(right_ast);
+            if left_lit && !right_lit {
+                let right = self.resolve_expr(right_ast, ctx, expected_type);
+                let left_expected = if right == TypeTable::ERROR {
+                    expected_type
+                } else {
+                    Some(right)
+                };
+                let left = self.resolve_expr(left_ast, ctx, left_expected);
+                (
+                    placeholder(left, left_ast.span()),
+                    placeholder(right, right_ast.span()),
+                )
+            } else {
+                let left = self.resolve_expr(left_ast, ctx, expected_type);
+                let right_expected = if is_comparison && left != TypeTable::ERROR {
+                    Some(left)
+                } else {
+                    expected_type
+                };
+                let right = self.resolve_expr(right_ast, ctx, right_expected);
+                (
+                    placeholder(left, left_ast.span()),
+                    placeholder(right, right_ast.span()),
+                )
+            }
+        }
+    }
+
+    pub(super) fn is_coercible_compound_literal(expr: &ast::Expr) -> bool {
+        match expr {
+            ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
+            ast::Expr::Call(call) => {
+                matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
+            }
+            _ => false,
         }
     }
 

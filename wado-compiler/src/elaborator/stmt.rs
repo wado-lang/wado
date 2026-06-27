@@ -180,7 +180,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for tuple literal to array coercion when type annotation is present
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
-            let target_type = self.resolve_type(annotated_type);
+            let resolved = self.resolve_type(annotated_type);
+            let target_type = if Self::first_infer_span(annotated_type).is_some() {
+                TypeTable::ERROR
+            } else {
+                resolved
+            };
             // Publish the resolved whole-pattern annotation so reify reads it
             // instead of re-running `resolve_type` against the AST.
             let key = let_stmt.id;
@@ -323,8 +328,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trait impls legitimately use TypeParam-vs-concrete (monomorphized later).
         if let_stmt.ty.is_some()
             && value_type != type_id
-            && value_type != TypeTable::UNKNOWN
-            && value_type != TypeTable::NEVER
+            && !matches!(
+                value_type,
+                TypeTable::UNKNOWN | TypeTable::NEVER | TypeTable::ERROR
+            )
+            && type_id != TypeTable::ERROR
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
