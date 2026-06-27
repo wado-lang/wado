@@ -316,7 +316,7 @@ fn gen_lexer_struct(w: &mut CodeWriter) {
     f.add_param(&"input", &"&String");
     f.set_return_type(&"Lexer");
     f.emit_begin(w);
-    w.line(&"return Lexer { chars: input.chars().collect(), pos: 0 };");
+    w.line(&"return Lexer { chars: input.to_chars(), pos: 0 };");
     w.end();
     w.blank();
 
