@@ -1,0 +1,38 @@
+// `matches` / `match` over named immutable-global constants should lower to a
+// dense `br_table` (Switch), exactly like the same values written as integer
+// literals. Before the const-pattern literalization fix, each `TK_*` constant
+// pattern desugared to a binding + equality guard, which `match_to_switch`
+// rejected (guards bail), leaving a compare cascade.
+
+use { println, Stdout } from "core:cli";
+
+global K0: i32 = 24;
+global K1: i32 = 25;
+global K2: i32 = 26;
+global K3: i32 = 27;
+global K4: i32 = 28;
+global K5: i32 = 29;
+global K6: i32 = 30;
+global K7: i32 = 31;
+global K8: i32 = 32;
+global K9: i32 = 33;
+
+fn is_kw(k: i32) -> bool {
+    return k matches { K0 | K1 | K2 | K3 | K4 | K5 | K6 | K7 | K8 | K9 };
+}
+
+export fn run() with Stdout {
+    let mut hits = 0;
+    for let mut i = 0; i < 64; i += 1 {
+        if is_kw(i) {
+            hits += 1;
+        }
+    }
+    println(`{hits}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_expect:O2": ["br_table"]
+}
