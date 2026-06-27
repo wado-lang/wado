@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782485616893,
+  "lastUpdate": 1782539050198,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -35785,6 +35785,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/85cf07385921093862e47473e32abf03161000f8"
         },
         "date": 1782485616263,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1887,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8476,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15409,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288701,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a4a10656a068664c6ebfdeee1d435a2ce5a0d48b",
+          "message": "Merge pull request #1452 from wado-lang/claude/wasm-component-import-variants-1daowz\n\nfeat(cm): complete component-import value-type surface; reserved-name tuple representation",
+          "timestamp": "2026-06-27T14:35:27+09:00",
+          "tree_id": "38989e3de2f1c255356130a9d31443c5aa865c4c",
+          "url": "https://github.com/wado-lang/wado/commit/a4a10656a068664c6ebfdeee1d435a2ce5a0d48b"
+        },
+        "date": 1782539049715,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
