@@ -44,6 +44,25 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     process_block(engine, root)
 }
 
+/// The [`FuncId`](crate::nir::FuncId)s of the diverging panic / `unreachable`
+/// builtins, recognized by name on the function record. Resolved once per pass
+/// run so the panic-block matcher identifies a panic callee by id. The driver
+/// hands the result to the engine via [`Engine::set_panic_callee_ids`].
+pub(super) fn resolve_panic_ids(
+    project: &crate::nir_package::NirPackage,
+) -> crate::hashmap::IndexSet<crate::nir::FuncId> {
+    project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            (f.name.contains("panic") || f.name == "unreachable")
+                .then_some(f.id)
+                .flatten()
+        })
+        .collect()
+}
+
 /// Standalone post-`promote_fields` run of the structural BCE matcher.
 ///
 /// `promote_fields` (born-as-operands) freezes invariant field reads — an array
@@ -60,6 +79,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
     let type_table = project.type_table.borrow();
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let panic_ids = resolve_panic_ids(project);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -90,6 +110,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
+        engine.set_panic_callee_ids(&panic_ids);
         changed |= eliminate_at_root(&mut engine);
     }
     changed
@@ -1033,7 +1054,7 @@ fn is_panic_block(engine: &Engine, block: BlockId) -> bool {
 
 fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
     match &engine.body.exprs[e].kind {
-        ExprKind::Call { func, .. } => func.name.contains("panic") || func.name == "unreachable",
+        ExprKind::Call { func_id, .. } => engine.is_panic_callee(*func_id),
         _ => false,
     }
 }

@@ -126,6 +126,12 @@ pub struct Engine<'a> {
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
     vg_type_table: Option<&'a crate::tir::TypeTable>,
+    /// [`FuncId`]s of the diverging panic / `unreachable` builtins, supplied by
+    /// `condition_implication` so its bounds-check elimination identifies a
+    /// panic block by callee id (not the call node's `FunctionRef`). `None` (the
+    /// default) means "no callee is a panic". Set via
+    /// [`Engine::set_panic_callee_ids`].
+    panic_callee_ids: Option<&'a IndexSet<crate::nir::FuncId>>,
 }
 
 impl<'a> Engine<'a> {
@@ -151,6 +157,7 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             vg_type_table: None,
+            panic_callee_ids: None,
         };
         // The value graph lives on `Body` and is built once, then maintained
         // through every edit (`maintain_value_after_edit` / `redirect_expr`, plus
@@ -423,6 +430,18 @@ impl<'a> Engine<'a> {
     /// literal operands (`2 + 3 → 5`). Used by the one build-once construction.
     pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
         self.vg_type_table = Some(type_table);
+    }
+
+    /// Supply the panic / `unreachable` callee ids for `condition_implication`'s
+    /// panic-block recognizer. See [`Engine::is_panic_callee`].
+    pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+        self.panic_callee_ids = Some(ids);
+    }
+
+    /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
+    /// `false` when no set was supplied or the call carries no id.
+    pub fn is_panic_callee(&self, func_id: Option<crate::nir::FuncId>) -> bool {
+        matches!((self.panic_callee_ids, func_id), (Some(s), Some(id)) if s.contains(&id))
     }
 
     /// The type table supplied for value-graph folding, if any. Used by

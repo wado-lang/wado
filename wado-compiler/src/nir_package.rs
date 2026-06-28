@@ -296,9 +296,8 @@ impl NirPackage {
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by
-    /// `(module_source, name)` → the type each helper deep-copies. Shared by the
-    /// `value_copy_elide` optimizer pass and the `remarks` collector so the two
-    /// stay in lock-step with the helper-identification convention.
+    /// `(module_source, name)` → the type each helper deep-copies. Used by the
+    /// `remarks` collector, which reports the copied type.
     pub fn value_copy_helper_types(&self) -> IndexMap<(ModuleSource, String), TypeId> {
         self.functions
             .iter()
@@ -306,6 +305,18 @@ impl NirPackage {
                 let f = f.borrow();
                 f.value_copy_type()
                     .map(|t| ((f.module_source.clone(), f.name.clone()), t))
+            })
+            .collect()
+    }
+
+    /// The [`FuncId`]s of the synthesized `$value_copy$T` helpers. The
+    /// `value_copy_elide` pass identifies a wrapper call by id membership.
+    pub fn value_copy_func_ids(&self) -> crate::hashmap::IndexSet<FuncId> {
+        self.functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                f.value_copy_type().and(f.id)
             })
             .collect()
     }
