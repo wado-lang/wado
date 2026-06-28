@@ -11,17 +11,17 @@ failed approaches) and [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 ## Benchmark state (measured 2026-06, dev host)
 
 The basis here is **`benchmark/syntax_highlight`**: it builds the full CST
-*and* walks it (highlighting), so it exercises the realistic consumer path —
+_and_ walks it (highlighting), so it exercises the realistic consumer path —
 build + traverse — not just build. `benchmark/sqlite_parse` (parse only: build
 the CST, then `result.ok()`) is kept as a build-isolation companion. Both run
 the same 13366-byte SQLite fixture, guest at `-O2`.
 
 Dev-host Gale numbers (`cargo run` `wado`; see the measurement note):
 
-| benchmark                          |    per-iter | throughput |
-| ---------------------------------- | ----------: | ---------: |
-| `syntax_highlight` (build + walk)  | ~28 ms/iter |  ~470 KB/s |
-| `sqlite_parse` (build only)        |  ~5 ms/iter |  ~2.5 MB/s |
+| benchmark                         |    per-iter | throughput |
+| --------------------------------- | ----------: | ---------: |
+| `syntax_highlight` (build + walk) | ~28 ms/iter |  ~470 KB/s |
+| `sqlite_parse` (build only)       |  ~5 ms/iter |  ~2.5 MB/s |
 
 The release headline + comparison baselines (Gale vs `tree-sitter` for
 highlight, vs `sqlparser-rs` for parse) come from `mise run syntax-highlight` /
@@ -59,19 +59,19 @@ dense classes) instead of `||`/`<=` disjunctions: profile-neutral (kind-set held
 at ~3%, lexer-compute ~9%), a modest wall-clock move (~29.7 → ~28 ms) and a
 code-size/readability win — confirming br_table ≈ cascade for membership (§3).
 
-|   Pct | Symbol                            | role                                                |
-| ----: | --------------------------------- | --------------------------------------------------- |
-| 29.9% | `highlight_walk`                  | recursive walk over the `CstNode` tree (traversal)  |
-| 12.1% | `List<CstChild>::push`            | per-node child-list build                           |
-|  8.4% | `TokenStream::new`                | SoA token-array alloc (WasmGC zero-fill; not a lever)|
-|  8.1% | `tree_build_node`                 | CST materialization (event log → tree)              |
-|  3.8% | `String::push`                    | HTML output build                                   |
-|  2.4% | `List<i32>::push`                 | `rule_stack` / trivia push                          |
-|  2.4% | `List<BuildEvent>::push`          | CST event-log build                                 |
-|  2.3% | `push_class`                      | HTML class emit                                     |
-|  2.2% | `scan_any_name`                   | scan (prediction)                                   |
-|  2.0% | `char::to_ascii_lowercase`        | case-insensitive keyword match                      |
-|  2.0% | `_kind_set_8`                     | membership over the big keyword set                 |
+|   Pct | Symbol                     | role                                                  |
+| ----: | -------------------------- | ----------------------------------------------------- |
+| 29.9% | `highlight_walk`           | recursive walk over the `CstNode` tree (traversal)    |
+| 12.1% | `List<CstChild>::push`     | per-node child-list build                             |
+|  8.4% | `TokenStream::new`         | SoA token-array alloc (WasmGC zero-fill; not a lever) |
+|  8.1% | `tree_build_node`          | CST materialization (event log → tree)                |
+|  3.8% | `String::push`             | HTML output build                                     |
+|  2.4% | `List<i32>::push`          | `rule_stack` / trivia push                            |
+|  2.4% | `List<BuildEvent>::push`   | CST event-log build                                   |
+|  2.3% | `push_class`               | HTML class emit                                       |
+|  2.2% | `scan_any_name`            | scan (prediction)                                     |
+|  2.0% | `char::to_ascii_lowercase` | case-insensitive keyword match                        |
+|  2.0% | `_kind_set_8`              | membership over the big keyword set                   |
 
 (Frames under 2% self-time omitted.)
 
@@ -100,7 +100,7 @@ as `[]`, which allocates a cap-0 list and then `grow`s on the first `push`
 (empty alloc + a grow call + GC churn, per node). Pre-sizing to
 `List::with_capacity(4)` (the grow-minimum, covering the common 3–4-child
 fan-out) does one right-sized allocation — syntax-highlight **39.4 → 30 ms**.
-The sweet spot is small: `with_capacity(8)`/`64` *regress* (over-zero-fill via
+The sweet spot is small: `with_capacity(8)`/`64` _regress_ (over-zero-fill via
 `array.new_default`, the same trap the cursor SoA hit), so this is right-sizing,
 not "reserve big". It only shows up under a live heap (build-and-walk); parse-
 only is ~neutral.
@@ -109,7 +109,7 @@ The deeper lever — a flat SoA arena + cursor, no per-node list at all — was
 implemented and **lost on both benchmarks**: see "Failed approaches". The walk
 loss is `children()` re-boxing per visited node; the retry lever recorded there
 is scalar child accessors that walk allocation-free. Until a representation
-cheap to *both* build and walk lands, the per-node-list build + traversal is the
+cheap to _both_ build and walk lands, the per-node-list build + traversal is the
 standing open problem and the largest remaining prize.
 
 ### 2. Lexer source-char buffer — `List<char>::grow` — LANDED
@@ -152,7 +152,7 @@ instead of char-at-a-time. Lives in `highlight_html` / `push_class`
 - **Inlining hot methods / any per-method micro-opt.** Measured **no wall-time
   change** from forcing inlining of small hot functions — wasmtime + Cranelift
   handle small Wasm calls cheaply, so inlinability is not the lever. Confirmed
-  again by the cursor spike, where raising the inline threshold *worsened*
+  again by the cursor spike, where raising the inline threshold _worsened_
   runtime (it bloats hot loops); see "Failed approaches".
 - **Re-sizing `TokenStream::new`'s arrays** (profiles at ~8.5% self-time). The
   cost is inherent WasmGC `array.new_default` zero-fill across its 10 parallel
@@ -161,7 +161,7 @@ instead of char-at-a-time. Lives in `highlight_html` / `push_class`
   only ~19% over-allocation. The current `chars/4` pre-size is already correct:
   it zero-fills ~3342/array vs ~8191/array for grow-from-`[]` doubling (~2.4×
   better), so `[]` would be worse, not better. An A/B sizing every array to its
-  *exact* used count (the unreachable ceiling of any cap-tuning) gained only ~2%,
+  _exact_ used count (the unreachable ceiling of any cap-tuning) gained only ~2%,
   two-thirds of it within run jitter — sub-1% on release after dev-host alloc
   inflation. Not a lever; leave the `chars/4` pre-size.
 - **Data-driven / bytecode-VM scan** (see below).
