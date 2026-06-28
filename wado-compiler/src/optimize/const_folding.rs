@@ -30,7 +30,7 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::hashmap::IndexSet;
 use crate::nir::NirFunction;
-use crate::nir::{FunctionRef, NirUnaryOp};
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind,
 };
@@ -206,10 +206,11 @@ pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
         if !is_ctfe_eligible(&func) {
             continue;
         }
-        let module_source = func.module_source.clone();
-        let full_name = FunctionRef::from_resolved(&func, module_source.clone()).full_name();
+        let Some(id) = func.id else {
+            continue;
+        };
         drop(func);
-        map.insert((module_source, full_name), func_rc.clone());
+        map.insert(id, func_rc.clone());
     }
     map
 }
