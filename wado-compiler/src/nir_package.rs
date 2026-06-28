@@ -193,6 +193,80 @@ impl NirPackage {
         }
     }
 
+    /// Stamp every call left `func_id = None` by an optimizer rewrite (a retarget
+    /// to a synthesized callee, or a freshly-built builtin call), interning a stub
+    /// for any extern callee. Restores the "born resolved" invariant after a pass
+    /// that creates or retargets calls, so a call site is always an integer.
+    ///
+    /// Idempotent and cheap when nothing is unstamped: it only walks bodies and
+    /// touches `None` slots. The in-package id index is read off each function's
+    /// own `id` (every function carries one — `FuncId == position`), so no
+    /// `full_name` materialization happens.
+    pub fn reintern_calls(&mut self) {
+        use cranelift_entity::EntityRef;
+        let mut ids: IndexMap<crate::name::FunctionId, FuncId> = IndexMap::default();
+        for func_rc in &self.functions {
+            let func = func_rc.borrow();
+            let Some(id) = func.id else { continue };
+            let key = FunctionRef::from_resolved(&func, func.module_source.clone()).function_id();
+            ids.insert(key, id);
+        }
+        let mut extern_stubs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+        for func_rc in &self.functions {
+            let func = func_rc.borrow();
+            let Some(body) = func.body.as_ref() else {
+                continue;
+            };
+            for expr in body.exprs.values() {
+                let func_ref = match &expr.kind {
+                    ExprKind::Call {
+                        func,
+                        func_id: None,
+                        ..
+                    }
+                    | ExprKind::MethodCall {
+                        func,
+                        func_id: None,
+                        ..
+                    } => func,
+                    _ => continue,
+                };
+                let key = func_ref.function_id();
+                if ids.contains_key(&key) {
+                    continue;
+                }
+                let id = FuncId::new(self.functions.len() + extern_stubs.len());
+                let mut stub = NirFunction::extern_stub(func_ref);
+                stub.id = Some(id);
+                extern_stubs.push(Rc::new(RefCell::new(stub)));
+                ids.insert(key, id);
+            }
+        }
+        self.functions.extend(extern_stubs);
+
+        for func_rc in &self.functions {
+            let mut func = func_rc.borrow_mut();
+            let Some(body) = func.body.as_mut() else {
+                continue;
+            };
+            for expr in body.exprs.values_mut() {
+                if let ExprKind::Call {
+                    func,
+                    func_id: func_id @ None,
+                    ..
+                }
+                | ExprKind::MethodCall {
+                    func,
+                    func_id: func_id @ None,
+                    ..
+                } = &mut expr.kind
+                {
+                    *func_id = ids.get(&func.function_id()).copied();
+                }
+            }
+        }
+    }
+
     /// The next free [`FuncId`] (one past the current maximum). Optimizer passes
     /// that synthesize functions (`value_copy_demote`'s shallow-copy twins,
     /// container SROA's per-field accessors) mint fresh ids from here so a new

@@ -340,6 +340,12 @@ pub fn optimize(
         extract::freeze_pure_arith(p, /* include_fields */ false, /* early */ false)
     });
 
+    // Restore the born-resolved invariant: optimizer rewrites that retargeted or
+    // synthesized calls left some `func_id = None` (a shallow array_clone, an SROA
+    // accessor, a `cold_path` marker). Re-stamp them — interning extern callees —
+    // so every call carries a `FuncId` for codegen (Phase 5d).
+    project.reintern_calls();
+
     project
 }
 
