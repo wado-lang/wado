@@ -37,7 +37,7 @@ pub struct WorldExportInfo {
     pub return_type: Option<Type>,
     /// CM FQ of the parent interface when this export was synthesized from
     /// an `export Foo;` interface reference (e.g.,
-    /// `"wasi:http/handler@0.3.0-rc-2026-03-15"`). `None` for direct
+    /// `"wasi:http/handler@0.3.0"`). `None` for direct
     /// `export fn ...` declarations.
     pub from_interface_fq: Option<String>,
 }
@@ -460,7 +460,7 @@ mod tests {
         assert!(run_export.params.is_empty(), "run should have no params");
         assert_eq!(
             run_export.from_interface_fq.as_deref(),
-            Some("wasi:cli/run@0.3.0-rc-2026-03-15"),
+            Some("wasi:cli/run@0.3.0"),
             "run should be tagged with its parent interface FQ"
         );
     }

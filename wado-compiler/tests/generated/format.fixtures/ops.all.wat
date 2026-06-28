@@ -158,5 +158,5 @@
   (instance (;0;)
     (export "run" (func $run))
   )
-  (export (;1;) "wasi:cli/run@0.3.0-rc-2026-03-15" (instance 0))
+  (export (;1;) "wasi:cli/run@0.3.0" (instance 0))
 )
