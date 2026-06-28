@@ -24,6 +24,13 @@ namespace = "myorg"
 name = "my-app"
 version = "0.1.0"
 lib = "src/lib.wado"
+description = "A fast widget toolkit"
+homepage = "https://wado-lang.org"
+repository = "https://github.com/myorg/my-app"
+documentation = "https://docs.wado-lang.org"
+license = "MIT OR Apache-2.0"
+authors = ["Alice <alice@example.com>"]
+wado-version = ">=0.5"
 
 [world]
 "wasi:cli/command" = "src/main.wado"
@@ -47,14 +54,26 @@ an open coordinate `ns:pkg`, or a `lib:` nickname for indirection. Bare keys
 
 ### `[package]`
 
-| Field       | Type     | Required | Description                                      |
-| ----------- | -------- | -------- | ------------------------------------------------ |
-| `namespace` | `string` | No       | Organization or user namespace (e.g., `"myorg"`) |
-| `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                  |
-| `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                 |
-| `lib`       | `string` | No       | Entry module of the package's library world      |
+| Field                  | Type       | Required | Description                                                                                   |
+| ---------------------- | ---------- | -------- | --------------------------------------------------------------------------------------------- |
+| `namespace`            | `string`   | No       | Organization or user namespace (e.g., `"myorg"`)                                              |
+| `name`                 | `string`   | Yes      | Package name (e.g., `"my-app"`)                                                               |
+| `version`              | `string`   | Yes      | Semver version (e.g., `"0.1.0"`)                                                              |
+| `lib`                  | `string`   | No       | Entry module of the package's library world                                                   |
+| `description`          | `string`   | No       | Short, human-readable summary                                                                 |
+| `homepage`             | `string`   | No       | Project home page URL                                                                         |
+| `repository`           | `string`   | No       | Source repository URL (bare repo URL, no subdirectory)                                        |
+| `repository-directory` | `string`   | No       | Subdirectory holding the package within a monorepo (Wado-custom; not an OCI key)              |
+| `documentation`        | `string`   | No       | Documentation URL                                                                             |
+| `license`              | `string`   | No       | SPDX License Expression (e.g., `"MIT OR Apache-2.0"`). Mutually exclusive with `license-file` |
+| `license-file`         | `string`   | No       | Path to a non-standard license file. Mutually exclusive with `license`                        |
+| `authors`              | `string[]` | No       | Contact details of the people or organization responsible                                     |
+| `wado-version`         | `string`   | No       | Minimum Wado compiler version required to build (e.g., `">=0.5"`)                             |
+| `publish`              | `bool`     | No       | `false` opts a namespaced package out of publishing. Default `true`                           |
 
-`namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools.
+`namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools. A namespaced package can still opt out explicitly with `publish = false`.
+
+The human-facing fields (`description`, `homepage`, `repository`, `documentation`, `license`, `authors`) are backend-agnostic package metadata; they live in `[package]` rather than a registry-flavored section, and map to OCI annotations only as a serialization detail. See [Package Metadata and Publishing](#package-metadata-and-publishing).
 
 #### Name and Namespace Validation
 
@@ -63,6 +82,69 @@ Both `namespace` and `name` must match `[a-zA-Z0-9_-]+` (minimum 1 character, ma
 Dependency keys in `[dependencies]` are quoted specifiers — an open coordinate `"ns:pkg"` or a `"lib:nick"` nickname — each segment matching the same `[a-zA-Z0-9_-]+` rule. The `lib:`-or-coordinate form makes a real registry identity and a local indirection distinguishable on sight.
 
 A package must declare at least one world: a `[world]` entry, `[package].lib`, or both.
+
+### Package Metadata and Publishing
+
+The human-facing `[package]` fields are universal package metadata that happen
+to map to OCI annotations. The registry backend is OCI (see [Registry backend](#registry-backend)), so on publish each field is serialized to a
+standard `org.opencontainers.image.*` annotation:
+
+| `[package]` field      | OCI annotation                                       | Notes                                                |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+| `description`          | `org.opencontainers.image.description`               | Short human-readable summary                         |
+| `homepage`             | `org.opencontainers.image.url`                       |                                                      |
+| `repository`           | `org.opencontainers.image.source`                    | Bare repo URL — enables registry → repo auto-linking |
+| `documentation`        | `org.opencontainers.image.documentation`             |                                                      |
+| `license`              | `org.opencontainers.image.licenses`                  | SPDX License Expression                              |
+| `authors`              | `org.opencontainers.image.authors`                   | Array, serialized comma-separated                    |
+| `version`              | `org.opencontainers.image.version`                   | Set by the registry tool at publish time             |
+| (git commit SHA)       | `org.opencontainers.image.revision`                  | Auto-derived at build time                           |
+| `repository-directory` | — (Wado-custom)                                      | No OCI key exists; embedded in the component only    |
+| `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded as a custom section            |
+
+`created` is not modeled: no embeddable field exists for it, and the registry
+tool owns publish-time timestamps. `keywords`/`categories` are omitted — OCI has
+no standard key for them, so they would not reach an OCI registry.
+
+#### License
+
+`license` (an SPDX expression such as `"MIT OR Apache-2.0"`) is the primary
+form. For a standard license the SPDX identifier is the canonical reference, so
+no file is shipped. A non-standard or proprietary license uses `license-file`
+instead: the annotation becomes `LicenseRef-<name>` (SPDX's syntax for custom
+licenses) and the file's text is embedded in the component. `license` and
+`license-file` are mutually exclusive; publishing requires one of them.
+
+#### Repository subdirectory (monorepo)
+
+Neither OCI nor git has a standard way to address a subdirectory within a
+repository. `repository` therefore stays a bare repo URL (so the registry can
+link the artifact back to its repository); a package's location inside a
+monorepo is recorded in `repository-directory`. This value is not emitted as an
+OCI annotation — it is embedded as Wado-custom metadata and preserved in the
+component for Wado tooling.
+
+The same need on the consuming side — depending on a package that lives in a
+subdirectory of a git repository — is served by the git dependency's
+`directory` field (see [Git](#git)).
+
+#### Metadata embedding and the publish backend
+
+Metadata is embedded into the compiled component using the `wasm-metadata`
+custom-section format that the registry tooling reads. `wado publish` shells out
+to `wkg` (wasm-pkg-tools), which derives the OCI annotations from the embedded
+metadata. There is no `wkg.toml`: `wado.toml` is the single source of truth, and
+users interact only with `wado publish` — `wkg` is an implementation detail. The
+only requirement is that `wkg` is installed; a missing `wkg` produces an error
+with install guidance and exits.
+
+Registry authentication is delegated to the ambient OCI credential store
+(`docker login`, read by `wkg`), with an environment-variable token override for
+CI. Wado stores no credentials of its own.
+
+`revision` (the git commit SHA) is derived at build time. When the working tree
+is dirty, the revision is omitted (with a warning) rather than recording an
+unreproducible state.
 
 ### Entry Points and Worlds
 
@@ -192,11 +274,23 @@ Each dependency must have exactly one primary source type (`git`, `registry`, or
 "user:router" = { git = "https://github.com/user/router.git", ref = "main" }
 ```
 
-| Field     | Required | Description                                   |
-| --------- | -------- | --------------------------------------------- |
-| `git`     | Yes      | Full git URL (any host: GitHub, GitLab, etc.) |
-| `version` | XOR      | Semver range on git tags (e.g., `"^1.0.0"`)   |
-| `ref`     | XOR      | Exact git ref (tag, branch, or commit SHA)    |
+| Field       | Required | Description                                                                                   |
+| ----------- | -------- | --------------------------------------------------------------------------------------------- |
+| `git`       | Yes      | Full git URL (any host: GitHub, GitLab, etc.)                                                 |
+| `version`   | XOR      | Semver range on git tags (e.g., `"^1.0.0"`)                                                   |
+| `ref`       | XOR      | Exact git ref (tag, branch, or commit SHA)                                                    |
+| `directory` | No       | Subdirectory holding the package within the repository (monorepo). Defaults to the repo root. |
+
+```toml
+# Package in a subdirectory of a monorepo
+"org:foo" = { git = "https://github.com/org/monorepo.git", version = "^1.0.0", directory = "packages/foo" }
+```
+
+`directory` addresses the subdirectory through an explicit field rather than
+encoding it into the URL — git has no URL syntax for subdirectories, and the
+ecosystem conventions that bolt one on (`//subdir`, `#subdirectory=`, `?path=`)
+are not interoperable. The inline table already has room for a dedicated key, so
+the path is unambiguous and host-independent.
 
 Exactly one of `version` or `ref` must be specified. `version` resolves against semver-tagged releases in the repository. `ref` pins to an exact git ref — use explicit branch names (e.g., `"main"`) rather than implicit defaults.
 
@@ -665,10 +759,15 @@ See [WEP: CLI Subcommands for Package Management](./wep-2026-02-22-cli-subcomman
 
 ### Publishing
 
-When publishing a package to a registry (`wado publish`), the following validations apply:
+`wado publish` builds the component, embeds the `[package]` metadata, and
+delegates the OCI upload to `wkg` (see [Metadata embedding and the publish
+backend](#metadata-embedding-and-the-publish-backend)). The following
+validations apply:
 
 - `namespace` and `name` must be present
 - `version` must be present and valid semver
+- `publish` must not be `false`
+- exactly one of `license` or `license-file` must be present
 - All `path` dependencies must have accompanying registry or git source information
 
 #### Path Dependency Replacement
