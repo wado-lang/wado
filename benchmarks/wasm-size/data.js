@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782658286606,
+  "lastUpdate": 1782659118179,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36313,6 +36313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/257330c4dd557e3a42a1595ed8b922513620ae31"
         },
         "date": 1782658286055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ee36980749194e490b16b85b81d0bf292800ddc4",
+          "message": "Merge pull request #1466 from wado-lang/claude/package-manifest-metadata-fgl0ju\n\nfeat(manifest): human-facing package metadata, OCI publishing, and workspace lockstep",
+          "timestamp": "2026-06-28T23:55:27+09:00",
+          "tree_id": "e5af528efbe728ad4dc79d7678acc574cd3b2ab8",
+          "url": "https://github.com/wado-lang/wado/commit/ee36980749194e490b16b85b81d0bf292800ddc4"
+        },
+        "date": 1782659117531,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
