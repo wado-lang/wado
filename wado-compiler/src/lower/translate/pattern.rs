@@ -179,8 +179,10 @@ impl Lowering {
             if !g.mutable
                 && let TirExprKind::IntLiteral { value, .. } = &g.initializer.kind
             {
-                const_int_globals
-                    .insert((g.module_source.clone(), g.name.clone()), i128::from(*value));
+                const_int_globals.insert(
+                    (g.module_source.clone(), g.name.clone()),
+                    i128::from(*value),
+                );
             }
         }
 

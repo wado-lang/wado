@@ -3403,6 +3403,15 @@ Returns an iterator over the UTF-8 bytes of the string.
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
+#### `pub fn to_chars(&self) -> List<char>`
+
+Decode the whole string into an owned `List<char>`.
+
+Reads better than `chars().collect()` and is no slower: the result is
+pre-sized to the byte length (an upper bound on the char count, exact
+for ASCII) and the decode is one straight loop over the shared
+`decode_utf8_scalar`, with no per-char `Option` or iterator dispatch.
+
 #### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
 Decodes the UTF-8 character starting at the given byte index.
