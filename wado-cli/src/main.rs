@@ -25,6 +25,7 @@ enum Cmd {
     Syntax,
     Lsp,
     Query,
+    Publish,
 }
 
 impl Cmd {
@@ -43,6 +44,7 @@ impl Cmd {
         Self::Syntax,
         Self::Lsp,
         Self::Query,
+        Self::Publish,
     ];
 
     const fn name(self) -> &'static str {
@@ -61,6 +63,7 @@ impl Cmd {
             Self::Syntax => "syntax",
             Self::Lsp => "lsp",
             Self::Query => "query",
+            Self::Publish => "publish",
         }
     }
 
@@ -70,7 +73,7 @@ impl Cmd {
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Doc | Self::Dump => "[options] <file.wado>...",
-            Self::Init | Self::Update | Self::Syntax | Self::Lsp => "[options]",
+            Self::Init | Self::Update | Self::Syntax | Self::Lsp | Self::Publish => "[options]",
             Self::Query => "<kind> [options] <file.wado>",
         }
     }
@@ -91,6 +94,7 @@ impl Cmd {
             Self::Syntax => "Generate syntax definition files",
             Self::Lsp => "Start the language server (LSP over stdio)",
             Self::Query => "Query language service information",
+            Self::Publish => "Check whether the package can be published",
         }
     }
 
@@ -241,6 +245,10 @@ async fn dispatch() -> Result<(), CliExit> {
                 Cmd::Query => {
                     let opts = wado_cli::query::parse_args(parser)?;
                     Box::pin(wado_cli::query::run(opts)).await
+                }
+                Cmd::Publish => {
+                    let opts = wado_cli::publish::parse_args(parser)?;
+                    wado_cli::publish::run(opts)
                 }
             }
         }
