@@ -101,11 +101,16 @@ The human-facing `[package]` fields are universal package metadata; on publish t
 | `authors`              | `org.opencontainers.image.authors`                   | Array, serialized comma-separated                    |
 | `version`              | `org.opencontainers.image.version`                   | Set by the registry tool at publish time             |
 | (git commit SHA)       | `org.opencontainers.image.revision`                  | Auto-derived at build time                           |
-| `repository-directory` | — (Wado-custom)                                      | No OCI key exists; embedded in the component only    |
-| `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded as a custom section            |
+| `repository-directory` | `org.wado-lang.package.repository-directory`         | Wado-custom annotation (no OCI key); embedded, not promoted by `wkg`        |
+| `license-file`         | `org.opencontainers.image.licenses` = `LicenseRef-…` | License text embedded in the `org.wado-lang.license` custom section         |
 
 `created` is not modeled (the registry tool owns publish timestamps);
 `keywords`/`categories` are omitted (no OCI key, so they would not reach the registry).
+
+Metadata with no standard OCI key uses the Wado namespace
+`org.wado-lang.package.*`, keyed by the `wado.toml` field name (e.g.
+`org.wado-lang.package.repository-directory`). Wado-proprietary binary custom
+sections use the same `org.wado-lang.*` namespace.
 
 #### License
 
@@ -117,7 +122,19 @@ Neither OCI nor git addresses a repository subdirectory, so `repository` stays a
 
 #### Metadata embedding and the publish backend
 
-`wado publish` embeds the metadata into the component in the `wasm-metadata` custom-section format and shells out to `wkg` (wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` — `wado.toml` is the only source of truth, and `wkg` is an implementation detail (a missing `wkg` errors with install guidance). Authentication is delegated to the ambient OCI credential store (`docker login`), with an env-var token override for CI; Wado stores no credentials. `revision` is the git commit SHA, derived at build time and omitted (with a warning) on a dirty tree.
+`wado compile` embeds the metadata into the component in the `wasm-metadata`
+custom-section format. Embedding happens only in manifest-driven mode — `wado
+compile` with no argument (the cwd `wado.toml`) or a directory argument
+(`<dir>/wado.toml`); an explicit `.wado` file argument compiles that file as a
+standalone target and embeds nothing. `--no-embed-metadata` opts out.
+
+`wado publish` builds through the same compile path and shells out to `wkg`
+(wasm-pkg-tools), which derives the OCI annotations. There is no `wkg.toml` —
+`wado.toml` is the only source of truth, and `wkg` is an implementation detail
+(a missing `wkg` errors with install guidance). Authentication is delegated to
+the ambient OCI credential store (`docker login`), with an env-var token
+override for CI; Wado stores no credentials. `revision` is the git commit SHA,
+derived at build time; a dirty tree omits it, warned only at publish.
 
 ### Entry Points and Worlds
 
