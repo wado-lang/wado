@@ -45,8 +45,9 @@ stamping each call with its callee's id.
 `NirPackage` owns a `FuncRegistry` (`FuncId ↔ function`, plus the resolver),
 populated by `lower`. The mangled `name` becomes a registry _attribute_, looked
 up only when a name is actually emitted (codegen, diagnostics) — never for
-identity or keying. External / builtin callees are interned into the same id
-space with an `extern` marker, so a call site is always an integer.
+identity or keying. In the end state external / builtin callees are interned into
+the same id space (with an `extern` marker) so a call site is always an integer;
+that interning is deferred to Phase 4 (see below).
 
 `FuncId` is stable across `dce` compaction and mid-loop appends. Functions the
 optimizer adds (`value_copy_demote`) draw fresh ids from the registry; copied
@@ -55,6 +56,24 @@ by the pass that rewrites them. Indexing the store goes through a `FuncId → in
 map — integer→integer, cheap to rebuild at the few `dce` boundaries. The gate's
 "index stable only within one run" constraint and its call-graph rebuild
 disappear.
+
+## Externs and invariants
+
+- Externs deferred. Until Phase 4, call nodes carry `func_id: Option<FuncId>`
+  covering only defined functions; an extern / builtin / not-yet-stamped callee is
+  `None`, which every analysis already treats conservatively. Extern interning (so
+  the field can become non-optional) lands with Phase 4, when codegen needs the
+  registry to name them.
+- `None` is always safe. Stamp maintenance is best-effort: a copied call carries
+  its id (plain field), a pass that creates or retargets a call stamps the new
+  callee's id, and anything missed reads as `None` → conservative. Per the gate's
+  existing rule, an imprecise id costs optimization _quality_, never correctness.
+- Uniqueness guard. `lower` `debug_assert`s that no two functions produce the same
+  canonical key when building `key → FuncId` — `full_name` uniqueness is the
+  load-bearing assumption (the gate's call graph already relies on it).
+- Two ids coexist transiently. The intrinsic `FuncId` (DCE-stable) and
+  `gate::FunctionId` (the store index) live side by side until Phase 5 folds the
+  gate onto `FuncId`.
 
 ## Staging
 
