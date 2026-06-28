@@ -223,7 +223,7 @@ type SigKindIndex = IndexMap<SigKey, ListMethodKind>;
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
 /// `List<T_k>::method`. Built once per pass.
-type MethodCatalog = IndexMap<(TypeId, SigKey), FunctionRef>;
+type MethodCatalog = IndexMap<(TypeId, SigKey), (FunctionRef, crate::nir::FuncId)>;
 
 /// A local that is a candidate for container SROA.
 struct Candidate {
@@ -406,10 +406,11 @@ fn build_method_catalog(
             method_info.method_name.clone(),
         );
         let func_ref = FunctionRef::from_resolved(&func, func.module_source.clone());
+        let func_id = func.id.expect("func_id assigned at lower");
         // First-writer wins (there should only be one per (T, sig)).
         catalog
             .entry((element_ty, sig_key.clone()))
-            .or_insert(func_ref);
+            .or_insert((func_ref, func_id));
 
         // Classify this method by signature shape. A method family (same
         // `SigKey`) has the same shape across all element types, so first-
@@ -1631,7 +1632,7 @@ impl Rewriter<'_, '_> {
             let elem_ty = info.element_types[0];
             let field_local = ctx.field_local_map[&(rec_local, 0)];
             let (field_name, arr_ty) = ctx.field_info_map[&(rec_local, 0)].clone();
-            let new_func = ctx
+            let (new_func, new_func_id) = ctx
                 .catalog
                 .get(&(elem_ty, sig))
                 .cloned()
@@ -1641,7 +1642,7 @@ impl Rewriter<'_, '_> {
             engine.replace_expr_kind(
                 e,
                 ExprKind::MethodCall {
-                    func_id: None,
+                    func_id: Some(new_func_id),
                     receiver: new_receiver.into(),
                     func: new_func,
                     type_args: Vec::new(),
@@ -1718,14 +1719,14 @@ fn build_with_capacity_call(
         ListMethodKind::Constructor,
     )
     .expect("Constructor checked by required_methods_available");
-    let func = ctx
+    let (func, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig))
         .expect("Constructor entry checked by required_methods_available")
         .clone();
     engine.alloc_expr(
         ExprKind::Call {
-            func_id: None,
+            func_id: Some(func_id),
             func,
             type_args: Vec::new(),
             args: vec![ArenaCallArg {
@@ -1751,7 +1752,7 @@ fn build_element_writer_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let func = ctx
+    let (func, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("ElementWriter entry checked by required_methods_available")
@@ -1759,7 +1760,7 @@ fn build_element_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: None,
+            func_id: Some(func_id),
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),
@@ -1787,7 +1788,7 @@ fn build_index_writer_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let func = ctx
+    let (func, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("IndexWriter entry checked by required_methods_available")
@@ -1795,7 +1796,7 @@ fn build_index_writer_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, true, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: None,
+            func_id: Some(func_id),
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),
@@ -1828,7 +1829,7 @@ fn build_index_reader_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let func = ctx
+    let (func, func_id) = ctx
         .catalog
         .get(&(elem_ty, sig.clone()))
         .expect("IndexReader entry checked by required_methods_available")
@@ -1836,7 +1837,7 @@ fn build_index_reader_call(
     let receiver = build_receiver(engine, field_local, field_name, arr_ty, false, span);
     engine.alloc_expr(
         ExprKind::MethodCall {
-            func_id: None,
+            func_id: Some(func_id),
             receiver: receiver.into(),
             func,
             type_args: Vec::new(),

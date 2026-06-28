@@ -71,6 +71,9 @@ pub(super) fn run_peephole(
     gate: &mut FunctionGate,
     pre_inline: bool,
 ) -> bool {
+    // Intern the builtins the bundled rules synthesize, before any shared
+    // immutable borrow of `project`, so their calls are born resolved.
+    let (cold_path_id, unreachable_id) = super::match_to_switch::intern_cold_markers(project);
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_names = resolve_array_push_names(project);
     let array_rule = Collapser::new(&push_names);
@@ -85,7 +88,7 @@ pub(super) fn run_peephole(
     let callees = build_callee_map(project);
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
-    let match_rule = MatchToSwitchRule::new(&type_table);
+    let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();

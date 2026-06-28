@@ -43,8 +43,9 @@ const SWITCH_MAX_RANGE: i64 = 1024;
 /// (and thus the gate) is skipped — avoids building a throwaway `FunctionGate`
 /// (a full call-graph walk) just to satisfy the gated signature.
 pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
+    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table);
+    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -65,8 +66,9 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
 /// Global initializer bodies are not mutated by the function-level loop, so a
 /// single pass is equivalent to running it every iteration.
 pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
+    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
     let type_table = project.type_table.borrow();
-    let rule = MatchToSwitchRule::new(&type_table);
+    let rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let mut buffers = EngineBuffers::default();
     run_globals(&mut project.globals, &rule, &type_table, &mut buffers)
 }
@@ -93,12 +95,41 @@ fn run_globals(
 
 pub(super) struct MatchToSwitchRule<'t> {
     type_table: &'t TypeTable,
+    cold_path_id: crate::nir::FuncId,
+    unreachable_id: crate::nir::FuncId,
 }
 
 impl<'t> MatchToSwitchRule<'t> {
-    pub(super) fn new(type_table: &'t TypeTable) -> Self {
-        Self { type_table }
+    pub(super) fn new(
+        type_table: &'t TypeTable,
+        cold_path_id: crate::nir::FuncId,
+        unreachable_id: crate::nir::FuncId,
+    ) -> Self {
+        Self {
+            type_table,
+            cold_path_id,
+            unreachable_id,
+        }
     }
+}
+
+/// Intern the `cold_path` / `unreachable` builtins this pass synthesizes for the
+/// default arm of an exhaustive match, returning their `FuncId`s so the
+/// synthesized calls are born resolved.
+pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (crate::nir::FuncId, crate::nir::FuncId) {
+    let cold_path_id = project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "cold_path".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
+    let unreachable_id = project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "unreachable".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
+    (cold_path_id, unreachable_id)
 }
 
 impl Rule for MatchToSwitchRule<'_> {
@@ -120,7 +151,15 @@ impl Rule for MatchToSwitchRule<'_> {
         };
 
         let span = engine.body.exprs[id].span;
-        let new_kind = build_switch(engine, scrutinee, &arms, analysis, span);
+        let new_kind = build_switch(
+            engine,
+            scrutinee,
+            &arms,
+            analysis,
+            span,
+            self.cold_path_id,
+            self.unreachable_id,
+        );
         engine.replace_expr_kind(id, new_kind);
         true
     }
@@ -226,6 +265,8 @@ fn build_switch(
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
+    cold_path_id: crate::nir::FuncId,
+    unreachable_id: crate::nir::FuncId,
 ) -> ExprKind {
     let range = (analysis.max_value - analysis.min_value + 1) as usize;
 
@@ -251,7 +292,7 @@ fn build_switch(
         // matching the other compiler-synthesized cold branches.
         let cold_call = engine.alloc_expr(
             ExprKind::Call {
-                func_id: None,
+                func_id: Some(cold_path_id),
                 func: FunctionRef {
                     module_source: ModuleSource::builtin(),
                     name: "cold_path".to_string(),
@@ -273,7 +314,7 @@ fn build_switch(
         // synthesised callee being removed.
         let call = engine.alloc_expr(
             ExprKind::Call {
-                func_id: None,
+                func_id: Some(unreachable_id),
                 func: FunctionRef {
                     module_source: ModuleSource::builtin(),
                     name: "unreachable".to_string(),

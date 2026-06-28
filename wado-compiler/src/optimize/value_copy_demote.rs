@@ -57,6 +57,15 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 /// specialization was added), so the optimizer's dirty-set gate can re-examine
 /// the touched functions and accommodate the new ones.
 pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    // Intern the `array_clone_shallow` builtin the synthesized twins call, so
+    // those calls are born resolved. One id serves all instantiations (the key
+    // ignores type args, which ride the node).
+    let array_clone_shallow_id = project.intern_extern(&FunctionRef {
+        module_source: crate::module_source::ModuleSource::builtin(),
+        name: "array_clone_shallow".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    });
     // Map every function to its index for callee lookup.
     let mut by_key: IndexMap<FuncKey, usize> = IndexMap::default();
     for (i, f) in project.functions.iter().enumerate() {
@@ -133,14 +142,24 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     }
 
     // Phase 2a: synthesize a shallow sibling helper per demoted deep helper.
+    // Each twin is born resolved: minted a `FuncId` at its eventual store
+    // position and registered in the reverse index, so its callers stamp the
+    // twin's id directly (`shallow_id`).
     let mut shallow_name: IndexMap<FuncKey, String> = IndexMap::default();
+    let mut shallow_id: IndexMap<FuncKey, FuncId> = IndexMap::default();
     let mut new_funcs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+    let mut next = project.next_func_id().index();
     for deep_key in &demoted_keys {
         let new_name = format!("{}$shallow", deep_key.1);
         // A prior fixed-point iteration may already have synthesized this
-        // helper; reuse it rather than adding a duplicate-named function.
-        if by_key.contains_key(&(deep_key.0.clone(), new_name.clone())) {
+        // helper; reuse it (and its id) rather than adding a duplicate.
+        if let Some(&existing) = by_key.get(&(deep_key.0.clone(), new_name.clone())) {
+            let id = project.functions[existing]
+                .borrow()
+                .id
+                .expect("func_id assigned at lower");
             shallow_name.insert(deep_key.clone(), new_name);
+            shallow_id.insert(deep_key.clone(), id);
             continue;
         }
         let idx = by_key[deep_key];
@@ -149,10 +168,16 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
         shallow.kind = FunctionKind::Regular;
         shallow.is_pub = false;
         shallow.is_export = false;
+        let id = FuncId::new(next);
+        next += 1;
+        shallow.id = Some(id);
         if let Some(body) = &mut shallow.body {
-            rewrite_array_clone_to_shallow(body);
+            rewrite_array_clone_to_shallow(body, array_clone_shallow_id);
         }
+        let key = FunctionRef::from_resolved(&shallow, shallow.module_source.clone()).function_id();
+        project.func_index.insert(key, id);
         shallow_name.insert(deep_key.clone(), new_name);
+        shallow_id.insert(deep_key.clone(), id);
         new_funcs.push(Rc::new(RefCell::new(shallow)));
     }
 
@@ -169,17 +194,14 @@ pub fn demote_value_copies(project: &mut NirPackage, gate: &mut FunctionGate) ->
     for &fi in &touched {
         let mut f = project.functions[fi].borrow_mut();
         if let Some(body) = &mut f.body {
-            retarget_block(body, fi, &site_elig, &list_wrapper_copies, &shallow_name);
-        }
-    }
-    // Mint a fresh FuncId for each shallow twin (cloned from a source function,
-    // so it would otherwise inherit the source's id).
-    {
-        use cranelift_entity::EntityRef;
-        let mut next = project.next_func_id().index();
-        for f in &new_funcs {
-            f.borrow_mut().id = Some(crate::nir::FuncId::new(next));
-            next += 1;
+            retarget_block(
+                body,
+                fi,
+                &site_elig,
+                &list_wrapper_copies,
+                &shallow_name,
+                &shallow_id,
+            );
         }
     }
     project.functions.extend(new_funcs);
@@ -251,7 +273,7 @@ fn body_is_list_wrapper_copy(body: &Body) -> bool {
 
 /// Rewrite every reachable `builtin::array_clone` call in `body` to its
 /// shallow sibling `array_clone_shallow`.
-fn rewrite_array_clone_to_shallow(body: &mut Body) {
+fn rewrite_array_clone_to_shallow(body: &mut Body, array_clone_shallow_id: FuncId) {
     for id in reachable_exprs(body) {
         if let ExprKind::Call { func, func_id, .. } = &mut body.exprs[id].kind
             && builtin_gname(func).as_deref() == Some("builtin::array_clone")
@@ -260,11 +282,10 @@ fn rewrite_array_clone_to_shallow(body: &mut Body) {
             if let Some(mi) = &mut func.monomorph_info {
                 mi.generic_name = "array_clone_shallow".to_string();
             }
-            // The callee just changed (array_clone → array_clone_shallow), so the
-            // stamped `func_id` is stale. Clear it (born-resolved invariant): a
-            // pass that rewrites a call's callee must re-stamp or drop its id, or
-            // codegen would resolve the descriptor from the old callee.
-            *func_id = None;
+            // The callee just changed (array_clone → array_clone_shallow); re-stamp
+            // it (born-resolved invariant) so codegen resolves the descriptor from
+            // the new callee. The key ignores type args, so one id serves all.
+            *func_id = Some(array_clone_shallow_id);
         }
     }
 }
@@ -426,6 +447,7 @@ fn retarget_block(
     site_elig: &IndexMap<(usize, u32), bool>,
     wrappers: &IndexSet<FuncKey>,
     shallow_name: &IndexMap<FuncKey, String>,
+    shallow_id: &IndexMap<FuncKey, FuncId>,
 ) {
     let mut targets: Vec<ExprId> = Vec::new();
     for block in reachable_blocks(body) {
@@ -450,7 +472,7 @@ fn retarget_block(
         }
     }
     for id in targets {
-        retarget_wrapper_call(body, id, wrappers, shallow_name);
+        retarget_wrapper_call(body, id, wrappers, shallow_name, shallow_id);
     }
 }
 
@@ -476,6 +498,7 @@ fn retarget_wrapper_call(
     value: ExprId,
     wrappers: &IndexSet<FuncKey>,
     shallow_name: &IndexMap<FuncKey, String>,
+    shallow_id: &IndexMap<FuncKey, FuncId>,
 ) {
     if let ExprKind::Call {
         func,
@@ -490,9 +513,9 @@ fn retarget_wrapper_call(
             && let Some(new) = shallow_name.get(&key)
         {
             func.name.clone_from(new);
-            // The callee changed to the shallow twin; the old stamp is stale.
-            // Clear it (conservative — the twin's calls re-stamp at Phase 4).
-            *func_id = None;
+            // Retarget to the shallow twin and re-stamp its `FuncId` (born
+            // resolved; the twin was interned in Phase 2a).
+            *func_id = shallow_id.get(&key).copied();
         }
     }
 }

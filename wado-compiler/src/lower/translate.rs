@@ -127,6 +127,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         entry_module_source,
         type_table,
         functions,
+        func_index: IndexMap::default(),
         structs: structs
             .iter()
             .map(|s| translator.convert_struct(s))

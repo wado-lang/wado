@@ -55,12 +55,15 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 pub(super) struct Ctx {
     push_str: FunctionRef,
     push_char: FunctionRef,
+    /// `FuncId` of `push_char`, captured at resolution so the synthesized
+    /// per-byte `push(ch)` calls are born resolved.
+    push_char_id: crate::nir::FuncId,
 }
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
         let mut push_str: Option<FunctionRef> = None;
-        let mut push_char: Option<FunctionRef> = None;
+        let mut push_char: Option<(FunctionRef, crate::nir::FuncId)> = None;
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
@@ -68,14 +71,17 @@ impl Ctx {
                     push_str = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
                 }
                 Some(CompilerItem::StringPushChar) => {
-                    push_char = Some(FunctionRef::from_resolved(&f, f.module_source.clone()));
+                    let id = f.id.expect("func_id assigned at lower");
+                    push_char = Some((FunctionRef::from_resolved(&f, f.module_source.clone()), id));
                 }
                 Some(_) | None => {}
             }
         }
+        let (push_char, push_char_id) = push_char?;
         Some(Self {
             push_str: push_str?,
-            push_char: push_char?,
+            push_char,
+            push_char_id,
         })
     }
 }
@@ -189,7 +195,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::MethodCall {
-                func_id: None,
+                func_id: Some(ctx.push_char_id),
                 receiver: recv_clone.into(),
                 func: ctx.push_char.clone(),
                 type_args: Vec::new(),
