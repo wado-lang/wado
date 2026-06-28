@@ -17,7 +17,7 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -85,10 +85,11 @@ struct LocalUsage {
 }
 
 /// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; else `expr`.
-fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
-    if let ExprKind::Call { func, args, .. } = &body.exprs[expr].kind
-        && func.module_source.is_core_builtin()
-        && func.name == "copy_value"
+/// `copy_value_id` is the builtin's `FuncId` (resolved once at the pass top);
+/// identity is an integer compare against the call node's `func_id`.
+fn unwrap_copy_value(body: &Body, expr: ExprId, copy_value_id: Option<FuncId>) -> ExprId {
+    if let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind
+        && *func_id == copy_value_id
         && args.len() == 1
     {
         return args[0].expr.as_expr().unwrap_or(expr);
@@ -96,7 +97,11 @@ fn unwrap_copy_value(body: &Body, expr: ExprId) -> ExprId {
     expr
 }
 
-fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
+fn analyze_copy_binding(
+    body: &Body,
+    stmt: StmtId,
+    copy_value_id: Option<FuncId>,
+) -> Option<CopyBinding> {
     let StmtKind::Let {
         local_index,
         value,
@@ -123,7 +128,7 @@ fn analyze_copy_binding(body: &Body, stmt: StmtId) -> Option<CopyBinding> {
     if skip_value_copy {
         return None;
     }
-    let value = unwrap_copy_value(body, value.as_expr()?);
+    let value = unwrap_copy_value(body, value.as_expr()?, copy_value_id);
     let value_type = body.exprs[value].type_id;
 
     let source = match &body.exprs[value].kind {
@@ -231,12 +236,20 @@ fn analyze_function_body(
     body: &Body,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) -> AnalysisResult {
     let mut result = AnalysisResult {
         bindings: Vec::new(),
         usage: IndexMap::default(),
     };
-    analyze_block(body, body.root, &mut result, type_table, first_param_types);
+    analyze_block(
+        body,
+        body.root,
+        &mut result,
+        type_table,
+        first_param_types,
+        copy_value_id,
+    );
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
@@ -259,10 +272,11 @@ fn analyze_block(
     result: &mut AnalysisResult,
     type_table: &TypeTable,
     fpt: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) {
     let stmts = body.blocks[block].stmts.clone();
     for (k, &stmt) in stmts.iter().enumerate() {
-        if let Some(mut binding) = analyze_copy_binding(body, stmt) {
+        if let Some(mut binding) = analyze_copy_binding(body, stmt, copy_value_id) {
             // The target's uses are confined to this block from `k` onward, so
             // the source is stable for the propagation iff it is not mutated in
             // those statements (a promoted value is unconditionally stable).
@@ -274,7 +288,7 @@ fn analyze_block(
             };
             result.bindings.push(binding);
         }
-        analyze_stmt(body, stmt, result, type_table, fpt);
+        analyze_stmt(body, stmt, result, type_table, fpt, copy_value_id);
     }
 }
 
@@ -284,13 +298,14 @@ fn analyze_stmt(
     result: &mut AnalysisResult,
     type_table: &TypeTable,
     fpt: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) {
     let mut kids = Vec::new();
     body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
     for c in kids {
         match c {
-            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt),
-            NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt),
+            NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt, copy_value_id),
+            NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt, copy_value_id),
             _ => {}
         }
     }
@@ -302,9 +317,10 @@ fn analyze_expr_operand(
     result: &mut AnalysisResult,
     type_table: &TypeTable,
     fpt: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) {
     if let Some(e) = op.as_expr() {
-        analyze_expr(body, e, result, type_table, fpt);
+        analyze_expr(body, e, result, type_table, fpt, copy_value_id);
     }
 }
 
@@ -314,6 +330,7 @@ fn analyze_expr(
     result: &mut AnalysisResult,
     type_table: &TypeTable,
     fpt: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) {
     match &body.exprs[id].kind {
         ExprKind::Local { index, .. } => {
@@ -330,9 +347,9 @@ fn analyze_expr(
             {
                 result.usage.entry(*index).or_default().has_field_mutation = true;
             }
-            analyze_expr(body, target, result, type_table, fpt);
+            analyze_expr(body, target, result, type_table, fpt, copy_value_id);
             if let Some(ve) = value.as_expr() {
-                analyze_expr(body, ve, result, type_table, fpt);
+                analyze_expr(body, ve, result, type_table, fpt, copy_value_id);
             }
         }
         ExprKind::Unary { op, expr: inner } => {
@@ -347,7 +364,7 @@ fn analyze_expr(
                     result.usage.entry(index).or_default().has_field_mutation = true;
                 }
             }
-            analyze_expr_operand(body, inner, result, type_table, fpt);
+            analyze_expr_operand(body, inner, result, type_table, fpt, copy_value_id);
         }
         ExprKind::Call { args, .. } => {
             let arg_data: Vec<(ExprId, bool)> = args
@@ -358,7 +375,7 @@ fn analyze_expr(
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
                 }
-                analyze_expr(body, arg, result, type_table, fpt);
+                analyze_expr(body, arg, result, type_table, fpt, copy_value_id);
             }
         }
         ExprKind::MethodCall {
@@ -382,12 +399,12 @@ fn analyze_expr(
             {
                 mark_potentially_mutated_local_operand(body, receiver, result);
             }
-            analyze_expr_operand(body, receiver, result, type_table, fpt);
+            analyze_expr_operand(body, receiver, result, type_table, fpt, copy_value_id);
             for (arg, is_mut) in arg_data {
                 if is_mut && may_mutate_through_arg(body, arg, type_table) {
                     mark_potentially_mutated_local(body, arg, result);
                 }
-                analyze_expr(body, arg, result, type_table, fpt);
+                analyze_expr(body, arg, result, type_table, fpt, copy_value_id);
             }
         }
         _ => {
@@ -395,8 +412,8 @@ fn analyze_expr(
             body.for_each_child(NodeRef::Expr(id), |c| kids.push(c));
             for c in kids {
                 match c {
-                    NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt),
-                    NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt),
+                    NodeRef::Expr(e) => analyze_expr(body, e, result, type_table, fpt, copy_value_id),
+                    NodeRef::Block(b) => analyze_block(body, b, result, type_table, fpt, copy_value_id),
                     _ => {}
                 }
             }
@@ -628,10 +645,12 @@ fn propagate_at_root(
     engine: &mut Engine,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
+    copy_value_id: Option<FuncId>,
 ) -> bool {
     let mut ever_changed = false;
     loop {
-        let analysis = analyze_function_body(engine.body, type_table, first_param_types);
+        let analysis =
+            analyze_function_body(engine.body, type_table, first_param_types, copy_value_id);
         if analysis.bindings.is_empty() {
             break;
         }
@@ -680,6 +699,7 @@ fn propagate_at_root(
 pub(super) struct CopyPropRule<'a> {
     type_table: &'a TypeTable,
     first_param_types: &'a FirstParamTypes,
+    copy_value_id: Option<FuncId>,
     applied: Cell<bool>,
 }
 
@@ -691,11 +711,17 @@ impl Rule for CopyPropRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        propagate_at_root(engine, self.type_table, self.first_param_types)
+        propagate_at_root(
+            engine,
+            self.type_table,
+            self.first_param_types,
+            self.copy_value_id,
+        )
     }
 }
 
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
     let first_param_types: FirstParamTypes = super::alias::first_param_types(project);
     let len = project.functions.len();
@@ -708,6 +734,7 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
         let rule = CopyPropRule {
             type_table: &type_table,
             first_param_types: &first_param_types,
+            copy_value_id,
             applied: Cell::new(false),
         };
         let NirFunction { body, locals, .. } = &mut *func;

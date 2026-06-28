@@ -202,6 +202,20 @@ impl NirPackage {
         self.func_index = ids;
     }
 
+    /// The [`FuncId`] of a `builtin::<name>` callee, or `None` if no such call is
+    /// interned in this package. Resolved once (e.g. at a pass's top) so an
+    /// optimizer recognizer can identify a builtin call by integer id comparison
+    /// against the call node's `func_id` — no per-call name materialization, and
+    /// no `store[id]` deref (which a self-recursive callee would double-borrow).
+    pub fn builtin_func_id(&self, name: &str) -> Option<FuncId> {
+        self.func_id_of(&FunctionRef {
+            module_source: crate::module_source::ModuleSource::builtin(),
+            name: name.to_string(),
+            monomorph_info: None,
+            method_info: None,
+        })
+    }
+
     /// Resolve a callee `FunctionRef` to its [`FuncId`] via the reverse index.
     /// `Some` for every in-package function and every already-interned extern;
     /// `None` only for a builtin the optimizer has not interned yet (see
