@@ -69,11 +69,25 @@ never code a prior phase introduced.
    bare-name collision. Measure here.
 3. WIR build / codegen resolve names by `FuncId` from the function record,
    dropping the `func_ref.name` path in `wir_build/calls.rs`.
-4. Drop `FunctionRef` from the call node (now unused); intern externs so the
-   callee `FuncId` is non-optional. Updates the ~30 nir-side construction sites
-   and `monomorphize`.
-5. Make the store a `PrimaryMap<FuncId, NirFunction>` with liveness-bit `dce`, and
-   fold the gate onto `FuncId`. The position/id duality is gone.
+4. Make the store stable under `dce`: mark a function dead with a liveness bit
+   instead of `retain`-removing it, so `FuncId` _is_ the store position for the
+   whole pipeline (`store[id]` is valid post-`dce`). Fold the gate onto `FuncId`.
+   The position/id duality is gone. **Prerequisite for Phase 5** — see below.
+5. Drop `FunctionRef` from the call node; intern externs so the callee `FuncId`
+   is non-optional. Codegen reads the callee descriptor (`module_source`, `name`,
+   `monomorph_info`, `method_info`) by `store[id]` instead of off the node.
+   Updates the ~30 nir-side construction sites and `monomorphize`.
+
+Staging-order finding (2026-06-28): Phase 5's `FunctionRef` drop requires reading
+the callee descriptor by `FuncId` at codegen, i.e. `store[id]`. Today `dce`'s
+`remove_unreachable_functions` `retain`s by position, renumbering the `Vec`, so
+post-`dce` `FuncId != position` and `store[id]` is invalid — only the
+`funcid_map` rebuilt from the stored `func.id` resolves a call. Hence the
+liveness-bit `dce` (originally Phase 5) must precede the `FunctionRef` drop
+(originally Phase 4); the two were swapped. The alternative — a parallel
+`SecondaryMap<FuncId, FunctionRef>` descriptor maintained across optimizer
+mutations — was rejected: it duplicates the arena record and risks drift, against
+"the name lives only in the arena record."
 
 ## Consequences
 
@@ -90,9 +104,10 @@ never code a prior phase introduced.
 
 ## TODO
 
-- [ ] Phase 1 — mint `FuncId` in `lower`; stamp the call node; `NirFunction.id`.
-- [ ] Phase 2 — analyses read the call-node `FuncId`, keyed by `SecondaryMap`.
-- [ ] Phase 3 — codegen resolves names by `FuncId` from the record.
-- [ ] Phase 4 — drop `FunctionRef` from call nodes; intern externs.
-- [ ] Phase 5 — `PrimaryMap<FuncId, NirFunction>` store + liveness `dce`; fold the
+- [x] Phase 1 — mint `FuncId` in `lower`; stamp the call node; `NirFunction.id`.
+- [x] Phase 2 — analyses read the call-node `FuncId`, keyed by `SecondaryMap`.
+- [x] Phase 3 — codegen resolves in-package calls by `FuncId` (`funcid_map`).
+- [ ] Phase 4 — liveness-bit `dce` (no renumber) so `store[id]` is valid; fold the
       gate onto `FuncId`.
+- [ ] Phase 5 — drop `FunctionRef` from call nodes; intern externs; codegen reads
+      the callee descriptor by `store[id]`.
