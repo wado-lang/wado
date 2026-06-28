@@ -268,6 +268,16 @@ wado compile -o out.wasm           # compiles the command entry point
 
 When a file argument is provided, it overrides the entry point from `wado.toml`.
 
+#### Default output path
+
+Without `-o`, a manifest-driven build (no argument or a directory argument)
+writes `<manifest_root>/build/<world>.wasm`, keeping artifacts out of the source
+tree and giving each world its own file (mirroring kiln's `build/` layout).
+`<world>` is the target Component Model world FQ sanitized to a path segment
+(`@version` dropped, `:`/`/` → `-`), e.g. `build/wasi-cli-command.wasm`;
+`--lib` writes `build/lib.wasm`. A standalone file argument keeps the old
+`<input>.wasm` beside the source.
+
 #### `--lib` — pending
 
 `wado compile --lib` (compile the `[package].lib` entry as a library) is

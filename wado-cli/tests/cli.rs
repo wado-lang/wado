@@ -100,6 +100,26 @@ fn test_compile_embeds_package_metadata_in_manifest_mode() {
 }
 
 #[test]
+fn test_compile_manifest_mode_default_output_to_build_dir() {
+    // Without -o, a manifest-driven build writes build/<world>.wasm at the
+    // manifest root, not into the source tree.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_metadata_project(dir);
+
+    wado_in(dir).arg("compile").assert().success();
+
+    assert!(
+        dir.join("build").join("wasi-cli-command.wasm").exists(),
+        "expected build/wasi-cli-command.wasm"
+    );
+    assert!(
+        !dir.join("src").join("main.wasm").exists(),
+        "must not write into the source tree"
+    );
+}
+
+#[test]
 fn test_compile_file_arg_does_not_embed_metadata() {
     // The same project, but the entry passed as an explicit file: a standalone
     // target, so no package metadata is embedded.

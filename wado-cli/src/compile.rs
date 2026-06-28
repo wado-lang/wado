@@ -1109,21 +1109,18 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
         return Ok(());
     }
 
+    // Discover the package manifest once, reused for the default output path and
+    // the wasm-output embedding paths (WIT + metadata) so nothing re-parses it.
+    let project = opts
+        .manifest_driven
+        .then(|| load_nearest_manifest(Path::new(&opts.input)))
+        .flatten();
+
     let output_path = if let Some(path) = &opts.output {
         Path::new(path).to_path_buf()
     } else {
-        let ext = match format {
-            OutputFormat::Wasm => "wasm",
-            OutputFormat::Wat => "wat",
-        };
-        Path::new(&opts.input).with_extension(ext)
+        default_output_path(&opts, project.as_ref(), format)
     };
-
-    // Discover the package manifest once for the wasm-output embedding paths
-    // (WIT + metadata), so neither step re-parses it.
-    let manifest_pair = (format == OutputFormat::Wasm)
-        .then(|| load_nearest_manifest(Path::new(&opts.input)))
-        .flatten();
 
     let bytes = match (format, embed) {
         (OutputFormat::Wasm, Some(explicit)) => {
@@ -1132,19 +1129,75 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
                 .map(|p| p.imported_cm_interfaces)
                 .unwrap_or_default();
             let embedded =
-                embed_wit_section(&opts, manifest_pair.as_ref(), wasm, world_imports, explicit)
-                    .await?;
-            embed_package_metadata(&opts, manifest_pair.as_ref(), embedded)
+                embed_wit_section(&opts, project.as_ref(), wasm, world_imports, explicit).await?;
+            embed_package_metadata(&opts, project.as_ref(), embedded)
         }
-        (OutputFormat::Wasm, None) => {
-            embed_package_metadata(&opts, manifest_pair.as_ref(), wasm)
-        }
+        (OutputFormat::Wasm, None) => embed_package_metadata(&opts, project.as_ref(), wasm),
         (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
+    if let Some(parent) = output_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)
+            .map_err(|e| CliExit::error(format!("creating output directory: {e}")))?;
+    }
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
     eprintln!("Generated: {}", output_path.display());
     Ok(())
+}
+
+/// The default output path when `-o` is absent. A manifest-driven build writes
+/// `<manifest_root>/build/<world>.<ext>` — keeping artifacts out of the source
+/// tree and giving each world its own file, mirroring kiln's `build/` layout.
+/// A standalone file argument writes `<input>.<ext>` beside the source.
+fn default_output_path(
+    opts: &CompileOptions,
+    project: Option<&manifest::ProjectManifest>,
+    format: OutputFormat,
+) -> std::path::PathBuf {
+    let ext = match format {
+        OutputFormat::Wasm => "wasm",
+        OutputFormat::Wat => "wat",
+    };
+    match project {
+        Some(project) => {
+            // `--lib` builds the library world, which has no external FQ name.
+            let world = if opts.lib_world.is_some() {
+                "lib".to_string()
+            } else {
+                world_path_segment(opts.target_world.as_deref().unwrap_or("wasi:cli/command"))
+            };
+            project.root.join("build").join(format!("{world}.{ext}"))
+        }
+        None => Path::new(&opts.input).with_extension(ext),
+    }
+}
+
+/// Sanitize a Component Model world FQ name into a single path segment: drop the
+/// `@version`, then replace every character outside `[A-Za-z0-9._-]` with `-`
+/// (e.g. `wasi:cli/command` → `wasi-cli-command`).
+fn world_path_segment(world_fq: &str) -> String {
+    let base = world_fq.split('@').next().unwrap_or(world_fq);
+    base.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod world_segment_tests {
+    use super::world_path_segment;
+
+    #[test]
+    fn sanitizes_and_drops_version() {
+        assert_eq!(world_path_segment("wasi:cli/command"), "wasi-cli-command");
+        assert_eq!(world_path_segment("wasi:http/service"), "wasi-http-service");
+        assert_eq!(world_path_segment("foo:bar/baz@1.2.3"), "foo-bar-baz");
+    }
 }
 
 #[cfg(test)]
