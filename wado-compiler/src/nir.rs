@@ -480,6 +480,28 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Bodyless stub for an extern / builtin callee (Phase 5 interning).
+    pub fn extern_stub(func_ref: &FunctionRef) -> Self {
+        Self {
+            id: None, is_dead: false, name: func_ref.name.clone(),
+            module_source: func_ref.module_source.clone(),
+            is_pub: false, is_export: false, is_async: false,
+            type_params: Vec::new(), impl_type_params: Vec::new(),
+            monomorph_info: func_ref.monomorph_info.clone(),
+            method_info: func_ref.method_info.clone(),
+            params: Vec::new(), return_type: TypeTable::UNIT,
+            task_return_type: None, effects: Vec::new(), stores: Vec::new(),
+            body: None, span: Span::default(), locals: Vec::new(),
+            address_taken_locals: IndexSet::default(),
+            stores_aliased_locals: IndexSet::default(),
+            is_cm_binding: false, is_dispatch_wrapper: false,
+            is_cm_export: false, is_ambient: false,
+            inline_hint: InlineHint::default(), compiler_item: None,
+            export_name: None, allocator_tag: None,
+            kind: FunctionKind::default(), return_abi: ReturnAbi::default(),
+        }
+    }
+
     /// The number of locals (params + body locals), i.e. the next free local
     /// index. `locals` is the single source of truth — there is no separate
     /// count field — so a pass allocates a local by pushing a `NirLocal` and

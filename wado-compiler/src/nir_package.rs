@@ -154,10 +154,24 @@ impl NirPackage {
                 "duplicate canonical function key: function_id must be unique"
             );
         }
-        // A call to a function outside the package (builtin / CM import / wasm
-        // asset) keys to no entry here and stays `func_id = None`; codegen
-        // resolves it by name. Interning these externs into the store (so the
-        // callee is always an integer) is the next Phase 5 step.
+        let mut extern_stubs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+        for func_rc in &self.functions {
+            let func = func_rc.borrow();
+            let Some(body) = func.body.as_ref() else { continue; };
+            for expr in body.exprs.values() {
+                let func_ref = match &expr.kind {
+                    ExprKind::Call { func, .. } | ExprKind::MethodCall { func, .. } => func,
+                    _ => continue,
+                };
+                let key = func_ref.function_id();
+                if ids.contains_key(&key) { continue; }
+                let id = FuncId::new(self.functions.len() + extern_stubs.len());
+                let mut stub = NirFunction::extern_stub(func_ref); stub.id = Some(id);
+                extern_stubs.push(Rc::new(RefCell::new(stub))); ids.insert(key, id);
+            }
+        }
+        self.functions.extend(extern_stubs);
+
         for func_rc in &self.functions {
             let mut func = func_rc.borrow_mut();
             let Some(body) = func.body.as_mut() else {
