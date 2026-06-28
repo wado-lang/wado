@@ -67,7 +67,6 @@ pub fn run(opts: PublishOptions) -> Result<(), CliExit> {
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
 
     if project.manifest.workspace.is_some() {
-        // cwd resolves to a workspace root: publish the whole workspace.
         return publish_workspace_dry_run(&project);
     }
     if let Some(root) =
@@ -124,8 +123,6 @@ fn publish_single_dry_run(manifest: &Manifest) -> Result<(), CliExit> {
             "package is not ready to publish:",
             &problems,
         )),
-        // A standalone `wado publish` on a non-package / opted-out manifest is
-        // a user error worth surfacing rather than a silent success.
         Verdict::NotAPackage => Err(CliExit::error("no [package] to publish")),
         Verdict::Skipped(reason) => {
             Err(CliExit::error(format!("package is not publishable: {reason}")))
@@ -147,7 +144,6 @@ fn publish_workspace_dry_run(root: &ProjectManifest) -> Result<(), CliExit> {
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
 
-    // The root's own [package] (if any) plus every member package.
     let mut candidates: Vec<(String, Manifest)> = vec![(".".to_string(), root.manifest.clone())];
     for dir in member_dirs {
         let project = discover(&dir)
@@ -253,8 +249,6 @@ mod tests {
     #[test]
     fn classify_failed_when_metadata_missing() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        // namespace present + publish default true, but description/repository/
-        // authors/license missing → Failed, not Skipped.
         assert!(matches!(classify(&m), Verdict::Failed(p) if !p.is_empty()));
     }
 

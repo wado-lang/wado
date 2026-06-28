@@ -58,20 +58,15 @@ fn validate_package(pkg: &crate::manifest::Package) -> Result<(), ManifestError>
         version: pkg.version.clone(),
         reason: e.to_string(),
     })?;
-    // `license` and `license-file` are mutually exclusive.
     if pkg.license.is_some() && pkg.license_file.is_some() {
         return Err(ManifestError::ConflictingLicense);
     }
-    // `license`, when set, must be a valid SPDX license expression. `LicenseRef-`
-    // (for a bundled non-standard license) is part of the SPDX grammar.
     if let Some(license) = &pkg.license {
         spdx::Expression::parse(license).map_err(|e| ManifestError::InvalidLicense {
             value: license.clone(),
             reason: e.to_string(),
         })?;
     }
-    // `wado-version` is a semver requirement (e.g. ">=0.5"); accepts the full
-    // comparator grammar, unlike dependency specifiers.
     if let Some(req) = &pkg.wado_version {
         semver::VersionReq::parse(req).map_err(|e| ManifestError::InvalidWadoVersion {
             value: req.clone(),
@@ -167,8 +162,6 @@ pub fn validate_for_publish(manifest: &Manifest) -> Vec<PublishError> {
     if pkg.license.is_none() && pkg.license_file.is_none() {
         errors.push(PublishError::MissingLicense);
     }
-    // Shipped dependencies (not dev-dependencies) must be self-contained: a
-    // `path` source needs a registry/git fallback for the published manifest.
     for (name, dep) in manifest.dependencies.iter().chain(&manifest.build_dependencies) {
         match &dep.source {
             DependencySource::Path {
@@ -420,7 +413,6 @@ authors = ["Alice"]
 
     #[test]
     fn publish_collects_all_missing_requirements() {
-        // Only name+version: namespace, description, repository, authors, license missing.
         let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
         let m = toml.parse::<crate::Manifest>().unwrap();
         let errs = super::validate_for_publish(&m);

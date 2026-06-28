@@ -713,8 +713,6 @@ fn build_dep_generator_local_path(
 /// both spellings land on the same entry file.
 fn package_generator_entry(pkg_dir: &Path) -> Option<String> {
     let manifest_text = fs::read_to_string(pkg_dir.join("wado.toml")).ok()?;
-    // Workspace-aware: a generator package may be a member that inherits
-    // required fields (e.g. version) from [workspace.package].
     let manifest = crate::manifest::resolve_manifest(pkg_dir, &manifest_text).ok()?;
     Some(manifest.world_entry("core:kiln/generator")?.to_string())
 }
@@ -930,10 +928,6 @@ pub fn load_nearest_manifest(
     if dir.as_os_str().is_empty() {
         dir = std::path::PathBuf::from(".");
     }
-    // Reuse workspace-aware discovery so a member manifest that inherits
-    // required fields from [workspace.package] resolves instead of failing to
-    // parse standalone. A malformed manifest yields `None` (no Kiln config), as
-    // before.
     let project = crate::manifest::discover(&dir).ok().flatten()?;
     Some((project.manifest, project.root))
 }

@@ -446,8 +446,6 @@ struct RawManifest {
     unknown: BTreeMap<String, toml::Value>,
 }
 
-// Sorted, deterministic list of the keys captured by a `#[serde(flatten)]`
-// catch-all — the keys the schema did not recognize.
 fn unknown_keys(captured: &BTreeMap<String, toml::Value>) -> Vec<String> {
     captured.keys().cloned().collect()
 }
@@ -580,8 +578,6 @@ pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, Ma
         .unwrap_or_default();
 
     if let (Some(pkg), Some(ws)) = (member_raw.package.as_mut(), ws_pkg.as_ref()) {
-        // Validate the source [workspace.package] so license problems are
-        // attributed to the root, not the inheriting member.
         validate::validate_workspace_package(ws)?;
         inherit_workspace_package(pkg, ws)?;
     }
@@ -599,8 +595,6 @@ fn inherit_workspace_package(
     inherit_forced(&mut pkg.version, ws.version.as_ref(), "version")?;
     inherit_forced(&mut pkg.repository, ws.repository.as_ref(), "repository")?;
     inherit_forced(&mut pkg.namespace, ws.namespace.as_ref(), "namespace")?;
-    // `license` and `license-file` are one logical slot: the member overrides
-    // the whole slot or inherits the whole slot.
     if pkg.license.is_none() && pkg.license_file.is_none() {
         pkg.license.clone_from(&ws.license);
         pkg.license_file.clone_from(&ws.license_file);
@@ -1538,7 +1532,6 @@ lib = "src/lib.wado"
         assert_eq!(pkg.namespace.as_deref(), Some("org"));
         assert_eq!(pkg.license.as_deref(), Some("MIT"));
         assert_eq!(pkg.authors, vec!["Alice <a@example.com>"]);
-        // member-specific fields stay
         assert_eq!(pkg.name, "core");
         assert_eq!(pkg.description.as_deref(), Some("Shared core"));
     }
@@ -1571,7 +1564,6 @@ authors = ["Bob"]
         let pkg = resolve_member(member, ROOT_WS).unwrap().package.unwrap();
         assert_eq!(pkg.license.as_deref(), Some("Apache-2.0"));
         assert_eq!(pkg.authors, vec!["Bob"]);
-        // forced fields still inherited
         assert_eq!(pkg.version, "0.2.0");
     }
 
@@ -1645,7 +1637,6 @@ license-file = "LICENSE"
             matches!(err, ManifestError::WorkspaceConflictingLicense),
             "{err:?}"
         );
-        // Same problem when the root is parsed directly.
         let err = root.parse::<Manifest>().unwrap_err();
         assert!(
             matches!(err, ManifestError::WorkspaceConflictingLicense),

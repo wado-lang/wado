@@ -665,8 +665,6 @@ authors = ["Alice"]
 
     #[test]
     fn workspace_root_that_is_also_a_package_parses_standalone() {
-        // A root declaring both [workspace] and [package] is the authority, not
-        // a governed member: it does not force-inherit and must not error.
         let tmp = tempfile::tempdir().unwrap();
         let toml = format!("{WS_ROOT}\n[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\nrepository = \"https://github.com/org/monorepo\"\nnamespace = \"org\"\n");
         write(&tmp.path().join("wado.toml"), &toml);
@@ -683,10 +681,8 @@ authors = ["Alice"]
             &member_dir.join("wado.toml"),
             "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
         );
-        // From a member: returns the root dir.
         let root = governing_workspace_root_dir(&member_dir).unwrap().unwrap();
         assert_eq!(root, tmp.path());
-        // From the root itself: it is the authority, not a governed member.
         assert!(
             governing_workspace_root_dir(tmp.path())
                 .unwrap()
@@ -716,7 +712,6 @@ authors = ["Alice"]
             &tmp.path().join("packages/b/wado.toml"),
             "[package]\nname = \"b\"\n",
         );
-        // A dir without a wado.toml is not a member.
         fs::create_dir_all(tmp.path().join("packages/empty")).unwrap();
         let dirs = workspace_member_dirs(tmp.path(), &["packages/*".to_string()]);
         assert_eq!(
@@ -727,8 +722,6 @@ authors = ["Alice"]
 
     #[test]
     fn non_member_directory_does_not_inherit() {
-        // A dir outside the members globs is standalone: omitting an inherited
-        // required field must fail rather than silently inherit.
         let tmp = tempfile::tempdir().unwrap();
         write(&tmp.path().join("wado.toml"), WS_ROOT);
         let outside = tmp.path().join("tools/helper");
