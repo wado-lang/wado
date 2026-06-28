@@ -135,7 +135,7 @@ pub struct TestExportPlan {
     pub export_name: String,
     /// Original, lossless `test "name"` string (`None` for unnamed tests).
     /// `export_name` is ASCII-folded and lowercased, so this is the only
-    /// faithful record of the name. Emitted into the `wado:test-names` custom
+    /// faithful record of the name. Emitted into the `org.wado-lang.test-names` custom
     /// section so the runner can display what the user actually wrote.
     pub original_name: Option<String>,
     /// Whether this test is expected to trap (derived from the `#[expect_trap]` attribute)

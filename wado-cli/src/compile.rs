@@ -100,6 +100,13 @@ pub struct CompileOptions {
     /// closure (a `local`, registry-referencing section is not encodable; see
     /// WEP §"Phase 2 finding"). Mutually exclusive with `--no-embed-wit`.
     pub embed_wit: bool,
+    /// `--no-embed-metadata`: opt out of embedding the `[package]` metadata.
+    pub no_embed_metadata: bool,
+    /// True when the entry was resolved from a manifest (no path argument, or a
+    /// directory argument), so the build represents the package's declared
+    /// artifact. An explicit `.wado` file argument sets this false and embeds no
+    /// metadata. See WEP `wep-2026-02-14-package-manifest.md`.
+    pub manifest_driven: bool,
 }
 
 impl CompileOptions {
@@ -212,6 +219,7 @@ enum Opt {
     Feature,
     NoEmbedWit,
     EmbedWit,
+    NoEmbedMetadata,
     Help,
 }
 
@@ -232,6 +240,7 @@ impl Opt {
         Self::Feature,
         Self::NoEmbedWit,
         Self::EmbedWit,
+        Self::NoEmbedMetadata,
         Self::Help,
     ];
 
@@ -282,6 +291,12 @@ impl Opt {
                 value: None,
                 desc: "Force embedding the WIT section on (e.g. under -Os, where it is off by default)",
             },
+            Self::NoEmbedMetadata => args::OptSpec {
+                long: Some("no-embed-metadata"),
+                short: None,
+                value: None,
+                desc: "Do not embed the [package] metadata sections in the output",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -326,6 +341,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
     let mut lib = false;
     let mut no_embed_wit = false;
     let mut embed_wit = false;
+    let mut no_embed_metadata = false;
     let mut param_args = args::ParamArgs::default();
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
@@ -364,6 +380,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::Feature => codegen_flags.push(args::require_string(&mut parser)?),
                 Opt::NoEmbedWit => no_embed_wit = true,
                 Opt::EmbedWit => embed_wit = true,
+                Opt::NoEmbedMetadata => no_embed_metadata = true,
                 Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
@@ -385,6 +402,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
             "`--no-embed-wit` and `--embed-wit` are mutually exclusive",
         ));
     }
+
+    // Manifest-driven mode: no path argument, or a directory argument. An
+    // explicit `.wado` file argument is a standalone target — `resolve_input`
+    // returns it verbatim without consulting a manifest for the entry, and
+    // metadata is not embedded (WEP `wep-2026-02-14-package-manifest.md`).
+    let manifest_driven = input.as_deref().is_none_or(|s| Path::new(s).is_dir());
 
     let (input, lib_world) = if lib {
         let (entry, world_fq) = manifest::resolve_lib_input(input, &usage)?;
@@ -418,6 +441,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         param_policy: param_args.policy,
         no_embed_wit,
         embed_wit,
+        no_embed_metadata,
+        manifest_driven,
     })
 }
 
@@ -1005,6 +1030,26 @@ async fn embed_wit_section(
     }
 }
 
+/// Embed the `[package]` metadata into the component when building the package's
+/// declared artifact (manifest-driven mode) and `--no-embed-metadata` was not
+/// given. Returns `wasm` unchanged otherwise — an explicit file argument, no
+/// `wado.toml`, or a manifest without `[package]`. The git `revision` is
+/// included only on a clean tree (omitted silently here; `wado publish` warns).
+fn embed_package_metadata(opts: &CompileOptions, wasm: Vec<u8>) -> Vec<u8> {
+    if opts.no_embed_metadata || !opts.manifest_driven {
+        return wasm;
+    }
+    let Some((manifest, root)) = load_nearest_manifest(Path::new(&opts.input)) else {
+        return wasm;
+    };
+    let Some(pkg) = manifest.package.as_ref() else {
+        return wasm;
+    };
+    let revision = crate::metadata_embed::clean_git_revision(&root);
+    let sections = wado_manifest::metadata_sections(pkg, revision.as_deref());
+    crate::metadata_embed::embed_metadata_sections(wasm, &sections)
+}
+
 pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
     // Output format is independent of the compiled bytes; resolve it first so we
     // know whether to retain WIR (only the wasm-output embedding path needs it).
@@ -1050,9 +1095,10 @@ pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
                 .wir_package
                 .map(|p| p.imported_cm_interfaces)
                 .unwrap_or_default();
-            embed_wit_section(&opts, wasm, world_imports, explicit).await?
+            let embedded = embed_wit_section(&opts, wasm, world_imports, explicit).await?;
+            embed_package_metadata(&opts, embedded)
         }
-        (OutputFormat::Wasm, None) => wasm,
+        (OutputFormat::Wasm, None) => embed_package_metadata(&opts, wasm),
         (OutputFormat::Wat, _) => wasm_to_wat(&wasm)?.into_bytes(),
     };
     fs::write(&output_path, &bytes)
