@@ -22,24 +22,24 @@ use {
 } from "core:prelude/types.wado";
 
 /// Returns the smaller of two i32 values (branchless).
-pub fn i32_min(a: i32, b: i32) -> i32 {
+internal fn i32_min(a: i32, b: i32) -> i32 {
     return builtin::select(a < b, a, b);
 }
 
 /// Returns the larger of two i32 values (branchless).
-pub fn i32_max(a: i32, b: i32) -> i32 {
+internal fn i32_max(a: i32, b: i32) -> i32 {
     return builtin::select(a > b, a, b);
 }
 
 /// Clamps `value` into the inclusive range `[lo, hi]`.
 /// Panics if `lo > hi` — the range must be well-formed.
-pub fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
+internal fn i32_clamp(value: i32, lo: i32, hi: i32) -> i32 {
     assert lo <= hi, "i32_clamp: lo must be <= hi";
     return i32_min(i32_max(value, lo), hi);
 }
 
 /// Copies bytes from linear memory to a new GC array.
-pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
+internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);
     for let mut i = 0; i < len; i += 1 {
         builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
@@ -48,13 +48,13 @@ pub fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
 }
 
 /// Copies bytes from linear memory to a new GC String.
-pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
+internal fn memory_to_gc_string(ptr: i32, len: i32) -> String {
     let arr = memory_to_gc_array(ptr, len);
     return String::internal_from_utf8_raw(arr, len);
 }
 
 /// Copies bytes from a GC array to linear memory.
-pub fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
+internal fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
     for let mut i = 0; i < len; i += 1 {
         builtin::i32_store8(ptr + i, builtin::array_get_u8(arr, i));
     }
@@ -65,7 +65,7 @@ pub fn gc_array_to_memory(arr: &Array<u8>, ptr: i32, len: i32) {
 ///
 /// Uses write_raw to pass String's internal GC array directly to the stream,
 /// avoiding the intermediate String → List<u8> byte-by-byte copy.
-pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
+internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let bytes = message.internal_raw_bytes();
     let len = message.len();
     if add_newline {
@@ -87,7 +87,7 @@ pub fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newli
 /// If the upper 28 bits (handle) are nonzero, an async task is in flight.
 /// A subtask transitions through Starting → Started → Returned. Each call to
 /// waitable-set.wait delivers one transition, so we must loop until RETURNED.
-pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
+internal fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
     let handle = packed >> 4;
     if handle != 0 {
         let subtask = handle as Subtask;
@@ -108,7 +108,7 @@ pub fn wait_for_subtask(packed: i32) with WaitableSet, Subtask {
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-pub fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
+internal fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
     future.drop();
 }
 
@@ -137,7 +137,7 @@ pub fn log_stderr(message: String) {
 }
 
 /// Logs a message to stderr and traps.
-pub fn panic(message: String) -> ! {
+internal fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();
 }
@@ -146,19 +146,19 @@ pub fn panic(message: String) -> ! {
 /// so the `-f bare-asserts` lowering can replace assertion failures with a bare
 /// `unreachable` trap (dropping the diagnostic) while leaving explicit
 /// `panic(...)` calls untouched. The `assert` desugar emits this, never `panic`.
-pub fn assert_failed(message: String) -> ! {
+internal fn assert_failed(message: String) -> ! {
     panic(message);
 }
 
 /// Traps unconditionally, marking unreachable code.
-pub fn unreachable() -> ! {
+internal fn unreachable() -> ! {
     builtin::unreachable();
 }
 
 /// Lowers a GC String to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
-pub fn cm_lower_string(s: String) -> i64 {
+internal fn cm_lower_string(s: String) -> i64 {
     let len = s.len();
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
@@ -169,7 +169,7 @@ pub fn cm_lower_string(s: String) -> i64 {
 /// Lowers a GC List<u8> to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
 /// The caller must free the allocated memory after the CM call.
-pub fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
+internal fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(&data, ptr, len);
     return ptr as i64 | len as i64 << 32;
@@ -177,7 +177,7 @@ pub fn cm_lower_list_u8(data: Array<u8>, len: i32) -> i64 {
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
 /// Returns (ptr | (len << 32)) as i64.
-pub fn cm_lower_array_u8(arr: List<u8>) -> i64 {
+internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     let data = arr.internal_raw_data();
     let len = arr.len();
     return cm_lower_list_u8(data, len);
@@ -186,7 +186,7 @@ pub fn cm_lower_array_u8(arr: List<u8>) -> i64 {
 /// Writes escaped string content to a Formatter (for inspect/debug output).
 /// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r.
 /// Does NOT write the surrounding quotes — caller is responsible for those.
-pub fn write_escaped_string(s: String, f: &mut Formatter) {
+internal fn write_escaped_string(s: String, f: &mut Formatter) {
     for let c of s.chars() {
         match c {
             '"' => f.write_str(&"\\\""),
@@ -208,7 +208,7 @@ pub fn write_escaped_string(s: String, f: &mut Formatter) {
 /// When a canonical stream/future operation returns BLOCKED (0xFFFF_FFFF),
 /// this creates a temporary WaitableSet, joins the handle, and waits.
 /// Returns the event payload (same format as the original return value).
-pub fn wait_for_blocked(handle: i32) -> i32 {
+internal fn wait_for_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
@@ -226,7 +226,7 @@ pub fn wait_for_blocked(handle: i32) -> i32 {
 /// `(count << 4) | status` packing `future.read` returns directly), so the
 /// caller's `status & 0xF` check distinguishes COMPLETED from DROPPED /
 /// CANCELLED on the blocked path exactly as on the non-blocked path.
-pub fn future_await_blocked(handle: i32) -> i32 {
+internal fn future_await_blocked(handle: i32) -> i32 {
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
@@ -241,7 +241,7 @@ pub fn future_await_blocked(handle: i32) -> i32 {
 /// CM adapter for stream.read(max) on Stream<u8>.
 /// Allocates linear memory, calls stream-read, handles BLOCKED,
 /// lifts bytes to GC array, constructs List<u8>.
-pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
+internal fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
     let ptr = builtin::realloc(0, 0, 1, max);
     let mut result = builtin::stream_read(handle, ptr, max);
     if result == -1 {
@@ -257,7 +257,7 @@ pub fn cm_stream_read_u8(handle: i32, max: i32) -> List<u8> {
 /// Allocates a linear memory buffer sized for max*element_size bytes,
 /// calls stream-read, handles BLOCKED, and returns [ptr, count].
 /// The caller must decode each record from the buffer.
-pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
+internal fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_align: i32) -> [i32, i32] {
     let byte_count = max * element_size;
     let ptr = builtin::realloc(0, 0, element_align, byte_count);
     let mut result = builtin::stream_read(handle, ptr, max);
@@ -271,18 +271,18 @@ pub fn cm_stream_read_raw(handle: i32, max: i32, element_size: i32, element_alig
 /// Create a new empty List<u8> with the given capacity.
 /// Used by synthesized stream-read binding functions for non-u8 types.
 /// The type parameter is monomorphized away during compilation.
-pub fn array_new_empty(capacity: i32) -> List<u8> {
+internal fn array_new_empty(capacity: i32) -> List<u8> {
     return List::with_capacity(capacity);
 }
 
 /// Free a buffer previously allocated by cm_stream_read_raw.
-pub fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
+internal fn cm_stream_read_raw_free(ptr: i32, byte_count: i32, element_align: i32) {
     let freed = builtin::realloc(ptr, byte_count, element_align, 0);
 }
 
 /// CM adapter for stream.write(data) on Stream<u8>.
 /// Lowers List<u8> to linear memory, calls stream-write, handles BLOCKED.
-pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
+internal fn cm_stream_write_u8(handle: i32, data: List<u8>) {
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
@@ -295,7 +295,7 @@ pub fn cm_stream_write_u8(handle: i32, data: List<u8>) {
 
 /// CM adapter for stream.write_raw(data, len) on Stream<u8>.
 /// Lowers raw GC array to linear memory, calls stream-write, handles BLOCKED.
-pub fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
+internal fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
     let packed = cm_lower_list_u8(data, len);
     let ptr = packed as i32;
     let raw_len = (packed >> 32) as i32;
@@ -308,7 +308,7 @@ pub fn cm_stream_write_raw_u8(handle: i32, data: Array<u8>, len: i32) {
 
 /// CM adapter for ErrorContext::new(msg).
 /// Lowers String to linear memory, calls error-context-new, frees buffer.
-pub fn cm_error_context_new(msg: String) -> i32 {
+internal fn cm_error_context_new(msg: String) -> i32 {
     let packed = cm_lower_string(msg);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
@@ -319,7 +319,7 @@ pub fn cm_error_context_new(msg: String) -> i32 {
 
 /// CM adapter for error_context.debug_message().
 /// Calls error-context-debug-message, lifts result from linear memory to String.
-pub fn cm_error_context_debug_message(handle: i32) -> String {
+internal fn cm_error_context_debug_message(handle: i32) -> String {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     builtin::error_context_debug_message(handle, out_ptr);
     let ptr = builtin::i32_load(out_ptr);
@@ -332,7 +332,7 @@ pub fn cm_error_context_debug_message(handle: i32) -> String {
 
 /// CM adapter for waitable_set.wait().
 /// Allocates output buffer, calls waitable-set-wait, constructs WaitEvent.
-pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
+internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_wait(ws, out_ptr);
     let evt_handle = builtin::i32_load(out_ptr);
@@ -341,12 +341,12 @@ pub fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     return WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 };
 }
 
-pub fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
+internal fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
     builtin::waitable_join(handle, ws);
     return handle;
 }
 
-pub fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
+internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_poll(ws, out_ptr);
     if code == 0 {

@@ -10,17 +10,17 @@ use { List } from "core:prelude/list.wado";
 
 /// Tuple type family declaration — establishes `core:prelude` as the owner of all tuple types.
 #[compiler_item("tuple")]
-pub type [..T];
+internal type [..T];
 
 /// Box wraps a value on the GC heap, enabling references to primitives.
 #[compiler_item("box")]
-pub struct Box<T> {
+internal struct Box<T> {
     pub value: T,
 }
 
 /// Optional value - either Some(T) or None
 #[compiler_item("option")]
-pub variant Option<T> {
+internal variant Option<T> {
     #[compiler_item("option_some")]
     Some(T),
     #[compiler_item("option_none")]
@@ -29,7 +29,7 @@ pub variant Option<T> {
 
 /// Result type - either Ok(T) or Err(E)
 #[compiler_item("result")]
-pub variant Result<T, E> {
+internal variant Result<T, E> {
     #[compiler_item("result_ok")]
     Ok(T),
     #[compiler_item("result_err")]
@@ -144,7 +144,7 @@ impl Default for Option<T> {
 ///
 /// Use `Future::<T>::new()` to create a `[Future<T>, FutureWritable<T>]` pair.
 /// The readable end is passed to consumers; the writable end fulfills the future.
-pub resource Future<T> {
+internal resource Future<T> {
     /// Create a new future pair: [Future<T>, FutureWritable<T>].
     #[cm("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
@@ -165,7 +165,7 @@ pub resource Future<T> {
 
 /// Writable end of an async value (WASI Component Model future).
 /// Opaque i32 handle managed by the runtime.
-pub resource FutureWritable<T> {
+internal resource FutureWritable<T> {
     /// Fulfill the future with a value.
     #[cm("future-write")]
     fn write(&self, value: T);
@@ -183,7 +183,7 @@ pub resource FutureWritable<T> {
 /// Opaque i32 handle managed by the runtime.
 ///
 /// Use `Stream::<T>::new()` to create a `[Stream<T>, StreamWritable<T>]` pair.
-pub resource Stream<T> {
+internal resource Stream<T> {
     /// Create a new stream pair: [Stream<T>, StreamWritable<T>].
     #[cm("stream-new")]
     fn new() -> [Stream<T>, StreamWritable<T>];
@@ -205,7 +205,7 @@ pub resource Stream<T> {
 
 /// Writable end of an async sequence (WASI Component Model stream).
 /// Opaque i32 handle managed by the runtime.
-pub resource StreamWritable<T> {
+internal resource StreamWritable<T> {
     /// Write a chunk of data to the stream.
     #[cm("stream-write")]
     fn write(&self, data: List<T>);
@@ -230,10 +230,10 @@ pub resource StreamWritable<T> {
 /// A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
 /// `i32`. It is an identity token with no lifecycle of its own — the joined
 /// `Subtask` / `AsyncCall` owns the actual handle lifecycle.
-pub type Waitable = i32;
+internal type Waitable = i32;
 
 /// Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
-pub struct WaitEvent {
+internal struct WaitEvent {
     /// CM event code:
     ///   1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
     pub code: i32,
@@ -250,7 +250,7 @@ pub struct WaitEvent {
 /// children — `Subtask::drop()` automatically removes the subtask from its
 /// joined set (via the CM spec's `Waitable.join(None)` semantics), so always
 /// drop subtasks before dropping the set.
-pub resource WaitableSet {
+internal resource WaitableSet {
     /// Create a new waitable set.
     #[cm("waitable-set-new")]
     fn new() -> WaitableSet;
@@ -282,7 +282,7 @@ pub resource WaitableSet {
 ///   ws.wait();
 ///   subtask.drop();  // removes from ws
 ///   ws.drop();       // safe — no children
-pub resource Subtask {
+internal resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
     #[cm("subtask-drop")]
@@ -320,7 +320,7 @@ pub resource Subtask {
 /// body_tx.drop();
 /// let resp = task.wait();             // block for response
 /// ```
-pub struct AsyncCall<T> {
+internal struct AsyncCall<T> {
     // CM-ABI plumbing populated by the synthesised `__cm_binding__*`
     // adapter via a TIR-level `StructLiteral` (which bypasses field
     // visibility); kept non-`pub` so user code cannot peek or forge.
@@ -391,7 +391,7 @@ impl AsyncCall<T> {
 }
 
 /// An error context carrying a debug message across component boundaries.
-pub resource ErrorContext {
+internal resource ErrorContext {
     /// Create a new error context with the given message.
     #[cm("error-context-new")]
     fn new(message: String) -> ErrorContext;
@@ -410,7 +410,7 @@ pub resource ErrorContext {
 /// Signals to the host that this component is under load.
 /// Increment to enable backpressure; decrement to release it.
 /// The host will stop dispatching new calls when the counter is non-zero.
-pub resource Backpressure {
+internal resource Backpressure {
     /// Increment the backpressure counter by 1.
     /// The host applies backpressure when the counter is non-zero.
     #[cm("backpressure-inc")]
@@ -426,7 +426,7 @@ pub resource Backpressure {
 /// Provides typed slots (u32) for passing context values across component
 /// boundaries without threading them through call arguments.
 /// The slot index must be a compile-time constant.
-pub resource Context {
+internal resource Context {
     /// Get the value of task-local context slot `slot`.
     /// `slot` must be a compile-time constant.
     #[cm("context-get")]
@@ -441,7 +441,7 @@ pub resource Context {
 /// The current async task handle.
 ///
 /// Provides operations that apply to the currently executing async task.
-pub resource Task {
+internal resource Task {
     /// Acknowledge cancellation of the current task.
     ///
     /// Call this in response to a cancellation signal (e.g. after receiving
@@ -453,13 +453,13 @@ pub resource Task {
 
 /// A suspended thread handle, used as an argument to thread switching operations.
 /// Obtained when a thread suspends itself (e.g. via `Thread::suspend`).
-pub resource SuspendedThread;
+internal resource SuspendedThread;
 
 /// Component Model stackful-async thread operations.
 ///
 /// These canonicals support cooperative threading within an async component:
 /// yielding, suspending, and switching between threads.
-pub resource Thread {
+internal resource Thread {
     /// Yield control to allow other threads to make progress.
     /// If `cancellable` is true, may return early if the current task is being cancelled.
     #[cm("thread-yield")]

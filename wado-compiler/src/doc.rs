@@ -202,6 +202,21 @@ pub fn extract_doc_with(
     module_name: &str,
     include_private: bool,
 ) -> DocModule {
+    extract_doc_filtered(module, trivia, module_name, include_private, false)
+}
+
+/// Like [`extract_doc_with`], but `include_internal` also admits top-level
+/// `internal` items (their members are still rendered at the `include_private`
+/// level). Used to follow `pub use` re-exports of `internal` definitions: the
+/// re-export publishes the item, so the facade module's docs must carry it,
+/// without leaking the item's own private fields / methods.
+pub fn extract_doc_filtered(
+    module: &Module,
+    trivia: &TriviaMap,
+    module_name: &str,
+    include_private: bool,
+    include_internal: bool,
+) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
 
     let mut traits: Vec<DocTrait> = Vec::new();
@@ -224,7 +239,10 @@ pub fn extract_doc_with(
     }
 
     for item in &module.items {
-        if !include_private && !is_pub_or_export(item) {
+        let visible = include_private
+            || is_pub_or_export(item)
+            || (include_internal && is_internal_item(item));
+        if !visible {
             continue;
         }
         match item {
@@ -593,6 +611,25 @@ fn is_pub_or_export(item: &Item) -> bool {
     }
 }
 
+/// Whether a top-level item carries the `internal` visibility modifier.
+fn is_internal_item(item: &Item) -> bool {
+    match item {
+        Item::Function(f) => f.visibility.is_internal(),
+        Item::Struct(s) => s.visibility.is_internal(),
+        Item::Enum(e) => e.visibility.is_internal(),
+        Item::Variant(v) => v.visibility.is_internal(),
+        Item::Flags(f) => f.visibility.is_internal(),
+        Item::Newtype(t) => t.visibility.is_internal(),
+        Item::Trait(t) => t.visibility.is_internal(),
+        Item::Interface(e) => e.visibility.is_internal(),
+        Item::Global(g) => g.visibility.is_internal(),
+        Item::Resource(r) => r.visibility.is_internal(),
+        Item::TupleTypeDecl(d) => d.visibility.is_internal(),
+        Item::BuiltinTypeDecl(d) => d.visibility.is_internal(),
+        Item::Impl(_) | Item::Use(_) | Item::World(_) | Item::Test(_) | Item::Error(_) => false,
+    }
+}
+
 fn render_type(ty: &Type) -> String {
     let mut out = String::new();
     unparse_type_into(ty, &mut out);
@@ -717,11 +754,19 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
         for reexport_source in &reexport_sources {
             if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
                 let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                let sub_doc = extract_doc_with(
+                // Include `internal` items: a `pub use { x }` re-export makes `x`
+                // part of this module's public API even when `x` is `internal`
+                // in its defining submodule (the common "internal impl, public
+                // facade" pattern). Members stay at the public level
+                // (`include_private = false`) so the item's own private fields /
+                // methods are not leaked. `merge_reexported_items` filters to the
+                // re-exported names and presents them as `pub`.
+                let sub_doc = extract_doc_filtered(
                     &sub_parsed.ast,
                     &sub_parsed.trivia,
                     reexport_source,
-                    include_private,
+                    false,
+                    true,
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -809,58 +854,45 @@ fn collect_pub_use_names(module: &Module) -> IndexSet<String> {
     names
 }
 
-/// Merge items from a sub-module into the parent doc, filtered by re-exported names.
+/// Rewrite a re-exported item's signature so its visibility reads `pub`: a
+/// `pub use { x }` re-export publishes `x` regardless of `x`'s own modifier, so
+/// the facade module's docs must present it as public, not `internal`.
+fn promote_reexport_signature(sig: &str) -> String {
+    if let Some(rest) = sig.strip_prefix("internal ") {
+        format!("pub {rest}")
+    } else if sig.starts_with("pub ") || sig.starts_with("export ") {
+        sig.to_string()
+    } else {
+        format!("pub {sig}")
+    }
+}
+
+/// Merge items from a sub-module into the parent doc, filtered by re-exported
+/// names. Re-exported items are presented as `pub` (see
+/// [`promote_reexport_signature`]).
 fn merge_reexported_items(parent: &mut DocModule, child: &DocModule, names: &IndexSet<String>) {
-    for t in &child.traits {
-        if names.contains(extract_item_name(&t.signature, "trait ")) {
-            parent.traits.push(t.clone());
-        }
+    macro_rules! merge {
+        ($field:ident, $it:ident => $key:expr) => {
+            for $it in &child.$field {
+                let key: &str = $key;
+                if names.contains(key) {
+                    let mut cloned = $it.clone();
+                    cloned.signature = promote_reexport_signature(&cloned.signature);
+                    parent.$field.push(cloned);
+                }
+            }
+        };
     }
-    for s in &child.structs {
-        if names.contains(extract_item_name(&s.signature, "struct ")) {
-            parent.structs.push(s.clone());
-        }
-    }
-    for t in &child.types {
-        if names.contains(&t.name) {
-            parent.types.push(t.clone());
-        }
-    }
-    for g in &child.globals {
-        if names.contains(&g.name) {
-            parent.globals.push(g.clone());
-        }
-    }
-    for e in &child.enums {
-        if names.contains(extract_item_name(&e.signature, "enum ")) {
-            parent.enums.push(e.clone());
-        }
-    }
-    for v in &child.variants {
-        if names.contains(&v.name) {
-            parent.variants.push(v.clone());
-        }
-    }
-    for f in &child.flags {
-        if names.contains(&f.name) {
-            parent.flags.push(f.clone());
-        }
-    }
-    for e in &child.effects {
-        if names.contains(&e.name) {
-            parent.effects.push(e.clone());
-        }
-    }
-    for r in &child.resources {
-        if names.contains(&r.name) {
-            parent.resources.push(r.clone());
-        }
-    }
-    for f in &child.functions {
-        if names.contains(extract_item_name(&f.signature, "fn ")) {
-            parent.functions.push(f.clone());
-        }
-    }
+    merge!(traits, it => extract_item_name(&it.signature, "trait "));
+    merge!(structs, it => extract_item_name(&it.signature, "struct "));
+    merge!(types, it => it.name.as_str());
+    merge!(globals, it => it.name.as_str());
+    merge!(enums, it => extract_item_name(&it.signature, "enum "));
+    merge!(variants, it => it.name.as_str());
+    merge!(flags, it => it.name.as_str());
+    merge!(effects, it => it.name.as_str());
+    merge!(resources, it => it.name.as_str());
+    merge!(functions, it => extract_item_name(&it.signature, "fn "));
 }
 
 /// Merge primitive impl entries, combining methods for the same type name.
