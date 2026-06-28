@@ -830,6 +830,15 @@ descriptive metadata. These four stay optional even when publishing.
 (it does not upload). The OCI upload itself is not yet implemented, so a bare
 `wado publish` errors rather than pretending to publish.
 
+In a workspace, `wado publish` is gated to the workspace root: it publishes every
+publishable member (and the root's own `[package]`, if any) together at the
+shared, force-inherited version. Members that are not publishable (`publish =
+false` or no `namespace`) are skipped. Running `wado publish` from a member
+directory is an error pointing at the root. Forced `version` inheritance already
+prevents version drift _within_ the repository; publishing only from the root
+extends that guarantee to the registry — members can never be published
+piecemeal at mismatched versions.
+
 #### Path Dependency Replacement
 
 `path` dependencies that also specify a registry or git source are automatically replaced with the non-path source when publishing, similar to Cargo:
