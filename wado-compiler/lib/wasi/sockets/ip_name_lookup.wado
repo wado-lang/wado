@@ -4,7 +4,7 @@
 use { IpAddress } from "wasi:sockets/types.wado";
 
 /// Lookup error codes.
-#[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#error-code")]
+#[cm("wasi:sockets/ip-name-lookup@0.3.0#error-code")]
 pub variant ErrorCode {
     /// Access denied.
     /// 
@@ -38,7 +38,7 @@ pub variant ErrorCode {
     Other(Option<String>),
 }
 
-#[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15")]
+#[cm("wasi:sockets/ip-name-lookup@0.3.0")]
 pub interface IpNameLookup {
     /// Resolve an internet host name to a list of IP addresses.
     /// 
@@ -59,7 +59,7 @@ pub interface IpNameLookup {
     /// - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
-    #[cm("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-03-15#resolve-addresses")]
+    #[cm("wasi:sockets/ip-name-lookup@0.3.0#resolve-addresses")]
     #[cm_params("name")]
     async fn resolve_addresses(name: String) -> AsyncCall<Result<List<IpAddress>, ErrorCode>>;
 }
