@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782615427632,
+  "lastUpdate": 1782626449499,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -36157,6 +36157,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288528,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca1dd28d53b6c65928d5a43d791eaf3ca35465a7",
+          "message": "Merge pull request #1462 from wado-lang/claude/wasmtime-46-vendor-update-10h9hr\n\nchore(deps): WASI P3 0.3.0 is officially released 🎉 bump wasmtime to 46.0.1",
+          "timestamp": "2026-06-28T14:50:53+09:00",
+          "tree_id": "24f700d60fdf2521767d3c165bfb4bfc7b6c3b7e",
+          "url": "https://github.com/wado-lang/wado/commit/ca1dd28d53b6c65928d5a43d791eaf3ca35465a7"
+        },
+        "date": 1782626448840,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1845,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 8434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 15339,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288458,
             "unit": "bytes"
           }
         ]
