@@ -14,6 +14,8 @@
 # `--experimental-wasm-jspi` (which Node 26 no longer accepts).
 node = "26"
 
+jq = "latest"
+
 [settings]
 auto_install = true
 lockfile = true
@@ -105,6 +107,30 @@ run = """
 set -xe -o pipefail
 cargo build --release -p wado-cli
 ls -lh target/release/wado
+"""
+
+[tasks.ghcr-login]
+description = "Write ghcr.io auth into ~/.docker/config.json from a GitHub token (cloud GITHUB_TOKEN / local gh keyring)"
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+
+token="${GITHUB_TOKEN:-${GH_TOKEN:-$(gh auth token 2>/dev/null || true)}}"
+if [ -z "${token}" ]; then
+  echo "error: no GitHub token; set GITHUB_TOKEN/GH_TOKEN or run 'gh auth login'" >&2
+  exit 1
+fi
+user="${GHCR_USER:-x-access-token}"
+auth="$(jq -rn --arg s "${user}:${token}" '$s | @base64')"
+
+cfg="$HOME/.docker/config.json"
+mkdir -p "$HOME/.docker"
+[ -f "$cfg" ] || echo '{}' > "$cfg"
+tmp="$(mktemp)"
+jq --arg a "$auth" '.auths["ghcr.io"].auth = $a' "$cfg" > "$tmp"
+mv "$tmp" "$cfg"
+chmod 600 "$cfg"
+echo "ok: wrote ghcr.io auth to $cfg"
 """
 
 [tasks.bump-version]
